@@ -1,0 +1,21 @@
+/* themes.css — Design tokens: the :root custom-property palette shared by every component.
+   Extracted verbatim from index.html (v4.96) lines 10–28; order preserved via main.css. */
+    :root {
+      --bg0: #070C16;
+      --bg1: #0B1322;
+      --glass: rgba(12, 19, 35, .66);
+      --glass2: rgba(17, 26, 46, .55);
+      --stroke: rgba(255, 255, 255, .09);
+      --stroke2: rgba(255, 255, 255, .16);
+      --text: #EAF0F9;
+      --dim: #8B99B0;
+      --navy: #0A1E3C;
+      --orange: #FF7A1A;
+      --orange2: #FFA149;
+      --danger: #FF6B81;
+      --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      --sbw: 396px;
+      --r: 13px;
+      --chipFont: 11.5px;
+      --untiltY: 1;
+    }

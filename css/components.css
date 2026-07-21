@@ -1,0 +1,378 @@
+/* components.css — Floating map UI: toolbar buttons, search, legend card, title card, north arrow, brand mark, status toast.
+   Extracted verbatim from index.html (v4.96) lines 1006–1381; order preserved via main.css. */
+    /* ---------- Floating map UI ---------- */
+    .search-box {
+      position: absolute;
+      top: 12px;
+      left: calc(var(--sbw) + 12px);
+      z-index: 1000;
+      width: 300px;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
+    }
+
+    .app.side-hidden .search-box {
+      left: 12px;
+    }
+
+    .search-box .inner {
+      display: flex;
+      align-items: center;
+      border-radius: 13px;
+      overflow: hidden;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
+      transition: box-shadow .2s;
+    }
+
+    .search-box .inner:focus-within {
+      box-shadow: 0 0 0 3px rgba(255, 122, 26, .35), 0 8px 28px rgba(0, 0, 0, .5);
+    }
+
+    .search-box .sIcon {
+      padding: 0 2px 0 12px;
+      color: var(--dim);
+      font-size: 13px;
+      flex: none;
+    }
+
+    .search-box input {
+      border: none;
+      border-radius: 0;
+      padding: 11px 10px;
+      font-size: 12.5px;
+      flex: 1;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .search-box input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+
+    .search-box button {
+      border: none;
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+      padding: 11px 15px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .search-results {
+      border-radius: 13px;
+      margin-top: 6px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+      overflow: hidden;
+      max-height: 262px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .search-results .res {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--stroke);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .search-results .res:last-child {
+      border-bottom: none;
+    }
+
+    .search-results .res:hover,
+    .search-results .res.sel {
+      background: rgba(255, 122, 26, .14);
+    }
+
+    .search-results .res .ico {
+      flex: none;
+      font-size: 12px;
+      opacity: .8;
+    }
+
+    .search-results .res .nm {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search-results .res .add {
+      border: none;
+      background: var(--orange);
+      color: #160B02;
+      border-radius: 7px;
+      width: 23px;
+      height: 23px;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      flex: none;
+      font-weight: 800;
+    }
+
+    .search-results .hint {
+      padding: 6px 11px;
+      font-size: 10px;
+      color: var(--dim);
+      border-top: 1px solid var(--stroke);
+    }
+
+    .search-results .res .meta {
+      font-size: 9.5px;
+      color: var(--dim);
+      margin-left: 6px;
+    }
+
+    .sSpin {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255, 255, 255, .2);
+      border-top-color: var(--orange);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex: none;
+      margin-right: 4px;
+    }
+
+    .sClear {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 4px;
+      flex: none;
+      line-height: 1;
+    }
+
+    .sClear:hover {
+      color: var(--text);
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes dropIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    #titleCard {
+      position: absolute;
+      top: 12px;
+      left: calc(50% + var(--sbw)/2);
+      transform: translateX(-50%);
+      z-index: 900;
+      background: rgba(10, 30, 60, .94);
+      color: #fff;
+      padding: 9px 24px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: .02em;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
+      border-bottom: 3px solid var(--orange);
+      white-space: nowrap;
+      outline: none;
+      max-width: 44%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
+    }
+
+    .app.side-hidden #titleCard {
+      left: 50%;
+    }
+
+    #titleCard:focus {
+      outline: 2px solid var(--orange);
+    }
+
+    #legendCard {
+      position: absolute;
+      top: 70px;
+      right: 12px;
+      z-index: 900;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+      min-width: 234px;
+      max-width: 304px;
+      overflow: hidden;
+    }
+
+    #legendCard .hd {
+      background: var(--navy);
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      padding: 9px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+
+    #legendCard .hd .grip {
+      cursor: move;
+      color: #8FA5C6;
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+
+    #legendCard .hd .ttl {
+      outline: none;
+      flex: 1;
+    }
+
+    #legendCard .hd .ttl:focus {
+      color: var(--orange2);
+    }
+
+    #legendCard table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      color: #17202B;
+    }
+
+    #legendCard td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #E5EAF1;
+    }
+
+    #legendCard tr:last-child td {
+      border-bottom: none;
+    }
+
+    #legendCard td.num {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+
+    #clickHint {
+      position: absolute;
+      bottom: 46px;
+      left: calc(50% + var(--sbw)/2);
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+      padding: 8px 18px;
+      border-radius: 24px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      display: none;
+      transition: left .34s;
+    }
+
+    .app.side-hidden #clickHint {
+      left: 50%;
+    }
+
+    .map-wrap.adding #clickHint {
+      display: block;
+    }
+
+    #fsBtn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 15px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #fsBtn:hover {
+      color: var(--orange);
+    }
+
+    #mapCredit {
+      position: absolute;
+      bottom: 4px;
+      right: 10px;
+      z-index: 800;
+      font-size: 8.5px;
+      color: rgba(255, 255, 255, .8);
+      background: rgba(0, 0, 0, .42);
+      padding: 2px 9px;
+      border-radius: 9px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    body.no-credit #mapCredit {
+      display: none;
+    }
+
+    #brandMark {
+      position: absolute;
+      bottom: 42px;
+      left: 12px;
+      z-index: 800;
+      background: #fff;
+      padding: 6px 11px;
+      border-radius: 11px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+      pointer-events: none;
+    }
+
+    #brandMark img {
+      height: 21px;
+      display: block;
+    }
+
+    body.no-brand #brandMark {
+      display: none;
+    }
+
+    #northArrow {
+      position: absolute;
+      right: 14px;
+      bottom: 104px;
+      z-index: 800;
+      width: 36px;
+      height: 36px;
+      pointer-events: none;
+      filter: drop-shadow(0 3px 8px rgba(0, 0, 0, .4));
+    }
+
+    body.no-north #northArrow {
+      display: none;
+    }
+

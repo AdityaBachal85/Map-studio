@@ -12,7 +12,9 @@
     "test:smoke": "npm run build && node test/ppt-export/browser-smoke.mjs"
   },
   "dependencies": {
+    "html2canvas": "1.4.1",
     "jszip": "3.10.1",
+    "leaflet": "1.9.4",
     "pptxgenjs": "4.0.1"
   },
   "devDependencies": {

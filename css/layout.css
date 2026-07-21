@@ -1,0 +1,183 @@
+/* layout.css — Leaflet control restyle, print stylesheet, capture states, mobile/responsive layout.
+   Extracted verbatim from index.html (v4.96) lines 1382–1562; order preserved via main.css. */
+    /* Leaflet control restyle */
+    .leaflet-bar {
+      border: none !important;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45) !important;
+      border-radius: 11px !important;
+      overflow: hidden;
+    }
+
+    .leaflet-bar a {
+      background: rgba(12, 19, 35, .8) !important;
+      color: #EAF0F9 !important;
+      border-bottom: 1px solid rgba(255, 255, 255, .08) !important;
+      backdrop-filter: blur(12px);
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      transition: background .15s;
+    }
+
+    .leaflet-bar a:hover {
+      background: rgba(255, 122, 26, .3) !important;
+    }
+
+    .leaflet-control-scale-line {
+      background: rgba(0, 0, 0, .42) !important;
+      color: #fff !important;
+      border-color: rgba(255, 255, 255, .5) !important;
+      font-size: 9px !important;
+    }
+
+    .leaflet-marker-icon:focus {
+      outline: none;
+    }
+
+    .map-wrap.capturing .search-box,
+    .map-wrap.capturing #fsBtn,
+    .map-wrap.capturing #clickHint,
+    .map-wrap.capturing .leaflet-control-zoom,
+    .map-wrap.capturing .pin-ghost {
+      display: none !important;
+    }
+
+    .map-wrap.capturing #titleCard {
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      transition: none !important;
+    }
+
+    .map-wrap.pptx-capture .label-badge,
+    .map-wrap.pptx-capture .pin-icon,
+    .map-wrap.pptx-capture .hwy-shield,
+    .map-wrap.pptx-capture #legendCard,
+    .map-wrap.pptx-capture #brandMark,
+    .map-wrap.pptx-capture #titleCard {
+      visibility: hidden !important;
+    }
+
+    @media print {
+
+      .sidebar,
+      #sideToggle {
+        display: none !important;
+      }
+
+      .search-box,
+      #fsBtn,
+      #clickHint,
+      .leaflet-control-zoom {
+        display: none !important;
+      }
+
+      #titleCard {
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+      }
+    }
+
+    /* ---------- Mobile ---------- */
+    @media (max-width:860px) {
+      .sidebar {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        height: 58dvh;
+        border-right: none;
+        border-top: 1px solid var(--stroke2);
+        border-radius: 22px 22px 0 0;
+        transform: translateY(0);
+        transition: transform .34s cubic-bezier(.32, .72, .28, 1);
+        box-shadow: 0 -10px 36px rgba(0, 0, 0, .55);
+      }
+
+      .app.side-hidden .sidebar {
+        transform: translateY(106%);
+      }
+
+      #sideToggle {
+        left: 50% !important;
+        top: auto;
+        bottom: calc(58dvh + 10px);
+        transform: translateX(-50%);
+        width: 66px;
+        height: 27px;
+        border-radius: 14px;
+        border: 1px solid var(--stroke2);
+        transition: bottom .34s cubic-bezier(.32, .72, .28, 1);
+      }
+
+      .app.side-hidden #sideToggle {
+        bottom: calc(14px + env(safe-area-inset-bottom));
+      }
+
+      #sideToggle svg {
+        transform: rotate(-90deg);
+      }
+
+      .app.side-hidden #sideToggle svg {
+        transform: rotate(90deg);
+      }
+
+      .sidebar.frost,
+      .search-results.frost {
+        background: rgba(13, 19, 33, .975);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .brandbar {
+        padding: 9px 16px 8px;
+      }
+
+      .brandbar p {
+        display: none;
+      }
+
+      .logoPill img {
+        height: 18px;
+      }
+
+      .search-box {
+        left: 12px !important;
+        width: min(58vw, 240px);
+      }
+
+      #titleCard {
+        font-size: 11.5px;
+        padding: 6px 13px;
+        max-width: 60%;
+        top: 64px;
+        left: 12px !important;
+        transform: none !important;
+      }
+
+      #legendCard {
+        top: auto;
+        bottom: calc(58dvh + 46px);
+        right: 10px;
+        min-width: 190px;
+        max-width: 230px;
+      }
+
+      #clickHint {
+        bottom: auto;
+        top: 110px;
+        left: 50% !important;
+        font-size: 11px;
+      }
+
+      #brandMark {
+        bottom: auto;
+        top: 12px;
+        right: 60px;
+        left: auto;
+      }
+
+      .btn {
+        padding: 11px 13px;
+      }
+    }

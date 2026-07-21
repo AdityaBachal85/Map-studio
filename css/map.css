@@ -1,0 +1,377 @@
+/* map.css — Map surface: tilt stage, billboard overlay, pins, location/route label badges, via-point dots, route context menu.
+   Extracted verbatim from index.html (v4.96) lines 93–467; order preserved via main.css. */
+    /* Billboard overlay — sits above the tilt stage, never rotates. */
+    #billboardLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 410;
+      overflow: hidden;
+    }
+
+    #billboardLayer .bb {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: auto;
+      will-change: transform;
+      transition: none;
+    }
+
+    #billboardLayer .bb.grabbable {
+      cursor: grab;
+    }
+
+    #billboardLayer .bb.grabbable:active {
+      cursor: grabbing;
+    }
+
+    #billboardLayer .leader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    .map-wrap.adding #billboardLayer .bb {
+      pointer-events: none;
+    }
+
+    .map-wrap.adding #billboardLayer {
+      pointer-events: none;
+    }
+
+    /* ---------- Premium floating badges (Apple/Google Maps-style) ---------- */
+    .pin-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FFFFFF;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 1px 2px rgba(0, 0, 0, .18);
+      overflow: hidden;
+      position: relative;
+      transition: transform .18s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    .pin-icon svg,
+    .pin-icon img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .pin-icon.circle {
+      border-radius: 50%;
+    }
+
+    .pin-icon.rounded {
+      border-radius: 22%;
+    }
+
+    .pin-icon.square {
+      border-radius: 6%;
+    }
+
+    .pin-icon.none {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+
+    .pin-icon.none.glow {
+      filter: drop-shadow(0 0 8px var(--glowCol, #FF7A1A));
+    }
+
+    .pin-icon.glow {
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 3px var(--glowCol, #FF7A1A55), 0 0 22px var(--glowCol, #FF7A1AAA);
+    }
+
+    /* Hidden-marker locations: a faint dot for editing only — a "routing anchor"
+       with no marker in the final map. Never appears in PNG/PPTX/print. */
+    .ghost-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      opacity: .4;
+      border: 2px dashed rgba(255, 255, 255, .8);
+      transition: opacity .15s;
+    }
+
+    .bb.pin-ghost:hover .ghost-dot {
+      opacity: .85;
+    }
+
+    .bb.selected .pin-icon {
+      animation: pulseRing 1.4s ease-out infinite;
+    }
+
+    @keyframes pulseRing {
+      0% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, .55);
+      }
+
+      70% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 14px rgba(255, 122, 26, 0);
+      }
+
+      100% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, 0);
+      }
+    }
+
+    .bb.hover .pin-icon {
+      transform: scale(1.08);
+    }
+
+    @keyframes markerDrop {
+      0% {
+        transform: translate(-50%, -140%) scale(.4);
+        opacity: 0;
+      }
+
+      60% {
+        transform: translate(-50%, -108%) scale(1.08);
+        opacity: 1;
+      }
+
+      80% {
+        transform: translate(-50%, -98%) scale(.96);
+      }
+
+      100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+    }
+
+    .bb.drop-anchor .pin-icon,
+    .bb.drop-anchor .badge-shape {
+      animation: markerDrop .55s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    @keyframes labelFade {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .bb.drop-label {
+      animation: labelFade .35s .15s both ease-out;
+    }
+
+    /* Location label badge — premium, minimal */
+    .label-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: #FFFFFF;
+      color: #17202B;
+      padding: 6px 11px 6px 8px;
+      border-radius: 999px;
+      font-size: var(--chipFont);
+      font-weight: 600;
+      letter-spacing: -.005em;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .22), 0 1px 3px rgba(0, 0, 0, .14);
+      white-space: nowrap;
+      line-height: 1.15;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    }
+
+    .label-badge .lb-ico {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: var(--accent, #2563EB);
+    }
+
+    .label-badge .lb-ico svg,
+    .label-badge .lb-ico img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .label-badge .lb-ico.plain {
+      background: none;
+    }
+
+    .label-badge.site {
+      background: #0A1E3C;
+      color: #fff;
+      padding: 7px 13px 7px 9px;
+      font-size: calc(var(--chipFont) + 1px);
+      font-weight: 700;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .09);
+    }
+
+    .label-badge.site .lb-ico {
+      background: #FF7A1A;
+    }
+
+    .label-badge.route {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: calc(var(--chipFont) - 1px);
+      font-weight: 700;
+      padding: 5px 10px;
+    }
+
+    .label-badge.ring {
+      font-family: 'SF Mono', monospace;
+      font-size: calc(var(--chipFont) - 2.5px);
+      padding: 3px 8px;
+      color: #17202B;
+      background: rgba(255, 255, 255, .96);
+    }
+
+    .label-badge .swatch-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex: none;
+    }
+
+    .hwy-shield {
+      transform: translate(-50%, -50%);
+      display: inline-block;
+      background: #F7C948;
+      color: #111;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      border: 2px solid #fff;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .45);
+      white-space: nowrap;
+      letter-spacing: .02em;
+      font-family: -apple-system, Arial, sans-serif;
+    }
+
+    /* Via-point marker: a draggable orange dot on the route */
+    .via-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #FF7A1A;
+      border: 2.5px solid #fff;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, .5), 0 0 0 2px rgba(255, 122, 26, .35);
+      cursor: grab;
+      position: relative;
+      transition: transform .15s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    .via-dot:hover {
+      transform: scale(1.25);
+    }
+
+    .via-dot:active {
+      cursor: grabbing;
+      transform: scale(1.15);
+    }
+
+    .via-dot::after {
+      content: attr(data-idx);
+      position: absolute;
+      top: -3px;
+      left: 16px;
+      font-size: 9px;
+      font-weight: 800;
+      color: #FF7A1A;
+      background: #fff;
+      padding: 1px 4px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    }
+
+    .map-wrap.via-arming #map {
+      cursor: crosshair;
+    }
+
+    .map-wrap.via-arming .bb {
+      pointer-events: none;
+    }
+
+    /* Context menu for right-click on a route */
+    #ctxMenu {
+      position: absolute;
+      z-index: 1400;
+      background: rgba(13, 20, 35, .95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 11px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+      padding: 5px;
+      min-width: 196px;
+      font-size: 12px;
+      color: var(--text);
+      display: none;
+      overflow: hidden;
+    }
+
+    #ctxMenu.on {
+      display: block;
+      animation: dropIn .16s ease;
+    }
+
+    #ctxMenu .mi {
+      padding: 8px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    #ctxMenu .mi:hover {
+      background: rgba(255, 122, 26, .18);
+      color: #fff;
+    }
+
+    #ctxMenu .mi .ico {
+      width: 14px;
+      text-align: center;
+      color: var(--orange);
+    }
+
+    #ctxMenu .sep {
+      height: 1px;
+      background: rgba(255, 255, 255, .08);
+      margin: 4px 6px;
+    }
+
+    #ctxMenu .lbl {
+      padding: 6px 12px 3px;
+      font-size: 9.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      font-weight: 800;
+    }
+
+    .map-wrap.adding #map {
+      cursor: crosshair;
+    }
+
+    .frost {
+      background: var(--glass);
+      backdrop-filter: blur(14px) saturate(1.25);
+      -webkit-backdrop-filter: blur(14px) saturate(1.25);
+      border: 1px solid var(--stroke);
+    }
+
+    body.no-glass .frost {
+      background: #0E1626;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
