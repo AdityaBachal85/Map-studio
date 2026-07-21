@@ -2,5 +2,8 @@ node_modules/
 dist/
 *.log
 
+# generated PPTX fixtures (reproducible via `npm run test:ppt` / demo.mjs)
+test/ppt-export/fixtures/*.pptx
 # unzip scratch dirs created while inspecting fixtures
 test/ppt-export/fixtures/u_*/
+test/ppt-export/fixtures/ud/

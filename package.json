@@ -5,10 +5,16 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test:ppt": "node test/ppt-export/run.mjs"
   },
   "dependencies": {
     "jszip": "3.10.1",
     "pptxgenjs": "4.0.1"
+  },
+  "devDependencies": {
+    "vite": "8.1.5"
   }
 }
