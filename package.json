@@ -1,0 +1,14 @@
+{
+  "name": "dbot-map-studio",
+  "version": "5.0.0-dev",
+  "description": "DBOT Map Studio — property location & access map builder with an editable PowerPoint export engine.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test:ppt": "node test/ppt-export/run.mjs"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "pptxgenjs": "4.0.1"
+  }
+}

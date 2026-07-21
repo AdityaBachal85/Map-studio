@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+
+# unzip scratch dirs created while inspecting fixtures
+test/ppt-export/fixtures/u_*/
