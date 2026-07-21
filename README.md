@@ -248,18 +248,109 @@ screenshots/
 
 ---
 
-# 🔮 Planned Features
+# 🚀 Planned Features
 
+## 💾 Project Management
+
+- Save & Load Projects
+- Auto Save (Recovery System)
+- Version History
+- Recent Projects
+- Project Templates
+- Multiple Maps per Project
+- Project Backup & Restore
+
+---
+
+## 👥 Team Collaboration
+
+- Share Projects via Link
+- Multi-User Collaboration
+- Real-Time Editing
+- Team Workspace
+- Comments & Review Mode
+- Role-Based Access (Viewer / Editor / Admin)
+- Activity & Edit History
+
+---
+
+## 📍 Advanced Mapping
+
+- Aerial (Straight-Line) Distance Calculation
+- Road Network Distance
+- Drive Time & Travel Time Analysis
+- Site Polygon Drawing
+- Plot Boundary Measurement
+- Land Area Calculation (Sq.ft / Sq.m / Acres / Hectares)
+- Property Buffer Analysis
+- Radius & Catchment Analysis
+- Custom GIS Layers
+- Terrain & Elevation View
+- Satellite & Hybrid Maps
+- 3D Building Visualization
+- Parcel / Survey Number Overlay
+
+---
+
+## 🏢 Real Estate Intelligence
+
+- Nearby Residential Projects
+- Comparable Property Analysis
+- Competitor Project Mapping
+- Infrastructure Mapping
+- School, Hospital & Metro Analysis
+- Retail & Commercial Catchment
+- Future Infrastructure Tracking
+- Market Growth Heatmaps
+- Development Pipeline Visualization
+- Population Density Layers
+- Zoning & Land Use Layers
+- Government Development Projects
+
+---
+
+## 🤖 AI Integration
+
+- AI Property Report Generator
+- AI Location Summary
+- AI Connectivity Analysis
+- AI Investment Score
+- AI SWOT Analysis
+- AI Market Insights
+- AI Auto Label Placement
+- AI Route Optimization
+- AI Presentation Generator
+- AI Image & Map Enhancement
+- AI Site Recommendation Engine
+- AI Chat Assistant for Maps
+
+---
+
+## 📊 Professional Reporting
+
+- One-Click Valuation Maps
+- Automatic Key Distance Tables
+- PDF Report Export
+- PowerPoint Presentation Generator
+- Word Report Export
+- Excel Data Export
+- Custom Company Branding
+- Batch Report Generation
+
+---
+
+## 🌐 Enterprise Features
+
+- Cloud Project Storage
+- Organization Dashboard
+- User Management
+- Audit Logs
+- API Integration
 - Google Maps Support
-- Mapbox Integration
-- 3D Buildings
-- Terrain Mode
-- PDF Export
-- Multi-page Report Generator
-- Project Save / Load
-- Layer Management
-- Team Collaboration
-- Dark / Light Themes
+- Mapbox Support
+- ArcGIS Support
+- Offline Project Mode
+- Mobile Companion App
 
 ---
 
