@@ -3230,12 +3230,25 @@
           // (the location/route label chips) -- the chip's background/border render fine,
           // but the name/text inside is silently skipped. This was confirmed by direct
           // testing: switching this on is what makes labels actually appear in exports.
+          //
+          // BUT: foreignObjectRendering serialises the subtree to an SVG <foreignObject>,
+          // and the browser refuses to draw *cross-origin images* (the map tiles) inside an
+          // SVG-drawn-to-canvas -- so tiles come out as broken-image placeholders. For the
+          // PPTX capture that does not matter and must be avoided: the label chips are
+          // hidden (.pptx-capture) and re-added as native PowerPoint objects by the export
+          // engine, so this pass only needs the tiles + route lines. Use the standard
+          // renderer there so the basemap actually rasterises.
+          const pptxPass = extraClass === 'pptx-capture';
+          const opts = { useCORS: true, allowTaint: false, scale: 2, logging: false, backgroundColor: '#0d1522' };
+          if (pptxPass) {
+            return await html2canvas(wrap, opts);
+          }
           try {
-            return await html2canvas(wrap, { useCORS: true, allowTaint: false, scale: 2, logging: false, backgroundColor: '#0d1522', foreignObjectRendering: true });
+            return await html2canvas(wrap, { ...opts, foreignObjectRendering: true });
           } catch (foErr) {
             // Rare fallback: some older/locked-down browsers don't support foreignObjectRendering
             // well. Degrade to the standard renderer rather than failing the export outright.
-            return await html2canvas(wrap, { useCORS: true, allowTaint: false, scale: 2, logging: false, backgroundColor: '#0d1522' });
+            return await html2canvas(wrap, opts);
           }
         } finally {
           wrap.classList.remove('capturing');
