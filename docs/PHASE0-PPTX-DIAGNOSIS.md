@@ -43,7 +43,7 @@ plus the edge cases the brief calls out (special chars `& < >`, SVG-dataURL icon
 leader lines, the 4-column legend table).
 
 ```
-diagnostics/pptx-repro/repro.js     # replays the app's exact pptxgenjs calls → repro-v49.pptx
+diagnostics/pptx-repro/repro.cjs     # replays the app's exact pptxgenjs calls → repro-v49.pptx
 diagnostics/pptx-repro/inspect.py   # unzips + walks slide1.xml for the defect classes below
 ```
 
@@ -52,7 +52,7 @@ Run:
 ```bash
 cd diagnostics/pptx-repro
 npm init -y && npm install pptxgenjs@3.12.0
-node repro.js
+node repro.cjs
 mkdir -p unz && (cd unz && unzip -q ../repro-v49.pptx)
 python3 inspect.py
 ```
