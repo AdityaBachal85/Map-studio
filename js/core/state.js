@@ -17,3 +17,9 @@ export const newId = () => nextId++;
 
 /** Ensure the id counter stays ahead of an externally supplied id (project load). @param {number} id */
 export function bumpId(id) { if (id >= nextId) nextId = id + 1; }
+
+/** Brand settings shared across markers, export and the Brand tab. */
+export const brand = { projectLogo: null, siteUsesProjLogo: false };
+
+/** Cross-module UI mode flags (click-to-add placement). */
+export const uiState = { addingMode: false };

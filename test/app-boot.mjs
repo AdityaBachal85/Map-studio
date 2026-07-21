@@ -64,6 +64,44 @@ await page.waitForTimeout(150);
 ok('tilt slider updates readout', ((await page.locator('#tiltVal').textContent()) || '').includes('30'));
 ok('tilt transforms the stage', await page.evaluate(() => (document.getElementById('tiltStage').style.transform || '').includes('rotateX')));
 
+// second location + a route between them (network is unavailable in this
+// sandbox, so routing must fall back to a straight line, not throw)
+await page.click('#tabBtnLoc');
+await page.click('#addLocBtn');
+await page.waitForTimeout(300);
+ok('second location card created', await page.locator('#locList > *').count() >= 2);
+
+await page.click('#tabBtnRt');
+await page.click('#addRtBtn');
+await page.waitForTimeout(1500); // OSRM fetch attempts + fallback
+ok('no uncaught JS errors after add-route (network unavailable)', pageErrors.length === 0);
+ok('route card created', await page.locator('#rtList > *').count() >= 1);
+// routes/rings render via Leaflet's canvas renderer (vectorRenderer = L.canvas(...)),
+// not SVG, so a drawn route is a <canvas> in the overlay pane, not a <path>.
+ok('route renders via the Leaflet canvas overlay', await page.evaluate(() => document.querySelectorAll('#map .leaflet-overlay-pane canvas').length >= 1));
+ok('legend row appended for the route', await page.locator('#legendBody tr').count() >= 1);
+
+// delete the route, then a location — bookkeeping (legend/empty-state) must follow
+const delRtBtn = page.locator('#rtList .del, #rtList button:has-text("Delete"), #rtList [class*="del"]').first();
+if (await delRtBtn.count()) { await delRtBtn.click(); await page.waitForTimeout(300); }
+await page.click('#tabBtnLoc');
+const delLocBtn = page.locator('#locList .del, #locList button:has-text("Delete"), #locList [class*="del"]').first();
+if (await delLocBtn.count()) { await delLocBtn.click(); await page.waitForTimeout(300); }
+ok('no uncaught JS errors after delete flows', pageErrors.length === 0);
+
+// project save/load round-trip: save must serialise brand + tilt correctly,
+// load must restore them (exercises core/state.brand + mapEngine.setTiltDeg)
+const proj = await page.evaluate(() => new Promise(resolve => {
+  const a = document.createElement('a');
+  const origClick = a.click.bind(a);
+  const origCreate = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { blob.text().then(t => resolve(JSON.parse(t))); return origCreate.call(URL, blob); };
+  document.getElementById('saveBtn').click();
+}));
+ok('saved project has a version tag', typeof proj.v === 'number');
+ok('saved project has locations array', Array.isArray(proj.locations));
+ok('saved project brand fields present (projectLogo/siteUsesProjLogo keys)', 'projectLogo' in proj && 'siteUsesProjLogo' in proj);
+
 // status line shows something (the app writes boot guidance into it)
 ok('status message present', ((await page.locator('#statusMsg').textContent()) || '').trim().length > 0);
 
