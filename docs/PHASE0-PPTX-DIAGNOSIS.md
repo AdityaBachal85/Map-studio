@@ -128,4 +128,20 @@ with a valid PNG-fallback blip + `<asvg:svgBlip>` (Phase 0, check #7).
 **Two confirmed repair vectors, both now handled:** (1) duplicate `cNvPr` id →
 `ensureUniqueShapeIds`; (2) roundRect adj > 50000 → `safeRectRadius`.
 
+### Which vector actually broke the file (v46 cross-check)
+
+The user also supplied **v4.6** — an older build whose editable PPTX export
+"works great." Reproducing v4.6's exact add-sequence under pptxgenjs 3.12.0
+showed it emits the **same duplicate `id="2"`** (Image 0 + Table 0) — so the
+duplicate id was never unique to v4.96, and the user's PowerPoint evidently
+*tolerates it*. The real difference: v4.6 uses tiny label corner radii
+(`rectRadius` 0.03–0.06) → small adj → fine, whereas v4.9/v4.96 use
+`rectRadius: 0.5` on the same small pills → adj up to 236848 → repair.
+
+**Practical conclusion:** the roundRect **adj-overflow was the trigger** that
+broke v4.96 in real PowerPoint; the duplicate id is a latent defect PowerPoint
+happens to tolerate here. The new engine fixes **both** regardless (plus ships
+pptxgenjs 4.0.1, which also emits a cleaner package than 3.12.0), so it is
+strictly safer than v4.6 while keeping the intended fully-rounded pill styling.
+
 **Status:** Phase 0 complete.
