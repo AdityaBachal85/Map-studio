@@ -3,6 +3,7 @@
  * route selects, the legend table, and empty-state visibility.
  */
 import { brand, locById, locations, routes } from '../core/state.js';
+import { LOGO_B64 } from '../constants.js';
 import { scheduleRepaint } from '../map/billboard.js';
 import { ICON_KEYS, ICON_LIBRARY } from '../map/icons.js';
 import { map } from '../map/mapEngine.js';
@@ -371,4 +372,74 @@ function wireLocCard(card, loc) {
         $('locEmpty').style.display = locations.length ? 'none' : '';
         $('rtEmpty').style.display = routes.length ? 'none' : '';
       }
+      /** Wire the legend card's drag handle so it can be repositioned. */
+      export function initLegendDrag() {
+        const cardEl = $('legendCard'), hd = $('legendDrag'), wrap = $('mapWrap');
+        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+        hd.addEventListener('pointerdown', e => {
+          dragging = true;
+          const r = cardEl.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+          ox = r.left - w.left; oy = r.top - w.top; sx = e.clientX; sy = e.clientY;
+          cardEl.style.right = 'auto'; cardEl.style.bottom = 'auto';
+          hd.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        hd.addEventListener('pointermove', e => {
+          if (!dragging) return;
+          cardEl.style.left = (ox + e.clientX - sx) + 'px';
+          cardEl.style.top = (oy + e.clientY - sy) + 'px';
+        });
+        hd.addEventListener('pointerup', () => { dragging = false; });
+      }
+
+      export function setProjectLogo(dataUrl) {
+        brand.projectLogo = dataUrl;
+        const im = $('projectLogoImg'), emp = $('projectLogoEmpty');
+        if (dataUrl) { im.src = dataUrl; im.style.display = ''; emp.style.display = 'none'; }
+        else { im.style.display = 'none'; emp.style.display = ''; im.removeAttribute('src'); }
+        // Re-render any locations using project logo
+        locations.forEach(l => { if (l.iconUseProjectLogo) renderLocPin(l); if (l.iconUseProjectLogo && l.showLabel) updateLocLabel(l); });
+        scheduleRepaint();
+      }
+      // Default project logo to the embedded DBOT
+      setProjectLogo('data:image/png;base64,' + LOGO_B64);
+      $('uploadProjLogoBtn').addEventListener('click', () => $('projLogoInput').click());
+      $('projLogoInput').addEventListener('change', e => {
+        const f = e.target.files[0]; if (!f) return;
+        const rd = new FileReader();
+        rd.onload = () => {
+          if (f.type === 'image/svg+xml') setProjectLogo(rd.result);
+          else {
+            const img = new Image();
+            img.onload = () => {
+              const cv = document.createElement('canvas');
+              const s = Math.min(1, 480 / Math.max(img.width, img.height));
+              cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+              cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+              setProjectLogo(cv.toDataURL('image/png'));
+            };
+            img.src = rd.result;
+          }
+          status('Project logo updated.');
+        };
+        rd.readAsDataURL(f);
+        e.target.value = '';
+      });
+      $('clearProjLogoBtn').addEventListener('click', () => {
+        setProjectLogo('data:image/png;base64,' + LOGO_B64);
+        status('Project logo reset to DBOT default.');
+      });
+      $('siteUsesProjLogo').addEventListener('change', e => {
+        brand.siteUsesProjLogo = e.target.checked;
+        locations.forEach(l => {
+          if (l.type === 'site') {
+            l.iconUseProjectLogo = brand.siteUsesProjLogo;
+            if (l.card) { const cb = l.card.querySelector('.uspl'); if (cb) cb.checked = brand.siteUsesProjLogo; }
+            renderLocPin(l); updateLocLabel(l);
+          }
+        });
+        scheduleRepaint();
+        status(brand.siteUsesProjLogo ? 'All Site pins now use the project logo.' : 'Site pins reverted to their per-location icons.');
+      });
+      $('brandTitleInput').addEventListener('input', e => { $('titleCard').textContent = e.target.value || 'PROPERTY LOCATION & ACCESS'; });
 

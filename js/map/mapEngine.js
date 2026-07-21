@@ -5,6 +5,8 @@
  */
 import L from 'leaflet';
 import { scheduleRepaint } from '../map/billboard.js';
+import { locations, routes } from '../core/state.js';
+import { status } from '../ui/notifications.js';
 import { $ } from '../utils/dom.js';
 
       // ---------- map + basemaps ----------
@@ -103,4 +105,19 @@ import { $ } from '../utils/dom.js';
       });
       /** Set the 3D tilt angle (degrees) — used by project load. @param {number} v */
       export function setTiltDeg(v) { tiltDeg = v; }
+      /** Fit the map view to every location (+ its rings) and route. */
+      export function fitAll() {
+        const pts = [];
+        locations.forEach(l => {
+          pts.push([l.lat, l.lng]);
+          (l.rings || []).forEach(r => {
+            const km = parseFloat(r.km);
+            if (km > 0) { pts.push([l.lat + km / 111.32, l.lng]); pts.push([l.lat - km / 111.32, l.lng]); }
+          });
+        });
+        routes.forEach(r => { const a = r.alts && r.alts[r.altIndex]; if (a) a.coords.forEach(c => pts.push(c)); });
+        if (!pts.length) { status('Nothing to fit yet — add a location first.'); return; }
+        map.fitBounds(pts, { padding: [80, 80] });
+      }
+      $('fitBtn').addEventListener('click', fitAll);
 
