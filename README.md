@@ -183,11 +183,22 @@ Or host it using:
 
 ```
 
-DBOTMapStudio/
+DBOT-Map-Studio/
 │
-├── DBOTMapStudiov5FIXED.html
-├── README.md
-└── Assets (optional)
+├── index.html
+├── css/ (style, layout, sidebar, toolbar, dialogs, components, map, themes)
+├── js/
+│   ├── app.js, config.js, constants.js
+│   ├── core/ (state, history, events, storage, logger)
+│   ├── map/ (mapEngine, markers, labels, routes, polygons, icons, snapping, distance)
+│   ├── ui/ (sidebar, toolbar, dialogs, propertyPanel, notifications, shortcuts)
+│   ├── export/ (exportPPT, pptShapes, pptImages, pptLabels, pptTables,
+│   │            pptValidation, pptUtils, exportPNG, exportPDF)
+│   ├── services/ (geocoder, routing, places)
+│   ├── project/ (saveProject, openProject, autosave)
+│   └── utils/ (helpers, validator, dom, math, colors)
+│
+└── assets/ (logos, icons, images)
 
 ```
 
@@ -359,12 +370,6 @@ screenshots/
 Contributions are welcome.
 
 If you have suggestions, improvements, or feature requests, feel free to open an issue or submit a pull request.
-
----
-
-# 📄 License
-
-This project is licensed under the MIT License.
 
 ---
 
