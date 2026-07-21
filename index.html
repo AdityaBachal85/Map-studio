@@ -1758,8 +1758,14 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.min.js"
-    onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';document.head.appendChild(s);"></script>
+  <!-- PPTX export is handled by the bundled v5 engine (js/export/*), which pins
+       pptxgenjs 4.0.1 + jszip and repairs the duplicate-cNvPr-id / roundRect-adj
+       defects that make PowerPoint 365 refuse the file. Replaces the old CDN
+       pptxgenjs 3.12.0 exporter. Requires the Vite build (npm run dev|build). -->
+  <script type="module">
+    import { exportDeck } from './js/export/exportPPT.js';
+    window.DBOTExport = { exportDeck };
+  </script>
   <script>
     /*JS-START*/
     (function () {
@@ -3269,8 +3275,8 @@
       // ---------- PPTX export ----------
       const mctx = document.createElement('canvas').getContext('2d');
       $('pptxBtn').addEventListener('click', async () => {
-        if (typeof PptxGenJS === 'undefined') {
-          status('PPTX library did not load — check internet connection and try again in a few seconds.');
+        if (!window.DBOTExport || !window.DBOTExport.exportDeck) {
+          status('Export engine still loading — wait a moment and try again.');
           return;
         }
         status('Building editable PPTX… (several seconds)', true);
@@ -3342,263 +3348,39 @@
 
         try {
           const dataUrl = canvas.toDataURL('image/png');
-
-          // Convert every icon to PNG (rasterizing any SVGs) BEFORE building the slide.
-          // This guarantees PowerPoint only ever receives PNG image parts, which some
-          // PowerPoint builds require (embedded SVG blips can trigger "can't read").
-          for (const w of widgets.pins) {
-            const raster = await iconAsRaster(w.iconData, w.size);
-            w.iconData = raster;                 // may be null if rasterization failed
-          }
-
-          const SW = 13.333, SH = 7.5;
-          const imgAspect = wrapW / wrapH, slideAspect = SW / SH;
-          let imgW, imgH, offX, offY;
-          if (imgAspect >= slideAspect) { imgW = SW; imgH = SW / imgAspect; offX = 0; offY = (SH - imgH) / 2; }
-          else { imgH = SH; imgW = SH * imgAspect; offY = 0; offX = (SW - imgW) / 2; }
-          const rr = imgW / wrapW;
-          const X = px => offX + px * rr;
-          const Y = px => offY + px * rr;
-          const PT = cssPx => Math.max(7.5, cssPx * rr * 72);
-          const textWIn = (text, pxSize, bold) => {
+          const measurePx = (text, pxSize, bold) => {
             mctx.font = (bold ? '700 ' : '600 ') + pxSize + 'px Arial';
-            return (mctx.measureText(String(text)).width) * rr + PT(pxSize) * 2.2 / 72 * 0.55 + 0.1;
+            return mctx.measureText(String(text)).width;
           };
-
-          const pptx = new PptxGenJS();
-          pptx.layout = 'LAYOUT_WIDE';
-          pptx.author = 'DBOT · Property Map Studio';
-          const slide = pptx.addSlide();
-          slide.background = { color: '0A1E3C' };
-          slide.addImage({ data: dataUrl, x: offX, y: offY, w: imgW, h: imgH });
-
-          widgets.leaders.forEach(L2 => {
-            const x1 = X(L2.a.x), y1 = Y(L2.a.y), x2 = X(L2.b.x), y2 = Y(L2.b.y);
-            const dx = x2 - x1, dy = y2 - y1;
-            if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
-            slide.addShape('line', {
-              x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(dx), h: Math.abs(dy),
-              flipH: (dx < 0) !== (dy < 0),
-              line: { color: hex(L2.color), width: 0.75 }
-            });
-          });
-
-          // Icon pins as native PPTX shapes with embedded images — every icon fully editable.
-          // iconData is always a PNG here (SVGs were rasterized above); if rasterization
-          // failed it's null, and we draw only the frame/marker so nothing breaks the file.
-          widgets.pins.forEach(w => {
-            const inSize = w.size * rr;
-            const cx = X(w.px.x), cy = Y(w.px.y);   // pin bottom-center
-            const bx = cx - inSize / 2, by = cy - inSize;
-            const hasImg = !!w.iconData && (w.iconData.startsWith('data:image/png') || w.iconData.startsWith('data:image/jpeg') || w.iconData.startsWith('data:image/jpg'));
-            if (w.frame === 'none') {
-              // Frameless: just the icon image. If we have no valid raster, drop a small
-              // dot so the location is still marked rather than invisible.
-              if (hasImg) {
-                slide.addImage({ data: w.iconData, x: bx, y: by, w: inSize, h: inSize });
-              } else {
-                slide.addShape('ellipse', { x: cx - inSize * 0.18, y: cy - inSize * 0.18, w: inSize * 0.36, h: inSize * 0.36, fill: { color: hex(w.borderColor || '#FF7A1A') }, line: { type: 'none' } });
-              }
-            } else {
-              const shape = w.frame === 'circle' ? 'ellipse' : 'roundRect';
-              const desired = w.frame === 'square' ? 0.02 : (w.frame === 'rounded' ? 0.16 : 0.5);
-              const radius = safeRadius(desired, inSize, inSize);
-              slide.addShape(shape, {
-                x: bx, y: by, w: inSize, h: inSize, rectRadius: radius,
-                fill: { color: hex(w.bg) }, line: { color: hex(w.borderColor), width: Math.max(.5, w.border) }
-              });
-              if (hasImg) {
-                const pad = inSize * (w.isImage ? 0.11 : 0.17);
-                slide.addImage({ data: w.iconData, x: bx + pad, y: by + pad, w: inSize - pad * 2, h: inSize - pad * 2 });
-              }
+          // Build the engine's deck spec from the widgets collected above. All the
+          // pptxgenjs work, id-repair and radius clamping now live in js/export/*.
+          const spec = {
+            fileName: 'property-access-map.pptx',
+            author: 'DBOT · Property Map Studio',
+            geometry: { wrapW, wrapH, chipFont },
+            slide: {
+              background: '0A1E3C',
+              map: { data: dataUrl },
+              leaders: widgets.leaders,
+              pins: widgets.pins,
+              locationLabels: widgets.locLabels,
+              routeLabels: widgets.rtLabels,
+              badges: widgets.badges,
+              rings: widgets.rings,
+              title: { visible: titleVisible, text: titleText },
+              legend: (legendRect && lgRows.length) ? {
+                visible: legendVisible, title: legendTitle,
+                pxLeft: legendRect.left - wrapRect.left,
+                pxTop: legendRect.top - wrapRect.top,
+                pxWidth: legendRect.width,
+                rows: lgRows
+              } : { visible: false },
+              logo: brandOn ? { visible: true, data: 'data:image/png;base64,' + LOGO_B64, aspect: LOGO_AR } : { visible: false }
             }
-          });
-
-          widgets.rtLabels.forEach(w => {
-            const px = chipFont - 1, pt = PT(px);
-            const bw = textWIn(w.text, px, true), bh = pt * 2.1 / 72;
-            slide.addText(w.text, {
-              x: X(w.px.x), y: Y(w.px.y), w: bw, h: bh,
-              shape: 'roundRect', rectRadius: safeRadius(0.5, bw, bh),
-              fill: { color: hex(w.bg) }, line: { type: 'none' },
-              color: hex(textOn(w.bg)), fontSize: pt, bold: true, fontFace: 'Arial',
-              align: 'center', valign: 'middle', margin: 0.02
-            });
-          });
-
-          widgets.locLabels.forEach(w => {
-            const px = w.site ? chipFont + 1 : chipFont, pt = PT(px);
-            const x = X(w.px.x);
-            const bw = textWIn(w.text, px, true), bh = pt * 2.1 / 72;
-            slide.addText(w.text, {
-              x: x, y: Y(w.px.y), w: bw, h: bh,
-              shape: 'roundRect', rectRadius: safeRadius(0.5, bw, bh),
-              fill: { color: hex(w.bg) }, line: { type: 'none' },
-              color: hex(textOn(w.bg)),
-              fontSize: pt, bold: true, fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0.02
-            });
-          });
-
-          widgets.badges.forEach(w => {
-            const pt = PT(11);
-            const bw = textWIn(w.text, 11, true), bh = pt * 2.2 / 72;
-            slide.addText(w.text, {
-              x: X(w.px.x) - bw / 2, y: Y(w.px.y) - bh / 2, w: bw, h: bh,
-              shape: 'roundRect', rectRadius: safeRadius(0.05, bw, bh),
-              fill: { color: hex(w.color) }, line: { color: 'FFFFFF', width: 1.5 },
-              color: '111111', fontSize: pt, bold: true, fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0.02
-            });
-          });
-
-          widgets.rings.forEach(w => {
-            const px = chipFont - 2, pt = PT(px);
-            const bw = textWIn(w.text, px, false), bh = pt * 2 / 72;
-            slide.addText(w.text, {
-              x: X(w.px.x), y: Y(w.px.y), w: bw, h: bh,
-              shape: 'roundRect', rectRadius: safeRadius(0.5, bw, bh),
-              fill: { color: 'FFFFFF' }, line: { color: hex(w.color), width: 0.75 },
-              color: '17202B', fontSize: pt, fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0.02
-            });
-          });
-
-          if (titleVisible) {
-            const tw = Math.max(3.4, textWIn(titleText, 15, true) + 0.5), th = 0.44;
-            const tx = (SW - tw) / 2, ty = offY + 0.12;
-            slide.addText(titleText, {
-              x: tx, y: ty, w: tw, h: th,
-              fill: { color: '0A1E3C' }, color: 'FFFFFF', bold: true,
-              fontSize: 16, fontFace: 'Arial', align: 'center', valign: 'middle',
-              shape: 'roundRect', rectRadius: safeRadius(0.05, tw, th), charSpacing: 1
-            });
-            slide.addShape('rect', { x: tx + 0.08, y: ty + th - 0.045, w: tw - 0.16, h: 0.045, fill: { color: 'FF7A1A' } });
-          }
-
-          if (legendRect && lgRows.length) {
-            const lx = X(legendRect.left - wrapRect.left), ly = Y(legendRect.top - wrapRect.top);
-            const lw = Math.max(2.3, legendRect.width * rr);
-            slide.addText(legendTitle, {
-              x: lx, y: ly, w: lw, h: 0.3, fill: { color: '0A1E3C' }, color: 'FFFFFF',
-              bold: true, fontSize: 9.5, fontFace: 'Arial', align: 'left', valign: 'middle', charSpacing: 2, margin: 0.06
-            });
-            const rows = lgRows.map(r => [
-              { text: '', options: { fill: { color: hex(r.color) } } },
-              { text: r.name, options: { align: 'left' } },
-              { text: r.km, options: { align: 'right' } },
-              { text: r.min, options: { align: 'right' } }
-            ]);
-            slide.addTable(rows, {
-              x: lx, y: ly + 0.3, w: lw, colW: [0.16, lw - 0.16 - 0.62 - 0.55, 0.62, 0.55],
-              fontFace: 'Arial', fontSize: 8.5, color: '17202B',
-              fill: { color: 'FFFFFF' }, border: { pt: 0.5, color: 'E5EAF1' },
-              rowH: 0.22, valign: 'middle', margin: 0.04
-            });
-          }
-
-          if (brandOn) {
-            const lw2 = 1.15, lh2 = lw2 * LOGO_AR, pad = 0.09;
-            const bx = SW - lw2 - pad * 2 - 0.15, by = SH - lh2 - pad * 2 - 0.12;
-            slide.addShape('roundRect', { x: bx, y: by, w: lw2 + pad * 2, h: lh2 + pad * 2, rectRadius: safeRadius(0.06, lw2 + pad * 2, lh2 + pad * 2), fill: { color: 'FFFFFF' }, line: { color: 'E5EAF1', width: 0.5 } });
-            slide.addImage({ data: 'data:image/png;base64,' + LOGO_B64, x: bx + pad, y: by + pad, w: lw2, h: lh2 });
-          }
-
-          // ---- Clean-repackage the PPTX so real PowerPoint accepts it ----
-          // PptxGenJS's bundled JSZip emits the archive with (a) directory placeholder
-          // entries (e.g. "ppt/", "ppt/charts/") and (b) [Content_Types].xml NOT first.
-          // Lenient readers (LibreOffice, python-pptx) tolerate this, but real PowerPoint
-          // enforces the OOXML rule that [Content_Types].xml must be the first entry and
-          // that there should be no directory entries -- otherwise it shows "can't open".
-          // So: generate the raw zip, then rebuild it cleanly with JSZip before download.
-          let cleaned = false;
-          try {
-            const rawBlob = await pptx.write({ outputType: 'blob' });
-            const JSZipRef = (typeof window !== 'undefined' && window.JSZip) ? window.JSZip : (pptx && pptx.JSZip) || null;
-            if (JSZipRef) {
-              const srcZip = await JSZipRef.loadAsync(rawBlob);
-              const outZip = new JSZipRef();
-              // Collect only real files (skip directory entries), preserving their data.
-              const fileNames = [];
-              srcZip.forEach((relPath, entry) => { if (!entry.dir) fileNames.push(relPath); });
-              // Write [Content_Types].xml FIRST, then every other file, all as real files.
-              const ordered = fileNames.slice().sort((a, b) => {
-                if (a === '[Content_Types].xml') return -1;
-                if (b === '[Content_Types].xml') return 1;
-                return 0;
-              });
-              for (const name of ordered) {
-                let data = await srcZip.file(name).async('uint8array');
-                // Fix duplicate shape IDs: PptxGenJS can assign the same <p:cNvPr id="N">
-                // to more than one object on a slide (notably a table graphicFrame colliding
-                // with an earlier shape). PowerPoint requires every cNvPr id on a slide to be
-                // unique and rejects the whole slide otherwise. So for each slide part, renumber
-                // all non-group cNvPr ids sequentially (the group root keeps id=1).
-                if (/^ppt\/slides\/slide\d+\.xml$/.test(name)) {
-                  try {
-                    let xml = new TextDecoder('utf-8').decode(data);
-                    let counter = 1;
-                    xml = xml.replace(/(<p:cNvPr\s+id=")(\d+)(")/g, (m, pre, oldId, post) => {
-                      return pre + (counter++) + post;
-                    });
-                    data = new TextEncoder().encode(xml);
-                  } catch (idErr) { /* leave slide as-is if anything unexpected */ }
-                }
-                // Fix child-element ORDER in presentation.xml. The OOXML schema mandates a
-                // strict sequence: sldMasterIdLst, notesMasterIdLst, sldIdLst, sldSz, notesSz.
-                // PptxGenJS emits notesMasterIdLst out of order (after sldIdLst), which real
-                // PowerPoint rejects ("can't read") even though lenient readers accept it.
-                if (name === 'ppt/presentation.xml') {
-                  try {
-                    let xml = new TextDecoder('utf-8').decode(data);
-                    // Pull out each optional block, then re-insert in the required order.
-                    const grab = (tag) => {
-                      const re = new RegExp('<p:' + tag + '(?:\\s[^>]*)?>[\\s\\S]*?<\\/p:' + tag + '>|<p:' + tag + '(?:\\s[^>]*)?\\/>');
-                      const m = xml.match(re);
-                      if (m) { xml = xml.replace(m[0], ''); return m[0]; }
-                      return '';
-                    };
-                    const sldMaster = grab('sldMasterIdLst');
-                    const notesMaster = grab('notesMasterIdLst');
-                    const sldId = grab('sldIdLst');
-                    const sldSz = grab('sldSz');
-                    const notesSz = grab('notesSz');
-                    const ordered5 = sldMaster + notesMaster + sldId + sldSz + notesSz;
-                    // Re-insert the ordered block where the first of these elements used to be:
-                    // right after the last element that precedes them. The simplest safe anchor
-                    // is just before the first remaining child of p:presentation that followed
-                    // them (defaultTextStyle / extLst / embeddedFontLst) or before </p:presentation>.
-                    if (/<p:defaultTextStyle/.test(xml)) {
-                      xml = xml.replace(/<p:defaultTextStyle/, ordered5 + '<p:defaultTextStyle');
-                    } else if (/<p:extLst/.test(xml)) {
-                      xml = xml.replace(/<p:extLst/, ordered5 + '<p:extLst');
-                    } else {
-                      xml = xml.replace(/<\/p:presentation>/, ordered5 + '</p:presentation>');
-                    }
-                    data = new TextEncoder().encode(xml);
-                  } catch (ordErr) { /* leave as-is on any surprise */ }
-                }
-                outZip.file(name, data, { createFolders: false, binary: true });
-              }
-              const cleanBlob = await outZip.generateAsync({
-                type: 'blob',
-                mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                compression: 'DEFLATE',
-                // Crucial: do NOT emit directory entries in the rebuilt archive.
-                streamFiles: false
-              });
-              // Trigger download of the cleaned file.
-              const url = URL.createObjectURL(cleanBlob);
-              const a = document.createElement('a');
-              a.href = url; a.download = 'property-access-map.pptx';
-              document.body.appendChild(a); a.click();
-              setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
-              cleaned = true;
-            }
-          } catch (repackErr) {
-            cleaned = false; // fall through to the standard writer below
-          }
-          if (!cleaned) {
-            await pptx.writeFile({ fileName: 'property-access-map.pptx' });
-          }
-          status('PPTX downloaded — flat view for clean editing; labels, badges, leader lines, title, table and logo are native PowerPoint objects.');
+          };
+          const { log } = await window.DBOTExport.exportDeck(spec, { measurePx, output: 'download' });
+          const skipped = (log && log.skipped) ? ' (' + log.skipped + ' invalid object(s) skipped)' : '';
+          status('PPTX downloaded — flat map with native, editable labels, badges, leader lines, title, table and logo.' + skipped);
         } catch (e) {
           status('PPTX build failed: ' + (e && e.message ? e.message : 'unknown error') + ' — the PNG export still works.');
         }

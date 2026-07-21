@@ -7,3 +7,6 @@ test/ppt-export/fixtures/*.pptx
 # unzip scratch dirs created while inspecting fixtures
 test/ppt-export/fixtures/u_*/
 test/ppt-export/fixtures/ud/
+
+# browser-smoke unzip scratch
+test/ppt-export/fixtures/bs/
