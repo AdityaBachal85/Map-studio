@@ -6,6 +6,7 @@
  */
 
 import { validateImage } from './pptValidation.js';
+import { safeRectRadius } from './pptUtils.js';
 import { addIconFrame } from './pptShapes.js';
 
 /**
@@ -66,7 +67,7 @@ export function addLogo(slide, logo, log, hex) {
   if (!validateImage(logo, log, 'logo')) return false;
   const c = logo.card;
   slide.addShape('roundRect', {
-    x: c.x, y: c.y, w: c.w, h: c.h, rectRadius: 0.06,
+    x: c.x, y: c.y, w: c.w, h: c.h, rectRadius: safeRectRadius(0.06, c.w, c.h),
     fill: { color: 'FFFFFF' }, line: { color: 'E5EAF1', width: 0.5 },
   });
   slide.addImage({ data: logo.data, x: logo.x, y: logo.y, w: logo.w, h: logo.h });

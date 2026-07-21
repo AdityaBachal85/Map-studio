@@ -48,6 +48,23 @@ export function isFiniteNumber(n) {
 }
 
 /**
+ * Clamp a roundRect corner radius so pptxgenjs never emits an out-of-range
+ * `<a:gd>` adjustment. pptxgenjs computes `adj = rectRadius / min(w,h) * 100000`,
+ * and PowerPoint 365 rejects the file ("can't read content" / repair) when
+ * `adj > 50000` — i.e. when the radius exceeds half the shorter side — even
+ * though python-pptx and LibreOffice accept it. The margin keeps adj just under
+ * the cap. Visually a fully-rounded pill stays fully rounded.
+ * @param {number} desiredIn Requested radius in inches.
+ * @param {number} wIn Shape width in inches.
+ * @param {number} hIn Shape height in inches.
+ * @returns {number} A safe radius in inches (0 ≤ r ≤ 0.49·min(w,h)).
+ */
+export function safeRectRadius(desiredIn, wIn, hIn) {
+  const maxIn = Math.min(wIn, hIn) * 0.5 * 0.98;
+  return Math.max(0, Math.min(desiredIn, maxIn));
+}
+
+/**
  * Fit a source rectangle (the map capture) inside the slide, letterboxed and
  * centred — the same maths the v4.9 export used, extracted so both the engine
  * and its tests share one implementation.

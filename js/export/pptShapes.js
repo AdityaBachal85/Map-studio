@@ -5,6 +5,7 @@
  */
 
 import { validateBox } from './pptValidation.js';
+import { safeRectRadius } from './pptUtils.js';
 
 /**
  * Add a leader line between two source-px points as a native line shape.
@@ -51,7 +52,7 @@ export function addIconFrame(slide, pin, log, hex) {
   if (!validateBox(pin, log, 'icon-frame')) return false;
   const { shape, radius } = frameGeometry(pin.frame);
   slide.addShape(shape, {
-    x: pin.x, y: pin.y, w: pin.w, h: pin.h, rectRadius: radius,
+    x: pin.x, y: pin.y, w: pin.w, h: pin.h, rectRadius: safeRectRadius(radius, pin.w, pin.h),
     fill: { color: hex(pin.bg) },
     line: { color: hex(pin.borderColor), width: Math.max(0.5, pin.border) },
   });

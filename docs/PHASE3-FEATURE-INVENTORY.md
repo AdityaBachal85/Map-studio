@@ -5,9 +5,13 @@ Complete capability checklist derived from reading the current single-file app
 nothing here may be silently dropped during migration. Each row names the v4.9
 source symbol(s) and the target module it migrates to.
 
-> Source note: this inventory is built from the **v4.9** file in the repo. The
-> build brief referenced an ~11k-line v4.94 that was never uploaded. If v4.94
-> lands, this list is extended, not replaced — the subsystems below are stable.
+> Source note: originally drafted from v4.9; the repo's `index.html` is now the
+> user's real current app, **v4.96** (3,743 lines), adopted as the source of
+> truth. v4.96 differs only by three export-hardening helpers — `svgToPngDataUri`
+> / `iconAsRaster` (rasterise SVG icons) and `safeRadius` (clamp roundRect
+> corner radius). All three are already handled natively by the Phase 1 engine
+> (SVG → valid PNG-fallback blip; radius → `pptUtils.safeRectRadius`), so no new
+> feature rows are needed. The subsystems below are otherwise unchanged.
 
 Legend: ☐ = to migrate · all currently present in v4.9 unless marked _(absent)_.
 

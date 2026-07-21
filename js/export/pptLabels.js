@@ -5,6 +5,7 @@
  */
 
 import { validateText } from './pptValidation.js';
+import { safeRectRadius } from './pptUtils.js';
 import { addTitleUnderline } from './pptShapes.js';
 
 /**
@@ -18,7 +19,7 @@ function addTextChip(slide, chip, log, kind) {
   if (!validateText(chip, log, kind)) return false;
   slide.addText(String(chip.text), {
     x: chip.x, y: chip.y, w: chip.w, h: chip.h,
-    shape: 'roundRect', rectRadius: chip.rectRadius,
+    shape: 'roundRect', rectRadius: safeRectRadius(chip.rectRadius, chip.w, chip.h),
     fill: chip.fill, line: chip.line,
     color: chip.color, fontSize: chip.fontSize, bold: !!chip.bold,
     fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0.02,

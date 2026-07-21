@@ -104,4 +104,28 @@ minimum extent, or draw them as connectors).
 4. Keep everything native/editable (text, shapes, icons, table, title, legend) — the current export
    already does this correctly; only the id assignment is broken.
 
-**Status:** Phase 0 complete. Stopping here for review before starting Phase 1, per the build plan.
+---
+
+## Addendum — second repair vector found via the v4.96 source
+
+After Phase 1, the user supplied the real current app (**v4.96**, adopted as the
+source of truth). Its export code carries three hardening helpers absent from
+v4.9 — `svgToPngDataUri`, `iconAsRaster`, `safeRadius` — one of which documents a
+**second, independent PowerPoint-repair cause**:
+
+> A roundRect `rectRadius` larger than half the shape's shorter side makes
+> pptxgenjs emit `adj = rectRadius / min(w,h) × 100000 > 50000`. PowerPoint 365
+> rejects `adj > 50000` (repair / "can't read content") even though python-pptx
+> and LibreOffice accept it.
+
+Verified against the new engine: small label pills with `rectRadius: 0.5`
+produced adjustments up to **236848**. The engine now clamps every roundRect
+via `pptUtils.safeRectRadius()` (≤ 0.49·min(w,h) → adj ≤ 49000), applied in
+`pptLabels`, `pptShapes`, and `pptImages`. The v4.96 SVG-rasterisation helpers
+are unnecessary in the new engine because pptxgenjs already embeds SVG icons
+with a valid PNG-fallback blip + `<asvg:svgBlip>` (Phase 0, check #7).
+
+**Two confirmed repair vectors, both now handled:** (1) duplicate `cNvPr` id →
+`ensureUniqueShapeIds`; (2) roundRect adj > 50000 → `safeRectRadius`.
+
+**Status:** Phase 0 complete.
