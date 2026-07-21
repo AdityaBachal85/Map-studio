@@ -53,6 +53,17 @@ await page.waitForTimeout(150);
 const northAfter = await page.locator('#northArrow').isVisible();
 ok('north-arrow toggle flips visibility', northBefore !== northAfter);
 
+// basemap actually initialised: setBasemap('hybrid') writes the credit line
+// and adds tile layers (this catches silently-dead init code, not just crashes)
+ok('basemap credit written (setBasemap ran)', (((await page.locator('#mapCredit').textContent()) || '').trim()).length > 0);
+ok('tile layer(s) attached to the map', await page.evaluate(() => document.querySelectorAll('#map .leaflet-tile-pane .leaflet-layer').length >= 1));
+
+// tilt control is wired: moving the range updates the ° readout and the stage transform
+await page.locator('#tiltRange').evaluate(el => { el.value = '30'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+await page.waitForTimeout(150);
+ok('tilt slider updates readout', ((await page.locator('#tiltVal').textContent()) || '').includes('30'));
+ok('tilt transforms the stage', await page.evaluate(() => (document.getElementById('tiltStage').style.transform || '').includes('rotateX')));
+
 // status line shows something (the app writes boot guidance into it)
 ok('status message present', ((await page.locator('#statusMsg').textContent()) || '').trim().length > 0);
 

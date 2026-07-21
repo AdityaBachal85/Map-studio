@@ -26,8 +26,6 @@ import { status } from './ui/notifications.js';
 window.DBOTExport = { exportDeck };
 
     /*JS-START*/
-    (function () {
-      'use strict';
 
       // ---------- DBOT brand asset ----------
       document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
@@ -87,6 +85,7 @@ window.DBOTExport = { exportDeck };
         activeBase = BASEMAPS[key].build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = BASEMAPS[key].credit;
+      }
       $('basemapSel').addEventListener('change', e => setBasemap(e.target.value));
       $('hdTgl').addEventListener('change', () => setBasemap(activeKey));
       $('hillTgl').addEventListener('change', e => { if (e.target.checked) hillshade.addTo(map); else map.removeLayer(hillshade); });
@@ -120,10 +119,6 @@ window.DBOTExport = { exportDeck };
           ctx.drawImage(src, 0, srcRow, W, 1, (W - dw) / 2, row, dw, 1);
         }
         return out;
-      }
-
-      // ---------- icon library (SVGs; every icon inherits currentColor for tinting) ----------
-
       }
 
       // ---------- billboard layer: labels/markers live OUTSIDE the tilt stage ----------
@@ -1678,5 +1673,4 @@ window.DBOTExport = { exportDeck };
 
       syncEmpties();
       status('Start blank: type in the search bar for live suggestions, paste "lat, lng" directly, or use Click-to-add.');
-    })();
     /*JS-END*/
