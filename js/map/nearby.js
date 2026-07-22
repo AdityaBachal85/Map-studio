@@ -61,10 +61,30 @@ function dropNearbyMarkers(key, places) {
     arr.push(m);
   });
   nearbyMarkers[key] = arr;
+  if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 function showNearbyCategory(key) { (nearbyMarkers[key] || []).forEach(m => { if (!map.hasLayer(m)) m.addTo(map); }); }
 function hideNearbyCategory(key) { (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); }); }
+
+/**
+ * Show/hide a fetched nearby category, keeping its Nearby-tab chip in sync.
+ * Used by the Layer Manager. Operates on the cached markers only (no refetch).
+ * @param {string} key @param {boolean} on
+ */
+function setNearbyCategoryVisible(key, on) {
+  const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
+  if (on) {
+    nearbyEnabled.add(key);
+    showNearbyCategory(key);
+    if (chip) chip.classList.add('active');
+  } else {
+    nearbyEnabled.delete(key);
+    hideNearbyCategory(key);
+    if (chip) chip.classList.remove('active');
+  }
+  updateNearbyClearBtn();
+}
 
 /** Fetch + drop one category's markers around the current centre/radius. @param {string} key */
 async function fetchNearbyKey(key) {
@@ -92,6 +112,7 @@ async function toggleNearbyCategory(key) {
     hideNearbyCategory(key);
     if (chip) chip.classList.remove('active');
     updateNearbyClearBtn();
+    if (typeof refreshLayers === 'function') refreshLayers();
     return;
   }
   if (!nearbyCenter) { nearbyCenter = map.getCenter(); drawNearbyCircle(); }
@@ -101,6 +122,7 @@ async function toggleNearbyCategory(key) {
   const ok = await fetchNearbyKey(key);
   if (!ok) { nearbyEnabled.delete(key); if (chip) chip.classList.remove('active'); }
   updateNearbyClearBtn();
+  if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 /** Drop every marker cache (used when centre/radius changes so enabled categories refetch). */
@@ -110,6 +132,7 @@ function clearNearbyMarkerCache() {
     delete nearbyMarkers[key];
   });
   $('nearbyGrid').querySelectorAll('.nc-count').forEach(el => (el.textContent = ''));
+  if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 /** Refetch every currently-enabled category (after a centre or radius change). */

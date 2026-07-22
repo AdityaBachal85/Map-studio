@@ -33,10 +33,22 @@ function layerGroups() {
     zoom: () => { if (g.layer.getBounds) map.fitBounds(g.layer.getBounds(), { padding: [60, 60] }); else if (g.layer.getLatLng) map.flyTo(g.layer.getLatLng(), Math.max(map.getZoom(), 16)); },
     setVisible: on => setGeomVisible(g, on),
   }));
+  // Nearby: one row per fetched category (from services/nearbyPlaces + map/nearby).
+  const nearbyItems = (typeof nearbyMarkers !== 'undefined' ? Object.keys(nearbyMarkers) : []).map(key => {
+    const cat = nearbyCatByKey(key);
+    const markers = nearbyMarkers[key] || [];
+    return {
+      name: `${cat.label} · ${markers.length}`, color: cat.color, icon: cat.icon,
+      hidden: !nearbyEnabled.has(key),
+      zoom: () => { if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds(), { padding: [60, 60] }); },
+      setVisible: on => setNearbyCategoryVisible(key, on),
+    };
+  });
   return [
     { key: 'loc', label: 'Locations', icon: '📍', items: locItems },
     { key: 'rt', label: 'Routes', icon: '🛣️', items: rtItems },
     { key: 'geom', label: 'Shapes', icon: '⬠', items: geomItems },
+    { key: 'nearby', label: 'Nearby', icon: '📌', items: nearbyItems },
   ];
 }
 
