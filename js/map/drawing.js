@@ -111,6 +111,7 @@ function syncGlowGeometry(g) {
 
 /** Create/refresh or remove a shape's glow halo to match g.glow. @param {object} g */
 function ensureGlow(g) {
+  if (g._hidden) { if (g.glowLayer) { map.removeLayer(g.glowLayer); g.glowLayer = null; } return; }
   if (g.glow) {
     if (!g.glowLayer) { g.glowLayer = makeGlowLayer(g); g.glowLayer.addTo(map); if (g.glowLayer.bringToBack) g.glowLayer.bringToBack(); }
     else syncGlowGeometry(g);
@@ -136,6 +137,7 @@ function geomLabelIcon(g) {
 
 /** Create/refresh or remove a shape's on-map name label to match g.showLabel. @param {object} g */
 function ensureGeomLabel(g) {
+  if (g._hidden) { if (g.labelMarker) { map.removeLayer(g.labelMarker); g.labelMarker = null; } return; }
   if (g.showLabel) {
     if (!g.labelMarker) {
       g.labelMarker = L.marker(geomLabelLatLng(g), { icon: geomLabelIcon(g), interactive: false, keyboard: false, zIndexOffset: 500 }).addTo(map);
@@ -315,6 +317,7 @@ function removeGeomById(id) {
   if (g.card && g.card.parentNode) g.card.parentNode.removeChild(g.card);
   geometries.splice(idx, 1);
   syncGeomEmpty();
+  if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 /** Build a full geometry entry around an already-positioned, already-styled layer and add it to the app. */
@@ -334,7 +337,21 @@ function registerGeom(layer, shape, meta) {
   buildGeomCard(g);
   updateGeomMeasurement(g);
   syncGeomEmpty();
+  if (typeof refreshLayers === 'function') refreshLayers();
   return g;
+}
+
+/** Show/hide a shape (fill/stroke, glow, label) without deleting it. Used by the Layer Manager. @param {object} g @param {boolean} on */
+function setGeomVisible(g, on) {
+  g._hidden = !on;
+  if (on) {
+    if (!map.hasLayer(g.layer)) g.layer.addTo(map);
+    ensureGlow(g); ensureGeomLabel(g);
+  } else {
+    if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
+    if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
+    if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
+  }
 }
 
 /** User-facing delete (card button or global removal-mode click) — undo-able. @param {object} g */

@@ -399,6 +399,231 @@
       color: var(--orange);
     }
 
+    /* ---------- Layer Manager (floating GIS-style panel) ---------- */
+    #layerBtn {
+      position: absolute;
+      top: 58px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #layerBtn:hover,
+    #layerBtn.toggled {
+      color: var(--orange);
+    }
+
+    #layerPanel {
+      position: absolute;
+      top: 58px;
+      right: 58px;
+      z-index: 1001;
+      width: 256px;
+      max-height: min(74vh, 560px);
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+    }
+
+    #layerPanel[hidden] {
+      display: none;
+    }
+
+    .lp-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .lp-title {
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    #lpClose {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #lpClose:hover {
+      color: var(--text);
+    }
+
+    .lp-search-row {
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    #lpSearch {
+      width: 100%;
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--text);
+    }
+
+    #lpSearch:focus {
+      outline: none;
+      border-color: var(--orange);
+    }
+
+    #lpBody {
+      overflow-y: auto;
+      padding: 6px 6px 8px;
+    }
+
+    .lp-group {
+      margin-bottom: 2px;
+    }
+
+    .lp-group-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 7px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .lp-group-head:hover {
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .lp-collapse {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+      font-size: 11px;
+      width: 14px;
+      transition: transform .18s;
+    }
+
+    .lp-group.collapsed .lp-collapse {
+      transform: rotate(-90deg);
+    }
+
+    .lp-group-title {
+      flex: 1;
+      font-weight: 800;
+      font-size: 10.5px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .lp-count {
+      font-size: 10px;
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .lp-group.collapsed .lp-items {
+      display: none;
+    }
+
+    .lp-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 7px 5px 20px;
+      border-radius: 8px;
+      cursor: default;
+    }
+
+    .lp-item:hover {
+      background: rgba(255, 122, 26, .12);
+    }
+
+    .lp-eye,
+    .lp-group-eye {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      flex: none;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .lp-eye::before,
+    .lp-group-eye::before {
+      content: '👁';
+      font-size: 12px;
+    }
+
+    .lp-eye.off::before,
+    .lp-group-eye.off::before,
+    .lp-item.off .lp-eye::before {
+      content: '🚫';
+      opacity: .55;
+    }
+
+    .lp-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      flex: none;
+      border: 1px solid rgba(255, 255, 255, .35);
+    }
+
+    .lp-ico {
+      font-size: 12px;
+      flex: none;
+      cursor: pointer;
+      width: 15px;
+      text-align: center;
+    }
+
+    .lp-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11.5px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .lp-item.off .lp-name,
+    .lp-item.off .lp-dot,
+    .lp-item.off .lp-ico {
+      opacity: .42;
+    }
+
+    .lp-empty {
+      padding: 16px 14px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--dim);
+      text-align: center;
+    }
+
     #mapCredit {
       position: absolute;
       bottom: 4px;

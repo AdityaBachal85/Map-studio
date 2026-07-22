@@ -19,11 +19,17 @@
         return svgForKey(loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'), '#FFFFFF');
       }
       function renderLocPin(loc) {
+        loc.anchor = L.latLng(loc.lat, loc.lng);
+        if (loc._hidden) {                       // hidden via Layer Manager
+          if (loc._pinEl) { removeBB(loc._pinEl); loc._pinEl = null; }
+          updateRings(loc);
+          scheduleRepaint();
+          return;
+        }
         const wasFirst = !loc._everRendered;
         if (loc._pinEl) removeBB(loc._pinEl);
         loc._pinEl = makePinEl(loc, wasFirst);
         loc._everRendered = true;
-        loc.anchor = L.latLng(loc.lat, loc.lng);
         updateRings(loc);
         scheduleRepaint();
       }
@@ -33,6 +39,7 @@
         loc.ringLayers = [];
         loc._ringLabelEls = [];
         loc.ringLabels = [];
+        if (loc._hidden) { scheduleRepaint(); return; }   // hidden via Layer Manager
         (loc.rings || []).forEach(r => {
           const km = parseFloat(r.km);
           if (!km || km <= 0) return;
@@ -54,6 +61,7 @@
       function updateLocLabel(loc) {
         const wasFirst = !loc._labelEverRendered;
         if (loc._labelEl) { removeBB(loc._labelEl); loc._labelEl = null; loc._el = null; }
+        if (loc._hidden) return;                 // hidden via Layer Manager
         if (loc.showLabel && loc.type !== 'badge' && !loc.hideMarker) {
           const isSite = loc.type === 'site';
           const bg = loc.labelBg || (isSite ? '#0A1E3C' : '#FFFFFF');
@@ -77,6 +85,12 @@
       function locChanged(loc) {
         renderLocPin(loc); updateLocLabel(loc);
         refreshRouteSelects(); rebuildLegend();
+      }
+      /** Show/hide a location (pin, label, rings) without deleting it. Used by the Layer Manager. @param {object} loc @param {boolean} on */
+      function setLocVisible(loc, on) {
+        loc._hidden = !on;
+        renderLocPin(loc); updateLocLabel(loc);  // both honour loc._hidden
+        scheduleRepaint();
       }
       function addLocation(opts) {
         opts = opts || {};
@@ -119,6 +133,7 @@
         buildLocCard(loc);
         renderLocPin(loc); updateLocLabel(loc);
         refreshRouteSelects(); rebuildLegend(); syncEmpties();
+        if (typeof refreshLayers === 'function') refreshLayers();
         return loc;
       }
       function deleteLocation(loc) {
@@ -131,4 +146,5 @@
         locations.splice(locations.indexOf(loc), 1);
         refreshRouteSelects(); rebuildLegend(); syncEmpties();
         scheduleRepaint();
+        if (typeof refreshLayers === 'function') refreshLayers();
       }

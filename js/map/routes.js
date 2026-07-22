@@ -25,6 +25,7 @@
       function drawRoute(rt) {
         if (rt.line) map.removeLayer(rt.line);
         if (rt._labelEl) { removeBB(rt._labelEl); rt._labelEl = null; rt._el = null; }
+        if (rt._hidden) { updateRtCardStats(rt); scheduleRepaint(); return; }  // hidden via Layer Manager
         const alt = rt.alts && rt.alts[rt.altIndex];
         if (!alt) return;
         const coords = offsetCoords(alt.coords, rt.offsetPx || 0);
@@ -118,7 +119,15 @@
         syncEmpties();
         if (rt.alts) { drawRoute(rt); renderViaDots(rt); } else computeRoute(rt);
         rebuildLegend();
+        if (typeof refreshLayers === 'function') refreshLayers();
         return rt;
+      }
+      /** Show/hide a route line + label without deleting it. Used by the Layer Manager. @param {object} rt @param {boolean} on */
+      function setRouteVisible(rt, on) {
+        rt._hidden = !on;
+        if (on) (rt._viaEls || []).forEach(el => el.style.display = '');
+        else (rt._viaEls || []).forEach(el => el.style.display = 'none');
+        drawRoute(rt); rebuildLegend();
       }
       function deleteRoute(rt) {
         if (rt.line) map.removeLayer(rt.line);
@@ -128,6 +137,7 @@
         routes.splice(routes.indexOf(rt), 1);
         rebuildLegend(); syncEmpties();
         scheduleRepaint();
+        if (typeof refreshLayers === 'function') refreshLayers();
       }
 
       // ---------- via-points ----------
