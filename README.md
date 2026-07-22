@@ -28,6 +28,48 @@ Designed primarily for:
 
 # ✨ Features
 
+## 🆕 New in v5
+
+Recent additions, all fully integrated into the existing app (no redesign — the
+original workflows, shortcuts and exports are unchanged):
+
+- **Professional search** — Geoapify geocoding (cities, villages, roads,
+  buildings, schools, hospitals, airports, malls, PIN codes, coordinates…) with
+  proximity ranking, de-duplication and caching, and a **silent automatic
+  fallback to Nominatim** if Geoapify is unavailable.
+- **Modern search box** — a floating frosted pill with a magnifier button that
+  expands/collapses (a compact search button on mobile), smooth animations and
+  a circular submit button.
+- **Professional drawing tools** — Marker, Polyline, Polygon, Rectangle, Circle
+  and Circle-marker, each with create / edit / drag / resize / rotate / delete
+  and app-level **undo/redo** (Ctrl+Z / Ctrl+Y), built on Leaflet-Geoman.
+- **Live measurements** — distance, perimeter and area update live while you
+  draw or edit, in m / km / m² / sq ft / acres / hectares / km².
+- **Full shape styling** — per-shape name, description, notes, fill & border
+  colour, border width, fill opacity, **line style (solid/dashed/dotted)**,
+  corner style, an on-map name label and a glow halo, plus created/modified
+  dates.
+- **GeoJSON import/export** — round-trips every shape with its style and
+  metadata; shapes also travel inside the regular `.json` project file.
+- **Aerial (straight-line) distance** — click two points for straight-line
+  distance + compass bearing; measurements persist, both endpoints are
+  draggable to adjust, and each has a one-click delete.
+- **Nearby places discovery** — from the **Nearby** tab, pick a centre + radius
+  and toggle categories (schools, colleges, hospitals, pharmacies, stations,
+  airports, malls/markets, petrol pumps, hotels, restaurants, banks/ATMs, parks)
+  to drop labelled pins, via the Geoapify Places API. Categories load on demand
+  and cache, to stay light on API credits.
+- **Reorganized Settings** — the old "Map" tab is now a tidy **Settings** tab
+  with collapsible sections (Basemap & imagery, 3D & terrain, Overlays, View,
+  Export, Project).
+
+> **Search & Nearby use a Geoapify API key** stored in `js/config.js`. Because
+> the app has no backend, that key is visible in the page source — restrict it
+> to your site's domain in the Geoapify dashboard. Leave it empty to disable
+> Geoapify and fall back to Nominatim search (Nearby needs the key).
+
+---
+
 ## 🗺️ Interactive Maps
 
 - OpenStreetMap integration
@@ -126,10 +168,12 @@ Supports:
 
 ## 🔍 Search System
 
-Built-in location search with:
+Built-in location search (Geoapify, with automatic Nominatim fallback):
 
-- Live search
-- Result suggestions
+- Live search with typed suggestions
+- Proximity-ranked, de-duplicated results with category icons
+- Paste `lat, lng` to drop a pin at exact coordinates
+- Recent searches + keyboard navigation
 - One-click add marker
 - Fast navigation
 
@@ -149,10 +193,13 @@ Works on:
 # 🛠️ Built With
 
 - HTML5, CSS3, plain JavaScript (no build step, no bundler)
-- [Leaflet](https://leafletjs.com/), [html2canvas](https://html2canvas.hertzen.com/),
+- [Leaflet](https://leafletjs.com/), [Leaflet-Geoman](https://geoman.io/leaflet-geoman)
+  (drawing/editing), [html2canvas](https://html2canvas.hertzen.com/),
   [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/)
   — vendored directly under `vendor/`, loaded as plain `<script>` tags
-- OpenStreetMap / Esri / CARTO tiles, Nominatim geocoding, OSRM routing (need internet at runtime)
+- OpenStreetMap / Esri / CARTO tiles, [Geoapify](https://www.geoapify.com/)
+  geocoding + Places (with Nominatim geocoding fallback), OSRM routing
+  (need internet at runtime)
 
 ---
 
@@ -166,25 +213,30 @@ just runs, in a browser or on GitHub Pages alike.
 ```
 Map-studio/
   index.html      — the whole app's markup + the ordered list of <script> tags
-  vendor/          — the 4 third-party libraries, vendored as plain files
-                       (leaflet.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
+  vendor/          — third-party libraries, vendored as plain files (leaflet.js/.css,
+                       leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
   css/
     main.css        — @import order (do not reorder — later rules override earlier ones)
     themes.css, style.css, map.css, sidebar.css, components.css, layout.css
   js/
     app.js          — runs last: wires everything together, prints the boot message
-    constants.js, config.js
+    constants.js, config.js   (config.js holds ROUTERS + the Geoapify API key)
     core/state.js    — locations[], routes[], brand{}, uiState{} — the single
                          source of truth every other file reads/writes
     map/            — mapEngine, billboard (pin/label overlay), snapping,
-                        markers, routes, icons
-    ui/             — sidebar, toolbar, propertyPanel, dialogs, notifications
-    services/       — geocoder (search), places (icon inference)
+                        markers, routes, icons, aerialDistance (straight-line
+                        measure), drawing (shape tools + undo/redo), nearby
+                        (Nearby-places markers)
+    ui/             — sidebar, toolbar, propertyPanel, geometryPanel (shape cards),
+                        searchBox (collapse UI), dialogs, notifications
+    services/       — geocoder (search box), geoapify (Geoapify-first geocoding +
+                        Nominatim fallback), nearbyPlaces (Places API), places
+                        (icon inference)
     export/         — the PPTX engine (exportPPT + pptShapes/pptImages/pptLabels/
                         pptTables/pptValidation/pptUtils) + pptxHandler,
                         captureMap, exportPNG, exportPDF
-    project/        — saveProject, openProject
-    utils/          — dom, math, colors
+    project/        — saveProject, openProject, geojson (shape import/export)
+    utils/          — dom, math (geodesic length/area), colors
   legacy/           — pristine single-file rollbacks of earlier versions
   docs/             — PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root cause),
                         PHASE3-FEATURE-INVENTORY.md (feature checklist)
@@ -247,6 +299,14 @@ PowerPoint. See `docs/PHASE0-PPTX-DIAGNOSIS.md` for how that was diagnosed.
 
 ✅ Multiple Marker Styles
 
+✅ Drawing Tools (polygons, boundaries, live area/perimeter)
+
+✅ Aerial (Straight-Line) Distance
+
+✅ Nearby Places Discovery
+
+✅ GeoJSON Import / Export
+
 ✅ Export Ready
 
 ✅ Presentation Ready
@@ -299,19 +359,17 @@ screenshots/
 
 ---
 
-## 📍 Advanced Mapping
+> ✅ Already shipped in v5: Aerial (straight-line) distance, site polygon
+> drawing, plot boundary measurement, land-area calculation (m² / sq ft / acres
+> / hectares / km²), and nearby school/hospital/metro discovery — see
+> **New in v5** above.
 
-- Aerial (Straight-Line) Distance Calculation
 - Road Network Distance
-- Drive Time & Travel Time Analysis
-- Site Polygon Drawing
-- Plot Boundary Measurement
-- Land Area Calculation (Sq.ft / Sq.m / Acres / Hectares)
+- Drive Time & Travel Time Analysis (isolines)
 - Property Buffer Analysis
 - Radius & Catchment Analysis
 - Custom GIS Layers
 - Terrain & Elevation View
-- Satellite & Hybrid Maps
 - 3D Building Visualization
 - Parcel / Survey Number Overlay
 
@@ -322,8 +380,6 @@ screenshots/
 - Nearby Residential Projects
 - Comparable Property Analysis
 - Competitor Project Mapping
-- Infrastructure Mapping
-- School, Hospital & Metro Analysis
 - Retail & Commercial Catchment
 - Future Infrastructure Tracking
 - Market Growth Heatmaps
