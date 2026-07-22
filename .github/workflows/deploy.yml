@@ -1,10 +1,14 @@
 name: Build & Deploy to GitHub Pages
 
 # Builds the Vite single-file bundle (app + export engine) and publishes it to
-# GitHub Pages. Set Pages source to "GitHub Actions" in repo Settings → Pages.
+# GitHub Pages. In repo Settings -> Pages, set "Build and deployment" source
+# to "GitHub Actions" (not "Deploy from a branch" -- that mode serves the raw
+# source files as static assets with no build step, and the app's ES modules
+# use bare specifiers like `import L from 'leaflet'` that only resolve after
+# Vite bundles them, so a branch-deploy shows a blank page).
 on:
   push:
-    branches: [main]
+    branches: [main, Map-Studio_V5]
   workflow_dispatch:
 
 permissions:
