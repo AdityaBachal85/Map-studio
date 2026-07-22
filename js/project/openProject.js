@@ -16,6 +16,7 @@
 function clearAll() {
   routes.slice().forEach(deleteRoute);
   locations.slice().forEach(deleteLocation);
+  if (typeof clearAllGeometries === 'function') clearAllGeometries();
 }
 
       function wireOpenProject() {
@@ -44,6 +45,7 @@ function clearAll() {
             if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }
             (proj.locations || []).forEach(l => addLocation(l));
             (proj.routes || []).forEach(r => addRoute(r));
+            (proj.geometries || []).forEach(f => importGeoJSONFeature(f));
             if (proj.view) map.setView(proj.view.c, proj.view.z); else fitAll();
             status('Project loaded.');
           } catch (err) { status('Could not read that file — is it a saved project (.json)?'); }

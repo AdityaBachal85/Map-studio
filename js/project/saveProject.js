@@ -33,7 +33,8 @@
               viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
               saved: alt ? { d: alt.d, t: alt.t, coords: alt.coords, approx: r.approx } : null
             };
-          })
+          }),
+          geometries: geometries.map(geomToGeoJSONFeature)
         };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(proj)], { type: 'application/json' }));

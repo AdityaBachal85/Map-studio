@@ -183,6 +183,10 @@
       function armViaAdd(rt) {
         if (armingViaFor === rt) { armingViaFor = null; $('mapWrap').classList.remove('via-arming'); status('Via-point mode cancelled.'); return; }
         armingViaFor = rt;
+        if (typeof setAdding === 'function') setAdding(false);
+        if (typeof aerialActive !== 'undefined' && aerialActive && typeof setAerialActive === 'function') setAerialActive(false);
+        if (typeof disableAllDrawModes === 'function') disableAllDrawModes();
+        if (typeof disableAllEditModes === 'function') disableAllEditModes();
         $('mapWrap').classList.add('via-arming');
         const A = locById(rt.fromId), B = locById(rt.toId);
         status(`Click on the map to force this route through a waypoint (${A ? A.name : '?'} → ${B ? B.name : '?'}). Esc to cancel.`, true);

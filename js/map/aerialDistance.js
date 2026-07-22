@@ -53,6 +53,8 @@ function setAerialActive(on) {
   if (on) {
     if (typeof setAdding === 'function') setAdding(false);
     if (typeof armingViaFor !== 'undefined' && armingViaFor && typeof disarmVia === 'function') disarmVia();
+    if (typeof disableAllDrawModes === 'function') disableAllDrawModes();
+    if (typeof disableAllEditModes === 'function') disableAllEditModes();
     clearAerial();
   } else {
     clearAerial();

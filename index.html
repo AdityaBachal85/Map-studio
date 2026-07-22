@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DBOT · Property Map Studio</title>
   <link rel="stylesheet" href="./vendor/leaflet.css">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css">
   <link rel="stylesheet" href="./css/main.css">
 </head>
 
@@ -58,6 +59,7 @@
       <nav class="tabs">
         <button id="tabBtnLoc" class="active">Locations</button>
         <button id="tabBtnRt">Routes</button>
+        <button id="tabBtnDraw">Draw</button>
         <button id="tabBtnBrand">Brand</button>
         <button id="tabBtnMap">Map</button>
       </nav>
@@ -83,6 +85,54 @@
             <b>No routes yet.</b><br>
             A route connects any two locations along real roads — site to landmark, landmark to landmark, or two points
             along a highway to trace the highway itself.
+          </div>
+        </section>
+
+        <section id="paneDraw" class="pane">
+          <div class="field">
+            <div class="lbl">Draw a shape</div>
+            <div class="draw-grid">
+              <button class="btn draw-shape-btn" id="drawMarkerBtn" data-shape="Marker" title="Marker">📍<span>Marker</span></button>
+              <button class="btn draw-shape-btn" id="drawLineBtn" data-shape="Line" title="Polyline">／<span>Line</span></button>
+              <button class="btn draw-shape-btn" id="drawPolygonBtn" data-shape="Polygon" title="Polygon">⬠<span>Polygon</span></button>
+              <button class="btn draw-shape-btn" id="drawRectBtn" data-shape="Rectangle" title="Rectangle">▭<span>Rectangle</span></button>
+              <button class="btn draw-shape-btn" id="drawCircleBtn" data-shape="Circle" title="Circle">◯<span>Circle</span></button>
+              <button class="btn draw-shape-btn" id="drawCircleMarkerBtn" data-shape="CircleMarker" title="Circle marker">•<span>Circle mkr</span></button>
+            </div>
+            <div class="row2" style="margin-top:6px;">
+              <button class="btn" id="drawFinishBtn" title="Finish the shape you're drawing (Polygon/Line: click the first point again, or use this button)">✓ Finish</button>
+              <button class="btn btn-ghost" id="drawCancelBtn" title="Cancel the shape you're drawing (Esc)">✕ Cancel</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Edit</div>
+            <div class="row2" style="margin-bottom:6px;">
+              <button class="btn draw-mode-btn" id="drawEditBtn" data-mode="edit">✎ Edit</button>
+              <button class="btn draw-mode-btn" id="drawDragBtn" data-mode="drag">✛ Drag</button>
+            </div>
+            <div class="row2" style="margin-bottom:6px;">
+              <button class="btn draw-mode-btn" id="drawRotateBtn" data-mode="rotate">↻ Rotate</button>
+              <button class="btn draw-mode-btn" id="drawRemoveBtn" data-mode="remove">🗑 Delete</button>
+            </div>
+            <div class="row2">
+              <button class="btn btn-ghost" id="drawUndoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+              <button class="btn btn-ghost" id="drawRedoBtn" title="Redo (Ctrl+Y)">↷ Redo</button>
+            </div>
+          </div>
+          <div id="drawLiveStats" class="draw-live-stats" style="display:none;"></div>
+          <div id="geomList"></div>
+          <div id="geomEmpty" class="empty">
+            <b>No shapes yet.</b><br>
+            Pick a shape above, then click on the map to draw. Land boundaries, site outlines, and route sketches all
+            support edit, drag, resize, rotate, undo/redo — plus live distance / perimeter / area as you draw.
+          </div>
+          <div class="field">
+            <div class="lbl">Import / Export</div>
+            <div class="stack">
+              <button class="btn" id="geoExportBtn">Export shapes as GeoJSON</button>
+              <button class="btn btn-ghost" id="geoImportBtn">Import GeoJSON</button>
+              <input type="file" id="geoImportInput" accept=".geojson,.json,application/geo+json,application/json" style="display:none;">
+            </div>
           </div>
         </section>
 
@@ -215,6 +265,7 @@
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
   <script src="./vendor/leaflet.js"></script>
+  <script src="./vendor/leaflet-geoman.js"></script>
   <script src="./vendor/html2canvas.js"></script>
   <script src="./vendor/pptxgen.bundle.js"></script>
   <script src="./vendor/jszip.js"></script>
@@ -249,6 +300,9 @@
   <script src="./js/services/geocoder.js"></script>
   <script src="./js/ui/toolbar.js"></script>
   <script src="./js/map/aerialDistance.js"></script>
+  <script src="./js/ui/geometryPanel.js"></script>
+  <script src="./js/map/drawing.js"></script>
+  <script src="./js/project/geojson.js"></script>
   <script src="./js/export/pptxHandler.js"></script>
   <script src="./js/project/openProject.js"></script>
   <script src="./js/project/saveProject.js"></script>

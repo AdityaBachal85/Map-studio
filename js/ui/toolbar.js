@@ -17,6 +17,10 @@
         $('mapWrap').classList.toggle('adding', on);
         $('clickAddBtn').classList.toggle('toggled', on);
         $('clickAddBtn').textContent = on ? 'Click-to-add: ON (Esc)' : 'Click map to add';
+        if (on) {
+          if (typeof disableAllDrawModes === 'function') disableAllDrawModes();
+          if (typeof disableAllEditModes === 'function') disableAllEditModes();
+        }
         if (on && tiltDeg > 0) status('Tip: set 3D tilt to 0° while placing points — clicks land at exact positions only on a flat view.', true);
       }
       $('clickAddBtn').addEventListener('click', () => setAdding(!uiState.addingMode));
