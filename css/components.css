@@ -624,6 +624,179 @@
       text-align: center;
     }
 
+    /* ---------- Preferences dialog (gear) ---------- */
+    .brandbar {
+      position: relative;
+    }
+
+    .prefs-gear {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      z-index: 5;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--dim);
+      cursor: pointer;
+      transition: color .15s, border-color .15s, transform .3s ease;
+    }
+
+    .prefs-gear:hover {
+      color: var(--orange);
+      border-color: var(--orange);
+      transform: rotate(45deg);
+    }
+
+    .prefs-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      background: rgba(4, 8, 16, .5);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn .16s ease;
+    }
+
+    .prefs-overlay[hidden] {
+      display: none;
+    }
+
+    .prefs-modal {
+      width: min(94vw, 430px);
+      max-height: 88vh;
+      overflow-y: auto;
+      border-radius: 16px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+    }
+
+    .prefs-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .prefs-title {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: .02em;
+      color: var(--text);
+    }
+
+    #prefsClose {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #prefsClose:hover {
+      color: var(--text);
+    }
+
+    .prefs-body {
+      padding: 8px 18px 18px;
+    }
+
+    .prefs-sec {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .prefs-lbl {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 11px;
+    }
+
+    .prefs-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 11px;
+    }
+
+    .prefs-row > span {
+      font-size: 12.5px;
+      color: var(--text);
+    }
+
+    .prefs-row select {
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--text);
+      min-width: 150px;
+    }
+
+    .prefs-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text);
+      cursor: pointer;
+      margin-bottom: 9px;
+    }
+
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--stroke2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .seg-btn {
+      border: none;
+      background: transparent;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--dim);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+
+    .seg-btn:hover {
+      color: var(--text);
+    }
+
+    .seg-btn.active {
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+    }
+
+    .prefs-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+    }
+
+    .prefs-note {
+      font-size: 10.5px;
+      color: var(--dim);
+    }
+
     #mapCredit {
       position: absolute;
       bottom: 4px;

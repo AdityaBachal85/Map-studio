@@ -57,8 +57,9 @@ function areaUnits(m2) {
   return { m2, sqft: m2 * 10.7639, acres: m2 / 4046.8564224, hectares: m2 / 10000, sqkm: m2 / 1e6 };
 }
 
-/** Format an area (m²) as a compact human string, picking a sensible unit. @param {number} m2 */
+/** Format an area (m²), honouring the user's area-unit preference when available. @param {number} m2 */
 function fmtArea(m2) {
+  if (typeof fmtAreaPref === 'function') return fmtAreaPref(m2);
   const u = areaUnits(m2);
   if (u.sqkm >= 1) return `${u.sqkm.toFixed(2)} km² (${u.hectares.toFixed(0)} ha)`;
   if (u.hectares >= 1) return `${u.hectares.toFixed(2)} ha (${u.acres.toFixed(2)} ac)`;
@@ -66,8 +67,9 @@ function fmtArea(m2) {
   return `${m2.toFixed(1)} m² (${u.sqft.toFixed(0)} sq ft)`;
 }
 
-/** Format a length (km) reusing the same "m below 1km" convention as the aerial tool. @param {number} km */
+/** Format a length (km), honouring the user's distance-unit preference when available. @param {number} km */
 function fmtLen(km) {
+  if (typeof fmtLenPref === 'function') return fmtLenPref(km);
   const m = km * 1000;
   if (km < 1) return `${Math.round(m)} m`;
   return `${km.toFixed(2)} km`;

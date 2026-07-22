@@ -81,6 +81,14 @@
 
     <aside class="sidebar frost">
       <div class="brandbar">
+        <button id="prefsBtn" class="prefs-gear" title="Preferences (theme, units)" aria-label="Preferences">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
         <div class="logoPill"><img class="dbotLogo" alt="DBOT"></div>
         <div class="tag tagline">Delivering Better Outcomes Together</div>
         <div class="tag">MARKET RESEARCH </div>
@@ -333,6 +341,54 @@
 
   </div>
 
+  <div id="prefsOverlay" class="prefs-overlay" hidden>
+    <div class="prefs-modal frost">
+      <div class="prefs-head">
+        <span class="prefs-title">Preferences</span>
+        <button id="prefsClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="prefs-body">
+        <div class="prefs-sec">
+          <div class="prefs-lbl">Appearance</div>
+          <div class="prefs-row"><span>Theme</span>
+            <div class="seg" id="prefTheme">
+              <button type="button" class="seg-btn" data-v="system">System</button>
+              <button type="button" class="seg-btn" data-v="light">Light</button>
+              <button type="button" class="seg-btn" data-v="dark">Dark</button>
+            </div>
+          </div>
+          <label class="prefs-check"><input type="checkbox" id="prefGlass"> Frosted-glass effects</label>
+          <label class="prefs-check"><input type="checkbox" id="prefMotion"> Reduce motion (fewer animations)</label>
+        </div>
+        <div class="prefs-sec">
+          <div class="prefs-lbl">Measurements</div>
+          <div class="prefs-row"><span>Distance units</span>
+            <select id="prefUnitDistance">
+              <option value="auto">Auto (m / km)</option>
+              <option value="km">Kilometres</option>
+              <option value="m">Metres</option>
+              <option value="mi">Miles</option>
+            </select>
+          </div>
+          <div class="prefs-row"><span>Area units</span>
+            <select id="prefUnitArea">
+              <option value="auto">Auto</option>
+              <option value="m2">Square metres</option>
+              <option value="sqft">Square feet</option>
+              <option value="acres">Acres</option>
+              <option value="hectares">Hectares</option>
+              <option value="km2">Square kilometres</option>
+            </select>
+          </div>
+        </div>
+        <div class="prefs-foot">
+          <button class="btn btn-ghost" id="prefReset">Reset to defaults</button>
+          <span class="prefs-note">Saved on this device</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- PPTX export is handled by the bundled v5 engine (js/export/*), which pins
        pptxgenjs 4.0.1 + jszip and repairs the duplicate-cNvPr-id / roundRect-adj
        defects that make PowerPoint 365 refuse the file. Replaces the old CDN
@@ -347,6 +403,7 @@
   <script src="./vendor/pptxgen.bundle.js"></script>
   <script src="./vendor/jszip.js"></script>
 
+  <script src="./js/core/prefs.js"></script>
   <script src="./js/constants.js"></script>
   <script src="./js/utils/dom.js"></script>
   <script src="./js/export/exportPDF.js"></script>
@@ -388,6 +445,7 @@
   <script src="./js/project/saveProject.js"></script>
   <script src="./js/ui/sidebar.js"></script>
   <script src="./js/ui/layerManager.js"></script>
+  <script src="./js/ui/settingsDialog.js"></script>
   <script src="./js/app.js"></script>
 </body>
 

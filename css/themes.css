@@ -19,3 +19,67 @@
       --chipFont: 11.5px;
       --untiltY: 1;
     }
+
+    /* ---------- Light theme (applied via <html data-theme="light">) ---------- */
+    :root[data-theme="light"] {
+      --bg0: #EDF1F7;
+      --bg1: #E3E9F2;
+      --glass: rgba(255, 255, 255, .85);
+      --glass2: rgba(255, 255, 255, .72);
+      --stroke: rgba(16, 32, 60, .12);
+      --stroke2: rgba(16, 32, 60, .22);
+      --text: #17233B;
+      --dim: #55627A;
+    }
+
+    /* Surfaces that hardcode white-alpha fills need a dark-alpha equivalent in
+       light mode. Map overlays (search box, title card, legend) stay dark glass
+       on purpose — they read well over any basemap, like Google Maps. */
+    :root[data-theme="light"] body.no-glass .sidebar.frost,
+    :root[data-theme="light"] body.no-glass .search-results.frost {
+      background: #F4F7FB;
+    }
+    :root[data-theme="light"] .btn {
+      background: rgba(16, 32, 60, .05);
+    }
+    :root[data-theme="light"] .btn:hover {
+      border-color: rgba(16, 32, 60, .28);
+    }
+    :root[data-theme="light"] input,
+    :root[data-theme="light"] select,
+    :root[data-theme="light"] textarea {
+      background: rgba(16, 32, 60, .04);
+      color: var(--text);
+    }
+    :root[data-theme="light"] .item-card {
+      background: rgba(255, 255, 255, .55);
+    }
+    :root[data-theme="light"] .acc {
+      background: rgba(16, 32, 60, .02);
+    }
+    :root[data-theme="light"] .acc-hd:hover,
+    :root[data-theme="light"] .tabs button:hover,
+    :root[data-theme="light"] .lp-group-head:hover {
+      background: rgba(16, 32, 60, .05);
+    }
+    :root[data-theme="light"] .nearby-chip,
+    :root[data-theme="light"] .draw-shape-btn,
+    :root[data-theme="light"] .search-results .res .ico {
+      background: rgba(16, 32, 60, .04);
+    }
+    :root[data-theme="light"] .brandbar h1,
+    :root[data-theme="light"] .brandbar .tagline,
+    :root[data-theme="light"] .lp-title,
+    :root[data-theme="light"] .prefs-title {
+      color: var(--text);
+    }
+
+    /* ---------- Reduce motion ---------- */
+    body.reduce-motion *,
+    body.reduce-motion *::before,
+    body.reduce-motion *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }
