@@ -18,13 +18,25 @@
         <div id="map"></div>
       </div>
       <div id="billboardLayer"></div>
-      <div class="search-box">
+      <div class="search-box" id="searchBox">
         <div class="inner frost">
-          <span class="sIcon">⌕</span>
+          <button class="sIconBtn" id="searchIconBtn" title="Search" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.5" y2="16.5" />
+            </svg>
+          </button>
           <input id="searchInput" placeholder="Search a place, or paste lat, lng…" autocomplete="off">
           <span class="sSpin" id="sSpin" hidden></span>
           <button class="sClear" id="sClear" hidden title="Clear">×</button>
-          <button id="searchBtn" title="Search">→</button>
+          <button id="searchBtn" title="Search">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="18" y2="12" />
+              <polyline points="12 6 18 12 12 18" />
+            </svg>
+          </button>
         </div>
         <div class="search-results frost" id="searchResults"></div>
       </div>
@@ -323,6 +335,7 @@
   <script src="./js/services/places.js"></script>
   <script src="./js/services/geoapify.js"></script>
   <script src="./js/services/geocoder.js"></script>
+  <script src="./js/ui/searchBox.js"></script>
   <script src="./js/ui/toolbar.js"></script>
   <script src="./js/map/aerialDistance.js"></script>
   <script src="./js/ui/geometryPanel.js"></script>
