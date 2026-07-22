@@ -386,31 +386,73 @@
     }
     .aerial-dot {
       display: block;
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       background: #FF7A1A;
-      border: 2px solid #fff;
-      box-shadow: 0 1px 5px rgba(0, 0, 0, .5);
+      border: 2.5px solid #fff;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, .55);
       cursor: move;
       transition: transform .12s ease, box-shadow .12s ease;
     }
     .aerial-dot-wrap:hover .aerial-dot {
-      transform: scale(1.25);
-      box-shadow: 0 2px 8px rgba(255, 122, 26, .7);
+      transform: scale(1.22);
+      box-shadow: 0 2px 9px rgba(255, 122, 26, .75);
     }
-    .leaflet-tooltip.aerial-tooltip {
-      background: #0A1E3C;
+
+    /* Frosted measurement pill with an inline delete (×), matching the app's
+       glass overlays (search box / title card). */
+    .aerial-label-wrap {
+      background: none;
+      border: none;
+      overflow: visible;
+    }
+    .aerial-label {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -125%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 5px 4px 11px;
+      border-radius: 999px;
+      background: rgba(12, 22, 44, .74);
+      backdrop-filter: blur(9px) saturate(1.25);
+      -webkit-backdrop-filter: blur(9px) saturate(1.25);
+      border: 1px solid rgba(255, 255, 255, .18);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .38);
       color: #EAF0F9;
-      border: 1px solid #FF7A1A;
-      border-radius: 8px;
-      padding: 6px 10px;
-      font: 600 11.5px/1.4 Arial, sans-serif;
-      text-align: center;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+      font: 800 11px/1 Arial, sans-serif;
+      white-space: nowrap;
+      pointer-events: auto;
     }
-    .leaflet-tooltip.aerial-tooltip::before {
-      border-top-color: #FF7A1A;
+    .aerial-label .aerial-txt {
+      letter-spacing: .01em;
+    }
+    .aerial-label .aerial-del {
+      width: 17px;
+      height: 17px;
+      flex: none;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      background: rgba(255, 255, 255, .14);
+      color: #EAF0F9;
+      font: 700 14px/1 Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .14s ease, color .14s ease;
+    }
+    .aerial-label .aerial-del:hover {
+      background: #FF7A1A;
+      color: #160B02;
+    }
+    body.no-glass .aerial-label {
+      background: rgba(12, 22, 44, .93);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
 
     /* ---------- Drawing tools (Draw tab) ---------- */

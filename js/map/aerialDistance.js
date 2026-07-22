@@ -26,11 +26,16 @@ const COMPASS_16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW'
 /** 16-point compass label for a bearing. @param {number} deg @returns {string} */
 function compassLabel(deg) { return COMPASS_16[Math.round(deg / 22.5) % 16]; }
 
-/** Format a km distance showing both metric units, e.g. "850 m" or "1.20 km · 1,200 m". @param {number} km @returns {string} */
+/** Full two-unit distance string for the status bar, e.g. "850 m" or "1.20 km · 1,200 m". @param {number} km */
 function fmtAerialDistance(km) {
   const m = km * 1000;
   if (km < 1) return `${Math.round(m)} m`;
   return `${km.toFixed(2)} km · ${Math.round(m).toLocaleString()} m`;
+}
+
+/** Compact single-unit distance for the on-map pill, e.g. "850 m" or "1.20 km". @param {number} km */
+function fmtAerialShort(km) {
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(2)} km`;
 }
 
 const aerialMeasurements = [];
@@ -38,48 +43,60 @@ let aerialActive = false;
 let aerialPendingA = null;
 let aerialPendingMarker = null;
 
-const aerialDot = () => L.divIcon({ className: 'aerial-dot-wrap', html: '<span class="aerial-dot"></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+const aerialDot = () => L.divIcon({ className: 'aerial-dot-wrap', html: '<span class="aerial-dot"></span>', iconSize: [16, 16], iconAnchor: [8, 8] });
 
-function aerialTooltipContent(km, brg) {
-  return `${fmtAerialDistance(km)}<br>Bearing ${Math.round(brg)}° (${compassLabel(brg)})`;
+/** Compact pill text: distance · compass bearing. @param {object} m */
+function aerialLabelText(m) {
+  return `${fmtAerialShort(m.lastKm)} · ${compassLabel(m.lastBrg)} ${Math.round(m.lastBrg)}°`;
 }
 
-/** Recompute a measurement's line, tooltip and cached distance/bearing from its current endpoints. @param {object} m */
+/** Recompute a measurement's line, label and cached distance/bearing from its current endpoints. @param {object} m */
 function updateAerialMeasurement(m) {
   m.line.setLatLngs([m.a, m.b]);
   const km = haversineKm(m.a.lat, m.a.lng, m.b.lat, m.b.lng);
   const brg = bearingDeg(m.a.lat, m.a.lng, m.b.lat, m.b.lng);
-  const mid = L.latLng((m.a.lat + m.b.lat) / 2, (m.a.lng + m.b.lng) / 2);
-  m.tooltip.setLatLng(mid).setContent(aerialTooltipContent(km, brg));
   m.lastKm = km; m.lastBrg = brg;
+  const mid = L.latLng((m.a.lat + m.b.lat) / 2, (m.a.lng + m.b.lng) / 2);
+  m.label.setLatLng(mid);
+  const el = m.label.getElement();
+  if (el) { const t = el.querySelector('.aerial-txt'); if (t) t.textContent = aerialLabelText(m); }
 }
 
 function aerialSummary(m) {
   return `Straight-line distance: ${fmtAerialDistance(m.lastKm)}, bearing ${Math.round(m.lastBrg)}° (${compassLabel(m.lastBrg)}).`;
 }
 
-/** Create a persistent, editable A→B measurement. @param {L.LatLng} a @param {L.LatLng} b @returns {object} */
+/** Create a persistent, editable A→B measurement with a frosted pill label + × delete button. @param {L.LatLng} a @param {L.LatLng} b @returns {object} */
 function makeAerialMeasurement(a, b) {
-  const m = { a, b };
+  const m = { a, b, lastKm: 0, lastBrg: 0 };
   m.line = L.polyline([a, b], { color: '#FF7A1A', weight: 2.5, dashArray: '6,6', interactive: false, renderer: vectorRenderer }).addTo(map);
-  m.tooltip = L.tooltip({ permanent: true, direction: 'top', className: 'aerial-tooltip', offset: [0, -8] }).setLatLng(a).addTo(map);
+  const labelIcon = L.divIcon({
+    className: 'aerial-label-wrap',
+    html: '<div class="aerial-label"><span class="aerial-txt"></span><button class="aerial-del" title="Remove this measurement" aria-label="Remove">×</button></div>',
+    iconSize: [0, 0],
+  });
+  m.label = L.marker(L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2), { icon: labelIcon, interactive: true, keyboard: false, zIndexOffset: 1000 }).addTo(map);
   m.markerA = L.marker(a, { icon: aerialDot(), draggable: true, keyboard: false, zIndexOffset: 900 }).addTo(map);
   m.markerB = L.marker(b, { icon: aerialDot(), draggable: true, keyboard: false, zIndexOffset: 900 }).addTo(map);
   m.markerA.on('drag', e => { m.a = e.target.getLatLng(); updateAerialMeasurement(m); });
   m.markerB.on('drag', e => { m.b = e.target.getLatLng(); updateAerialMeasurement(m); });
   m.markerA.on('dragend', () => status(aerialSummary(m)));
   m.markerB.on('dragend', () => status(aerialSummary(m)));
-  m.markerA.on('contextmenu', ev => { L.DomEvent.stop(ev); removeAerialMeasurement(m); status('Measurement removed.'); });
-  m.markerB.on('contextmenu', ev => { L.DomEvent.stop(ev); removeAerialMeasurement(m); status('Measurement removed.'); });
+  // Wire the pill's × button (survives updates -- we only rewrite .aerial-txt, never the button)
+  const el = m.label.getElement();
+  if (el) {
+    const del = el.querySelector('.aerial-del');
+    if (del) L.DomEvent.on(del, 'click', ev => { L.DomEvent.stop(ev); removeAerialMeasurement(m); status('Measurement removed.'); });
+  }
   updateAerialMeasurement(m);
   aerialMeasurements.push(m);
   updateAerialClearBtn();
   return m;
 }
 
-/** Remove a single measurement (its line, tooltip and both endpoints). @param {object} m */
+/** Remove a single measurement (its line, label and both endpoints). @param {object} m */
 function removeAerialMeasurement(m) {
-  [m.markerA, m.markerB, m.line, m.tooltip].forEach(l => { if (l && map.hasLayer(l)) map.removeLayer(l); });
+  [m.markerA, m.markerB, m.line, m.label].forEach(l => { if (l && map.hasLayer(l)) map.removeLayer(l); });
   const i = aerialMeasurements.indexOf(m);
   if (i >= 0) aerialMeasurements.splice(i, 1);
   updateAerialClearBtn();
@@ -148,5 +165,5 @@ map.on('click', e => {
   const A = aerialPendingA;
   cancelAerialPending();
   const m = makeAerialMeasurement(A, e.latlng);
-  status(aerialSummary(m) + ' Drag an endpoint to adjust, right-click it to remove.');
+  status(aerialSummary(m) + ' Drag an endpoint to adjust · click × on the label to remove.');
 });

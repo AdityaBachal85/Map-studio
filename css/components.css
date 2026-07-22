@@ -91,8 +91,16 @@
 
     .search-results .res .ico {
       flex: none;
-      font-size: 12px;
-      opacity: .8;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--stroke);
     }
 
     .search-results .res .nm {

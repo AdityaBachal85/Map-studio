@@ -60,6 +60,7 @@ function areaUnits(m2) {
 /** Format an area (m²) as a compact human string, picking a sensible unit. @param {number} m2 */
 function fmtArea(m2) {
   const u = areaUnits(m2);
+  if (u.sqkm >= 1) return `${u.sqkm.toFixed(2)} km² (${u.hectares.toFixed(0)} ha)`;
   if (u.hectares >= 1) return `${u.hectares.toFixed(2)} ha (${u.acres.toFixed(2)} ac)`;
   if (m2 >= 1000) return `${(m2).toFixed(0)} m² (${u.acres.toFixed(3)} ac)`;
   return `${m2.toFixed(1)} m² (${u.sqft.toFixed(0)} sq ft)`;

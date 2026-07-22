@@ -116,8 +116,8 @@
 
     .tabs {
       display: flex;
-      gap: 5px;
-      padding: 10px 12px;
+      gap: 4px;
+      padding: 10px 10px;
       border-bottom: 1px solid var(--stroke);
     }
 
@@ -125,14 +125,16 @@
       flex: 1;
       border: 1px solid transparent;
       background: transparent;
-      padding: 8px 4px;
-      font-size: 10.5px;
+      padding: 8px 2px;
+      font-size: 10px;
       font-weight: 800;
-      letter-spacing: .06em;
+      letter-spacing: .03em;
       color: var(--dim);
       cursor: pointer;
       border-radius: 10px;
       text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
       transition: color .15s, background .15s, border-color .15s;
     }
 
@@ -143,9 +145,9 @@
 
     .tabs button.active {
       color: #fff;
-      background: rgba(255, 255, 255, .07);
-      border-color: var(--stroke2);
-      box-shadow: inset 0 -2px 0 var(--orange);
+      background: rgba(255, 122, 26, .14);
+      border-color: rgba(255, 122, 26, .55);
+      box-shadow: none;
     }
 
     .panes {
