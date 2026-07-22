@@ -2,24 +2,23 @@
  * map/markers.js — location lifecycle: create/render pins, labels, distance
  * rings, change propagation, deletion.
  */
-import L from 'leaflet';
-import { PALETTE } from '../constants.js';
-import { brand, bumpId, locations, newId, routes } from '../core/state.js';
-import { makeLabelEl, makePinEl, removeBB, scheduleRepaint } from '../map/billboard.js';
-import { svgForKey } from '../map/icons.js';
-import { map, vectorRenderer } from '../map/mapEngine.js';
-import { deleteRoute } from '../map/routes.js';
-import { buildLocCard, rebuildLegend, refreshRouteSelects, syncEmpties } from '../ui/propertyPanel.js';
-import { textOn } from '../utils/colors.js';
+
+
+
+
+
+
+
+
 
       // ---------- locations ----------
-      export function locLabelIconHtml(loc) {
+      function locLabelIconHtml(loc) {
         // Small icon shown inside the label badge itself
         if (loc.iconImage) return `<img src="${loc.iconImage}">`;
         if (loc.iconUseProjectLogo && brand.projectLogo) return `<img src="${brand.projectLogo}">`;
         return svgForKey(loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'), '#FFFFFF');
       }
-      export function renderLocPin(loc) {
+      function renderLocPin(loc) {
         const wasFirst = !loc._everRendered;
         if (loc._pinEl) removeBB(loc._pinEl);
         loc._pinEl = makePinEl(loc, wasFirst);
@@ -28,7 +27,7 @@ import { textOn } from '../utils/colors.js';
         updateRings(loc);
         scheduleRepaint();
       }
-      export function updateRings(loc) {
+      function updateRings(loc) {
         (loc.ringLayers || []).forEach(l => map.removeLayer(l));
         (loc._ringLabelEls || []).forEach(removeBB);
         loc.ringLayers = [];
@@ -52,7 +51,7 @@ import { textOn } from '../utils/colors.js';
         });
         scheduleRepaint();
       }
-      export function updateLocLabel(loc) {
+      function updateLocLabel(loc) {
         const wasFirst = !loc._labelEverRendered;
         if (loc._labelEl) { removeBB(loc._labelEl); loc._labelEl = null; loc._el = null; }
         if (loc.showLabel && loc.type !== 'badge' && !loc.hideMarker) {
@@ -75,11 +74,11 @@ import { textOn } from '../utils/colors.js';
           };
         }
       }
-      export function locChanged(loc) {
+      function locChanged(loc) {
         renderLocPin(loc); updateLocLabel(loc);
         refreshRouteSelects(); rebuildLegend();
       }
-      export function addLocation(opts) {
+      function addLocation(opts) {
         opts = opts || {};
         let rings = opts.rings;
         if (!rings && opts.ringKm) {
@@ -122,7 +121,7 @@ import { textOn } from '../utils/colors.js';
         refreshRouteSelects(); rebuildLegend(); syncEmpties();
         return loc;
       }
-      export function deleteLocation(loc) {
+      function deleteLocation(loc) {
         routes.filter(r => r.fromId === loc.id || r.toId === loc.id).forEach(deleteRoute);
         if (loc._pinEl) removeBB(loc._pinEl);
         if (loc._labelEl) removeBB(loc._labelEl);

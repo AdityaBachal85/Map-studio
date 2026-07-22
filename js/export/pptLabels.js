@@ -4,9 +4,7 @@
  * (with a rounded-rectangle background) so the recipient can retype it.
  */
 
-import { validateText } from './pptValidation.js';
-import { safeRectRadius } from './pptUtils.js';
-import { addTitleUnderline } from './pptShapes.js';
+
 
 /**
  * Add a rounded text chip. Shared by every label variant.
@@ -36,7 +34,7 @@ function addTextChip(slide, chip, log, kind) {
  * @param {object} log
  * @returns {boolean}
  */
-export function addLocationLabel(slide, w, ctx, log) {
+function addLocationLabel(slide, w, ctx, log) {
   const px = w.site ? ctx.chipFont + 1 : ctx.chipFont, pt = ctx.tf.pt(px);
   return addTextChip(slide, {
     text: w.text, x: ctx.tf.X(w.px.x), y: ctx.tf.Y(w.px.y),
@@ -52,7 +50,7 @@ export function addLocationLabel(slide, w, ctx, log) {
  * @param {{px:{x:number,y:number}, text:string, bg:string}} w
  * @param {object} ctx @param {object} log @returns {boolean}
  */
-export function addRouteLabel(slide, w, ctx, log) {
+function addRouteLabel(slide, w, ctx, log) {
   const px = ctx.chipFont - 1, pt = ctx.tf.pt(px);
   return addTextChip(slide, {
     text: w.text, x: ctx.tf.X(w.px.x), y: ctx.tf.Y(w.px.y),
@@ -68,7 +66,7 @@ export function addRouteLabel(slide, w, ctx, log) {
  * @param {{px:{x:number,y:number}, text:string, color:string}} w
  * @param {object} ctx @param {object} log @returns {boolean}
  */
-export function addBadge(slide, w, ctx, log) {
+function addBadge(slide, w, ctx, log) {
   const pt = ctx.tf.pt(11);
   const bw = ctx.chipWidth(w.text, 11, true), bh = pt * 2.2 / 72;
   return addTextChip(slide, {
@@ -85,7 +83,7 @@ export function addBadge(slide, w, ctx, log) {
  * @param {{px:{x:number,y:number}, text:string, color:string}} w
  * @param {object} ctx @param {object} log @returns {boolean}
  */
-export function addRingLabel(slide, w, ctx, log) {
+function addRingLabel(slide, w, ctx, log) {
   const px = ctx.chipFont - 2, pt = ctx.tf.pt(px);
   return addTextChip(slide, {
     text: w.text, x: ctx.tf.X(w.px.x), y: ctx.tf.Y(w.px.y),
@@ -103,7 +101,7 @@ export function addRingLabel(slide, w, ctx, log) {
  * @param {object} log
  * @returns {boolean} true when the title text was added.
  */
-export function addTitle(slide, title, ctx, log) {
+function addTitle(slide, title, ctx, log) {
   const tw = Math.max(3.4, ctx.chipWidth(title.text, 15, true) + 0.5), th = 0.44;
   const tx = (ctx.slideW - tw) / 2, ty = ctx.fit.offY + 0.12;
   const ok = addTextChip(slide, {

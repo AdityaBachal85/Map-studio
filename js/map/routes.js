@@ -2,28 +2,27 @@
  * map/routes.js — route lifecycle: OSRM routing with fallbacks, drawing,
  * via-points (arm/place/drag), alternatives, deletion, recompute-on-move.
  */
-import L from 'leaflet';
-import { ROUTERS } from '../config.js';
-import { PALETTE } from '../constants.js';
-import { bumpId, locById, locations, newId, routes } from '../core/state.js';
-import { bbLayer, makeLabelEl, offsetCoords, removeBB, scheduleRepaint } from '../map/billboard.js';
-import { map, tiltDeg, vectorRenderer } from '../map/mapEngine.js';
-import { showRouteContextMenu } from '../ui/dialogs.js';
-import { status } from '../ui/notifications.js';
-import { buildRtCard, rebuildLegend, syncEmpties, updateRtCardStats } from '../ui/propertyPanel.js';
-import { textOn } from '../utils/colors.js';
-import { $ } from '../utils/dom.js';
-import { haversineKm } from '../utils/math.js';
+
+
+
+
+
+
+
+
+
+
+
 
       // ---------- routes ----------
-      export function routeAutoText(rt) {
+      function routeAutoText(rt) {
         const alt = rt.alts && rt.alts[rt.altIndex];
         if (!alt) return '…';
         const km = (alt.d / 1000).toFixed(1) + ' km';
         return rt.approx ? km + ' (direct)' : km + ' • ' + Math.round(alt.t / 60) + ' min';
       }
-      export function routeLabelText(rt) { return rt.labelText && rt.labelText.trim() ? rt.labelText : routeAutoText(rt); }
-      export function drawRoute(rt) {
+      function routeLabelText(rt) { return rt.labelText && rt.labelText.trim() ? rt.labelText : routeAutoText(rt); }
+      function drawRoute(rt) {
         if (rt.line) map.removeLayer(rt.line);
         if (rt._labelEl) { removeBB(rt._labelEl); rt._labelEl = null; rt._el = null; }
         const alt = rt.alts && rt.alts[rt.altIndex];
@@ -58,7 +57,7 @@ import { haversineKm } from '../utils/math.js';
         updateRtCardStats(rt);
         scheduleRepaint();
       }
-      export async function computeRoute(rt) {
+      async function computeRoute(rt) {
         const A = locById(rt.fromId), B = locById(rt.toId);
         if (!A || !B || A === B) { updateRtCardStats(rt); return; }
         const vias = rt.viaPoints || [];
@@ -97,7 +96,7 @@ import { haversineKm } from '../utils/math.js';
         }
         drawRoute(rt); renderViaDots(rt); rebuildLegend();
       }
-      export function addRoute(opts) {
+      function addRoute(opts) {
         opts = opts || {};
         const rt = {
           id: opts.id || newId(),
@@ -121,7 +120,7 @@ import { haversineKm } from '../utils/math.js';
         rebuildLegend();
         return rt;
       }
-      export function deleteRoute(rt) {
+      function deleteRoute(rt) {
         if (rt.line) map.removeLayer(rt.line);
         if (rt._labelEl) removeBB(rt._labelEl);
         (rt._viaEls || []).forEach(removeBB);
@@ -132,9 +131,9 @@ import { haversineKm } from '../utils/math.js';
       }
 
       // ---------- via-points ----------
-      export let armingViaFor = null;   // Route currently in "click to add via-point" mode
+      let armingViaFor = null;   // Route currently in "click to add via-point" mode
 
-      export function renderViaDots(rt) {
+      function renderViaDots(rt) {
         (rt._viaEls || []).forEach(removeBB);
         rt._viaEls = [];
         (rt.viaPoints || []).forEach((v, idx) => {
@@ -181,19 +180,19 @@ import { haversineKm } from '../utils/math.js';
         scheduleRepaint();
       }
 
-      export function armViaAdd(rt) {
+      function armViaAdd(rt) {
         if (armingViaFor === rt) { armingViaFor = null; $('mapWrap').classList.remove('via-arming'); status('Via-point mode cancelled.'); return; }
         armingViaFor = rt;
         $('mapWrap').classList.add('via-arming');
         const A = locById(rt.fromId), B = locById(rt.toId);
         status(`Click on the map to force this route through a waypoint (${A ? A.name : '?'} → ${B ? B.name : '?'}). Esc to cancel.`, true);
       }
-      export function disarmVia() {
+      function disarmVia() {
         armingViaFor = null;
         $('mapWrap').classList.remove('via-arming');
       }
 
-      export function recomputeRoutesTouching(locId) {
+      function recomputeRoutesTouching(locId) {
         routes.forEach(r => { if (r.fromId === locId || r.toId === locId) computeRoute(r); });
       }
 

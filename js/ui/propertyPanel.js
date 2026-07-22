@@ -2,18 +2,17 @@
  * ui/propertyPanel.js — sidebar cards for locations & routes, ring rows,
  * route selects, the legend table, and empty-state visibility.
  */
-import { brand, locById, locations, routes } from '../core/state.js';
-import { LOGO_B64 } from '../constants.js';
-import { scheduleRepaint } from '../map/billboard.js';
-import { ICON_KEYS, ICON_LIBRARY } from '../map/icons.js';
-import { map } from '../map/mapEngine.js';
-import { addLocation, deleteLocation, locChanged, renderLocPin, updateLocLabel, updateRings } from '../map/markers.js';
-import { addRoute, armViaAdd, computeRoute, deleteRoute, drawRoute, recomputeRoutesTouching, routeAutoText } from '../map/routes.js';
-import { status } from '../ui/notifications.js';
-import { $, esc } from '../utils/dom.js';
-import { fmtCoord, parseCoord } from '../utils/math.js';
 
-      export function renderRingRows(loc) {
+
+
+
+
+
+
+
+
+
+      function renderRingRows(loc) {
         const box = loc.card.querySelector('.ringsBox');
         box.innerHTML = '';
         (loc.rings || []).forEach((r, idx) => {
@@ -237,22 +236,22 @@ function wireLocCard(card, loc) {
        * Build and wire a location's sidebar card, then append it to the list.
        * @param {object} loc
        */
-      export function buildLocCard(loc) {
+      function buildLocCard(loc) {
         const card = locCardMarkup(loc);
         wireLocCard(card, loc);
       }
 
-      export function locOptions(sel) {
+      function locOptions(sel) {
         return locations.map(l => `<option value="${l.id}" ${sel === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
       }
-      export function refreshRouteSelects() {
+      function refreshRouteSelects() {
         routes.forEach(rt => {
           if (!rt.card) return;
           rt.card.querySelector('.from').innerHTML = locOptions(rt.fromId);
           rt.card.querySelector('.to').innerHTML = locOptions(rt.toId);
         });
       }
-      export function buildRtCard(rt) {
+      function buildRtCard(rt) {
         const card = document.createElement('div');
         card.className = 'item-card';
         card.innerHTML = `
@@ -334,7 +333,7 @@ function wireLocCard(card, loc) {
         rt.card = card;
         $('rtList').appendChild(card);
       }
-      export function updateRtCardStats(rt) {
+      function updateRtCardStats(rt) {
         if (!rt.card) return;
         rt.card.querySelector('.stats').textContent = routeAutoText(rt);
         rt.card.querySelector('.alt').textContent = '⇆ ' + ((rt.altIndex || 0) + 1) + '/' + (rt.alts ? rt.alts.length : 1);
@@ -345,7 +344,7 @@ function wireLocCard(card, loc) {
         if (vCount) vCount.textContent = vc ? (vc + ' via-point' + (vc > 1 ? 's' : '')) : '';
       }
       // ---------- legend ----------
-      export function legendRows() {
+      function legendRows() {
         const rows = [];
         routes.forEach(rt => {
           const A = locById(rt.fromId), B = locById(rt.toId);
@@ -357,7 +356,7 @@ function wireLocCard(card, loc) {
         });
         return rows;
       }
-      export function rebuildLegend() {
+      function rebuildLegend() {
         const body = $('legendBody');
         body.innerHTML = '';
         legendRows().forEach(r => {
@@ -368,12 +367,12 @@ function wireLocCard(card, loc) {
         });
         $('legendCard').style.display = ($('legendTgl').checked && body.children.length) ? '' : 'none';
       }
-      export function syncEmpties() {
+      function syncEmpties() {
         $('locEmpty').style.display = locations.length ? 'none' : '';
         $('rtEmpty').style.display = routes.length ? 'none' : '';
       }
       /** Wire the legend card's drag handle so it can be repositioned. */
-      export function initLegendDrag() {
+      function initLegendDrag() {
         const cardEl = $('legendCard'), hd = $('legendDrag'), wrap = $('mapWrap');
         let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
         hd.addEventListener('pointerdown', e => {
@@ -392,7 +391,7 @@ function wireLocCard(card, loc) {
         hd.addEventListener('pointerup', () => { dragging = false; });
       }
 
-      export function setProjectLogo(dataUrl) {
+      function setProjectLogo(dataUrl) {
         brand.projectLogo = dataUrl;
         const im = $('projectLogoImg'), emp = $('projectLogoEmpty');
         if (dataUrl) { im.src = dataUrl; im.style.display = ''; emp.style.display = 'none'; }

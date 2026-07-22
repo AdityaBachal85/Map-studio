@@ -2,24 +2,23 @@
  * project/openProject.js — restore a previously saved .json project: view,
  * basemap, tilt, chip scale, brand, and every location/route.
  */
-import { BASEMAPS, applyTilt, hillshade, map, setBasemap, setTiltDeg, tiltDeg } from '../map/mapEngine.js';
-import { addLocation } from '../map/markers.js';
-import { addRoute, deleteRoute } from '../map/routes.js';
-import { deleteLocation } from '../map/markers.js';
-import { applyChipScale, setChipPct } from '../ui/toolbar.js';
-import { setProjectLogo } from '../ui/propertyPanel.js';
-import { fitAll } from '../map/mapEngine.js';
-import { brand, locations, routes } from '../core/state.js';
-import { status } from '../ui/notifications.js';
-import { $ } from '../utils/dom.js';
+
+
+
+
+
+
+
+
+
 
 /** Remove every route and location (used before loading a saved project). */
-export function clearAll() {
+function clearAll() {
   routes.slice().forEach(deleteRoute);
   locations.slice().forEach(deleteLocation);
 }
 
-      export function wireOpenProject() {
+      function wireOpenProject() {
       $('loadBtn').addEventListener('click', () => $('loadInput').click());
       $('loadInput').addEventListener('change', e => {
         const f = e.target.files[0];

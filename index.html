@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DBOT · Property Map Studio</title>
+  <link rel="stylesheet" href="./vendor/leaflet.css">
   <link rel="stylesheet" href="./css/main.css">
 </head>
 
@@ -205,7 +206,48 @@
        pptxgenjs 4.0.1 + jszip and repairs the duplicate-cNvPr-id / roundRect-adj
        defects that make PowerPoint 365 refuse the file. Replaces the old CDN
        pptxgenjs 3.12.0 exporter. Requires the Vite build (npm run dev|build). -->
-  <script type="module" src="./js/app.js"></script>
+  <!-- Classic (non-module) scripts -- these run directly when this file is
+       opened via double-click (file://), which browsers block for ES modules.
+       Load order matters: each file below depends on globals declared by the
+       ones before it. Do not reorder. -->
+  <script src="./vendor/leaflet.js"></script>
+  <script src="./vendor/html2canvas.js"></script>
+  <script src="./vendor/pptxgen.bundle.js"></script>
+  <script src="./vendor/jszip.js"></script>
+
+  <script src="./js/constants.js"></script>
+  <script src="./js/utils/dom.js"></script>
+  <script src="./js/export/exportPDF.js"></script>
+  <script src="./js/export/captureMap.js"></script>
+  <script src="./js/core/state.js"></script>
+  <script src="./js/map/icons.js"></script>
+  <script src="./js/config.js"></script>
+  <script src="./js/ui/notifications.js"></script>
+  <script src="./js/utils/math.js"></script>
+  <script src="./js/map/billboard.js"></script>
+  <script src="./js/ui/propertyPanel.js"></script>
+  <script src="./js/ui/dialogs.js"></script>
+  <script src="./js/utils/colors.js"></script>
+  <script src="./js/map/routes.js"></script>
+  <script src="./js/map/markers.js"></script>
+  <script src="./js/map/snapping.js"></script>
+  <script src="./js/map/mapEngine.js"></script>
+  <script src="./js/export/exportPNG.js"></script>
+  <script src="./js/export/pptUtils.js"></script>
+  <script src="./js/export/pptValidation.js"></script>
+  <script src="./js/export/pptShapes.js"></script>
+  <script src="./js/export/pptImages.js"></script>
+  <script src="./js/export/pptLabels.js"></script>
+  <script src="./js/export/pptTables.js"></script>
+  <script src="./js/export/exportPPT.js"></script>
+  <script src="./js/services/places.js"></script>
+  <script src="./js/services/geocoder.js"></script>
+  <script src="./js/ui/toolbar.js"></script>
+  <script src="./js/export/pptxHandler.js"></script>
+  <script src="./js/project/openProject.js"></script>
+  <script src="./js/project/saveProject.js"></script>
+  <script src="./js/ui/sidebar.js"></script>
+  <script src="./js/app.js"></script>
 </body>
 
 </html>

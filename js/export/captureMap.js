@@ -1,8 +1,7 @@
 /**
  * export/captureMap.js — shared map rasteriser for PNG and PPTX export.
  */
-import html2canvas from 'html2canvas';
-import { $ } from '../utils/dom.js';
+
 
       /**
        * Rasterise the map + overlays to a canvas via html2canvas.
@@ -10,7 +9,7 @@ import { $ } from '../utils/dom.js';
        *   capture (e.g. 'pptx-capture' to hide the DOM label chips).
        * @returns {Promise<HTMLCanvasElement>}
        */
-      export async function captureMap(extraClass) {
+      async function captureMap(extraClass) {
         const wrap = $('mapWrap');
         const stage = $('tiltStage');
         const savedTransform = stage.style.transform;

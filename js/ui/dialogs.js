@@ -1,14 +1,13 @@
 /**
  * ui/dialogs.js — the right-click route context menu.
  */
-import { locById } from '../core/state.js';
-import { map } from '../map/mapEngine.js';
-import { computeRoute, drawRoute } from '../map/routes.js';
-import { status } from '../ui/notifications.js';
-import { rebuildLegend, updateRtCardStats } from '../ui/propertyPanel.js';
-import { $, esc } from '../utils/dom.js';
 
-      export function showRouteContextMenu(rt, x, y, latlng) {
+
+
+
+
+
+      function showRouteContextMenu(rt, x, y, latlng) {
         const menu = $('ctxMenu');
         const A = locById(rt.fromId), B = locById(rt.toId);
         const routeName = (A ? A.name : '?') + ' → ' + (B ? B.name : '?');

@@ -5,8 +5,6 @@
  * and the whole thing is validated before it is added.
  */
 
-import { validateTable } from './pptValidation.js';
-
 /**
  * Add the legend header bar and distance table.
  * @param {object} slide pptxgenjs slide.
@@ -16,7 +14,7 @@ import { validateTable } from './pptValidation.js';
  * @param {object} log Logger.
  * @returns {boolean} true when the table was added.
  */
-export function addLegend(slide, legend, ctx, log) {
+function addLegend(slide, legend, ctx, log) {
   const { tf, hex } = ctx;
   const lx = tf.X(legend.pxLeft), ly = tf.Y(legend.pxTop);
   const lw = Math.max(2.3, legend.pxWidth * tf.rr);

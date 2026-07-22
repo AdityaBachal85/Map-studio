@@ -2,9 +2,8 @@
  * map/icons.js — the built-in SVG icon library for location pins.
  * Every glyph uses currentColor so it can be tinted per location.
  */
-import { esc } from '../utils/dom.js';
 
-export const ICON_LIBRARY = {
+const ICON_LIBRARY = {
   pin: { label: 'Pin', svg: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2C7.58 2 4 5.58 4 10c0 5.5 8 12 8 12s8-6.5 8-12c0-4.42-3.58-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z"/></svg>` },
   building: { label: 'Office', svg: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 21V3h9v6h7v12H4zm2-2h5V5H6v14zm7 0h5v-8h-5v8zm-5-9h1v2H8v-2zm0-4h1v2H8V6zm2 4h1v2h-1v-2zm0-4h1v2h-1V6zm4 6h1v2h-1v-2zm2 0h1v2h-1v-2zm-2 4h1v2h-1v-2zm2 0h1v2h-1v-2z"/></svg>` },
   home: { label: 'Residential', svg: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 3l9 8h-3v10h-5v-6H11v6H6V11H3l9-8z"/></svg>` },
@@ -20,6 +19,6 @@ export const ICON_LIBRARY = {
   tree: { label: 'Park', svg: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2L5 12h4v3l-3 5h12l-3-5v-3h4L12 2z"/></svg>` },
   star: { label: 'Site ★', svg: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>` }
 };
-export const ICON_KEYS = Object.keys(ICON_LIBRARY);
+const ICON_KEYS = Object.keys(ICON_LIBRARY);
 
-export function svgForKey(key, color) { return (ICON_LIBRARY[key] || ICON_LIBRARY.pin).svg.replace('currentColor', esc(color || '#0A1E3C')); }
+function svgForKey(key, color) { return (ICON_LIBRARY[key] || ICON_LIBRARY.pin).svg.replace('currentColor', esc(color || '#0A1E3C')); }

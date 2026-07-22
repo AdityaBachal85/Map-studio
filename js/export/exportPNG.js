@@ -2,12 +2,11 @@
  * export/exportPNG.js — PNG export: capture the map, apply the 3D
  * perspective warp if tilted, and download.
  */
-import { warpPerspective, tiltDeg } from '../map/mapEngine.js';
-import { status } from '../ui/notifications.js';
-import { $ } from '../utils/dom.js';
-import { captureMap } from './captureMap.js';
 
-      export function wirePngExport() {
+
+
+
+      function wirePngExport() {
       $('pngBtn').addEventListener('click', async () => {
         status('Rendering PNG… (a few seconds)', true);
         try {

@@ -3,17 +3,16 @@
  * hillshade, scale control, HD toggle, and the 3D tilt (CSS transform + the
  * perspective warp used by PNG export).
  */
-import L from 'leaflet';
-import { scheduleRepaint } from '../map/billboard.js';
-import { locations, routes } from '../core/state.js';
-import { status } from '../ui/notifications.js';
-import { $ } from '../utils/dom.js';
+
+
+
+
 
       // ---------- map + basemaps ----------
-      export const map = L.map('map', { zoomControl: false, attributionControl: false, maxZoom: 21 }).setView([21.5, 78.5], 5);
+      const map = L.map('map', { zoomControl: false, attributionControl: false, maxZoom: 21 }).setView([21.5, 78.5], 5);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      export let scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
-      export const vectorRenderer = L.canvas({ padding: 0.5 });
+      let scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+      const vectorRenderer = L.canvas({ padding: 0.5 });
 
       const TL = (url, opts) => L.tileLayer(url, Object.assign({ maxZoom: 21, crossOrigin: 'anonymous' }, opts || {}));
       const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
@@ -24,7 +23,7 @@ import { $ } from '../utils/dom.js';
       // native cap by one there so requests never pass the deepest real tiles — this was the
       // cause of the "Map data not yet available" grey tiles.
       const RZ = nz => (L.Browser.retina ? nz - 1 : nz);
-      export const BASEMAPS = {
+      const BASEMAPS = {
         hybrid: {
           credit: 'Imagery © Esri · Maxar · Earthstar Geographics', build: hd => [
             mk('World_Imagery', { zIndex: 1, maxNativeZoom: RZ(hd ? 19 : 18), detectRetina: true }),
@@ -54,10 +53,10 @@ import { $ } from '../utils/dom.js';
         natgeo: { credit: '© Esri · National Geographic', build: () => [mk('NatGeo_World_Map', { zIndex: 1, maxNativeZoom: RZ(16), detectRetina: true })] },
         opentopo: { credit: '© OpenTopoMap · © OpenStreetMap', build: () => [TL('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { zIndex: 1, maxNativeZoom: 17, subdomains: 'abc' })] }
       };
-      export const hillshade = mk('Elevation/World_Hillshade', { maxNativeZoom: 15, opacity: .35, zIndex: 2 });
+      const hillshade = mk('Elevation/World_Hillshade', { maxNativeZoom: 15, opacity: .35, zIndex: 2 });
       let activeBase = [];
-      export let activeKey = 'hybrid';
-      export function setBasemap(key) {
+      let activeKey = 'hybrid';
+      function setBasemap(key) {
         activeKey = key;
         activeBase.forEach(l => map.removeLayer(l));
         activeBase = BASEMAPS[key].build($('hdTgl').checked);
@@ -70,15 +69,15 @@ import { $ } from '../utils/dom.js';
       setBasemap('hybrid');
 
       // ---------- 3D tilt (billboarded markers) ----------
-      export let tiltDeg = 0;
-      export function applyTilt() {
+      let tiltDeg = 0;
+      function applyTilt() {
         $('tiltStage').style.transform = tiltDeg ? `rotateX(${tiltDeg}deg) scale(${(1 + tiltDeg / 120).toFixed(3)})` : '';
         $('tiltVal').textContent = tiltDeg + '°';
         scheduleRepaint();
       }
       $('tiltRange').addEventListener('input', e => { tiltDeg = +e.target.value; applyTilt(); });
 
-      export function warpPerspective(src, deg) {
+      function warpPerspective(src, deg) {
         const t = deg * Math.PI / 180, W = src.width, H = src.height, d = 1.5 * H;
         const f = y => d / (d - y * Math.sin(t));
         const Yp = y => y * Math.cos(t) * f(y);
@@ -104,9 +103,9 @@ import { $ } from '../utils/dom.js';
         else if (scaleCtl) { map.removeControl(scaleCtl); scaleCtl = null; }
       });
       /** Set the 3D tilt angle (degrees) — used by project load. @param {number} v */
-      export function setTiltDeg(v) { tiltDeg = v; }
+      function setTiltDeg(v) { tiltDeg = v; }
       /** Fit the map view to every location (+ its rings) and route. */
-      export function fitAll() {
+      function fitAll() {
         const pts = [];
         locations.forEach(l => {
           pts.push([l.lat, l.lng]);

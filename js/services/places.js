@@ -3,7 +3,7 @@
  * class/type, used by the search results dropdown.
  */
 
-export function iconFor(c, t) {
+function iconFor(c, t) {
         if (c === 'railway' || t === 'station' || t === 'halt') return '🚉';
         if (c === 'aeroway' || t === 'aerodrome') return '✈️';
         if (t === 'hospital' || t === 'clinic' || t === 'doctors') return '🏥';

@@ -3,23 +3,22 @@
  * the tilt stage, screen-space projection through the tilt transform, the
  * repaint loop, leader-line canvas, and element factories with drag handling.
  */
-import L from 'leaflet';
-import { brand, locations, routes, uiState } from '../core/state.js';
-import { svgForKey } from '../map/icons.js';
-import { map, tiltDeg } from '../map/mapEngine.js';
-import { updateRings } from '../map/markers.js';
-import { drawRoute, recomputeRoutesTouching } from '../map/routes.js';
-import { autoAvoidCollisions } from '../map/snapping.js';
-import { $ } from '../utils/dom.js';
-import { fmtCoord } from '../utils/math.js';
+
+
+
+
+
+
+
+
 
       // ---------- billboard layer: labels/markers live OUTSIDE the tilt stage ----------
-      export const bbLayer = $('billboardLayer');
+      const bbLayer = $('billboardLayer');
       const leaderCanvas = document.createElement('canvas');
       leaderCanvas.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
       bbLayer.appendChild(leaderCanvas);
       let bbW = 0, bbH = 0;
-      export function resizeBB() {
+      function resizeBB() {
         bbW = bbLayer.clientWidth; bbH = bbLayer.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         leaderCanvas.width = bbW * dpr; leaderCanvas.height = bbH * dpr;
@@ -30,7 +29,7 @@ import { fmtCoord } from '../utils/math.js';
 
       // Project the tilted map's container point through the CSS 3D transform to the
       // user's viewport plane, so labels sit exactly on the imagery even when tilted.
-      export function projectPin(latlng) {
+      function projectPin(latlng) {
         const cp = map.latLngToContainerPoint(latlng);
         if (!tiltDeg) return { x: cp.x, y: cp.y, s: 1 };
         const t = tiltDeg * Math.PI / 180;
@@ -47,7 +46,7 @@ import { fmtCoord } from '../utils/math.js';
       }
 
       let repaintScheduled = false;
-      export function scheduleRepaint() {
+      function scheduleRepaint() {
         if (repaintScheduled) return;
         repaintScheduled = true;
         requestAnimationFrame(() => {
@@ -57,7 +56,7 @@ import { fmtCoord } from '../utils/math.js';
       }
 
       // ---------- main billboard repaint ----------
-      export function repaintBillboard() {
+      function repaintBillboard() {
         const ctx = leaderCanvas.getContext('2d');
         ctx.clearRect(0, 0, bbW, bbH);
 
@@ -119,7 +118,7 @@ import { fmtCoord } from '../utils/math.js';
       }
 
       // ---------- creating billboard elements ----------
-      export function makePinEl(loc, animate) {
+      function makePinEl(loc, animate) {
         const wrap = document.createElement('div');
         wrap.className = 'bb grabbable' + (animate ? ' drop-anchor' : '') + (loc.hideMarker ? ' pin-ghost' : '');
         wrap.style.zIndex = loc.type === 'site' ? 400 : 350;
@@ -220,7 +219,7 @@ import { fmtCoord } from '../utils/math.js';
         return wrap;
       }
 
-      export function makeLabelEl(ent, kind, opts, animate) {
+      function makeLabelEl(ent, kind, opts, animate) {
         // kind: 'loc' | 'route' | 'ring'
         const wrap = document.createElement('div');
         wrap.className = 'bb' + (animate ? ' drop-label' : '');
@@ -258,11 +257,11 @@ import { fmtCoord } from '../utils/math.js';
         return wrap;
       }
 
-      export function removeBB(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+      function removeBB(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
 
 
       // ---------- geometry ----------
-      export function offsetCoords(coords, px) {
+      function offsetCoords(coords, px) {
         if (!px) return coords;
         const pts = coords.map(c => map.latLngToLayerPoint(L.latLng(c[0], c[1])));
         const out = [];
@@ -287,7 +286,7 @@ import { fmtCoord } from '../utils/math.js';
        * modules are evaluated (breaks the mapEngine<->billboard import cycle:
        * nothing here runs at module-evaluation time).
        */
-      export function initBillboard() {
+      function initBillboard() {
         window.addEventListener('resize', resizeBB);
         map.on('resize', resizeBB);
         setTimeout(resizeBB, 0);

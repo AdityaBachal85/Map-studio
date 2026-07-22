@@ -5,9 +5,7 @@
  * nothing is flattened into the map picture.
  */
 
-import { validateImage } from './pptValidation.js';
-import { safeRectRadius } from './pptUtils.js';
-import { addIconFrame } from './pptShapes.js';
+
 
 /**
  * Add the letterboxed background map image.
@@ -16,7 +14,7 @@ import { addIconFrame } from './pptShapes.js';
  * @param {object} log Logger.
  * @returns {boolean} true when added.
  */
-export function addBackground(slide, img, log) {
+function addBackground(slide, img, log) {
   if (!validateImage(img, log, 'background')) return false;
   slide.addImage({ data: img.data, x: img.x, y: img.y, w: img.w, h: img.h });
   return true;
@@ -33,7 +31,7 @@ export function addBackground(slide, img, log) {
  * @param {Function} hex Colour normaliser.
  * @returns {boolean} true when the glyph image was added.
  */
-export function addIconPin(slide, pin, tf, log, hex) {
+function addIconPin(slide, pin, tf, log, hex) {
   const inSize = pin.size * tf.rr;
   const cx = tf.X(pin.px.x), cy = tf.Y(pin.px.y);
   const bx = cx - inSize / 2, by = cy - inSize; // bottom-centre anchor
@@ -63,7 +61,7 @@ export function addIconPin(slide, pin, tf, log, hex) {
  * @param {Function} hex Colour normaliser.
  * @returns {boolean} true when the logo image was added.
  */
-export function addLogo(slide, logo, log, hex) {
+function addLogo(slide, logo, log, hex) {
   if (!validateImage(logo, log, 'logo')) return false;
   const c = logo.card;
   slide.addShape('roundRect', {

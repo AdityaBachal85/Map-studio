@@ -2,10 +2,9 @@
  * map/snapping.js — label collision avoidance (radial nudge) applied on every
  * billboard repaint.
  */
-import { projectPin } from '../map/billboard.js';
 
       // ---------- label collision avoidance (radial nudge) ----------
-      export function autoAvoidCollisions(entries) {
+      function autoAvoidCollisions(entries) {
         const items = entries.filter(e => e._labelEl && e.showLabel);
         if (items.length < 2) return;
         items.forEach(e => {

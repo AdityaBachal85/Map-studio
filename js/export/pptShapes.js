@@ -4,8 +4,6 @@
  * degenerate object is skipped, not emitted.
  */
 
-import { validateBox } from './pptValidation.js';
-import { safeRectRadius } from './pptUtils.js';
 
 /**
  * Add a leader line between two source-px points as a native line shape.
@@ -16,7 +14,7 @@ import { safeRectRadius } from './pptUtils.js';
  * @param {Function} hex Colour normaliser (`hexColor`).
  * @returns {boolean} true when the line was added.
  */
-export function addLeaderLine(slide, leader, tf, log, hex) {
+function addLeaderLine(slide, leader, tf, log, hex) {
   const x1 = tf.X(leader.a.x), y1 = tf.Y(leader.a.y);
   const x2 = tf.X(leader.b.x), y2 = tf.Y(leader.b.y);
   const dx = x2 - x1, dy = y2 - y1;
@@ -47,7 +45,7 @@ function frameGeometry(frame) {
  * @param {Function} hex Colour normaliser.
  * @returns {boolean} true when a frame shape was added.
  */
-export function addIconFrame(slide, pin, log, hex) {
+function addIconFrame(slide, pin, log, hex) {
   if (pin.frame === 'none') return false;
   if (!validateBox(pin, log, 'icon-frame')) return false;
   const { shape, radius } = frameGeometry(pin.frame);
@@ -67,7 +65,7 @@ export function addIconFrame(slide, pin, log, hex) {
  * @param {string} [color] Bar colour hex (no `#`). Defaults to DBOT orange.
  * @returns {boolean} true when added.
  */
-export function addTitleUnderline(slide, box, log, color = 'FF7A1A') {
+function addTitleUnderline(slide, box, log, color = 'FF7A1A') {
   if (!validateBox(box, log, 'title-underline')) return false;
   slide.addShape('rect', { ...box, fill: { color } });
   return true;

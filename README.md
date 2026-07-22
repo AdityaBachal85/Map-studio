@@ -148,126 +148,73 @@ Works on:
 
 # 🛠️ Built With
 
-- HTML5, CSS3, JavaScript (ES modules)
-- [Leaflet](https://leafletjs.com/) — the interactive map
-- [html2canvas](https://html2canvas.hertzen.com/) — flat-map rasterisation for PNG/PPTX export
-- [pptxgenjs](https://gitbrent.github.io/PptxGenJS/) + [JSZip](https://stuk.github.io/jszip/) — the editable PowerPoint export engine
-- [Vite](https://vitejs.dev/) — dev server & single-file production build
-- [Playwright](https://playwright.dev/) — automated browser tests (app boot, PPTX export)
-- OpenStreetMap / Esri / CARTO tiles, Nominatim geocoding, OSRM routing
+- HTML5, CSS3, plain JavaScript (no build step, no bundler)
+- [Leaflet](https://leafletjs.com/), [html2canvas](https://html2canvas.hertzen.com/),
+  [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/)
+  — vendored directly under `vendor/`, loaded as plain `<script>` tags
+- OpenStreetMap / Esri / CARTO tiles, Nominatim geocoding, OSRM routing (need internet at runtime)
 
 ---
 
-# 🏗️ Architecture (v5)
+# 🏗️ Architecture
 
-The app is a modular ES-module project built with Vite. `index.html` is markup
-only; every behavior lives in its own single-responsibility file under `js/`
-and `css/`.
+**There is no build step.** `index.html` loads `css/*.css` and every file in
+`js/**` directly as classic (non-module) `<script>` tags, in a fixed
+dependency order already wired up in `index.html` — open the file and it
+just runs, in a browser or on GitHub Pages alike.
 
 ```
 Map-studio/
-  index.html            — markup only; loads css/main.css + js/app.js
+  index.html      — the whole app's markup + the ordered list of <script> tags
+  vendor/          — the 4 third-party libraries, vendored as plain files
+                       (leaflet.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
   css/
-    main.css             — import order (do not reorder — later rules override earlier ones)
-    themes.css            — design tokens (:root custom properties)
-    style.css             — base/reset styles
-    map.css                — tilt stage, billboard overlay, pins, label badges
-    sidebar.css             — sidebar shell, tabs, panels, form controls
-    components.css           — toolbar, search, legend/title cards, north arrow
-    layout.css                — Leaflet control restyle, print stylesheet, mobile
+    main.css        — @import order (do not reorder — later rules override earlier ones)
+    themes.css, style.css, map.css, sidebar.css, components.css, layout.css
   js/
-    app.js                — entry point: assembles every module, nothing else
-    constants.js           — brand asset (logo), colour palette
-    config.js               — external service endpoints (OSRM routing hosts)
-    core/
-      state.js               — locations[], routes[], brand{}, uiState{} — the
-                                 single source of truth every other module reads/writes
-    map/
-      mapEngine.js            — Leaflet init, basemap catalogue, hillshade, 3D tilt, fitAll
-      billboard.js             — DOM pin/label overlay, screen-space projection, repaint loop
-      snapping.js               — label collision avoidance
-      markers.js                 — location lifecycle (create/render/rings/labels/delete)
-      routes.js                   — route lifecycle (OSRM routing + fallback, via-points)
-      icons.js                     — the built-in SVG icon library
-    ui/
-      sidebar.js               — tab switching, collapse, cursor spotlight
-      toolbar.js                — click-to-add, overlay toggles, chip scale, fullscreen
-      propertyPanel.js           — location/route cards, legend, brand tab
-      dialogs.js                  — route right-click context menu
-      notifications.js             — the status toast line
-    services/
-      geocoder.js               — Nominatim forward/reverse geocoding + search UI
-      places.js                  — icon inference from a geocode result
-    export/
-      exportPPT.js + pptShapes/pptImages/pptLabels/pptTables/pptValidation/pptUtils
-                                 — the standalone, tested PPTX engine (see js/export/README.md)
-      pptxHandler.js             — DOM → deck-spec adapter for the Export PPTX button
-      captureMap.js               — shared html2canvas rasteriser (PNG + PPTX)
-      exportPNG.js, exportPDF.js   — PNG and Print/Save-as-PDF handlers
-    project/
-      saveProject.js            — serialise state to a downloadable .json
-      openProject.js             — restore a saved .json (view/basemap/tilt/brand/locations/routes)
-    utils/
-      dom.js, math.js, colors.js — small pure helpers (no DOM/state coupling)
-  legacy/
-    map-studio-v4.9.html    — pristine single-file rollback (pre-refactor)
-    map-studio-v4.96.html    — pristine single-file rollback (the version the v5 rewrite is based on)
-  test/
-    app-boot.mjs             — Playwright: boots the built app, exercises every
-                                 subsystem (tabs, add/delete location+route, search,
-                                 click-to-add, tilt, PPTX export, project load)
-    ppt-export/run.mjs        — builds 5 incremental PPTX decks and audits them
-    ppt-export/browser-smoke.mjs — runs the *bundled* engine inside Chromium
-  docs/
-    PHASE0-PPTX-DIAGNOSIS.md   — root-cause writeup of the original export corruption
-    PHASE3-FEATURE-INVENTORY.md — the v4.9→v5 migration checklist
+    app.js          — runs last: wires everything together, prints the boot message
+    constants.js, config.js
+    core/state.js    — locations[], routes[], brand{}, uiState{} — the single
+                         source of truth every other file reads/writes
+    map/            — mapEngine, billboard (pin/label overlay), snapping,
+                        markers, routes, icons
+    ui/             — sidebar, toolbar, propertyPanel, dialogs, notifications
+    services/       — geocoder (search), places (icon inference)
+    export/         — the PPTX engine (exportPPT + pptShapes/pptImages/pptLabels/
+                        pptTables/pptValidation/pptUtils) + pptxHandler,
+                        captureMap, exportPNG, exportPDF
+    project/        — saveProject, openProject
+    utils/          — dom, math, colors
+  legacy/           — pristine single-file rollbacks of earlier versions
+  docs/             — PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root cause),
+                        PHASE3-FEATURE-INVENTORY.md (feature checklist)
 ```
 
-Mutable values that cross module boundaries (`tiltDeg`, `chipPct`, the id
-counter) are never exported as raw reassignable bindings — each has a setter
-(`setTiltDeg()`, `setChipPct()`, `newId()`/`bumpId()`) so every write goes
-through its owning module.
+Every file in `js/` is a plain script — no `import`/`export`. `index.html`
+loads them in the exact order each one needs its dependencies to already
+exist; don't reorder those `<script>` tags.
 
 ---
 
 # 🚀 Getting Started
 
-Requires [Node.js](https://nodejs.org/) 22+.
+**Locally:** just double-click `index.html`. It opens and works — no Node,
+no npm, no terminal.
 
-```bash
-npm install        # install dependencies (pinned versions, no "latest")
-npm run dev         # start the Vite dev server (hot reload) at http://localhost:5173
-npm run build         # produce dist/index.html — one self-contained file with
-                        # the export engine inlined, ready to open directly or
-                        # deploy to any static host
-npm run preview          # serve the production build locally to sanity-check it
-```
-
-## Running the tests
-
-```bash
-npm run test:ppt     # builds & audits 5 incremental PPTX decks (unique shape
-                       # ids, valid XML, python-pptx load) — Node only, no browser
-npm run test:smoke     # builds the app, then runs the bundled export engine
-                         # inside real Chromium (Playwright)
-node test/app-boot.mjs   # boots the built app in Chromium and exercises every
-                           # subsystem end-to-end (requires `npm run build` first)
-```
-
-The one check no script can perform is *"opens in desktop PowerPoint 365 with
-zero repair prompts"* — that requires a human with real PowerPoint. See
-`docs/PHASE0-PPTX-DIAGNOSIS.md` for how that was diagnosed and verified.
+**To edit:** open any file in `js/` or `css/` in a text editor, save, then
+refresh the page in your browser. Changes show up immediately.
 
 ## Deploying
 
-`npm run build` outputs `dist/index.html`, a single self-contained file
-(Leaflet CSS, the export engine, pptxgenjs, and JSZip are all inlined — only
-map tiles, geocoding, and routing calls go over the network at runtime). Drop
-it on any static host — GitHub Pages, Netlify, Vercel, or any static web
-server — or push to `main` and let `.github/workflows/deploy.yml` build and
-publish it to GitHub Pages automatically (set the repo's Pages source to
-"GitHub Actions"). See the **Architecture** section above for the real
-project structure — `js/` and `css/` are now the source of truth.
+Push to GitHub and set the repo's **Settings → Pages → Build and deployment
+→ Source** to **"Deploy from a branch"**, pointed at whichever branch you're
+using. GitHub serves the files as-is — no build, no GitHub Actions workflow
+needed. Pushing an edit updates the live site on the next deploy (usually
+under a minute).
+
+The one thing no automated check can confirm is *"opens in desktop
+PowerPoint 365 with zero repair prompts"* — that needs a human with real
+PowerPoint. See `docs/PHASE0-PPTX-DIAGNOSIS.md` for how that was diagnosed.
 
 ---
 

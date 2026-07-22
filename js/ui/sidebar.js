@@ -2,7 +2,6 @@
  * ui/sidebar.js — sidebar chrome: collapse toggle, cursor-spotlight hover
  * effect, and the four-tab pane switcher (Locations/Routes/Brand/Map).
  */
-import { $ } from '../utils/dom.js';
 
       $('sideToggle').addEventListener('click', () => $('app').classList.toggle('side-hidden'));
 
@@ -27,5 +26,5 @@ import { $ } from '../utils/dom.js';
       });
 
       /** Re-apply the active tab's pane visibility (no-op helper for symmetry with other UI setup). */
-      export function initTabs() { /* tabs wire themselves above at module load */ }
+      function initTabs() { /* tabs wire themselves above at module load */ }
 

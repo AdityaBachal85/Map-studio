@@ -12,16 +12,14 @@
  * which is feature-detected.
  */
 
-import PptxGenJS from 'pptxgenjs';
-import { hexColor, textOn, computeFit, makeTransform, makeLogger } from './pptUtils.js';
-import { ensureUniqueShapeIds, PPTX_MIME } from './pptValidation.js';
-import { addBackground, addIconPin, addLogo } from './pptImages.js';
-import { addLeaderLine } from './pptShapes.js';
-import { addLocationLabel, addRouteLabel, addBadge, addRingLabel, addTitle } from './pptLabels.js';
-import { addLegend } from './pptTables.js';
+
+
+
+
+
 
 const DEFAULT_SLIDE = { slideW: 13.333, slideH: 7.5 };
-const LOGO_AR = 0.4026;
+const PPT_LOGO_AR = 0.4026;
 
 /** Default text measurer (Arial heuristic) used when the caller supplies none. */
 function heuristicMeasurePx(text, pxSize, bold) {
@@ -39,7 +37,7 @@ function makeContext(geometry, measurePx) {
   const tf = { ...makeTransform(fit), rr: fit.rr };
   const chipWidth = (text, px, bold) =>
     measurePx(text, px, bold) * fit.rr + tf.pt(px) * 2.2 / 72 * 0.55 + 0.1;
-  return { fit, tf, chipWidth, hex: hexColor, textOn, chipFont: geometry.chipFont, slideW: geometry.slideW };
+  return { fit, tf, chipWidth, hex: hexColor, textOn: pptTextOn, chipFont: geometry.chipFont, slideW: geometry.slideW };
 }
 
 /**
@@ -47,7 +45,7 @@ function makeContext(geometry, measurePx) {
  * @returns {{data:string, x:number, y:number, w:number, h:number, card:object}}
  */
 function logoPlacement(logo, slideW, slideH) {
-  const w = 1.15, h = w * (logo.aspect || LOGO_AR), pad = 0.09;
+  const w = 1.15, h = w * (logo.aspect || PPT_LOGO_AR), pad = 0.09;
   const bx = slideW - w - pad * 2 - 0.15, by = slideH - h - pad * 2 - 0.12;
   return { data: logo.data, x: bx + pad, y: by + pad, w, h, card: { x: bx, y: by, w: w + pad * 2, h: h + pad * 2 } };
 }
@@ -87,7 +85,7 @@ function buildSlide(slide, s, ctx, log) {
  * @param {object} [opts] `{measurePx}`.
  * @returns {{pptx:object, log:object}}
  */
-export function buildDeck(spec, opts = {}) {
+function buildDeck(spec, opts = {}) {
   const geometry = { ...DEFAULT_SLIDE, ...(spec.geometry || {}) };
   const log = makeLogger();
   const ctx = makeContext(geometry, opts.measurePx || heuristicMeasurePx);
@@ -105,7 +103,7 @@ export function buildDeck(spec, opts = {}) {
  *        `'download'` (browser), `'nodebuffer'`, or `'arraybuffer'` (default).
  * @returns {Promise<{data:*, log:object, fileName:string}>}
  */
-export async function exportDeck(spec, opts = {}) {
+async function exportDeck(spec, opts = {}) {
   const { pptx, log } = buildDeck(spec, opts);
   const raw = await pptx.write({ outputType: 'arraybuffer' });
   const fileName = spec.fileName || 'property-access-map.pptx';

@@ -14,7 +14,7 @@ const HEX6 = /^[0-9A-Fa-f]{6}$/;
  * @param {string} [c] CSS colour, e.g. `#0A1E3C` or `0a1e3c`.
  * @returns {string} Six uppercase hex chars, e.g. `0A1E3C`.
  */
-export function hexColor(c) {
+function hexColor(c) {
   const raw = String(c == null ? '' : c).replace('#', '').trim().toUpperCase();
   if (HEX6.test(raw)) return raw;
   if (/^[0-9A-F]{3}$/.test(raw)) return raw.split('').map(ch => ch + ch).join('');
@@ -26,7 +26,7 @@ export function hexColor(c) {
  * @param {string} hex A colour accepted by {@link hexColor}.
  * @returns {[number, number, number]} `[r, g, b]`, each 0–255.
  */
-export function channelsOf(hex) {
+function channelsOf(hex) {
   const h = hexColor(hex);
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
@@ -37,13 +37,13 @@ export function channelsOf(hex) {
  * @param {string} bg Background colour.
  * @returns {string} `17202B` (dark) or `FFFFFF` (white), no `#`.
  */
-export function textOn(bg) {
+function pptTextOn(bg) {
   const [r, g, b] = channelsOf(bg);
   return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '17202B' : 'FFFFFF';
 }
 
 /** @returns {boolean} true when `n` is a real, finite number. */
-export function isFiniteNumber(n) {
+function isFiniteNumber(n) {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
@@ -59,7 +59,7 @@ export function isFiniteNumber(n) {
  * @param {number} hIn Shape height in inches.
  * @returns {number} A safe radius in inches (0 ≤ r ≤ 0.49·min(w,h)).
  */
-export function safeRectRadius(desiredIn, wIn, hIn) {
+function safeRectRadius(desiredIn, wIn, hIn) {
   const maxIn = Math.min(wIn, hIn) * 0.5 * 0.98;
   return Math.max(0, Math.min(desiredIn, maxIn));
 }
@@ -75,7 +75,7 @@ export function safeRectRadius(desiredIn, wIn, hIn) {
  * @returns {{offX:number, offY:number, imgW:number, imgH:number, rr:number}}
  *          Placement in inches plus `rr`, the px→inch ratio.
  */
-export function computeFit(slideW, slideH, wrapW, wrapH) {
+function computeFit(slideW, slideH, wrapW, wrapH) {
   const imgAspect = wrapW / wrapH;
   const slideAspect = slideW / slideH;
   let imgW, imgH, offX, offY;
@@ -94,7 +94,7 @@ export function computeFit(slideW, slideH, wrapW, wrapH) {
  *          `X`/`Y` map source px to slide inches; `pt` maps a CSS px font size
  *          to points (floored at 7.5pt, as the app did).
  */
-export function makeTransform(fit) {
+function makeTransform(fit) {
   const { offX, offY, rr } = fit;
   return {
     X: px => offX + px * rr,
@@ -109,7 +109,7 @@ export function makeTransform(fit) {
  * corrupting the deck.
  * @returns {{skip:(kind:string,reason:string,detail?:*)=>void, note:(m:string)=>void, entries:Array, skipped:number}}
  */
-export function makeLogger() {
+function makeLogger() {
   const entries = [];
   return {
     entries,

@@ -4,16 +4,15 @@
  * location/route, overlay visibility toggles, label-chip size scale, and
  * fullscreen.
  */
-import { armingViaFor, computeRoute, disarmVia, addRoute } from '../map/routes.js';
-import { locChanged, addLocation } from '../map/markers.js';
-import { map, tiltDeg } from '../map/mapEngine.js';
-import { reverseGeocodeName } from '../services/geocoder.js';
-import { status } from '../ui/notifications.js';
-import { updateRtCardStats, rebuildLegend } from '../ui/propertyPanel.js';
-import { locations, uiState } from '../core/state.js';
-import { $ } from '../utils/dom.js';
 
-      export function setAdding(on) {
+
+
+
+
+
+
+
+      function setAdding(on) {
         uiState.addingMode = on;
         $('mapWrap').classList.toggle('adding', on);
         $('clickAddBtn').classList.toggle('toggled', on);
@@ -63,9 +62,10 @@ import { $ } from '../utils/dom.js';
       $('creditTgl').addEventListener('change', e => document.body.classList.toggle('no-credit', !e.target.checked));
       $('glassTgl').addEventListener('change', e => document.body.classList.toggle('no-glass', !e.target.checked));
       $('brandTgl').addEventListener('change', e => document.body.classList.toggle('no-brand', !e.target.checked));
-      $('northTgl').addEventListener('change', e => document.body.classList.toggle('no-north', !e.target.checked));      export let chipPct = 100;
-      export let chipFont = 11.5;
-      export function applyChipScale() {
+      $('northTgl').addEventListener('change', e => document.body.classList.toggle('no-north', !e.target.checked));
+      let chipPct = 100;
+      let chipFont = 11.5;
+      function applyChipScale() {
         chipFont = +(11.5 * chipPct / 100).toFixed(2);
         document.documentElement.style.setProperty('--chipFont', chipFont + 'px');
         $('chipVal').textContent = chipPct + '%';
@@ -73,7 +73,7 @@ import { $ } from '../utils/dom.js';
       }
       $('chipRange').addEventListener('input', e => { chipPct = +e.target.value; applyChipScale(); });
       /** Set the label-chip scale (%) and re-apply it. Used by project load. @param {number} v */
-      export function setChipPct(v) { chipPct = v; applyChipScale(); }
+      function setChipPct(v) { chipPct = v; applyChipScale(); }
       $('fsBtn').addEventListener('click', () => {
         const w = $('mapWrap');
         if (document.fullscreenElement) document.exitFullscreen();

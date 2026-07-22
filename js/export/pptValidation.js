@@ -9,8 +9,6 @@
  *     `<p:cNvPr id>` values — via {@link ensureUniqueShapeIds}.
  */
 
-import JSZip from 'jszip';
-import { isFiniteNumber } from './pptUtils.js';
 
 /** Generous absolute bound (inches) for slide coordinates; guards EMU overflow. */
 const MAX_IN = 100;
@@ -24,7 +22,7 @@ const MAX_IN = 100;
  *        to be 0 — used by axis-aligned line shapes.
  * @returns {boolean} true when the box is safe to add.
  */
-export function validateBox(box, log, kind, opts = {}) {
+function validateBox(box, log, kind, opts = {}) {
   const { x, y, w, h } = box || {};
   for (const [k, v] of Object.entries({ x, y, w, h })) {
     if (!isFiniteNumber(v)) { log.skip(kind, `non-finite ${k}`, box); return false; }
@@ -43,7 +41,7 @@ export function validateBox(box, log, kind, opts = {}) {
  * Validate an image placement (background map, icon, logo).
  * @returns {boolean} true when safe to add.
  */
-export function validateImage(img, log, kind = 'image') {
+function validateImage(img, log, kind = 'image') {
   if (!img || typeof img.data !== 'string' || !img.data) {
     log.skip(kind, 'missing image data'); return false;
   }
@@ -57,7 +55,7 @@ export function validateImage(img, log, kind = 'image') {
  * Validate a text object. Coerces `text` to a non-empty string.
  * @returns {boolean} true when safe to add.
  */
-export function validateText(t, log, kind = 'text') {
+function validateText(t, log, kind = 'text') {
   const text = t == null ? '' : String(t.text);
   if (!text.trim()) { log.skip(kind, 'empty text'); return false; }
   return validateBox(t, log, kind);
@@ -68,7 +66,7 @@ export function validateText(t, log, kind = 'text') {
  * width (the defect class the diagnosis flagged for tables).
  * @returns {boolean} true when the table is safe to add.
  */
-export function validateTable(spec, log, kind = 'table') {
+function validateTable(spec, log, kind = 'table') {
   if (!spec || !Array.isArray(spec.rows) || spec.rows.length === 0) {
     log.skip(kind, 'no rows'); return false;
   }
@@ -97,7 +95,7 @@ export function validateTable(spec, log, kind = 'table') {
  * @param {{outputType?: 'arraybuffer'|'nodebuffer'|'uint8array'|'blob'}} [opts]
  * @returns {Promise<*>} The repaired package in the requested `outputType`.
  */
-export async function ensureUniqueShapeIds(data, opts = {}) {
+async function ensureUniqueShapeIds(data, opts = {}) {
   const outputType = opts.outputType || 'arraybuffer';
   const zip = await JSZip.loadAsync(data);
   const slidePaths = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p));
@@ -111,7 +109,7 @@ export async function ensureUniqueShapeIds(data, opts = {}) {
 }
 
 /** MIME type for a .pptx package. */
-export const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 /**
  * Cheap structural audit used by tests: parse each slide's `cNvPr` ids and
@@ -119,7 +117,7 @@ export const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presenta
  * @param {string} slideXml Raw slide XML.
  * @returns {{ids:string[], duplicates:string[]}}
  */
-export function auditShapeIds(slideXml) {
+function auditShapeIds(slideXml) {
   const ids = [...slideXml.matchAll(/<p:cNvPr id="(\d+)"/g)].map(m => m[1]);
   const seen = new Set(), dup = new Set();
   for (const id of ids) { if (seen.has(id)) dup.add(id); else seen.add(id); }

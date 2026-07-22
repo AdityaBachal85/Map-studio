@@ -2,15 +2,14 @@
  * project/saveProject.js — serialise the current map state to a downloadable
  * .json project file.
  */
-import { activeKey } from '../map/mapEngine.js';
-import { tiltDeg } from '../map/mapEngine.js';
-import { chipPct } from '../ui/toolbar.js';
-import { brand, locations, routes } from '../core/state.js';
-import { map } from '../map/mapEngine.js';
-import { $ } from '../utils/dom.js';
-import { status } from '../ui/notifications.js';
 
-      export function wireSaveProject() {
+
+
+
+
+
+
+      function wireSaveProject() {
       $('saveBtn').addEventListener('click', () => {
         const proj = {
           v: 4.96, title: $('titleCard').textContent, legendTitle: $('legendTitle').textContent,

@@ -6,20 +6,19 @@
  * ../export/exportPPT.js and its pptShapes/pptImages/pptLabels/pptTables/
  * pptValidation/pptUtils siblings — this file only assembles the spec.
  */
-import { exportDeck } from './exportPPT.js';
-import { captureMap } from './captureMap.js';
-import { LOGO_AR, LOGO_B64 } from '../constants.js';
-import { brand, locations, routes } from '../core/state.js';
-import { svgForKey } from '../map/icons.js';
-import { map } from '../map/mapEngine.js';
-import { routeLabelText } from '../map/routes.js';
-import { status } from '../ui/notifications.js';
-import { legendRows } from '../ui/propertyPanel.js';
-import { chipFont } from '../ui/toolbar.js';
-import { $ } from '../utils/dom.js';
+
+
+
+
+
+
+
+
+
+
 
       const mctx = document.createElement('canvas').getContext('2d');
-      export function wirePptxExport() {
+      function wirePptxExport() {
       $('pptxBtn').addEventListener('click', async () => {
         if (!window.DBOTExport || !window.DBOTExport.exportDeck) {
           status('Export engine still loading — wait a moment and try again.');

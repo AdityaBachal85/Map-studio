@@ -3,22 +3,21 @@
  * box's live suggestions dropdown (with recents + keyboard nav) and the
  * click-to-add reverse lookup.
  */
-import { iconFor } from './places.js';
-import { map } from '../map/mapEngine.js';
-import { addLocation } from '../map/markers.js';
-import { status } from '../ui/notifications.js';
-import { $, esc } from '../utils/dom.js';
-import { fmtCoord, haversineKm, parseCoord } from '../utils/math.js';
+
+
+
+
+
 
 let searchTimer = null, resultsData = [], selIdx = -1, searching = 0;
 const recents = [];
-      export function showBox() {
+      function showBox() {
         const box = $('searchResults');
         box.style.display = 'block';
         box.style.animation = 'none'; void box.offsetWidth;
         box.style.animation = 'dropIn .18s ease';
       }
-      export function renderResults(hintText) {
+      function renderResults(hintText) {
         const box = $('searchResults');
         box.innerHTML = '';
         if (!resultsData.length) { box.style.display = 'none'; return; }
@@ -39,7 +38,7 @@ const recents = [];
         box.appendChild(hint);
         showBox();
       }
-      export function pickResult(r) {
+      function pickResult(r) {
         addLocation({ name: r.name, lat: r.lat, lng: r.lng });
         map.flyTo([r.lat, r.lng], 15);
         if (!r.synthetic) {
@@ -52,8 +51,8 @@ const recents = [];
         resultsData = []; selIdx = -1;
         status('Added "' + r.name + '".');
       }
-      export function setSpin(on) { $('sSpin').hidden = !on; }
-      export async function doSearch(live) {
+      function setSpin(on) { $('sSpin').hidden = !on; }
+      async function doSearch(live) {
         const q = $('searchInput').value.trim();
         if (!q) { resultsData = []; renderResults(); return; }
         const c = parseCoord(q);
@@ -114,7 +113,7 @@ const recents = [];
  * @param {number} lat @param {number} lng
  * @returns {Promise<string|null>}
  */
-export async function reverseGeocodeName(lat, lng) {
+async function reverseGeocodeName(lat, lng) {
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
     const j = await r.json();
