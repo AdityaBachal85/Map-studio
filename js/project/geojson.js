@@ -13,6 +13,7 @@ function geomToGeoJSONFeature(g) {
     properties: {
       shape: g.shape, name: g.name, description: g.description, notes: g.notes,
       fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
+      lineStyle: g.lineStyle, corner: g.corner, showLabel: g.showLabel, glow: g.glow,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
       radius: g.shape === 'Circle' ? g.layer.getRadius() : undefined,
     },
@@ -59,6 +60,9 @@ function importGeoJSONFeature(feat) {
     fillColor: props.fillColor, borderColor: props.borderColor,
     borderWidth: props.borderWidth != null ? +props.borderWidth : undefined,
     fillOpacity: props.fillOpacity != null ? +props.fillOpacity : undefined,
+    lineStyle: props.lineStyle, corner: props.corner,
+    showLabel: props.showLabel != null ? !!props.showLabel : undefined,
+    glow: props.glow != null ? !!props.glow : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,
   });
   return true;

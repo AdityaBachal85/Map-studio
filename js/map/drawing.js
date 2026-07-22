@@ -24,7 +24,17 @@ let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25 }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', showLabel: false, glow: false }; }
+
+/** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
+function dashArrayFor(style, w) {
+  if (style === 'dashed') return `${Math.max(8, w * 3)},${Math.max(7, w * 2.5)}`;
+  if (style === 'dotted') return `1,${Math.max(6, w * 2.4)}`; // round caps render these as dots
+  return null;
+}
+
+/** corner name -> [lineCap, lineJoin]. @param {string} corner */
+const GEOM_CAP = { round: ['round', 'round'], sharp: ['butt', 'miter'], square: ['square', 'bevel'] };
 
 // Brand Geoman's in-progress drawing + editing chrome so it matches the app
 // (its defaults are a generic blue). Runs once at load; map/map.pm exist by now.
@@ -49,14 +59,93 @@ function geomMarkerIcon(g) {
   return L.divIcon({
     className: 'geom-marker-dot',
     html: `<span style="display:block;width:100%;height:100%;border-radius:50%;background:${g.fillColor};opacity:${g.fillOpacity};border:${g.borderWidth}px solid ${g.borderColor};box-shadow:0 1px 4px rgba(0,0,0,.4);"></span>`,
-    iconSize: [22, 22],
+    iconSize: [22, 22], iconAnchor: [11, 11],
   });
 }
 
-/** Re-apply a geometry's current style fields onto its live Leaflet layer. @param {object} g */
+/** Re-apply a geometry's current style fields onto its live Leaflet layer, plus its optional glow halo and on-map label. @param {object} g */
 function applyGeomStyle(g) {
-  if (g.shape === 'Marker') { g.layer.setIcon(geomMarkerIcon(g)); return; }
-  g.layer.setStyle({ color: g.borderColor, weight: g.borderWidth, fillColor: g.fillColor, fillOpacity: g.fillOpacity });
+  if (g.shape === 'Marker') {
+    g.layer.setIcon(geomMarkerIcon(g));
+  } else {
+    const [cap, join] = GEOM_CAP[g.corner] || GEOM_CAP.round;
+    g.layer.setStyle({
+      color: g.borderColor, weight: g.borderWidth, fillColor: g.fillColor, fillOpacity: g.fillOpacity,
+      dashArray: dashArrayFor(g.lineStyle, g.borderWidth), lineCap: cap, lineJoin: join,
+    });
+  }
+  ensureGlow(g);
+  ensureGeomLabel(g);
+}
+
+// ---------- glow halo (a wider, translucent under-layer that tracks the shape) ----------
+
+function glowStyleFor(g) {
+  return {
+    color: g.fillColor, weight: (g.borderWidth || 3) + 8, opacity: 0.3,
+    fillColor: g.fillColor, fillOpacity: 0.2, interactive: false, renderer: vectorRenderer,
+    dashArray: null, lineCap: 'round', lineJoin: 'round',
+  };
+}
+
+function makeGlowLayer(g) {
+  const s = glowStyleFor(g);
+  if (g.shape === 'Marker') return L.circleMarker(g.layer.getLatLng(), Object.assign({ radius: 15, fill: true }, s));
+  if (g.shape === 'CircleMarker') return L.circleMarker(g.layer.getLatLng(), Object.assign({ radius: (g.layer.getRadius() || 8) + 7, fill: true }, s));
+  if (g.shape === 'Circle') return L.circle(g.layer.getLatLng(), Object.assign({ radius: g.layer.getRadius(), fill: false }, s));
+  if (g.shape === 'Rectangle') return L.rectangle(g.layer.getBounds(), Object.assign({ fill: false }, s));
+  if (g.shape === 'Line') return L.polyline(g.layer.getLatLngs(), Object.assign({ fill: false }, s));
+  return L.polygon(g.layer.getLatLngs(), Object.assign({ fill: false }, s));
+}
+
+/** Keep a glow layer's geometry + style in sync with its shape. @param {object} g */
+function syncGlowGeometry(g) {
+  if (!g.glowLayer) return;
+  if (g.shape === 'Marker' || g.shape === 'CircleMarker') g.glowLayer.setLatLng(g.layer.getLatLng());
+  else if (g.shape === 'Circle') { g.glowLayer.setLatLng(g.layer.getLatLng()); g.glowLayer.setRadius(g.layer.getRadius()); }
+  else if (g.shape === 'Rectangle') g.glowLayer.setBounds(g.layer.getBounds());
+  else g.glowLayer.setLatLngs(g.layer.getLatLngs());
+  g.glowLayer.setStyle(glowStyleFor(g));
+  if (g.glowLayer.bringToBack) g.glowLayer.bringToBack();
+}
+
+/** Create/refresh or remove a shape's glow halo to match g.glow. @param {object} g */
+function ensureGlow(g) {
+  if (g.glow) {
+    if (!g.glowLayer) { g.glowLayer = makeGlowLayer(g); g.glowLayer.addTo(map); if (g.glowLayer.bringToBack) g.glowLayer.bringToBack(); }
+    else syncGlowGeometry(g);
+  } else if (g.glowLayer) {
+    map.removeLayer(g.glowLayer); g.glowLayer = null;
+  }
+}
+
+// ---------- on-map name label (a small frosted chip centered on the shape) ----------
+
+function geomLabelLatLng(g) {
+  try { return g.layer.getBounds ? g.layer.getBounds().getCenter() : g.layer.getLatLng(); }
+  catch (e) { return g.layer.getLatLng ? g.layer.getLatLng() : map.getCenter(); }
+}
+
+function geomLabelIcon(g) {
+  return L.divIcon({
+    className: 'geom-label-wrap',
+    html: `<span class="geom-label" style="border-color:${g.borderColor}">${esc(g.name)}</span>`,
+    iconSize: [0, 0],
+  });
+}
+
+/** Create/refresh or remove a shape's on-map name label to match g.showLabel. @param {object} g */
+function ensureGeomLabel(g) {
+  if (g.showLabel) {
+    if (!g.labelMarker) {
+      g.labelMarker = L.marker(geomLabelLatLng(g), { icon: geomLabelIcon(g), interactive: false, keyboard: false, zIndexOffset: 500 }).addTo(map);
+    } else {
+      g.labelMarker.setLatLng(geomLabelLatLng(g));
+      g.labelMarker.setIcon(geomLabelIcon(g));
+    }
+  } else if (g.labelMarker) {
+    map.removeLayer(g.labelMarker); g.labelMarker = null;
+  }
 }
 
 /**
@@ -86,11 +175,13 @@ function measureForLayer(shape, layer) {
   return { text: '' };
 }
 
-/** Push the live measurement into a geometry's card and, if `live`, the floating readout. @param {object} g @param {boolean} [live] */
+/** Push the live measurement into a geometry's card and, if `live`, the floating readout. Also keeps the glow halo and on-map label tracking the shape as it moves. @param {object} g @param {boolean} [live] */
 function updateGeomMeasurement(g, live) {
   const m = measureForLayer(g.shape, g.layer);
   g.measureText = m.text;
   if (g.card) { const el = g.card.querySelector('.geom-measure'); if (el) el.textContent = m.text; }
+  if (g.glowLayer) syncGlowGeometry(g);
+  if (g.labelMarker) g.labelMarker.setLatLng(geomLabelLatLng(g));
   if (live) {
     const box = $('drawLiveStats');
     box.textContent = `${g.name} — ${m.text}`;
@@ -152,6 +243,7 @@ function snapshotGeom(g) {
   return {
     id: g.id, shape: g.shape, name: g.name, description: g.description, notes: g.notes,
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
+    lineStyle: g.lineStyle, corner: g.corner, showLabel: g.showLabel, glow: g.glow,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -218,6 +310,8 @@ function removeGeomById(id) {
   if (idx < 0) return;
   const g = geometries[idx];
   if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
+  if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
+  if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
   if (g.card && g.card.parentNode) g.card.parentNode.removeChild(g.card);
   geometries.splice(idx, 1);
   syncGeomEmpty();
@@ -263,6 +357,7 @@ function recreateGeomFromSnapshot(snap) {
   return registerGeom(layer, snap.shape, {
     id: snap.id, name: snap.name, description: snap.description, notes: snap.notes,
     fillColor: snap.fillColor, borderColor: snap.borderColor, borderWidth: snap.borderWidth, fillOpacity: snap.fillOpacity,
+    lineStyle: snap.lineStyle, corner: snap.corner, showLabel: snap.showLabel, glow: snap.glow,
     createdAt: snap.createdAt,
   });
 }
@@ -276,6 +371,8 @@ function applyHistoryEntry(entry, isUndo) {
     const snap = isUndo ? entry.before : entry.after;
     applyGeomCoords(g, snap.geom);
     g.fillColor = snap.fillColor; g.borderColor = snap.borderColor; g.borderWidth = snap.borderWidth; g.fillOpacity = snap.fillOpacity;
+    g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.showLabel = snap.showLabel; g.glow = snap.glow;
+    if (g.card) syncGeomCardStyleControls(g);
     applyGeomStyle(g);
     touchGeom(g);
     updateGeomMeasurement(g);
@@ -303,6 +400,8 @@ function doRedo() {
 function clearAllGeometries() {
   geometries.slice().forEach(g => {
     if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
+    if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
+    if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
     if (g.card && g.card.parentNode) g.card.parentNode.removeChild(g.card);
   });
   geometries.length = 0;
