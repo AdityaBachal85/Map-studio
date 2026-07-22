@@ -33,6 +33,7 @@ function geomCardMarkup(g) {
     </div>
     <div class="r">
       <span class="sub grow geom-modified" style="font-size:10px;">Modified ${new Date(g.modifiedAt).toLocaleString()}</span>
+      <button class="mini-btn gedit" title="Edit this shape (drag vertices) — or double-click it on the map">✎ Edit</button>
       <button class="mini-btn gzoom" title="Zoom to shape">⌖</button>
     </div>`;
   return card;
@@ -55,6 +56,7 @@ function wireGeomCard(card, g) {
   });
   card.querySelector('.gdesc').addEventListener('change', e => { g.description = e.target.value; touchGeom(g); });
   card.querySelector('.gnotes').addEventListener('change', e => { g.notes = e.target.value; touchGeom(g); });
+  card.querySelector('.gedit').addEventListener('click', () => enableSingleShapeEdit(g));
   card.querySelector('.gzoom').addEventListener('click', () => {
     if (g.layer.getBounds) map.fitBounds(g.layer.getBounds(), { padding: [60, 60] });
     else if (g.layer.getLatLng) map.flyTo(g.layer.getLatLng(), Math.max(map.getZoom(), 16));

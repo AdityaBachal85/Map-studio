@@ -78,7 +78,7 @@ const recents = [];
         const q = $('searchInput').value.trim();
         $('sClear').hidden = !q;
         if (q.length < 3 && !parseCoord(q)) { resultsData = []; renderResults(); return; }
-        searchTimer = setTimeout(() => doSearch(true), 380);
+        searchTimer = setTimeout(() => doSearch(true), 300);
       });
       $('searchInput').addEventListener('focus', () => {
         if (!$('searchInput').value.trim() && recents.length) {

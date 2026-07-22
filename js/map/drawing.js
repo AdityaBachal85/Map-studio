@@ -26,6 +26,15 @@ let activeEditMode = null;
 /** Default per-shape style, matching the app's orange/navy brand palette. */
 function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25 }; }
 
+// Brand Geoman's in-progress drawing + editing chrome so it matches the app
+// (its defaults are a generic blue). Runs once at load; map/map.pm exist by now.
+map.pm.setGlobalOptions({
+  templineStyle: { color: '#FF7A1A', weight: 2.5 },
+  hintlineStyle: { color: '#FF7A1A', weight: 2, dashArray: '6,6' },
+  pathOptions: { color: '#0A1E3C', weight: 3, fillColor: '#FF7A1A', fillOpacity: 0.25 },
+  snappable: true, snapDistance: 20,
+});
+
 /** Next auto-generated name for a newly created/imported shape, e.g. "Polygon 2". @param {string} shape */
 function nextGeomName(shape) {
   shapeCounters[shape] = (shapeCounters[shape] || 0) + 1;
@@ -179,6 +188,28 @@ function attachGeomLayerEvents(g) {
     if (before) pushUndo({ type: 'edit', id: g.id, before, after: snapshotGeom(g) });
   });
   layer.on('click', () => selectGeom(g));
+  // Double-click a shape to edit just that shape's vertices in place (stop the
+  // event so the map doesn't also zoom).
+  layer.on('dblclick', ev => { L.DomEvent.stop(ev); enableSingleShapeEdit(g); });
+}
+
+/**
+ * Enable direct vertex/shape editing on a single geometry (and turn it off
+ * everywhere else), independent of the global Edit mode. Toggles: a second
+ * call on the same shape turns its editing off.
+ * @param {object} g
+ */
+function enableSingleShapeEdit(g) {
+  disableAllDrawModes();
+  disableAllEditModes();
+  const wasEditing = g.layer.pm && g.layer.pm.enabled && g.layer.pm.enabled();
+  geometries.forEach(x => { if (x.layer.pm && x.layer.pm.enabled && x.layer.pm.enabled()) x.layer.pm.disable(); });
+  geometries.forEach(x => { if (x.card) x.card.classList.toggle('editing', false); });
+  if (wasEditing) { status(`${g.name}: editing off.`); return; }
+  g.layer.pm.enable({ allowSelfIntersection: false });
+  if (g.card) g.card.classList.add('editing');
+  selectGeom(g);
+  status(`${g.name}: drag vertices to reshape · drag the middle handles to add points · click a vertex to remove it.`);
 }
 
 /** Remove a geometry from the map/array/DOM without touching undo history (used by the history machinery itself). @param {number} id */

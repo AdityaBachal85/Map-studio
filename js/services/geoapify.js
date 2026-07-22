@@ -24,44 +24,67 @@ function cacheSet(key, val) {
 /**
  * Map a Geoapify result category (e.g. "education.school") to an emoji,
  * mirroring services/places.js's iconFor() for Nominatim's class/type.
- * @param {string} cat @returns {string}
+ * @param {string} cat @param {string} [rt] Geoapify result_type (city/street/postcode/...)
+ * @returns {string}
  */
-function iconForGeoapifyCategory(cat) {
+function iconForGeoapifyCategory(cat, rt) {
   const c = String(cat || '');
-  if (c.startsWith('railway')) return '🚉';
+  const t = String(rt || '');
+  if (t === 'postcode' || c.includes('postcode')) return '📮';
+  if (c.startsWith('railway') || c.includes('subway') || c.includes('train')) return '🚉';
   if (c.startsWith('airport') || c.startsWith('aeroway')) return '✈️';
-  if (c.startsWith('healthcare')) return '🏥';
-  if (c.startsWith('education')) return '🎓';
-  if (c.startsWith('highway')) return '🛣️';
+  if (c.includes('hospital') || c.startsWith('healthcare')) return '🏥';
+  if (c.includes('school') || c.includes('university') || c.includes('college') || c.startsWith('education')) return '🎓';
+  if (c.includes('fuel') || c.includes('petrol')) return '⛽';
+  if (c.includes('mall') || c.includes('supermarket') || c.startsWith('commercial')) return '🛍️';
+  if (c.includes('restaurant') || c.includes('catering') || c.includes('food')) return '🍽️';
+  if (c.includes('hotel') || c.startsWith('accommodation')) return '🏨';
+  if (c.startsWith('highway') || t === 'street' || c.includes('road')) return '🛣️';
   if (c.includes('bus')) return '🚌';
-  if (c.startsWith('commercial')) return '🛍️';
   if (c.startsWith('leisure') || c.startsWith('natural') || c.includes('park')) return '🌳';
-  if (c.startsWith('populated_place') || c.startsWith('administrative')) return '🏙️';
-  if (c.includes('hotel')) return '🏨';
-  if (c.startsWith('building') || c.startsWith('accommodation')) return '🏢';
+  if (t === 'country' || t === 'state' || t === 'county' || c.startsWith('administrative')) return '🗺️';
+  if (t === 'city' || t === 'village' || t === 'town' || t === 'suburb' || c.startsWith('populated_place')) return '🏙️';
+  if (c.startsWith('building') || t === 'amenity') return '🏢';
   return '📍';
 }
 
 /**
  * Query Geoapify's autocomplete endpoint directly (no cache, no fallback --
- * callers should go through geocodeSearch()).
+ * callers should go through geocodeSearch()). Uses a *proximity* bias toward
+ * the current view centre so nearby matches rank first without hard-excluding
+ * far-away ones, asks for more candidates (limit 8) and de-duplicates
+ * near-identical results Geoapify sometimes returns for the same place.
  * @param {string} q @param {L.LatLngBounds|null} bias
  * @returns {Promise<Array>} mapped results; throws on network/HTTP failure.
  */
 async function geoapifySearch(q, bias) {
   if (!GEOAPIFY_API_KEY) return [];
-  let url = 'https://api.geoapify.com/v1/geocode/autocomplete?limit=6&format=json&text=' + encodeURIComponent(q) + '&apiKey=' + GEOAPIFY_API_KEY;
-  if (bias) url += `&bias=rect:${bias.getWest()},${bias.getSouth()},${bias.getEast()},${bias.getNorth()}`;
+  let url = 'https://api.geoapify.com/v1/geocode/autocomplete'
+    + '?text=' + encodeURIComponent(q)
+    + '&limit=8&format=json&lang=en'
+    + '&apiKey=' + GEOAPIFY_API_KEY;
+  if (bias) { const c = bias.getCenter(); url += `&bias=proximity:${c.lng},${c.lat}`; }
   const res = await fetch(url);
   if (!res.ok) throw new Error('Geoapify HTTP ' + res.status);
   const json = await res.json();
   const items = json.results || [];
-  return items.map(r => ({
-    lat: r.lat, lng: r.lon,
-    name: r.name || r.address_line1 || (r.formatted || '').split(',')[0],
-    label: r.formatted || r.address_line1 || r.name,
-    icon: iconForGeoapifyCategory(r.category || (r.categories && r.categories[0]) || ''),
-  }));
+  const seen = new Set();
+  const out = [];
+  for (const r of items) {
+    const lat = r.lat, lng = r.lon;
+    if (lat == null || lng == null) continue;
+    const label = r.formatted || r.address_line1 || r.name || '';
+    const dedupeKey = label.toLowerCase() + '|' + lat.toFixed(4) + ',' + lng.toFixed(4);
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push({
+      lat, lng,
+      name: r.name || r.address_line1 || (r.formatted || '').split(',')[0],
+      label,
+      icon: iconForGeoapifyCategory(r.category || (r.categories && r.categories[0]) || '', r.result_type),
+    });
+  }
+  return out;
 }
 
 /** The original Nominatim search (unchanged), now the fallback path. */
@@ -82,7 +105,8 @@ async function nominatimSearch(q, bias) {
  * @returns {Promise<Array<{lat:number,lng:number,name:string,label:string,icon:string}>>}
  */
 async function geocodeSearch(q, bias) {
-  const key = q.trim().toLowerCase() + '|' + (bias ? bias.toBBoxString() : '');
+  const c = bias ? bias.getCenter() : null;
+  const key = q.trim().toLowerCase() + '|' + (c ? c.lat.toFixed(2) + ',' + c.lng.toFixed(2) : '');
   const cached = cacheGet(key);
   if (cached) return cached;
   let results = [];

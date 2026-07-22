@@ -380,13 +380,24 @@
     .map-wrap.aerial-measuring #map {
       cursor: crosshair;
     }
+    .aerial-dot-wrap {
+      background: none;
+      border: none;
+    }
     .aerial-dot {
-      width: 12px;
-      height: 12px;
+      display: block;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: #FF7A1A;
       border: 2px solid #fff;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+      box-shadow: 0 1px 5px rgba(0, 0, 0, .5);
+      cursor: move;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .aerial-dot-wrap:hover .aerial-dot {
+      transform: scale(1.25);
+      box-shadow: 0 2px 8px rgba(255, 122, 26, .7);
     }
     .leaflet-tooltip.aerial-tooltip {
       background: #0A1E3C;
@@ -406,32 +417,47 @@
     .draw-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
+      gap: 7px;
     }
     .draw-shape-btn {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 3px;
-      padding: 10px 4px;
-      font-size: 16px;
+      justify-content: center;
+      gap: 4px;
+      padding: 11px 4px;
+      font-size: 19px;
+      line-height: 1;
+      border-radius: 13px;
     }
     .draw-shape-btn span {
       font-size: 10px;
       font-weight: 700;
       letter-spacing: .02em;
+      color: var(--dim);
+    }
+    .draw-shape-btn.toggled span {
+      color: #160B02;
+    }
+    .draw-shape-btn:hover {
+      border-color: var(--orange);
     }
     .draw-mode-btn {
       width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
     }
     .draw-live-stats {
-      background: rgba(255, 122, 26, .12);
-      border: 1px solid rgba(255, 122, 26, .4);
-      border-radius: 10px;
-      padding: 8px 11px;
-      font: 700 11.5px/1.4 Arial, sans-serif;
+      background: linear-gradient(135deg, rgba(255, 122, 26, .16), rgba(255, 122, 26, .07));
+      border: 1px solid rgba(255, 122, 26, .45);
+      border-radius: 11px;
+      padding: 9px 12px;
+      font: 800 12px/1.45 Arial, sans-serif;
       color: var(--text);
       margin-bottom: 10px;
+      box-shadow: 0 3px 12px rgba(255, 122, 26, .14);
     }
     .geom-marker-dot {
       background: transparent;
@@ -443,4 +469,45 @@
     @keyframes geomFlash {
       0%, 100% { box-shadow: none; }
       30% { box-shadow: 0 0 0 2px var(--orange); }
+    }
+    /* Card whose shape is currently in per-shape edit mode */
+    .item-card.geom-card.editing {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 1px var(--orange), 0 8px 24px rgba(255, 122, 26, .18);
+    }
+    .geom-card textarea {
+      resize: vertical;
+      min-height: 34px;
+      font: 400 12px/1.4 inherit;
+      color: var(--text);
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 6px 9px;
+      width: 100%;
+    }
+    .geom-card textarea:focus {
+      outline: none;
+      border-color: var(--orange);
+    }
+    .geom-card .geom-measure {
+      color: var(--orange);
+      font-weight: 700;
+    }
+
+    /* Brand Geoman's edit/draw vertex handles to the app palette (its defaults
+       are a generic blue). Only appearance is overridden -- size/anchoring
+       (14px, centered via margin) stays exactly as Geoman ships it, so vertices
+       still sit precisely on the geometry. */
+    .leaflet-container .marker-icon {
+      border: 2px solid #FF7A1A;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+    }
+    .leaflet-container .marker-icon-middle {
+      border: 1.5px dashed #FF7A1A;
+      background-color: rgba(255, 255, 255, .9);
+    }
+    .leaflet-container .marker-icon.rotate-marker {
+      border-color: #0A1E3C;
+      background-color: #FF7A1A;
     }
