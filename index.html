@@ -72,6 +72,7 @@
         <button id="tabBtnLoc" class="active">Locations</button>
         <button id="tabBtnRt">Routes</button>
         <button id="tabBtnDraw">Draw</button>
+        <button id="tabBtnNearby">Nearby</button>
         <button id="tabBtnBrand">Brand</button>
         <button id="tabBtnMap">Settings</button>
       </nav>
@@ -156,6 +157,26 @@
               <input type="file" id="geoImportInput" accept=".geojson,.json,application/geo+json,application/json" style="display:none;">
             </div>
           </div>
+        </section>
+
+        <section id="paneNearby" class="pane">
+          <div class="field">
+            <div class="lbl">Find places near</div>
+            <div class="stack">
+              <button class="btn btn-block" id="nearbyCenterBtn">📍 Search around map centre</button>
+              <div class="inline-ctl"><span class="sub">Radius</span><input type="range" id="nearbyRadius" min="500"
+                  max="5000" step="250" value="2000"><span class="val" id="nearbyRadiusVal">2.0 km</span></div>
+              <div class="sub" style="white-space:normal;line-height:1.5;">Pan the map to your area and hit "Search around
+                map centre", then toggle categories to drop nearby places. Each category loads on first tap and can be
+                switched off again.</div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Categories</div>
+            <div class="nearby-grid" id="nearbyGrid"></div>
+          </div>
+          <button class="btn btn-ghost btn-block" id="nearbyClearBtn" style="display:none;margin-top:4px;">Clear nearby
+            places</button>
         </section>
 
         <section id="paneBrand" class="pane">
@@ -334,12 +355,14 @@
   <script src="./js/export/exportPPT.js"></script>
   <script src="./js/services/places.js"></script>
   <script src="./js/services/geoapify.js"></script>
+  <script src="./js/services/nearbyPlaces.js"></script>
   <script src="./js/services/geocoder.js"></script>
   <script src="./js/ui/searchBox.js"></script>
   <script src="./js/ui/toolbar.js"></script>
   <script src="./js/map/aerialDistance.js"></script>
   <script src="./js/ui/geometryPanel.js"></script>
   <script src="./js/map/drawing.js"></script>
+  <script src="./js/map/nearby.js"></script>
   <script src="./js/project/geojson.js"></script>
   <script src="./js/export/pptxHandler.js"></script>
   <script src="./js/project/openProject.js"></script>
