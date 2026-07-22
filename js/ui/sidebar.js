@@ -28,3 +28,10 @@
       /** Re-apply the active tab's pane visibility (no-op helper for symmetry with other UI setup). */
       function initTabs() { /* tabs wire themselves above at module load */ }
 
+      // ---------- collapsible accordion sections (Settings tab) ----------
+      // Each .acc header toggles its own .open state independently, so users can
+      // open exactly the groups they need instead of scrolling one long list.
+      document.querySelectorAll('.acc .acc-hd').forEach(hd => {
+        hd.addEventListener('click', () => hd.parentElement.classList.toggle('open'));
+      });
+

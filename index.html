@@ -61,7 +61,7 @@
         <button id="tabBtnRt">Routes</button>
         <button id="tabBtnDraw">Draw</button>
         <button id="tabBtnBrand">Brand</button>
-        <button id="tabBtnMap">Map</button>
+        <button id="tabBtnMap">Settings</button>
       </nav>
       <div class="panes">
 
@@ -119,6 +119,16 @@
               <button class="btn btn-ghost" id="drawRedoBtn" title="Redo (Ctrl+Y)">↷ Redo</button>
             </div>
           </div>
+          <div class="field">
+            <div class="lbl">Measure</div>
+            <div class="stack">
+              <button class="btn btn-block" id="aerialBtn">📏 Measure straight-line distance</button>
+              <button class="btn btn-ghost btn-block" id="aerialClearBtn" style="display:none;">Clear measurements</button>
+              <div class="sub" style="white-space:normal;line-height:1.5;">Click two points for straight-line distance &amp;
+                bearing. Measurements stay on the map — drag either endpoint to adjust, or click the × on a label to
+                remove it.</div>
+            </div>
+          </div>
           <div id="drawLiveStats" class="draw-live-stats" style="display:none;"></div>
           <div id="geomList"></div>
           <div id="geomEmpty" class="empty">
@@ -162,91 +172,100 @@
         </section>
 
         <section id="paneMap" class="pane">
-          <div class="field">
-            <div class="lbl">Basemap</div>
-            <select id="basemapSel">
-              <optgroup label="Satellite">
-                <option value="hybrid" selected>Satellite + roads &amp; labels (Esri)</option>
-                <option value="sat">Satellite — clean (Esri)</option>
-              </optgroup>
-              <optgroup label="Streets">
-                <option value="esristreet">Streets — Esri</option>
-                <option value="osm">Streets — OpenStreetMap</option>
-                <option value="voyager">Streets — Carto Voyager</option>
-              </optgroup>
-              <optgroup label="Executive / minimal">
-                <option value="lightgray">Light Gray Canvas (Esri)</option>
-                <option value="darkgray">Dark Gray Canvas (Esri)</option>
-                <option value="positron">Minimal light (Carto)</option>
-                <option value="dark">Minimal dark (Carto)</option>
-              </optgroup>
-              <optgroup label="Terrain">
-                <option value="topo">Terrain topo (Esri)</option>
-                <option value="natgeo">National Geographic (Esri)</option>
-                <option value="opentopo">OpenTopoMap</option>
-              </optgroup>
-            </select>
-            <label class="chk wrap" style="margin-top:8px;"><input type="checkbox" id="hdTgl" checked> HD imagery
-              (sharpest tiles — if grey "no data" tiles appear in remote areas, switch this off)</label>
-          </div>
-          <div class="field">
-            <div class="lbl">3D &amp; depth</div>
-            <div class="stack">
-              <div class="inline-ctl"><span class="sub">3D tilt</span><input type="range" id="tiltRange" min="0"
-                  max="45" step="1" value="0"><span class="val" id="tiltVal">0°</span></div>
-              <label class="chk"><input type="checkbox" id="hillTgl"> Terrain relief shading</label>
-              <div class="sub" style="white-space:normal;line-height:1.5;">Pins and labels stand upright like Google
-                Earth while the ground tilts. Set tilt back to 0° while placing points for exact positions. PNG keeps
-                the 3D perspective; PPTX exports flat for clean editing.</div>
+
+          <div class="acc open" data-acc="basemap">
+            <button class="acc-hd" type="button">Basemap &amp; imagery<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <select id="basemapSel">
+                <optgroup label="Satellite">
+                  <option value="hybrid" selected>Satellite + roads &amp; labels (Esri)</option>
+                  <option value="sat">Satellite — clean (Esri)</option>
+                </optgroup>
+                <optgroup label="Streets">
+                  <option value="esristreet">Streets — Esri</option>
+                  <option value="osm">Streets — OpenStreetMap</option>
+                  <option value="voyager">Streets — Carto Voyager</option>
+                </optgroup>
+                <optgroup label="Executive / minimal">
+                  <option value="lightgray">Light Gray Canvas (Esri)</option>
+                  <option value="darkgray">Dark Gray Canvas (Esri)</option>
+                  <option value="positron">Minimal light (Carto)</option>
+                  <option value="dark">Minimal dark (Carto)</option>
+                </optgroup>
+                <optgroup label="Terrain">
+                  <option value="topo">Terrain topo (Esri)</option>
+                  <option value="natgeo">National Geographic (Esri)</option>
+                  <option value="opentopo">OpenTopoMap</option>
+                </optgroup>
+              </select>
+              <label class="chk wrap" style="margin-top:8px;"><input type="checkbox" id="hdTgl" checked> HD imagery
+                (sharpest tiles — if grey "no data" tiles appear in remote areas, switch this off)</label>
             </div>
           </div>
-          <div class="field">
-            <div class="lbl">Overlays &amp; appearance</div>
-            <div class="stack">
-              <label class="chk"><input type="checkbox" id="titleTgl" checked> Map title card (click the title to
-                edit)</label>
-              <label class="chk"><input type="checkbox" id="legendTgl" checked> Key-distances panel (drag ⠿, click text
-                to edit)</label>
-              <label class="chk"><input type="checkbox" id="brandTgl" checked> DBOT logo on map &amp; exports</label>
-              <label class="chk"><input type="checkbox" id="northTgl" checked> North arrow</label>
-              <label class="chk"><input type="checkbox" id="scaleTgl" checked> Scale bar</label>
-              <label class="chk"><input type="checkbox" id="creditTgl" checked> Imagery credit line</label>
-              <label class="chk"><input type="checkbox" id="glassTgl" checked> Glass / frost effects (turn off if
-                laggy)</label>
-              <div class="inline-ctl"><span class="sub">Label size</span><input type="range" id="chipRange" min="50"
-                  max="200" step="5" value="100"><span class="val" id="chipVal">100%</span></div>
+
+          <div class="acc" data-acc="depth">
+            <button class="acc-hd" type="button">3D &amp; terrain<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <div class="inline-ctl"><span class="sub">3D tilt</span><input type="range" id="tiltRange" min="0"
+                    max="45" step="1" value="0"><span class="val" id="tiltVal">0°</span></div>
+                <label class="chk"><input type="checkbox" id="hillTgl"> Terrain relief shading</label>
+                <div class="sub" style="white-space:normal;line-height:1.5;">Pins and labels stand upright like Google
+                  Earth while the ground tilts. Set tilt back to 0° while placing points for exact positions. PNG keeps
+                  the 3D perspective; PPTX exports flat for clean editing.</div>
+              </div>
             </div>
           </div>
-          <div class="field">
-            <div class="lbl">View</div>
-            <button class="btn btn-block" id="fitBtn">Fit view to everything</button>
-          </div>
-          <div class="field">
-            <div class="lbl">Tools</div>
-            <div class="stack">
-              <button class="btn btn-block" id="aerialBtn">📏 Measure straight-line distance</button>
-              <button class="btn btn-ghost btn-block" id="aerialClearBtn" style="display:none;">Clear measurements</button>
-              <div class="sub" style="white-space:normal;line-height:1.5;">Click two points for straight-line distance &amp;
-                bearing. Measurements stay on the map — drag either endpoint to adjust, or click the × on a label to
-                remove it.</div>
+
+          <div class="acc" data-acc="overlays">
+            <button class="acc-hd" type="button">Overlays &amp; appearance<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <label class="chk"><input type="checkbox" id="titleTgl" checked> Map title card (click the title to
+                  edit)</label>
+                <label class="chk"><input type="checkbox" id="legendTgl" checked> Key-distances panel (drag ⠿, click text
+                  to edit)</label>
+                <label class="chk"><input type="checkbox" id="brandTgl" checked> DBOT logo on map &amp; exports</label>
+                <label class="chk"><input type="checkbox" id="northTgl" checked> North arrow</label>
+                <label class="chk"><input type="checkbox" id="scaleTgl" checked> Scale bar</label>
+                <label class="chk"><input type="checkbox" id="creditTgl" checked> Imagery credit line</label>
+                <label class="chk"><input type="checkbox" id="glassTgl" checked> Glass / frost effects (turn off if
+                  laggy)</label>
+                <div class="inline-ctl"><span class="sub">Label size</span><input type="range" id="chipRange" min="50"
+                    max="200" step="5" value="100"><span class="val" id="chipVal">100%</span></div>
+              </div>
             </div>
           </div>
-          <div class="field">
-            <div class="lbl">Export</div>
-            <div class="stack">
-              <button class="btn btn-primary" id="pptxBtn">Export PPTX — editable slide</button>
-              <button class="btn" id="pngBtn">Export PNG image</button>
-              <button class="btn" id="printBtn">Print / Save as PDF</button>
+
+          <div class="acc" data-acc="view">
+            <button class="acc-hd" type="button">View<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <button class="btn btn-block" id="fitBtn">Fit view to everything</button>
             </div>
           </div>
-          <div class="field">
-            <div class="lbl">Project</div>
-            <div class="stack">
-              <button class="btn" id="saveBtn">Save project (.json)</button>
-              <button class="btn btn-ghost" id="loadBtn">Open project (.json)</button>
-              <input type="file" id="loadInput" accept=".json,application/json" style="display:none;">
+
+          <div class="acc open" data-acc="export">
+            <button class="acc-hd" type="button">Export<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <button class="btn btn-primary" id="pptxBtn">Export PPTX — editable slide</button>
+                <button class="btn" id="pngBtn">Export PNG image</button>
+                <button class="btn" id="printBtn">Print / Save as PDF</button>
+              </div>
             </div>
           </div>
+
+          <div class="acc" data-acc="project">
+            <button class="acc-hd" type="button">Project<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <button class="btn" id="saveBtn">Save project (.json)</button>
+                <button class="btn btn-ghost" id="loadBtn">Open project (.json)</button>
+                <input type="file" id="loadInput" accept=".json,application/json" style="display:none;">
+              </div>
+            </div>
+          </div>
+
         </section>
 
       </div>

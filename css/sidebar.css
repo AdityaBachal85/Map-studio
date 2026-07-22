@@ -168,6 +168,62 @@
       animation: fadeIn .2s ease;
     }
 
+    /* ---------- Collapsible accordion sections (Settings tab) ---------- */
+    .acc {
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .acc-hd {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 13px;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .acc-hd:hover {
+      background: rgba(255, 255, 255, .045);
+    }
+
+    .acc-ch {
+      color: var(--dim);
+      font-size: 11px;
+      transition: transform .2s ease;
+    }
+
+    .acc.open > .acc-hd .acc-ch {
+      transform: rotate(180deg);
+      color: var(--orange);
+    }
+
+    .acc.open > .acc-hd {
+      color: #fff;
+    }
+
+    .acc-body {
+      display: none;
+      padding: 2px 13px 13px;
+    }
+
+    .acc.open > .acc-body {
+      display: block;
+      animation: fadeIn .18s ease;
+    }
+
     @keyframes fadeIn {
       from {
         opacity: 0;
