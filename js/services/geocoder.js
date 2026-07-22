@@ -63,15 +63,10 @@ const recents = [];
         const token = ++searching;
         setSpin(true);
         try {
-          let url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' + encodeURIComponent(q);
-          if (map.getZoom() >= 8) {
-            const b = map.getBounds();
-            url += `&viewbox=${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}&bounded=0`;
-          }
-          const res = await fetch(url);
-          const data = await res.json();
+          const bias = map.getZoom() >= 8 ? map.getBounds() : null;
+          const data = await geocodeSearch(q, bias); // Geoapify first, silent fallback to Nominatim
           if (token !== searching) return;              // a newer keystroke superseded this request
-          resultsData = data.map(r => ({ lat: +r.lat, lng: +r.lon, name: (r.name || r.display_name.split(',')[0]), label: r.display_name, icon: iconFor(r.class, r.type) }));
+          resultsData = data;
           selIdx = resultsData.length ? 0 : -1;
           renderResults();
           if (!live) status(resultsData.length ? '' : 'No results for "' + q + '".');
