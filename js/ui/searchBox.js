@@ -29,6 +29,7 @@ $('searchIconBtn').addEventListener('click', () => {
   else collapseSearch();
 });
 
-// Start collapsed on small screens so the map isn't covered; expanded on desktop
-// where there's room. Users can toggle either way afterwards.
-if (window.matchMedia('(max-width: 720px)').matches) $('searchBox').classList.add('collapsed');
+// Start collapsed on every screen — a compact magnifier button that expands on
+// click (so the expand/collapse affordance is discoverable, and the map isn't
+// covered until the user actually wants to search).
+$('searchBox').classList.add('collapsed');
