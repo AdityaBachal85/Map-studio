@@ -59,7 +59,8 @@ function iconForGeoapifyCategory(cat, rt) {
  */
 async function geoapifySearch(q, bias) {
   if (!GEOAPIFY_API_KEY) return [];
-  let url = 'https://api.geoapify.com/v1/geocode/autocomplete'
+  let url =
+    SEARCH_PROVIDERS.geoapify.autocomplete
     + '?text=' + encodeURIComponent(q)
     + '&limit=8&format=json&lang=en'
     + '&apiKey=' + GEOAPIFY_API_KEY;
@@ -87,9 +88,62 @@ async function geoapifySearch(q, bias) {
   return out;
 }
 
+/**
+ * Photon autocomplete fallback
+ */
+async function photonSearch(q, bias) {
+
+  let url =
+    SEARCH_PROVIDERS.photon.autocomplete
+    + '?q=' + encodeURIComponent(q)
+    + '&limit=8';
+
+  if (bias) {
+    const c = bias.getCenter();
+    url += '&lon=' + c.lng + '&lat=' + c.lat;
+  }
+
+  const res = await fetch(url);
+
+  if (!res.ok)
+    throw new Error('Photon HTTP ' + res.status);
+
+  const json = await res.json();
+
+  return (json.features || []).map(f => ({
+
+    lat: f.geometry.coordinates[1],
+
+    lng: f.geometry.coordinates[0],
+
+    name:
+      f.properties.name ||
+      f.properties.city ||
+      f.properties.street ||
+      'Unknown',
+
+    label: [
+      f.properties.name,
+      f.properties.city,
+      f.properties.county,
+      f.properties.state,
+      f.properties.country
+    ]
+      .filter(Boolean)
+      .join(', '),
+
+    icon: "📍"
+
+  }));
+
+}
+
 /** The original Nominatim search (unchanged), now the fallback path. */
 async function nominatimSearch(q, bias) {
-  let url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' + encodeURIComponent(q);
+  let url =
+    SEARCH_PROVIDERS.nominatim.search
+    + '?format=jsonv2&limit=6&q='
+    + encodeURIComponent(q);
   if (bias) url += `&viewbox=${bias.getWest()},${bias.getNorth()},${bias.getEast()},${bias.getSouth()}&bounded=0`;
   const res = await fetch(url);
   const data = await res.json();
@@ -110,8 +164,52 @@ async function geocodeSearch(q, bias) {
   const cached = cacheGet(key);
   if (cached) return cached;
   let results = [];
-  try { results = await geoapifySearch(q, bias); } catch (e) { results = []; }
-  if (!results.length) results = await nominatimSearch(q, bias);
+
+  /* ---------- Geoapify ---------- */
+
+  try {
+
+    results = await geoapifySearch(q, bias);
+
+  } catch (e) {
+
+    console.warn("Geoapify failed:", e);
+
+  }
+
+  /* ---------- Photon ---------- */
+
+  if (!results.length) {
+
+    try {
+
+      results = await photonSearch(q, bias);
+
+    } catch (e) {
+
+      console.warn("Photon failed:", e);
+
+    }
+
+  }
+
+  /* ---------- Nominatim ---------- */
+
+  if (!results.length) {
+
+    try {
+
+      results = await nominatimSearch(q, bias);
+
+    } catch (e) {
+
+      console.warn("Nominatim failed:", e);
+
+      results = [];
+
+    }
+
+  }
   cacheSet(key, results);
   return results;
 }
