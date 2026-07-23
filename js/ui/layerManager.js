@@ -57,10 +57,19 @@ function layerGroups() {
       },
     };
   });
+  // Measurements: straight-line (aerial) distance measurements (map/aerialDistance).
+  const measureItems = (typeof aerialMeasurements !== 'undefined' ? aerialMeasurements : []).map(m => ({
+    name: m.name, color: m.color, icon: '📏', hidden: !!m._hidden,
+    zoom: () => zoomToMeasurement(m),
+    setVisible: on => setAerialMeasurementVisible(m, on),
+    rename: n => { m.name = n || ('Measurement ' + m.n); const el = m.card && m.card.querySelector('.mnm'); if (el) el.value = m.name; },
+    remove: () => removeAerialMeasurement(m),
+  }));
   return [
     { key: 'loc', label: 'Locations', icon: '📍', items: locItems },
     { key: 'rt', label: 'Routes', icon: '🛣️', items: rtItems },
     { key: 'geom', label: 'Shapes', icon: '⬠', items: geomItems },
+    { key: 'measure', label: 'Measurements', icon: '📏', items: measureItems },
     { key: 'nearby', label: 'Nearby', icon: '📌', items: nearbyItems },
   ];
 }

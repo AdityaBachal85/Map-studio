@@ -39,18 +39,37 @@ function fmtAerialShort(km) {
 }
 
 const aerialMeasurements = [];
+let aerialNextId = 1;
+let aerialCounter = 0;
 let aerialActive = false;
 let aerialPendingA = null;
 let aerialPendingMarker = null;
 
 const aerialDot = () => L.divIcon({ className: 'aerial-dot-wrap', html: '<span class="aerial-dot"></span>', iconSize: [16, 16], iconAnchor: [8, 8] });
 
+/** dashArray for a measurement line style; null = solid. @param {string} style */
+function aerialDashArray(style) {
+  if (style === 'solid') return null;
+  if (style === 'dotted') return '1,7';
+  return '8,8'; // dashed (default)
+}
+
+/** Apply a measurement's colour + line style to its line. @param {object} m */
+function applyAerialStyle(m) {
+  m.line.setStyle({ color: m.color, dashArray: aerialDashArray(m.lineStyle), lineCap: 'round' });
+}
+
 /** Compact pill text: distance · compass bearing. @param {object} m */
 function aerialLabelText(m) {
   return `${fmtAerialShort(m.lastKm)} · ${compassLabel(m.lastBrg)} ${Math.round(m.lastBrg)}°`;
 }
 
-/** Recompute a measurement's line, label and cached distance/bearing from its current endpoints. @param {object} m */
+/** Full card readout: both distance units + bearing. @param {object} m */
+function aerialReadout(m) {
+  return `${fmtAerialDistance(m.lastKm)} · Bearing ${Math.round(m.lastBrg)}° (${compassLabel(m.lastBrg)})`;
+}
+
+/** Recompute a measurement's line, label, card readout and cached distance/bearing. @param {object} m */
 function updateAerialMeasurement(m) {
   m.line.setLatLngs([m.a, m.b]);
   const km = haversineKm(m.a.lat, m.a.lng, m.b.lat, m.b.lng);
@@ -60,16 +79,77 @@ function updateAerialMeasurement(m) {
   m.label.setLatLng(mid);
   const el = m.label.getElement();
   if (el) { const t = el.querySelector('.aerial-txt'); if (t) t.textContent = aerialLabelText(m); }
+  if (m.card) { const r = m.card.querySelector('.measure-readout'); if (r) r.textContent = aerialReadout(m); }
 }
 
 function aerialSummary(m) {
   return `Straight-line distance: ${fmtAerialDistance(m.lastKm)}, bearing ${Math.round(m.lastBrg)}° (${compassLabel(m.lastBrg)}).`;
 }
 
-/** Create a persistent, editable A→B measurement with a frosted pill label + × delete button. @param {L.LatLng} a @param {L.LatLng} b @returns {object} */
+/** Fit the map to a measurement's two endpoints. @param {object} m */
+function zoomToMeasurement(m) { map.fitBounds(L.latLngBounds([m.a, m.b]), { padding: [80, 80] }); }
+
+/** Show/hide a measurement (line, label, endpoints) without deleting it. Used by the Layer Manager. @param {object} m @param {boolean} on */
+function setAerialMeasurementVisible(m, on) {
+  m._hidden = !on;
+  [m.line, m.label, m.markerA, m.markerB].forEach(l => {
+    if (!l) return;
+    if (on) { if (!map.hasLayer(l)) l.addTo(map); }
+    else if (map.hasLayer(l)) map.removeLayer(l);
+  });
+}
+
+// ---------- sidebar card (Draw tab › Measure) ----------
+
+function syncMeasureEmpty() {
+  const empty = $('measureEmpty');
+  if (empty) empty.style.display = aerialMeasurements.length ? 'none' : '';
+}
+
+/** Build and wire a measurement's card in the Draw tab's Measure list. @param {object} m */
+function buildMeasureCard(m) {
+  const card = document.createElement('div');
+  card.className = 'item-card measure-card';
+  card.innerHTML = `
+    <div class="r">
+      <input type="color" class="mclr" value="${esc(m.color)}" title="Line color">
+      <input type="text" class="mnm grow" value="${esc(m.name)}" placeholder="Name">
+      <button class="x-btn" title="Delete">&times;</button>
+    </div>
+    <div class="r">
+      <span class="sub" style="width:44px;">Line</span>
+      <select class="mls grow">
+        <option value="dashed">Dashed</option>
+        <option value="solid">Solid</option>
+        <option value="dotted">Dotted</option>
+      </select>
+      <button class="mini-btn mzoom" title="Zoom to measurement">⌖</button>
+    </div>
+    <div class="r"><textarea class="mnotes grow" rows="2" placeholder="Notes">${esc(m.notes)}</textarea></div>
+    <div class="r"><span class="sub measure-readout">${aerialReadout(m)}</span></div>
+    <div class="r"><span class="sub" style="font-size:10px;">Created ${new Date(m.createdAt).toLocaleString()}</span></div>`;
+  card.querySelector('.mls').value = m.lineStyle;
+  card.querySelector('.mclr').addEventListener('input', e => { m.color = e.target.value; applyAerialStyle(m); refreshLayersSafe(); });
+  card.querySelector('.mnm').addEventListener('change', e => { m.name = e.target.value || ('Measurement ' + m.n); refreshLayersSafe(); });
+  card.querySelector('.mls').addEventListener('change', e => { m.lineStyle = e.target.value; applyAerialStyle(m); });
+  card.querySelector('.mnotes').addEventListener('change', e => { m.notes = e.target.value; });
+  card.querySelector('.mzoom').addEventListener('click', () => zoomToMeasurement(m));
+  card.querySelector('.x-btn').addEventListener('click', () => { removeAerialMeasurement(m); status('Measurement removed.'); });
+  m.card = card;
+  $('measureList').appendChild(card);
+}
+
+function refreshLayersSafe() { if (typeof refreshLayers === 'function') refreshLayers(); }
+
+/** Create a persistent, editable A→B measurement (on-map pill + endpoints + sidebar card). @param {L.LatLng} a @param {L.LatLng} b @returns {object} */
 function makeAerialMeasurement(a, b) {
-  const m = { a, b, lastKm: 0, lastBrg: 0 };
-  m.line = L.polyline([a, b], { color: '#FF7A1A', weight: 2.5, dashArray: '6,6', interactive: false, renderer: vectorRenderer }).addTo(map);
+  const m = {
+    id: aerialNextId++, n: ++aerialCounter,
+    a, b, lastKm: 0, lastBrg: 0,
+    name: 'Measurement ' + (aerialCounter), color: '#FF7A1A', lineStyle: 'dashed', notes: '',
+    createdAt: new Date().toISOString(), card: null,
+  };
+  m.line = L.polyline([a, b], { color: m.color, weight: 2.5, dashArray: aerialDashArray(m.lineStyle), lineCap: 'round', interactive: false, renderer: vectorRenderer }).addTo(map);
   const labelIcon = L.divIcon({
     className: 'aerial-label-wrap',
     html: '<div class="aerial-label"><span class="aerial-txt"></span><button class="aerial-del" title="Remove this measurement" aria-label="Remove">×</button></div>',
@@ -82,24 +162,29 @@ function makeAerialMeasurement(a, b) {
   m.markerB.on('drag', e => { m.b = e.target.getLatLng(); updateAerialMeasurement(m); });
   m.markerA.on('dragend', () => status(aerialSummary(m)));
   m.markerB.on('dragend', () => status(aerialSummary(m)));
-  // Wire the pill's × button (survives updates -- we only rewrite .aerial-txt, never the button)
   const el = m.label.getElement();
   if (el) {
     const del = el.querySelector('.aerial-del');
     if (del) L.DomEvent.on(del, 'click', ev => { L.DomEvent.stop(ev); removeAerialMeasurement(m); status('Measurement removed.'); });
   }
-  updateAerialMeasurement(m);
   aerialMeasurements.push(m);
+  buildMeasureCard(m);
+  updateAerialMeasurement(m);
   updateAerialClearBtn();
+  syncMeasureEmpty();
+  refreshLayersSafe();
   return m;
 }
 
-/** Remove a single measurement (its line, label and both endpoints). @param {object} m */
+/** Remove a single measurement (line, label, endpoints, card). @param {object} m */
 function removeAerialMeasurement(m) {
   [m.markerA, m.markerB, m.line, m.label].forEach(l => { if (l && map.hasLayer(l)) map.removeLayer(l); });
+  if (m.card && m.card.parentNode) m.card.parentNode.removeChild(m.card);
   const i = aerialMeasurements.indexOf(m);
   if (i >= 0) aerialMeasurements.splice(i, 1);
   updateAerialClearBtn();
+  syncMeasureEmpty();
+  refreshLayersSafe();
 }
 
 /** Remove every measurement from the map. */

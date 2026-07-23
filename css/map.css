@@ -636,7 +636,8 @@
       border-color: var(--orange);
       box-shadow: 0 0 0 1px var(--orange), 0 8px 24px rgba(255, 122, 26, .18);
     }
-    .geom-card textarea {
+    .geom-card textarea,
+    .measure-card textarea {
       resize: vertical;
       min-height: 34px;
       font: 400 12px/1.4 inherit;
@@ -647,13 +648,21 @@
       padding: 6px 9px;
       width: 100%;
     }
-    .geom-card textarea:focus {
+    .geom-card textarea:focus,
+    .measure-card textarea:focus {
       outline: none;
       border-color: var(--orange);
     }
-    .geom-card .geom-measure {
+    .geom-card .geom-measure,
+    .measure-card .measure-readout {
       color: var(--orange);
       font-weight: 700;
+    }
+    #measureList {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
     }
 
     /* Brand Geoman's edit/draw vertex handles to the app palette (its defaults
