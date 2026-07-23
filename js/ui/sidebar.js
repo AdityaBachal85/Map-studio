@@ -18,7 +18,7 @@
 
       // ---------- tabs ----------
       // ---------- tabs ----------
-      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnBrand', 'paneBrand'], ['tabBtnMap', 'paneMap']];
+      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnMap', 'paneMap']];
       TABS.forEach(([b, p]) => {
         $(b).addEventListener('click', () => {
           TABS.forEach(([b2, p2]) => { $(b2).classList.toggle('active', b2 === b); $(p2).classList.toggle('active', p2 === p); });

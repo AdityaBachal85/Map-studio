@@ -13,6 +13,7 @@ const PREF_DEFAULTS = {
   reduceMotion: false,    // minimise animations
   unitDistance: 'auto',   // 'auto' | 'km' | 'm' | 'mi'
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'
+  basemap: 'hybrid',      // last-selected basemap key (remembered by the switcher)
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

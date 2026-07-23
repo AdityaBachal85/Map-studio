@@ -62,6 +62,7 @@
         activeBase = BASEMAPS[key].build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = BASEMAPS[key].credit;
+        if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(key);   // update the floating switcher UI
       }
       $('basemapSel').addEventListener('change', e => setBasemap(e.target.value));
       $('hdTgl').addEventListener('change', () => setBasemap(activeKey));
