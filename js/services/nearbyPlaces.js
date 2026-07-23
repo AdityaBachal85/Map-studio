@@ -11,8 +11,8 @@
 
 /** Discoverable categories: friendly label + icon + marker colour + Geoapify category id(s). */
 const NEARBY_CATEGORIES = [
-  { key: 'school', label: 'Schools', icon: '🎓', color: '#4C9AFF', cats: 'education.school' },
-  { key: 'college', label: 'Colleges', icon: '🏛️', color: '#6554C0', cats: 'education.college,education.university' },
+  { key: 'school', label: 'Schools', icon: '🎓', color: '#4C9AFF', cats: 'education' },
+  { key: 'college', label: 'Colleges', icon: '🏛️', color: '#6554C0', cats: 'education' },
   { key: 'hospital', label: 'Hospitals', icon: '🏥', color: '#FF5630', cats: 'healthcare.hospital' },
   { key: 'pharmacy', label: 'Pharmacies', icon: '💊', color: '#FF7452', cats: 'healthcare.pharmacy' },
   { key: 'transit', label: 'Stations', icon: '🚉', color: '#00B8D9', cats: 'public_transport' },
@@ -37,15 +37,19 @@ const nearbyCatByKey = key => NEARBY_CATEGORIES.find(c => c.key === key);
  */
 async function fetchNearbyCategory(lat, lng, radiusM, cats, limit) {
   if (!GEOAPIFY_API_KEY) return [];
-  const url = 'https://api.geoapify.com/v2/places'
+  const url = PLACES_PROVIDERS.geoapify.nearby
     + '?categories=' + encodeURIComponent(cats)
     + '&filter=circle:' + lng + ',' + lat + ',' + radiusM
     + '&bias=proximity:' + lng + ',' + lat
-    + '&limit=' + (limit || 20)
+    + '&limit=' + (limit || 50)
     + '&apiKey=' + GEOAPIFY_API_KEY;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Geoapify Places HTTP ' + res.status);
+
   const json = await res.json();
+
+  console.log("Nearby API:", cats, json.features?.length, json);
+
   return (json.features || []).map(f => {
     const p = f.properties || {};
     const coords = (f.geometry && f.geometry.coordinates) || [p.lon, p.lat];
