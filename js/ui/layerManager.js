@@ -18,6 +18,8 @@ function layerGroups() {
     hidden: !!loc._hidden,
     zoom: () => map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 15)),
     setVisible: on => setLocVisible(loc, on),
+    rename: n => { loc.name = n || 'Location'; const el = loc.card && loc.card.querySelector('.nm'); if (el) el.value = loc.name; locChanged(loc); },
+    remove: () => deleteLocation(loc),
   }));
   const rtItems = routes.map(rt => {
     const A = locById(rt.fromId), B = locById(rt.toId);
@@ -26,12 +28,16 @@ function layerGroups() {
       name: nm, color: rt.color, icon: '🛣️', hidden: !!rt._hidden,
       zoom: () => { if (rt.line) map.fitBounds(rt.line.getBounds(), { padding: [70, 70] }); },
       setVisible: on => setRouteVisible(rt, on),
+      rename: n => { rt.labelText = n; const el = rt.card && rt.card.querySelector('.lt'); if (el) el.value = n; drawRoute(rt); rebuildLegend(); },
+      remove: () => deleteRoute(rt),
     };
   });
   const geomItems = geometries.map(g => ({
     name: g.name, color: g.fillColor, icon: SHAPE_LAYER_ICON[g.shape] || '⬠', hidden: !!g._hidden,
     zoom: () => { if (g.layer.getBounds) map.fitBounds(g.layer.getBounds(), { padding: [60, 60] }); else if (g.layer.getLatLng) map.flyTo(g.layer.getLatLng(), Math.max(map.getZoom(), 16)); },
     setVisible: on => setGeomVisible(g, on),
+    rename: n => { g.name = n || nextGeomName(g.shape); const el = g.card && g.card.querySelector('.gnm'); if (el) el.value = g.name; ensureGeomLabel(g); touchGeom(g); },
+    remove: () => deleteGeom(g),
   }));
   // Nearby: one row per fetched category (from services/nearbyPlaces + map/nearby).
   const nearbyItems = (typeof nearbyMarkers !== 'undefined' ? Object.keys(nearbyMarkers) : []).map(key => {
@@ -42,6 +48,13 @@ function layerGroups() {
       hidden: !nearbyEnabled.has(key),
       zoom: () => { if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds(), { padding: [60, 60] }); },
       setVisible: on => setNearbyCategoryVisible(key, on),
+      // no rename for a category; "remove" clears that category's markers + cache
+      remove: () => {
+        setNearbyCategoryVisible(key, false);
+        (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+        delete nearbyMarkers[key];
+        refreshLayers();
+      },
     };
   });
   return [
@@ -57,16 +70,40 @@ function lpItemRow(item) {
   row.className = 'lp-item' + (item.hidden ? ' off' : '');
   row.innerHTML = `<button class="lp-eye" title="Show / hide"></button>
     <span class="lp-dot" style="background:${esc(item.color || '#888')}"></span>
-    <span class="lp-ico">${item.icon}</span>
-    <span class="lp-name" title="${esc(item.name)}">${esc(item.name)}</span>`;
-  row.querySelector('.lp-eye').addEventListener('click', e => {
-    e.stopPropagation();
-    item.setVisible(item.hidden);       // hidden -> show, visible -> hide
-    refreshLayers();
-  });
-  row.querySelector('.lp-name').addEventListener('click', () => item.zoom());
+    <span class="lp-ico" title="Zoom to">${item.icon}</span>
+    <span class="lp-name" title="${item.rename ? 'Double-click to rename · click to zoom' : 'Click to zoom'}">${esc(item.name)}</span>
+    ${item.rename ? '<button class="lp-act lp-ren" title="Rename">✎</button>' : ''}
+    ${item.remove ? '<button class="lp-act lp-del" title="Delete">🗑</button>' : ''}`;
+  const nameEl = row.querySelector('.lp-name');
+  row.querySelector('.lp-eye').addEventListener('click', e => { e.stopPropagation(); item.setVisible(item.hidden); refreshLayers(); });
   row.querySelector('.lp-ico').addEventListener('click', () => item.zoom());
+  nameEl.addEventListener('click', () => item.zoom());
+  if (item.rename) {
+    const startRename = () => beginLayerRename(nameEl, item);
+    nameEl.addEventListener('dblclick', e => { e.stopPropagation(); startRename(); });
+    row.querySelector('.lp-ren').addEventListener('click', e => { e.stopPropagation(); startRename(); });
+  }
+  if (item.remove) {
+    row.querySelector('.lp-del').addEventListener('click', e => { e.stopPropagation(); item.remove(); refreshLayers(); });
+  }
   return row;
+}
+
+/** Swap a layer row's name label for an inline editor. @param {HTMLElement} nameEl @param {object} item */
+function beginLayerRename(nameEl, item) {
+  const input = document.createElement('input');
+  input.className = 'lp-rename';
+  input.value = item.name;
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;                                  // guard so Escape's refresh->blur can't re-commit
+  const commit = () => { if (done) return; done = true; item.rename(input.value.trim()); refreshLayers(); };
+  const cancel = () => { if (done) return; done = true; refreshLayers(); };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', commit);
 }
 
 /** Rebuild the panel body from live state, honouring collapse state + the search filter. */
