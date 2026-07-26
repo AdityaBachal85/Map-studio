@@ -54,13 +54,18 @@ function setNearbyChipCount(key, n) {
 function dropNearbyMarkers(key, places) {
   const cat = nearbyCatByKey(key);
   const arr = [];
+  const pinEls = [];
   places.forEach(p => {
     const m = L.marker([p.lat, p.lng], { icon: nearbyMarkerIcon(cat), keyboard: false, zIndexOffset: 200 });
     m.bindTooltip(`${cat.icon} ${esc(p.name)}`, { direction: 'top', offset: [0, -12], className: 'nearby-tip' });
     m.addTo(map);
     arr.push(m);
+    const iconEl = m.getElement();
+    const pinEl = iconEl && iconEl.querySelector('.nearby-pin');
+    if (pinEl) pinEls.push(pinEl);
   });
   nearbyMarkers[key] = arr;
+  if (typeof staggerPopIn === 'function') staggerPopIn(pinEls);
   if (typeof refreshLayers === 'function') refreshLayers();
 }
 
