@@ -70,35 +70,39 @@ const MAP_PROVIDER_KEYS = {
 const MAPPLS_ENABLED = true;
 
 /**
- * Mappls raster tiles.
+ * Mappls ROAD basemap — needs a direct tile URL, which Mappls does not publish.
  *
- * The URL *shape* is confirmed — the layer is a path segment:
+ * Mappls ships its road basemap through its own Web SDK loader:
+ *   https://apis.mappls.com/advancedmaps/api/<key>/map_sdk?v=3.0&layer=raster
+ * That script brings its own bundled copy of Leaflet and expects to construct
+ * the map itself (`new mappls.Map(...)`). Running it alongside the Leaflet
+ * instance this app already owns means two Leaflet globals fighting over the
+ * same container, so it is not a drop-in tile layer.
+ *
+ * There is no publicly documented XYZ template for the road basemap. Guessing
+ * layer names does not work — `map_tiles`, `raster_tiles`, `standard` and
+ * `tiles` were all tried against the live service and all 404.
+ *
+ * The URL *shape* is documented, and `bhuvan_imagery` below proves the pattern:
  *   https://apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png
- * `bhuvan_imagery` is a documented layer name. Which name serves the standard
- * road basemap is not documented publicly, and the build environment cannot
- * reach apis.mappls.com to find out.
  *
- * So the app discovers it: on first use it requests one tile from each
- * candidate below, in order, and keeps the first that returns an image. The
- * winner is remembered on the device and reported in the status line so it can
- * be pinned here permanently.
- *
- * To skip discovery, set MAPPLS_TILE_URL to the winning template.
- * The authoritative list for an account is the **List Styles API**, which is
- * allocated on this key.
- *
- * `{token}` ← MAP_PROVIDER_KEYS.mappls.
+ * To enable the road basemap, get the correct <layer> name — from the
+ * **List Styles API** (allocated on this account) or from Mappls support — and
+ * paste the whole template here. The entry stays hidden from the basemap
+ * switcher until this is filled in, so nobody can select a basemap that cannot
+ * draw. `{token}` ← MAP_PROVIDER_KEYS.mappls.
  */
 const MAPPLS_TILE_URL = '';
 
-const MAPPLS_TILE_CANDIDATES = [
-  'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png',
-  'https://apis.mappls.com/advancedmaps/v1/{token}/raster_tiles/{z}/{x}/{y}.png',
-  'https://apis.mappls.com/advancedmaps/v1/{token}/standard/{z}/{x}/{y}.png',
-  'https://apis.mappls.com/advancedmaps/v1/{token}/tiles/{z}/{x}/{y}.png'
-];
+/**
+ * Optional templates to try automatically, in order, when MAPPLS_TILE_URL is
+ * empty. Left deliberately empty: shotgunning guessed layer names produced
+ * nothing but 404s and a blank map. Add candidates here only if you have
+ * reason to believe they exist.
+ */
+const MAPPLS_TILE_CANDIDATES = [];
 
-/** Confirmed-documented Mappls satellite layer (ISRO Bhuvan imagery). */
+/** Documented Mappls satellite layer (ISRO Bhuvan imagery) — a direct template. */
 const MAPPLS_IMAGERY_URL = 'https://apis.mappls.com/advancedmaps/v1/{token}/bhuvan_imagery/{z}/{x}/{y}.png';
 
 /**

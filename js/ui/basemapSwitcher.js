@@ -98,8 +98,11 @@ function syncBasemapSwitcher(key) {
 function chooseBasemap(key) {
   if (!BASEMAPS[key]) return;
   $('basemapSel').value = key;
+  // The choice is persisted by mapEngine's rememberBasemapWorks() once a tile
+  // actually renders — not here. Saving it eagerly meant a basemap that could
+  // not draw was remembered and re-applied on the next visit, so one bad
+  // provider left the app opening on a blank map every time.
   setBasemap(key);                          // updates the map + credit + (via hook) the switcher
-  if (typeof setPref === 'function') setPref('basemap', key);
   $('bmPanel').hidden = true;
   $('bmToggle').classList.remove('open');
 }

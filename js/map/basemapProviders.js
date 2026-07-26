@@ -341,9 +341,14 @@ function basemapKey(provider) {
  */
 function isBasemapAvailable(spec) {
   if (!spec) return false;
+  // A basemap with no tile template and nothing to try is unusable. Hiding it
+  // is the whole point: a basemap the user can select but that cannot draw
+  // leaves them staring at an empty map wondering what broke.
+  const first = spec.layers && spec.layers[0];
+  if (first && !first.url && !(first.urlCandidates || []).length) return false;
   if (!spec.needsKey) return true;
   if (!basemapKey(spec.needsKey)) return false;
-  // Mappls additionally needs an explicit opt-in: its tiles break canvas export.
+  // Mappls additionally needs an explicit opt-in.
   if (spec.provider === 'mappls') return typeof MAPPLS_ENABLED !== 'undefined' && !!MAPPLS_ENABLED;
   return true;
 }

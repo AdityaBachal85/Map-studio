@@ -55,6 +55,7 @@
         if (lyr.adaptive && hd) attachAdaptiveDepth(layer, lyr);
         attachExportSafetyProbe(layer, spec);
         attachTileAuthDiagnostic(layer, spec);
+        if (lyr.zIndex === 1) layer.once('tileload', () => rememberBasemapWorks(spec.id));
         return layer;
       }
 
@@ -151,10 +152,8 @@
             return true;
           }
         }
-        if (typeof status === 'function') {
-          status('None of the candidate Mappls tile endpoints responded. Check the Map SDK key, then set MAPPLS_TILE_URL in js/config.js — the shape is ' +
-            'apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png, and the List Styles API on your account lists the valid layer names.');
-        }
+        revertBasemap(spec.id, 'No “' + spec.label + '” tile endpoint responded. Set MAPPLS_TILE_URL in js/config.js — the shape is ' +
+          'apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png, and the List Styles API on your account lists the valid layer names.');
         return false;
       }
 
@@ -204,10 +203,14 @@
             // exports work, instead of leaving it needlessly display-only.
             setBasemap(spec.id);
             if (typeof status === 'function') status('“' + spec.label + '” supports image export.');
-          } else if (typeof status === 'function') {
-            status(r.reachable
-              ? '“' + spec.label + '” loads on screen but its tiles cannot be exported (the server sends no CORS header). Switch basemap before exporting.'
-              : '“' + spec.label + '” tiles are not loading — check the key and tile URL in js/config.js.');
+          } else if (r.reachable) {
+            // Usable on screen, just not exportable — worth saying, not worth
+            // abandoning the basemap over.
+            if (typeof status === 'function') {
+              status('“' + spec.label + '” loads on screen but its tiles cannot be exported (the server sends no CORS header). Switch basemap before exporting.', true);
+            }
+          } else {
+            revertBasemap(spec.id, '“' + spec.label + '” tiles are not loading — check the key and tile URL in js/config.js.');
           }
         });
       }
@@ -268,11 +271,9 @@
           if (reported || ++errors < 4) return;
           reported = true;
           const which = spec.needsKey === 'mappls'
-            ? 'Mappls tiles need the **Map SDK key**, not the REST API key — check MAP_PROVIDER_KEYS.mappls in js/config.js.'
+            ? 'Mappls tiles need the Map SDK key, not the REST API key — check MAP_PROVIDER_KEYS.mappls in js/config.js.'
             : 'Check the ' + spec.needsKey + ' key in js/config.js.';
-          if (typeof status === 'function') {
-            status('“' + spec.label + '” tiles are not loading. ' + which.replace(/\*\*/g, ''));
-          }
+          revertBasemap(spec.id, '“' + spec.label + '” tiles are not loading. ' + which);
         });
       }
 
@@ -332,6 +333,49 @@
 
       let activeBase = [];
       let activeKey = preferredBasemapId();
+
+      /**
+       * The last basemap that actually drew a tile. A basemap is only written to
+       * prefs once it proves it can render, so a broken choice cannot be
+       * remembered and re-applied on the next visit.
+       */
+      let lastGoodBasemap = null;
+
+      /** Record that a basemap really works, and make it the remembered choice. */
+      function rememberBasemapWorks(key) {
+        if (key !== activeKey) return;
+        lastGoodBasemap = key;
+        if (typeof setPref === 'function') setPref('basemap', key);
+      }
+
+      /**
+       * Abandon a basemap that cannot draw and go back to one that can.
+       *
+       * Without this a failed provider leaves an empty grey rectangle with no
+       * tiles, no explanation once the status line auto-clears, and — because
+       * the choice had already been persisted — the same empty map on the next
+       * reload. Falling back automatically and saying why keeps a provider
+       * experiment from breaking the app.
+       *
+       * @param {string} key The basemap that failed.
+       * @param {string} reason Sentence explaining the failure, shown sticky.
+       */
+      /** Basemaps already abandoned this session — keeps one failure to one message. */
+      const revertedBasemaps = {};
+
+      function revertBasemap(key, reason) {
+        // A failing basemap trips several detectors at once (the tile probe, the
+        // auth diagnostic). They are all correct, but the user needs one
+        // sentence, not a pile-up.
+        if (revertedBasemaps[key]) return;
+        revertedBasemaps[key] = true;
+        if (key !== activeKey) return;
+        const fallback = (lastGoodBasemap && lastGoodBasemap !== key) ? lastGoodBasemap : preferredBasemapId();
+        if (fallback === key) { if (typeof status === 'function') status(reason, true); return; }
+        const label = (BASEMAP_CATALOGUE[fallback] || {}).label || fallback;
+        setBasemap(fallback);
+        if (typeof status === 'function') status(reason + ' Switched back to “' + label + '”.', true);
+      }
       function setBasemap(key) {
         const entry = BASEMAPS[key] || BASEMAPS[preferredBasemapId()];
         activeKey = entry.spec.id;
