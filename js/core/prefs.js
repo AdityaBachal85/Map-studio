@@ -20,6 +20,16 @@ const _prefs = Object.assign({}, PREF_DEFAULTS);
 const _prefSubs = {};
 
 function loadPrefs() {
+  // Support escape hatch: ?reset=1 starts from defaults and clears stored
+  // preferences. A saved setting that turns out to be unusable — a basemap that
+  // stopped working, say — otherwise reapplies itself on every visit, and
+  // "clear your site data" is not a reasonable thing to ask an operator for.
+  try {
+    if (/[?&]reset=1\b/.test(location.search)) {
+      localStorage.removeItem(PREFS_KEY);
+      return;
+    }
+  } catch (e) { /* no location (tests) */ }
   try { const raw = localStorage.getItem(PREFS_KEY); if (raw) Object.assign(_prefs, JSON.parse(raw)); } catch (e) { /* private mode / disabled storage */ }
 }
 function savePrefs() {

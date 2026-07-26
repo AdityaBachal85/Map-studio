@@ -318,3 +318,32 @@ Driven through Playwright against a local server with tiles stubbed:
 * 3D tilt export path works and map state (tilt, classes, transforms, leader
   canvas resolution) is fully restored after every capture;
 * export scale clamp holds at the 60 MP budget.
+
+---
+
+## 6. Cache busting
+
+`index.html` referenced `./js/*.js` and `./css/*.css` by plain path, and there
+is no build step. GitHub Pages serves those with caching headers, so a returning
+browser keeps its copies — and refreshes them at *different times*. A deploy
+could therefore leave a user running some new files against some old ones, which
+fails in stranger ways than being wholly out of date. That is what a blank map
+after the basemap change turned out to be: correct code on the server, a stale
+mixture in the browser.
+
+`tools/stamp-assets.js` appends `?v=<version>` to every local asset reference,
+making each release a distinct set of URLs so a deploy is all-or-nothing and a
+hard refresh is never required.
+
+```
+node tools/stamp-assets.js          # stamp with the current UTC time
+node tools/stamp-assets.js 5.2.0    # stamp with an explicit version
+node tools/stamp-assets.js --check  # exit 1 if anything is unstamped
+```
+
+**Run it before committing whenever a `.js` or `.css` file changed.**
+
+`?reset=1` on the app URL clears stored preferences and starts from defaults.
+A saved setting that turns out to be unusable otherwise reapplies itself on
+every visit, and "clear your site data" is not a reasonable thing to ask an
+operator for.
