@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mappls tile URL finder — Map Studio diagnostics</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      margin: 0; padding: 28px; max-width: 1000px; margin-inline: auto;
+    }
+    h1 { font-size: 21px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 32px 0 8px; }
+    p.sub { color: #667; margin: 0 0 22px; }
+    .card { border: 1px solid #8884; border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+    label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 5px; }
+    input[type=text] {
+      width: 100%; padding: 9px 11px; border: 1px solid #8886; border-radius: 8px;
+      font: 13px/1.4 ui-monospace, Consolas, monospace; background: transparent; color: inherit;
+    }
+    button {
+      padding: 9px 16px; border-radius: 8px; border: 1px solid #8886; cursor: pointer;
+      font-weight: 600; font-size: 13px; background: #2563EB; color: #fff; border-color: #2563EB;
+    }
+    button.sec { background: transparent; color: inherit; }
+    button:disabled { opacity: .5; cursor: default; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 14px; }
+    .hit { border: 1px solid #8884; border-radius: 10px; padding: 9px; }
+    .hit img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: #8882; display: block; }
+    .hit code { font-size: 10.5px; word-break: break-all; display: block; margin-top: 6px; }
+    .ok { border-color: #16a34a; box-shadow: 0 0 0 2px #16a34a33; }
+    .ok .tag { color: #16a34a; font-weight: 700; }
+    .bad { opacity: .38; }
+    pre {
+      background: #8881; padding: 12px; border-radius: 9px; overflow: auto;
+      font-size: 12px; max-height: 320px; white-space: pre-wrap; word-break: break-all;
+    }
+    .result { margin-top: 14px; padding: 12px 14px; border-radius: 9px; background: #16a34a1a; border: 1px solid #16a34a55; }
+    .result.none { background: #dc26261a; border-color: #dc262655; }
+    .result code { font-size: 13px; font-weight: 700; word-break: break-all; }
+    .muted { color: #667; font-size: 12.5px; }
+  </style>
+</head>
+
+<body>
+  <h1>Mappls tile URL finder</h1>
+  <p class="sub">
+    Finds the raster tile URL for your Mappls key so the Mappls basemap can be switched on in Map Studio.
+    Everything runs in this browser and talks only to <code>apis.mappls.com</code> — nothing is uploaded anywhere.
+  </p>
+
+  <div class="card">
+    <label for="key">Mappls key <span class="muted">(the one from MAP_PROVIDER_KEYS.mappls)</span></label>
+    <input type="text" id="key" value="qvbbxilcnllctbsgabklmdpsxnoucoabncre" spellcheck="false">
+    <div class="row">
+      <button id="runAll">Run all checks</button>
+      <span class="muted" id="overall"></span>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <h2>1 · Ask the SDK what URL it uses</h2>
+  <p class="muted">
+    Loads the official Mappls raster Web SDK in a hidden container, lets it draw a map, then reads the
+    <code>src</code> off a tile it actually requested. When this works it is the definitive answer, because it is
+    the URL Mappls themselves use.
+  </p>
+  <div class="card">
+    <button class="sec" id="runSniff">Load SDK and read a tile URL</button>
+    <div id="sniffOut"></div>
+    <div id="sdkHost" style="width:420px;height:280px;margin-top:12px;border-radius:9px;overflow:hidden;"></div>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <h2>2 · Try candidate layer names directly</h2>
+  <p class="muted">
+    The URL shape is documented — <code>/advancedmaps/v1/&lt;key&gt;/&lt;layer&gt;/{z}/{x}/{y}.png</code> — but the
+    layer name for the road basemap is not. This requests one tile over Delhi for each candidate. Anything that
+    renders an image is a working layer.
+  </p>
+  <div class="card">
+    <button class="sec" id="runProbe">Probe layer names</button>
+    <div class="grid" id="probeOut"></div>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <h2>3 · List Styles API</h2>
+  <p class="muted">
+    This API is allocated on your account and should enumerate the styles/layers your key may use. Several request
+    shapes are tried; any JSON that comes back is dumped raw.
+  </p>
+  <div class="card">
+    <button class="sec" id="runStyles">Call List Styles API</button>
+    <pre id="stylesOut">Not run yet.</pre>
+  </div>
+
+  <h2>What to do with the result</h2>
+  <p class="muted">
+    Copy whichever URL came back green and paste it into <code>MAPPLS_TILE_URL</code> in
+    <code>js/config.js</code>, replacing your key with <code>{token}</code> and the tile numbers with
+    <code>{z}/{x}/{y}</code>. Then run <code>node tools/stamp-assets.js</code> and redeploy.
+  </p>
+
+  <script>
+    /* A tile over central Delhi at z12 — dense enough that any working road
+       layer renders something obviously non-blank. */
+    const TILE = { z: 12, x: 2926, y: 1708 };
+    const $ = id => document.getElementById(id);
+    const key = () => $('key').value.trim();
+
+    /** Layer names worth trying, roughly most to least likely. */
+    const LAYERS = [
+      'map_tiles', 'raster_tiles', 'tiles', 'standard', 'default', 'base', 'basemap',
+      'roadmap', 'road', 'map', 'mmi', 'mmi_map', 'hybrid', 'satellite', 'imagery',
+      'bhuvan_imagery', 'terrain', 'grey', 'light', 'dark', 'night', 'traffic'
+    ];
+
+    /** URL shapes to combine with each layer name. */
+    const SHAPES = [
+      k => l => `https://apis.mappls.com/advancedmaps/v1/${k}/${l}/${TILE.z}/${TILE.x}/${TILE.y}.png`,
+      k => l => `https://apis.mappls.com/advancedmaps/v1/${k}/${l}/${TILE.z}/${TILE.x}/${TILE.y}`,
+    ];
+
+    /** Resolve true when the URL yields a real image. */
+    function loadsAsImage(url) {
+      return new Promise(res => {
+        const img = new Image();
+        const done = ok => { img.onload = img.onerror = null; res(ok); };
+        img.onload = () => done(img.naturalWidth > 1);
+        img.onerror = () => done(false);
+        setTimeout(() => done(false), 10000);
+        img.src = url;
+      });
+    }
+
+    /** Turn a concrete tile URL into a Map Studio template. */
+    function toTemplate(url) {
+      return url
+        .replace(key(), '{token}')
+        .replace(new RegExp(`/${TILE.z}/${TILE.x}/${TILE.y}(\\b|\\.)`), '/{z}/{x}/{y}$1')
+        .replace(/\/\d+\/\d+\/\d+(\.png)?(\?|$)/, '/{z}/{x}/{y}$1$2');
+    }
+
+    function announce(url) {
+      const box = document.createElement('div');
+      box.className = 'result';
+      box.innerHTML = '<b>Found a working tile URL.</b><br>Paste this into <code>MAPPLS_TILE_URL</code>:<br><br><code>' +
+        toTemplate(url) + '</code>';
+      return box;
+    }
+
+    /* ---- 1. SDK sniff --------------------------------------------------- */
+    $('runSniff').addEventListener('click', async () => {
+      const out = $('sniffOut'), host = $('sdkHost');
+      out.innerHTML = '<p class="muted">Loading the Mappls raster SDK…</p>';
+      host.innerHTML = '';
+
+      const src = `https://apis.mappls.com/advancedmaps/api/${key()}/map_sdk?v=3.0&layer=raster`;
+      const loaded = await new Promise(res => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => res(true);
+        s.onerror = () => res(false);
+        setTimeout(() => res(false), 15000);
+        document.head.appendChild(s);
+      });
+      if (!loaded) {
+        out.innerHTML = '<p class="muted">The SDK script did not load. That usually means this key is not valid for ' +
+          'the Raster Tiles SDK, or the domain is not whitelisted in the Mappls console.<br>Script URL tried: <code>' +
+          src + '</code></p>';
+        return;
+      }
+
+      // The SDK exposes a global map constructor; name varies by version.
+      const Ctor = (window.mappls && window.mappls.Map) || (window.MapmyIndia && window.MapmyIndia.Map);
+      if (!Ctor) {
+        out.innerHTML = '<p class="muted">SDK loaded but exposed no map constructor — nothing to sniff.</p>';
+        return;
+      }
+      try { new Ctor(host, { center: [28.61, 77.21], zoom: 12 }); }
+      catch (e) { out.innerHTML = '<p class="muted">SDK loaded but the map failed to construct: ' + e.message + '</p>'; return; }
+
+      // Give it a moment to request tiles, then read one back.
+      await new Promise(r => setTimeout(r, 4000));
+      const img = Array.from(host.querySelectorAll('img')).find(i => /\d+\/\d+/.test(i.src) && i.naturalWidth > 1);
+      if (!img) {
+        out.innerHTML = '<p class="muted">The SDK drew, but no tile image URL could be read from it ' +
+          '(it may be rendering to a canvas). Try section 2.</p>';
+        return;
+      }
+      out.innerHTML = '';
+      out.appendChild(announce(img.src));
+      const raw = document.createElement('p');
+      raw.className = 'muted';
+      raw.innerHTML = 'Raw tile the SDK requested:<br><code>' + img.src + '</code>';
+      out.appendChild(raw);
+    });
+
+    /* ---- 2. Layer-name probe -------------------------------------------- */
+    $('runProbe').addEventListener('click', async () => {
+      const out = $('probeOut');
+      out.innerHTML = '';
+      const btn = $('runProbe');
+      btn.disabled = true;
+      const urls = [];
+      SHAPES.forEach(shape => { const f = shape(key()); LAYERS.forEach(l => urls.push({ layer: l, url: f(l) })); });
+
+      const winners = [];
+      for (const u of urls) {
+        const cell = document.createElement('div');
+        cell.className = 'hit';
+        cell.innerHTML = `<img alt=""><code><span class="tag"></span> ${u.layer}</code>`;
+        out.appendChild(cell);
+        const ok = await loadsAsImage(u.url);
+        cell.classList.add(ok ? 'ok' : 'bad');
+        cell.querySelector('.tag').textContent = ok ? '✓ WORKS —' : '✕';
+        if (ok) { cell.querySelector('img').src = u.url; winners.push(u.url); }
+      }
+      btn.disabled = false;
+
+      const summary = document.createElement('div');
+      if (winners.length) {
+        out.parentNode.appendChild(announce(winners[0]));
+      } else {
+        summary.className = 'result none';
+        summary.innerHTML = '<b>No candidate layer responded.</b> The key is probably not enabled for direct raster ' +
+          'tiles, or the domain needs whitelisting in the Mappls console (Applications → your app → Whitelisting). ' +
+          'Section 1 or 3 may still find it.';
+        out.parentNode.appendChild(summary);
+      }
+    });
+
+    /* ---- 3. List Styles -------------------------------------------------- */
+    $('runStyles').addEventListener('click', async () => {
+      const out = $('stylesOut');
+      out.textContent = 'Calling…';
+      const candidates = [
+        `https://apis.mappls.com/advancedmaps/v1/${key()}/still_image/styles`,
+        `https://apis.mappls.com/vector/v1/styles?access_token=${key()}`,
+        `https://apis.mappls.com/advancedmaps/v1/${key()}/styles`,
+        `https://apis.mappls.com/api/places/styles?access_token=${key()}`,
+      ];
+      const lines = [];
+      for (const u of candidates) {
+        try {
+          const r = await fetch(u);
+          const body = await r.text();
+          lines.push(`${r.status} ${u}\n${body.slice(0, 1500)}\n`);
+        } catch (e) {
+          lines.push(`ERROR ${u}\n${e.message} (a CORS block here still means the endpoint exists — check the ` +
+            `Network tab for the real status)\n`);
+        }
+      }
+      out.textContent = lines.join('\n' + '-'.repeat(60) + '\n');
+    });
+
+    /* ---- run everything -------------------------------------------------- */
+    $('runAll').addEventListener('click', async () => {
+      $('overall').textContent = 'Running all three checks…';
+      $('runSniff').click();
+      await new Promise(r => setTimeout(r, 500));
+      $('runProbe').click();
+      $('runStyles').click();
+      $('overall').textContent = 'Started — results appear in each section below.';
+    });
+  </script>
+</body>
+
+</html>
