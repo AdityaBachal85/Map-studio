@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.log
 
+# Python bytecode cache (generated when .claude/skills/*/scripts/*.py run)
+__pycache__/
+*.pyc
+
 # generated PPTX fixtures (reproducible via `npm run test:ppt` / demo.mjs)
 test/ppt-export/fixtures/*.pptx
 # unzip scratch dirs created while inspecting fixtures
