@@ -113,28 +113,53 @@ interception bypasses CORS enforcement and produced a false pass:
 | 200, ACAO `*` | rebuilds with crossOrigin; "supports image export"; PNG exports |
 | 403 | "tiles are not loading — needs the Map SDK key, not the REST API key" |
 
-**The tile template is discovered, not guessed.** Mappls documents the URL
-*shape* — the layer is a path segment —
+**The road basemap needs a tile URL Mappls does not publish.** Mappls ships it
+through its own Web SDK loader —
+`apis.mappls.com/advancedmaps/api/<key>/map_sdk?v=3.0&layer=raster` — which
+bundles its own copy of Leaflet and expects to construct the map itself
+(`new mappls.Map(...)`). Running that beside the Leaflet instance this app owns
+means two Leaflet globals contending for one container, so it is not a drop-in
+tile layer. Guessing layer names is no substitute: `map_tiles`, `raster_tiles`,
+`standard` and `tiles` were all tried against the live service and all 404.
+
+The URL *shape* is documented, and `bhuvan_imagery` proves the pattern:
 
 ```
 https://apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png
 ```
 
-— and `bhuvan_imagery` is a documented layer name, but which name serves the
-standard road basemap is not public, and `apis.mappls.com` is unreachable from
-the build environment. So `resolveTileCandidates()` requests one tile from each
-candidate in `MAPPLS_TILE_CANDIDATES` (`js/config.js`), in order, and keeps the
-first that returns an image. The winner is cached in prefs (one request per
-device) and named in the status line so it can be pinned as `MAPPLS_TILE_URL`
-and discovery skipped. If none respond, the message says so and points at the
-**List Styles API** — allocated on this account — as the authoritative source of
-valid layer names.
-
-While a template is unresolved no tile layer is added, so the map shows its
-background rather than a grid of broken tiles.
+So `MAPPLS_TILE_URL` in `js/config.js` is empty, and `isBasemapAvailable()`
+hides any basemap whose first layer has neither a URL nor candidates to try. The
+road entry therefore does not appear in the switcher at all until a real
+template is pasted in — a basemap you can select but that cannot draw is worse
+than one that is absent. Get the layer name from the **List Styles API**
+(allocated on this account) or from Mappls support.
 
 `mapplsImagery` ("Mappls — Bhuvan imagery", ISRO satellite) uses the documented
-`bhuvan_imagery` template directly and needs no discovery.
+template directly and *is* offered. `resolveTileCandidates()` remains in
+`mapEngine.js` for any provider that supplies a real candidate list.
+
+### Never strand the user on a basemap that cannot draw
+
+Shipping the road entry with guessed candidates produced exactly the failure it
+should have anticipated: an empty grey map, no explanation once the status line
+auto-cleared after five seconds, and — because the choice had already been
+written to prefs — the same empty map on every subsequent reload. Three changes
+make a failed provider survivable:
+
+* `rememberBasemapWorks()` persists the basemap preference only after a tile
+  actually renders, so a basemap that cannot draw is never remembered and a
+  poisoned preference self-heals. The switcher no longer saves it eagerly.
+* `revertBasemap()` abandons a failed basemap for the last one that worked —
+  or the default if there isn't one — and explains why in a **sticky** message
+  that does not auto-clear.
+* Failure detectors are deduplicated: a broken basemap trips the tile probe and
+  the auth diagnostic at once, and the user gets one sentence, not a pile-up.
+
+Verified: clean boot persists only after a tile loads; a preference pointing at
+a now-hidden basemap self-heals to the default; and selecting a basemap whose
+tiles 404 reverts automatically with a single sticky explanation, leaving the
+saved preference untouched.
 
 Licensing for redistributing rendered tiles inside client deliverables still
 needs confirming with Mappls before commercial use.
