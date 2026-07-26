@@ -166,7 +166,17 @@
 
     /* Location label badge — premium, minimal */
     .label-badge {
-      display: inline-flex;
+      /* Block-level flex + max-content, NOT inline-flex. Visually identical (the
+         .bb wrapper is absolutely positioned, so it shrink-wraps either way),
+         but html2canvas 1.4.1 silently drops every child of an *inline*-level
+         flex or grid container when it renders it as part of a larger tree —
+         which is why exported labels used to come out as empty pills. The old
+         workaround was to force `foreignObjectRendering`, and that in turn made
+         html2canvas refuse to draw cross-origin map tiles. Fixing the layout
+         mode removes the need for both. Verified against block flex, inline
+         flex, inline grid and block grid: only the inline-level variants fail. */
+      display: flex;
+      width: max-content;
       align-items: center;
       gap: 7px;
       background: #FFFFFF;

@@ -1,0 +1,242 @@
+# Phase 5 — Production polish
+
+Architectural notes for the production-readiness pass. Covers the basemap
+provider layer, the high-resolution export pipeline, the PPTX changes, leader
+lines and the design-token layer.
+
+---
+
+## 1. Basemap provider architecture
+
+**New file:** `js/map/basemapProviders.js` — pure data and pure functions. It
+declares *what* each basemap is (endpoints, native zoom depth, retina policy,
+credit, export safety); `js/map/mapEngine.js` turns a descriptor into Leaflet
+layers. Adding or swapping a provider means adding a descriptor, not editing the
+map engine.
+
+```
+basemapProviders.js   BASEMAP_CATALOGUE  ─┐  declarative specs
+                      HILLSHADE_LAYER     │
+                      availableBasemaps() │
+mapEngine.js          buildTileLayer()   ─┘  spec → L.TileLayer
+                      BASEMAPS              legacy-shaped shim (unchanged API)
+basemapSwitcher.js    grid + <select>       generated from the catalogue
+```
+
+`BASEMAPS` keeps its old `{ credit, build(hd) }` shape, so project save/load and
+every existing caller work untouched.
+
+### Which ArcGIS basemap the brief's attribution refers to
+
+The attribution block quoted in the brief is the **ArcGIS "Imagery Hybrid"**
+style from the Basemap Styles service v2. It is a composite:
+
+| Attribution fragment | Layer |
+| --- | --- |
+| `Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, GEBCO…` | World Imagery (Vantor = the former Maxar) |
+| `Map data © OpenStreetMap contributors, Microsoft, Esri Community Maps` | Hybrid Reference Layer (vector roads + labels) |
+| `Map data from Meta, Microsoft, PinMeTo, Krick, Foursquare` | Esri Places (POIs) |
+| `Google Open Buildings (CC BY-4.0)`, `USGS 3DEP` | 3D scene / elevation layers |
+
+That style is served as vector tiles, which Leaflet's raster pipeline cannot
+consume directly. Esri also publishes it through the **ArcGIS Static Basemap
+Tiles service**, which renders the same styles server-side to 512 px PNGs:
+
+```
+https://static-map-tiles-api.arcgis.com/arcgis/rest/services/
+  static-basemap-tiles-service/v1/{style}/static/tile/{z}/{y}/{x}?token={key}
+```
+
+Those are drop-in raster tiles, so the app can use the modern cartography
+without swapping renderers. They are wired up as the `imageryHybridHD` and
+`navigationHD` basemaps and appear in the switcher **as soon as an ArcGIS
+Location Platform key is set** in `MAP_PROVIDER_KEYS.arcgis` (`js/config.js`).
+`preferredBasemapId()` then makes Imagery Hybrid HD the default. No key is
+committed — the free tier has to be provisioned per organisation.
+
+### Provider comparison
+
+| | Rendering | Roads / labels | Satellite | Perf | Licence | Export |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Esri raster (default)** | good | raster, stop at z19 | z19 global, z20–21 urban India | fast | free, attributed | CORS ✓ |
+| **ArcGIS Static Tiles (key)** | best | re-rendered per zoom, 512 px | same imagery | fast | ArcGIS LP account | CORS ✓ |
+| **Esri Clarity** | best imagery | none (pair with reference) | to z22, often sharper | fast | free, attributed | CORS ✓ |
+| **Carto / OSM** | good | vector-derived, z20 | — | fast | ODbL | CORS ✓ |
+| **Mappls** | best Indian roads | best Indian roads | — | fast | free tier excludes redistribution in deliverables | **CORS ✗** |
+
+### Mappls finding
+
+Mappls has the best Indian road network of anything evaluated, and its
+JavaScript SDK is a Leaflet wrapper, so it would integrate cleanly. Two things
+keep it off by default:
+
+1. **Its raster tiles carry no `Access-Control-Allow-Origin` header.** Drawing
+   them into a canvas taints it, and every PNG and PPTX export then throws a
+   `SecurityError`. This is not a styling preference — it disables the export
+   pipeline outright, which is the product's main output.
+2. The free developer tier does not cover redistributing rendered tiles inside
+   exported client deliverables.
+
+The descriptor is therefore declared but gated behind both
+`MAP_PROVIDER_KEYS.mappls` and `MAPPLS_ENABLED` (off), and marked
+`corsSafe: false`. Both exporters check `basemapExportSafe(activeKey)` and
+refuse with an explanation rather than throwing. To adopt Mappls properly,
+proxy its tiles through a same-origin backend that adds the CORS header and
+confirm the licence — then flip `MAPPLS_ENABLED`. Mappls *search and geocoding*
+have neither problem and could be added independently.
+
+**Note:** the Mappls tile template in the catalogue could not be verified
+against the live service from the build environment (outbound network is
+restricted). Confirm it before enabling.
+
+### Adaptive imagery depth
+
+Esri's satellite services answer `200 OK` with a flat grey *"Map data not yet
+available"* placeholder past their coverage, so a plain `error` handler never
+fires. The previous fix capped `maxNativeZoom` at 18–19 globally, which threw
+away the z20–21 imagery that *does* exist over the areas this tool is used on —
+the direct cause of "zoom levels become blurry".
+
+`attachAdaptiveDepth()` instead lets the layer request deep tiles and inspects
+what comes back: the placeholder is a uniform, fully desaturated light grey,
+which real imagery is essentially never across all corners at once
+(`looksLikeNoDataTile()`). Three consecutive hits at the deepest level drop that
+layer's depth by one and redraw, so the map settles on the deepest zoom the
+service genuinely serves for wherever the user is. A false positive costs one
+upscaled zoom level — exactly what the old blanket cap did everywhere.
+
+---
+
+## 2. High-resolution export pipeline
+
+**New file:** `js/export/hiResRender.js`. `js/export/captureMap.js` is now a
+deprecated shim that delegates to it.
+
+### Why the old pipeline could not be sharp
+
+The old exporter was one `html2canvas(mapWrap, { scale: 2 })` call. html2canvas's
+`scale` enlarges the *output canvas*; it gives the page no additional source
+detail. Text and CSS borders genuinely re-rasterise, but a map tile is a bitmap —
+a 256 px tile drawn into a 512 px slot is a 2× upscale. Every export was a
+blown-up screenshot, and PowerPoint then softened it again.
+
+### The two-pass composite
+
+Ground truth comes from *deeper tiles*, not a bigger canvas. For supersample
+factor `s`, an offscreen Leaflet map is built in a container `s`× larger, at
+`zoom + log2(s)`. A zoom level doubles pixels-per-metre, so the two changes
+cancel geographically: the offscreen map frames the identical extent from `s`×
+as many real tile pixels.
+
+| Pass | Source | Renders |
+| --- | --- | --- |
+| **A — ground** | offscreen hi-res map | basemap tiles, hillshade, every vector path (re-drawn by Leaflet's canvas renderer at the larger size, stroke weights scaled) |
+| **B — furniture** | real `#mapWrap`, tile + vector panes hidden, `html2canvas` at `scale: s` | labels, pins, divIcon markers, title, legend, north arrow, scale bar, logo |
+
+Both canvases are the same size and share an origin, so compositing is one
+`drawImage`.
+
+Vector paths are collected by walking the live map for `L.Path` instances
+(`collectMapPaths`) rather than the app's own arrays, so routes, rings, drawn
+geometry, GeoJSON imports and measurements are all covered by one
+implementation — and geoman's editing handles, being `L.Marker`s, are excluded
+automatically.
+
+Presets are 2× / 3× / 4×, clamped by `safeExportScale()` against a 60 MP budget.
+The menu shows the actual output dimensions, not just a multiplier.
+
+### Two bugs this pass fixed
+
+**Leaflet's container background wiped the ground.** Pass B hides the tile pane,
+which exposed `.leaflet-container`'s default `#ddd` fill and `.map-wrap`'s dark
+fill — so the "transparent" overlay came back fully opaque and hid pass A
+entirely. `.hires-overlay-pass` now forces those surfaces transparent.
+
+**html2canvas drops the children of inline-level flex containers.** `.label-badge`
+was `display: inline-flex`, and html2canvas 1.4.1 renders its background and
+border but silently discards its text and icon when it appears inside a larger
+tree — exported labels came out as empty pills. The previous workaround was to
+force `foreignObjectRendering`, which in turn makes html2canvas refuse to draw
+cross-origin tiles. Testing block flex / inline flex / block grid / inline grid
+showed only the *inline-level* variants fail, so `.label-badge` is now
+`display: flex; width: max-content` — pixel-identical layout, no workaround
+needed, and `foreignObjectRendering` is gone from the codebase.
+
+`flattenBillboardForCapture()` additionally rewrites the billboard's CSS
+transforms as `left`/`top` for the duration of a capture (html2canvas mishandles
+transformed subtrees), guarded by `bbCaptureLock` so a queued repaint cannot
+re-apply them mid-capture.
+
+---
+
+## 3. PPTX export
+
+* **Background** is rendered by the same hi-res pipeline, targeting ~4000 px
+  across the 13.333 in slide (≈300 DPI). Photographic basemaps are encoded as
+  JPEG q94 — nothing with a hard edge is inside that image any more, because
+  labels and lines are native objects — and cartographic basemaps stay PNG.
+* **Routes, boundaries, rings and measurements are no longer baked into the
+  picture.** The background is captured with `includeVectors: false`, and every
+  path is re-emitted by `addVectorPath()` as native PowerPoint geometry:
+  polylines and polygons as a single `custGeom` freeform each, circles as
+  ellipses. They can be selected, recoloured and deleted in PowerPoint.
+* Polylines are simplified (Douglas–Peucker, 0.7 px) first: an OSRM route
+  arrives with a vertex every few metres, which PowerPoint accepts but chokes on
+  when dragged.
+* **Leader lines** use the same edge-anchored, shouldered geometry as the screen
+  (`leaderPathPoints()` is shared), emitted as `custGeom` when they have a
+  shoulder and as a plain `line` when they are straight.
+
+---
+
+## 4. Leader lines
+
+`drawLeader()` in `js/map/billboard.js` replaces the previous single 1.4 px
+centre-to-centre stroke:
+
+* **Edge anchoring** — `boxEdgePoint()` finds where the ray from the feature
+  meets the label box, so the connector stops at the chip instead of running
+  underneath it.
+* **Casing** — a wider translucent dark stroke under the coloured one. A single
+  light stroke vanishes over pale imagery and a dark one vanishes over dark
+  imagery; the casing keeps it legible on any basemap.
+* **Shoulder** — a short horizontal run into side-mounted labels, so the line
+  meets the text along its baseline rather than stabbing a corner.
+* **Anchor dot** at the feature end; rounded caps and joins; suppressed entirely
+  when the label already covers its own pin.
+* **Resolution-aware** — `setLeaderRenderScale()` re-renders the canvas at export
+  resolution so connectors are not upscaled from screen pixels.
+
+---
+
+## 5. Design tokens
+
+`css/themes.css` gains a systematic token layer (type scale, 4 px spacing scale,
+radius scale, three elevation steps, motion durations and easings, semantic
+surface names) alongside the original brand palette, which is unchanged.
+
+`css/refine.css` is imported last and refines the existing sheets without
+editing them: UI font stack, tabular/slashed-zero figures on every numeric
+readout, `:focus-visible` rings (previously absent), theme-aware scrollbars
+(previously white-only, invisible in light mode), consistent control radii and
+transitions, an active-tab indicator, wrapped map attribution (previously
+`nowrap`, so long credits were silently truncated), the grouped basemap picker
+and the export-resolution menu, and `prefers-reduced-motion` support.
+
+---
+
+## Verification
+
+Driven through Playwright against a local server with tiles stubbed:
+
+* app boots with no page errors; 14 basemaps built; key-gated entries correctly
+  hidden; `maxNativeZoom` 21 (was 18);
+* hi-res capture at 3× → 4500 × 2700 from a 1500 × 900 map, ~9 s;
+* PNG export contains labels with text and icons, routes, polygons, rings,
+  leader lines, title, legend, north arrow, scale bar, logo and attribution;
+* PPTX package passes zip integrity and XML well-formedness, has unique shape
+  ids, and contains `custGeom` freeforms (with `close` on polygons) and ellipses
+  at correct slide extents;
+* 3D tilt export path works and map state (tilt, classes, transforms, leader
+  canvas resolution) is fully restored after every capture;
+* export scale clamp holds at the 60 MP budget.

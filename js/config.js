@@ -20,6 +20,34 @@ const ROUTERS = {
 const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
 
 /**
+ * Basemap provider API keys. The catalogue in map/basemapProviders.js hides any
+ * basemap whose key is missing, so leaving these empty simply falls back to the
+ * keyless Esri/Carto/OSM tiles — nothing breaks.
+ *
+ * `arcgis` — an ArcGIS Location Platform key (free tier at
+ *   developers.arcgis.com). Unlocks the "Imagery Hybrid HD" / "Navigation HD"
+ *   basemaps: 512px tiles rendered from Esri's Basemap Styles v2 vector styles,
+ *   which is the cartography the ArcGIS attribution in the brief refers to.
+ *   This is the single biggest available upgrade to map quality.
+ *
+ * `mappls` — a Mappls (MapmyIndia) key. See MAPPLS_ENABLED below before using.
+ */
+const MAP_PROVIDER_KEYS = {
+  arcgis: '',
+  mappls: 'qvbbxilcnllctbsgabklmdpsxnoucoabncre'
+};
+
+/**
+ * Mappls basemap opt-in. OFF by default and deliberately so: Mappls raster
+ * tiles are served without an `Access-Control-Allow-Origin` header, which
+ * taints the export canvas and makes every PNG and PPTX export throw a
+ * SecurityError. Mappls *search/geocoding* has no such problem — only the
+ * basemap tiles do. Flip this on only for on-screen use, or once tiles are
+ * proxied through a same-origin backend that adds the CORS header.
+ */
+const MAPPLS_ENABLED = false;
+
+/**
  * Search provider endpoints
  */
 const SEARCH_PROVIDERS = Object.freeze({

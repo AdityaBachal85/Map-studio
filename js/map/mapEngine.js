@@ -9,65 +9,123 @@
 
 
       // ---------- map + basemaps ----------
-      const map = L.map('map', { zoomControl: false, attributionControl: false, maxZoom: 21 }).setView([21.5, 78.5], 5);
+      // MAX_MAP_ZOOM matches the deepest basemap in the catalogue (Esri Clarity,
+      // z22). Individual layers stop at their own maxNativeZoom; Leaflet upscales
+      // the parent tile past that rather than requesting a level that doesn't exist.
+      const MAX_MAP_ZOOM = 22;
+      const map = L.map('map', { zoomControl: false, attributionControl: false, maxZoom: MAX_MAP_ZOOM }).setView([21.5, 78.5], 5);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
       let scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
       const vectorRenderer = L.canvas({ padding: 0.5 });
 
-      const TL = (url, opts) => L.tileLayer(url, Object.assign({ maxZoom: 21, crossOrigin: 'anonymous' }, opts || {}));
-      const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
-      const mk = (path, o) => TL(ESRI + path + '/MapServer/tile/{z}/{y}/{x}', o);
-      // maxNativeZoom = deepest real tiles; beyond that Leaflet upscales instead of showing
-      // blank "no data" tiles. detectRetina pulls double-resolution tiles on sharp screens.
-      // Retina screens (phones, hi-dpi laptops) request tiles one zoom deeper; RZ lowers the
-      // native cap by one there so requests never pass the deepest real tiles — this was the
-      // cause of the "Map data not yet available" grey tiles.
-      const RZ = nz => (L.Browser.retina ? nz - 1 : nz);
-      const BASEMAPS = {
-        hybrid: {
-          credit: 'Imagery © Esri · Maxar · Earthstar Geographics', build: hd => [
-            mk('World_Imagery', { zIndex: 1, maxNativeZoom: RZ(hd ? 19 : 18), detectRetina: true }),
-            mk('Reference/World_Transportation', { zIndex: 3, maxNativeZoom: 17 }),
-            mk('Reference/World_Boundaries_and_Places', { zIndex: 4, maxNativeZoom: 17 })]
-        },
-        sat: {
-          credit: 'Imagery © Esri · Maxar · Earthstar Geographics', build: hd => [
-            mk('World_Imagery', { zIndex: 1, maxNativeZoom: RZ(hd ? 19 : 18), detectRetina: true })]
-        },
-        esristreet: { credit: '© Esri · World Street Map', build: () => [mk('World_Street_Map', { zIndex: 1, maxNativeZoom: RZ(18), detectRetina: true })] },
-        osm: { credit: '© OpenStreetMap contributors', build: () => [TL('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { zIndex: 1, maxNativeZoom: RZ(19), detectRetina: true })] },
-        voyager: { credit: '© CARTO · © OpenStreetMap', build: () => [TL('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { zIndex: 1, maxNativeZoom: 20 })] },
-        lightgray: {
-          credit: '© Esri · Light Gray Canvas', build: () => [
-            mk('Canvas/World_Light_Gray_Base', { zIndex: 1, maxNativeZoom: RZ(16), detectRetina: true }),
-            mk('Canvas/World_Light_Gray_Reference', { zIndex: 3, maxNativeZoom: 16 })]
-        },
-        darkgray: {
-          credit: '© Esri · Dark Gray Canvas', build: () => [
-            mk('Canvas/World_Dark_Gray_Base', { zIndex: 1, maxNativeZoom: RZ(16), detectRetina: true }),
-            mk('Canvas/World_Dark_Gray_Reference', { zIndex: 3, maxNativeZoom: 16 })]
-        },
-        positron: { credit: '© CARTO · © OpenStreetMap', build: () => [TL('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { zIndex: 1, maxNativeZoom: 20 })] },
-        dark: { credit: '© CARTO · © OpenStreetMap', build: () => [TL('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { zIndex: 1, maxNativeZoom: 20 })] },
-        topo: { credit: '© Esri · World Topo', build: () => [mk('World_Topo_Map', { zIndex: 1, maxNativeZoom: RZ(18), detectRetina: true })] },
-        natgeo: { credit: '© Esri · National Geographic', build: () => [mk('NatGeo_World_Map', { zIndex: 1, maxNativeZoom: RZ(16), detectRetina: true })] },
-        opentopo: { credit: '© OpenTopoMap · © OpenStreetMap', build: () => [TL('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { zIndex: 1, maxNativeZoom: 17, subdomains: 'abc' })] }
-      };
-      const hillshade = mk('Elevation/World_Hillshade', { maxNativeZoom: 15, opacity: .35, zIndex: 2 });
+      /**
+       * Turn one LayerSpec from the basemap catalogue into a Leaflet tile layer.
+       *
+       * `hd` off trades sharpness for bandwidth: it gives up retina tiles and
+       * backs the native depth off by two levels, which roughly quarters the
+       * bytes on a slow connection. `hd` on (the default) asks each service for
+       * everything it actually publishes.
+       *
+       * @param {object} lyr LayerSpec from BASEMAP_CATALOGUE.
+       * @param {object} spec The owning BasemapSpec (for token substitution).
+       * @param {boolean} hd  HD imagery toggle.
+       * @returns {L.TileLayer}
+       */
+      function buildTileLayer(lyr, spec, hd) {
+        const retina = !!lyr.retina && hd;
+        const opts = {
+          maxZoom: MAX_MAP_ZOOM,
+          crossOrigin: spec.corsSafe === false ? undefined : 'anonymous',
+          maxNativeZoom: hd ? lyr.maxNative : Math.max(1, lyr.maxNative - 2),
+          zIndex: lyr.zIndex,
+          // Reference overlays must not paint an opaque background over the imagery.
+          updateWhenIdle: false,
+          keepBuffer: 3,
+        };
+        if (lyr.tileSize) opts.tileSize = lyr.tileSize;
+        if (lyr.zoomOffset != null) opts.zoomOffset = lyr.zoomOffset;
+        if (lyr.subdomains) opts.subdomains = lyr.subdomains;
+        if (lyr.opacity != null) opts.opacity = lyr.opacity;
+        // Two different retina mechanisms: CARTO-style `{r}` → `@2x` filename
+        // suffix, and Leaflet's detectRetina which fetches one zoom deeper and
+        // paints it at half size. Never both — that would double-count density.
+        if (lyr.retinaSuffix) opts.r = (retina && L.Browser.retina) ? lyr.retinaSuffix : '';
+        else if (retina) opts.detectRetina = true;
+        const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
+        if (lyr.adaptive && hd) attachAdaptiveDepth(layer, lyr);
+        return layer;
+      }
+
+      /**
+       * Walk a layer's native depth back when the service starts answering with
+       * its "Map data not yet available" placeholder. See the long note on
+       * looksLikeNoDataTile() in map/basemapProviders.js for why this exists
+       * instead of a blanket zoom cap.
+       * @param {L.TileLayer} layer @param {object} lyr LayerSpec
+       */
+      function attachAdaptiveDepth(layer, lyr) {
+        const probe = document.createElement('canvas');
+        probe.width = probe.height = 4;
+        const pctx = probe.getContext('2d', { willReadFrequently: true });
+        const floor = Math.max(17, lyr.maxNative - 4);   // never degrade below usable detail
+        let strikes = 0, disabled = false;
+        layer.on('tileload', ev => {
+          if (disabled || !ev.coords) return;
+          if (ev.coords.z < layer.options.maxNativeZoom) return;   // only judge the deepest level
+          let flat;
+          try {
+            pctx.drawImage(ev.tile, 0, 0, 4, 4);
+            flat = looksLikeNoDataTile(Array.from(pctx.getImageData(0, 0, 4, 4).data));
+          } catch (e) {
+            disabled = true;                                        // tainted canvas — stop probing
+            return;
+          }
+          if (!flat) { strikes = 0; return; }
+          if (++strikes < 3) return;                                // one blank tile is just water/desert
+          strikes = 0;
+          const next = layer.options.maxNativeZoom - 1;
+          if (next < floor) { disabled = true; return; }
+          layer.options.maxNativeZoom = next;
+          layer.redraw();
+        });
+      }
+
+      /**
+       * Legacy-shaped basemap map (`{ credit, build(hd) }`) generated from the
+       * catalogue. Kept so basemapSwitcher.js, project load/save and anything
+       * else holding a basemap key keep working unchanged.
+       * @type {Object<string, {credit:string, build:(hd:boolean)=>L.TileLayer[], spec:object}>}
+       */
+      const BASEMAPS = {};
+      availableBasemaps().forEach(spec => {
+        BASEMAPS[spec.id] = {
+          spec,
+          credit: spec.credit,
+          build: hd => spec.layers.map(l => buildTileLayer(l, spec, hd)),
+        };
+      });
+
+      const hillshade = L.tileLayer(HILLSHADE_LAYER.url, {
+        maxZoom: MAX_MAP_ZOOM, crossOrigin: 'anonymous',
+        maxNativeZoom: HILLSHADE_LAYER.maxNative, opacity: HILLSHADE_LAYER.opacity, zIndex: HILLSHADE_LAYER.zIndex,
+      });
+
       let activeBase = [];
-      let activeKey = 'hybrid';
+      let activeKey = preferredBasemapId();
       function setBasemap(key) {
-        activeKey = key;
+        const entry = BASEMAPS[key] || BASEMAPS[preferredBasemapId()];
+        activeKey = entry.spec.id;
         activeBase.forEach(l => map.removeLayer(l));
-        activeBase = BASEMAPS[key].build($('hdTgl').checked);
+        activeBase = entry.build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
-        $('mapCredit').textContent = BASEMAPS[key].credit;
-        if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(key);   // update the floating switcher UI
+        $('mapCredit').textContent = entry.credit;
+        $('mapWrap').classList.toggle('basemap-unsafe', entry.spec.corsSafe === false);
+        if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);   // update the floating switcher UI
       }
       $('basemapSel').addEventListener('change', e => setBasemap(e.target.value));
       $('hdTgl').addEventListener('change', () => setBasemap(activeKey));
       $('hillTgl').addEventListener('change', e => { if (e.target.checked) hillshade.addTo(map); else map.removeLayer(hillshade); });
-      setBasemap('hybrid');
+      setBasemap(activeKey);
 
       // ---------- 3D tilt (billboarded markers) ----------
       let tiltDeg = 0;

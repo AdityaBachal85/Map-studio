@@ -51,6 +51,26 @@
       transition: none !important;
     }
 
+    /* Furniture pass of the high-resolution exporter: the basemap tiles and the
+       vector paths are rendered separately at export resolution (see
+       js/export/hiResRender.js), so they must not appear in this pass or they
+       would be composited twice — the upscaled copy over the sharp one. */
+    .map-wrap.hires-overlay-pass .leaflet-tile-pane,
+    .map-wrap.hires-overlay-pass .leaflet-overlay-pane {
+      display: none !important;
+    }
+
+    /* ...and every surface behind them has to become transparent, or the pass
+       comes back as an opaque sheet that hides the ground it is meant to sit on.
+       Two culprits: .map-wrap's own dark fill, and Leaflet's default #ddd
+       container background, which is normally invisible under the tiles. */
+    .map-wrap.hires-overlay-pass,
+    .map-wrap.hires-overlay-pass #tiltStage,
+    .map-wrap.hires-overlay-pass #map,
+    .map-wrap.hires-overlay-pass .leaflet-container {
+      background: transparent !important;
+    }
+
     .map-wrap.pptx-capture .label-badge,
     .map-wrap.pptx-capture .pin-icon,
     .map-wrap.pptx-capture .hwy-shield,

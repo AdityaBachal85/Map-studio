@@ -18,13 +18,30 @@
       leaderCanvas.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
       bbLayer.appendChild(leaderCanvas);
       let bbW = 0, bbH = 0;
+      /**
+       * Backing-store multiplier for the leader canvas. 0 means "follow the
+       * display"; the hi-res exporter raises it so leader lines rasterise at
+       * export resolution instead of being upscaled from screen pixels.
+       */
+      let leaderRenderScale = 0;
       function resizeBB() {
         bbW = bbLayer.clientWidth; bbH = bbLayer.clientHeight;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        leaderCanvas.width = bbW * dpr; leaderCanvas.height = bbH * dpr;
+        const dpr = leaderRenderScale || Math.min(window.devicePixelRatio || 1, 2);
+        leaderCanvas.width = Math.round(bbW * dpr); leaderCanvas.height = Math.round(bbH * dpr);
         leaderCanvas.style.width = bbW + 'px'; leaderCanvas.style.height = bbH + 'px';
         leaderCanvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
         scheduleRepaint();
+      }
+
+      /**
+       * Render leader lines at `s`× device resolution for an export pass.
+       * Pass 0 to go back to following the display.
+       * @param {number} s
+       */
+      function setLeaderRenderScale(s) {
+        leaderRenderScale = s && s > 0 ? s : 0;
+        resizeBB();
+        repaintBillboard();          // synchronous — the caller captures immediately after
       }
 
       // Project the tilted map's container point through the CSS 3D transform to the
@@ -46,8 +63,18 @@
       }
 
       let repaintScheduled = false;
+      /**
+       * Set while an export capture is in flight. A repaint during a capture
+       * would re-apply the CSS transforms that flattenBillboardForCapture() just
+       * removed — and the capture is asynchronous, so a queued rAF lands right in
+       * the middle of it. That is not cosmetic: html2canvas silently drops text
+       * inside transformed elements, so a single stray repaint turns every label
+       * in the export into an empty chip.
+       */
+      let bbCaptureLock = false;
+
       function scheduleRepaint() {
-        if (repaintScheduled) return;
+        if (repaintScheduled || bbCaptureLock) return;
         repaintScheduled = true;
         requestAnimationFrame(() => {
           repaintScheduled = false;
@@ -57,6 +84,7 @@
 
       // ---------- main billboard repaint ----------
       function repaintBillboard() {
+        if (bbCaptureLock) return;
         const ctx = leaderCanvas.getContext('2d');
         ctx.clearRect(0, 0, bbW, bbH);
 
@@ -101,20 +129,184 @@
           });
         });
         // Leader lines only for entries with a real pin — skip decor
+        const wrapRect = bbLayer.getBoundingClientRect();
         entries.forEach(e => {
-          const pin = projectPin(e.anchor);
           const rect = e._labelEl.getBoundingClientRect();
-          const wrapRect = bbLayer.getBoundingClientRect();
-          const lx = rect.left - wrapRect.left + rect.width / 2;
-          const ly = rect.top - wrapRect.top + rect.height / 2;
-          ctx.beginPath();
-          ctx.moveTo(pin.x, pin.y);
-          ctx.lineTo(lx, ly);
-          ctx.strokeStyle = e._leaderColor || 'rgba(255,255,255,.7)';
-          ctx.lineWidth = 1.4;
-          ctx.setLineDash([]);
-          ctx.stroke();
+          drawLeader(ctx, projectPin(e.anchor), {
+            x: rect.left - wrapRect.left,
+            y: rect.top - wrapRect.top,
+            w: rect.width,
+            h: rect.height,
+          }, e._leaderColor);
         });
+      }
+
+      /* ---------- leader lines ---------- */
+
+      // Cartographic leader geometry, in CSS px. Tuned against the way ArcGIS
+      // Pro and Illustrator draw callouts: a hairline is too faint over
+      // satellite imagery, anything past ~1.6px starts to read as a route line.
+      const LEADER = {
+        width: 1.5,          // coloured stroke
+        halo: 3.4,           // dark casing drawn underneath for contrast
+        shoulder: 9,         // horizontal run entering the label
+        gapAtPin: 4,         // clearance so the line never touches the pin tip
+        gapAtLabel: 2,       // clearance so it never slides under the chip
+        minRun: 16,          // below this the label is on top of the pin — skip
+        dot: 2.4,            // anchor dot radius at the feature end
+      };
+
+      /**
+       * Where a ray from `from` towards the centre of `box` first meets the box.
+       * Anchoring on the edge — rather than on the centre, as the old code did —
+       * is what stops the connector disappearing under the label chip and is why
+       * the result reads as a drawn callout instead of a stray diagonal.
+       * @param {{x:number,y:number,w:number,h:number}} box
+       * @param {{x:number,y:number}} from
+       * @returns {{x:number, y:number, side:string}}
+       */
+      function boxEdgePoint(box, from) {
+        const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+        const dx = from.x - cx, dy = from.y - cy;
+        if (!dx && !dy) return { x: cx, y: cy, side: 'c' };
+        const hw = box.w / 2 + LEADER.gapAtLabel, hh = box.h / 2 + LEADER.gapAtLabel;
+        // Scale the ray until it hits whichever pair of edges it reaches first.
+        const tx = dx ? hw / Math.abs(dx) : Infinity;
+        const ty = dy ? hh / Math.abs(dy) : Infinity;
+        const t = Math.min(tx, ty);
+        return {
+          x: cx + dx * t,
+          y: cy + dy * t,
+          side: tx <= ty ? (dx < 0 ? 'l' : 'r') : (dy < 0 ? 't' : 'b'),
+        };
+      }
+
+      /**
+       * The polyline a connector follows, from the feature to the label edge.
+       *
+       * Shared by the on-screen canvas renderer and the PPTX exporter so the
+       * exported connector has exactly the geometry the operator positioned.
+       *
+       * When the label sits to the side of its pin the path gets a short
+       * horizontal shoulder before it enters the chip, so the connector meets
+       * the text along its baseline direction rather than stabbing into a corner.
+       *
+       * @param {{x:number,y:number}} pin Feature anchor in layer px.
+       * @param {{x:number,y:number,w:number,h:number}} box Label box in layer px.
+       * @returns {Array<{x:number,y:number}>|null} null when the label is sitting
+       *          on top of its own pin and a connector would be noise.
+       */
+      function leaderPathPoints(pin, box) {
+        const edge = boxEdgePoint(box, pin);
+        const dx = edge.x - pin.x, dy = edge.y - pin.y;
+        const run = Math.hypot(dx, dy);
+        if (run < LEADER.minRun) return null;            // label covers the pin already
+
+        // Pull the start clear of the pin graphic.
+        const ux = dx / run, uy = dy / run;
+        const pts = [{ x: pin.x + ux * LEADER.gapAtPin, y: pin.y + uy * LEADER.gapAtPin }];
+        // A shoulder only helps when the label is genuinely off to one side; for
+        // a label directly above or below, a straight line is cleaner.
+        if ((edge.side === 'l' || edge.side === 'r') && run > LEADER.shoulder * 2.5) {
+          const dir = edge.side === 'r' ? 1 : -1;
+          pts.push({ x: edge.x + dir * LEADER.shoulder, y: edge.y });
+        }
+        pts.push({ x: edge.x, y: edge.y });
+        return pts;
+      }
+
+      /**
+       * Draw one label connector: dark casing, coloured stroke on top, anchor dot
+       * at the feature.
+       *
+       * The casing is the detail that makes these read as professional. A single
+       * light stroke vanishes over pale imagery and a single dark one vanishes
+       * over dark imagery; stroking a wider translucent dark line first and the
+       * colour over it keeps the connector legible on any basemap — the same
+       * trick cartographers use for halo'd label text.
+       *
+       * @param {CanvasRenderingContext2D} ctx
+       * @param {{x:number,y:number}} pin Feature anchor in layer px.
+       * @param {{x:number,y:number,w:number,h:number}} box Label box in layer px.
+       * @param {string} [color] Stroke colour.
+       */
+      function drawLeader(ctx, pin, box, color) {
+        const pts = leaderPathPoints(pin, box);
+        if (!pts) return;
+        const stroke = color || 'rgba(255,255,255,.92)';
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+
+        const trace = () => {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        };
+
+        trace();
+        ctx.strokeStyle = 'rgba(8,14,24,.42)';
+        ctx.lineWidth = LEADER.halo;
+        ctx.stroke();
+
+        trace();
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = LEADER.width;
+        ctx.stroke();
+
+        // Anchor dot: reads as a deliberate attachment point rather than a line
+        // that happens to stop near the pin.
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, LEADER.dot, 0, Math.PI * 2);
+        ctx.fillStyle = stroke;
+        ctx.strokeStyle = 'rgba(8,14,24,.42)';
+        ctx.lineWidth = 1;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      /* ---------- capture helpers ---------- */
+
+      // Billboard elements are placed with CSS transforms, which html2canvas
+      // 1.4.1 mishandles: it draws the chip's background and border but silently
+      // drops the text inside. Flattening each transform to plain left/top for
+      // the duration of a capture sidesteps the bug, which in turn lets the
+      // exporter use html2canvas's standard renderer instead of
+      // foreignObjectRendering — the renderer that refuses to draw cross-origin
+      // map tiles. Positions are read from getBoundingClientRect so percentage
+      // translates resolve correctly.
+      let bbFlattened = [];
+
+      /** Freeze billboard positions as left/top for an export capture. */
+      function flattenBillboardForCapture() {
+        restoreBillboardAfterCapture();
+        const base = bbLayer.getBoundingClientRect();
+        bbCaptureLock = true;   // no repaint may re-apply transforms until we restore
+        const els = Array.from(bbLayer.querySelectorAll('.bb'));
+        // Read every rect before writing any style, so no measurement is taken
+        // against a partially-rewritten layout.
+        const rects = els.map(el => el.getBoundingClientRect());
+        els.forEach((el, i) => {
+          bbFlattened.push({ el, transform: el.style.transform, left: el.style.left, top: el.style.top });
+          el.style.transform = 'none';
+          el.style.left = (rects[i].left - base.left) + 'px';
+          el.style.top = (rects[i].top - base.top) + 'px';
+        });
+      }
+
+      /** Undo {@link flattenBillboardForCapture}. Safe to call when not flattened. */
+      function restoreBillboardAfterCapture() {
+        bbCaptureLock = false;
+        if (!bbFlattened.length) return;
+        bbFlattened.forEach(s => {
+          s.el.style.transform = s.transform;
+          s.el.style.left = s.left;
+          s.el.style.top = s.top;
+        });
+        bbFlattened = [];
+        scheduleRepaint();
       }
 
       // ---------- creating billboard elements ----------

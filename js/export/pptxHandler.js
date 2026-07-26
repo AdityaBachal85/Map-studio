@@ -24,6 +24,10 @@
           status('Export engine still loading — wait a moment and try again.');
           return;
         }
+        if (!basemapExportSafe(activeKey)) {
+          status('This basemap’s tiles block canvas export (no CORS header). Switch to an Esri or Carto basemap to export.');
+          return;
+        }
         status('Building editable PPTX… (several seconds)', true);
         const wrap = $('mapWrap');
         const wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;
@@ -35,6 +39,20 @@
           return { x: r.left - wrapRectPPT.left + r.width / 2, y: r.top - wrapRectPPT.top + r.height / 2, w: r.width, h: r.height };
         };
         const widgets = { locLabels: [], badges: [], rtLabels: [], rings: [], leaders: [], pins: [] };
+        /**
+         * Build a leader descriptor with the same edge-anchored, shouldered
+         * geometry the canvas renderer draws, so the deck matches the screen
+         * instead of running a bare diagonal into the middle of the chip.
+         * @param {{x:number,y:number}} pin
+         * @param {{x:number,y:number,w:number,h:number}} lab Label centre + size.
+         * @param {string} color
+         */
+        const pushLeader = (pin, lab, color) => {
+          const box = { x: lab.x - lab.w / 2, y: lab.y - lab.h / 2, w: lab.w, h: lab.h };
+          const pts = leaderPathPoints(pin, box);
+          if (!pts) return;
+          widgets.leaders.push({ a: pts[0], b: pts[pts.length - 1], points: pts, color });
+        };
         locations.forEach(l => {
           // Icon pin: capture position + image (skip entirely if this location's marker is hidden)
           if (l._pinEl && !l.hideMarker) {
@@ -56,7 +74,7 @@
             widgets.locLabels.push({ px: { x: lp.x - lp.w / 2, y: lp.y - lp.h / 2 }, text: l.name, site: l.type === 'site', color: l.color, bg: l.labelBg || (l.type === 'site' ? '#0A1E3C' : '#FFFFFF') });
             if (l._pinEl) {
               const pinP = bbToWrap(l._pinEl);
-              widgets.leaders.push({ a: { x: pinP.x, y: pinP.y }, b: { x: lp.x, y: lp.y }, color: l.type === 'site' ? '#FF7A1A' : l.color });
+              pushLeader({ x: pinP.x, y: pinP.y }, lp, l.type === 'site' ? '#FF7A1A' : l.color);
             }
           }
           (l.ringLabels || []).forEach(rl => {
@@ -71,7 +89,7 @@
             const lp = bbToWrap(rt._labelEl);
             widgets.rtLabels.push({ px: { x: lp.x - lp.w / 2, y: lp.y - lp.h / 2 }, text: routeLabelText(rt), color: rt.color, bg: rt.labelBg || '#FFFFFF' });
             const aP = cp(rt.anchor);
-            widgets.leaders.push({ a: { x: aP.x, y: aP.y }, b: { x: lp.x, y: lp.y }, color: rt.color });
+            pushLeader({ x: aP.x, y: aP.y }, lp, rt.color);
           }
         });
         const titleVisible = $('titleTgl').checked && $('titleCard').style.display !== 'none';
@@ -83,16 +101,41 @@
         const lgRows = legendRows();
         const brandOn = $('brandTgl').checked;
 
-        let canvas;
+        // Native, editable geometry for everything that used to be flattened
+        // into the background picture.
+        const paths = mapPathsForExport(map);
+
+        let canvas, renderScale = 1;
         try {
-          canvas = await captureMap('pptx-capture');
+          // Target ~300 DPI across the 13.333in slide (≈4000px) so the picture
+          // is still sharp after PowerPoint scales it to the slide and again
+          // when the deck is projected or printed. This is the fix for "the
+          // exported image quality is poor / the map image becomes soft": the
+          // old export handed PowerPoint a 2×-upscaled screenshot.
+          const targetPx = 4000;
+          const res = await captureMapHiRes({
+            scale: Math.max(2, Math.min(4, targetPx / Math.max(1, wrapW))),
+            extraClass: 'pptx-capture',
+            includeVectors: false,          // re-emitted natively below
+            onProgress: msg => status(msg, true),
+          });
+          canvas = res.canvas;
+          renderScale = res.scale;
         } catch (e) {
           status('Could not render the map image for PPTX on this browser — try the PNG export or Chrome/Edge.');
           return;
         }
 
         try {
-          const dataUrl = canvas.toDataURL('image/png');
+          // Photographic basemaps compress far better as JPEG and show no
+          // visible artefacts — labels and lines are native shapes, so nothing
+          // with a hard edge is inside this image. Cartographic basemaps keep
+          // PNG, where flat colour and crisp boundaries matter more than size.
+          const bmSpec = BASEMAP_CATALOGUE[activeKey];
+          const photographic = !!(bmSpec && bmSpec.imagery);
+          const dataUrl = photographic
+            ? canvas.toDataURL('image/jpeg', 0.94)
+            : canvas.toDataURL('image/png');
           const measurePx = (text, pxSize, bold) => {
             mctx.font = (bold ? '700 ' : '600 ') + pxSize + 'px Arial';
             return mctx.measureText(String(text)).width;
@@ -106,6 +149,7 @@
             slide: {
               background: '0A1E3C',
               map: { data: dataUrl },
+              paths: paths,
               leaders: widgets.leaders,
               pins: widgets.pins,
               locationLabels: widgets.locLabels,
@@ -125,7 +169,8 @@
           };
           const { log } = await window.DBOTExport.exportDeck(spec, { measurePx, output: 'download' });
           const skipped = (log && log.skipped) ? ' (' + log.skipped + ' invalid object(s) skipped)' : '';
-          status('PPTX downloaded — flat map with native, editable labels, badges, leader lines, title, table and logo.' + skipped);
+          status('PPTX downloaded at ' + canvas.width + ' × ' + canvas.height + ' px (' + renderScale.toFixed(1) +
+            '×) — routes, shapes, labels, badges, leader lines, title, table and logo are all native editable objects.' + skipped);
         } catch (e) {
           status('PPTX build failed: ' + (e && e.message ? e.message : 'unknown error') + ' — the PNG export still works.');
         }

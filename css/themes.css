@@ -18,6 +18,69 @@
       --r: 13px;
       --chipFont: 11.5px;
       --untiltY: 1;
+
+      /* ------------------------------------------------------------------
+         Design system tokens.
+         The palette above is the original brand layer and is left untouched so
+         every existing rule keeps working. What follows is the systematic layer
+         that new and refined components draw from: one scale per dimension,
+         so spacing, corner radius, elevation and motion stay consistent instead
+         of being re-invented per component.
+         ------------------------------------------------------------------ */
+
+      /* Type — a 1.2 modular scale anchored on the 13px body size. */
+      --fs-micro: 9.5px;
+      --fs-small: 11px;
+      --fs-body: 12.5px;
+      --fs-lg: 15px;
+      --fs-xl: 19px;
+      --lh-tight: 1.25;
+      --lh-body: 1.5;
+      --tracking-caps: .07em;
+
+      /* Space — 4px base, so every gap is a multiple and edges align. */
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 22px;
+      --sp-6: 32px;
+
+      /* Radius */
+      --r-sm: 7px;
+      --r-md: 10px;
+      --r-lg: 14px;
+      --r-xl: 18px;
+      --r-pill: 999px;
+
+      /* Elevation — three steps only. More than three and nothing reads as
+         "raised" any more; each level pairs a tight contact shadow with a
+         soft ambient one, which is what keeps panels from looking like
+         flat rectangles with a blur behind them. */
+      --elev-1: 0 1px 2px rgba(5, 10, 20, .16), 0 2px 8px rgba(5, 10, 20, .10);
+      --elev-2: 0 2px 4px rgba(5, 10, 20, .20), 0 8px 24px rgba(5, 10, 20, .18);
+      --elev-3: 0 4px 8px rgba(5, 10, 20, .24), 0 20px 48px rgba(5, 10, 20, .30);
+
+      /* Motion — short and decelerating. Animation is used to show where
+         something came from, never for decoration. */
+      --dur-fast: 110ms;
+      --dur-base: 190ms;
+      --dur-slow: 320ms;
+      --ease-out: cubic-bezier(.22, .8, .3, 1);
+      --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+
+      /* Semantic surfaces, derived from the brand palette. */
+      --surface: var(--glass);
+      --surface-2: var(--glass2);
+      --surface-solid: #0E1728;
+      --border: var(--stroke);
+      --border-strong: var(--stroke2);
+      --text-2: var(--dim);
+      --accent: var(--orange);
+      --accent-soft: rgba(255, 122, 26, .14);
+      --focus-ring: rgba(255, 122, 26, .55);
+      --scroll-thumb: rgba(255, 255, 255, .16);
+      --scroll-thumb-hover: rgba(255, 255, 255, .28);
     }
 
     /* ---------- Light theme (applied via <html data-theme="light">) ---------- */
@@ -30,6 +93,12 @@
       --stroke2: rgba(16, 32, 60, .22);
       --text: #17233B;
       --dim: #55627A;
+      --surface-solid: #FFFFFF;
+      --elev-1: 0 1px 2px rgba(16, 32, 60, .07), 0 2px 8px rgba(16, 32, 60, .05);
+      --elev-2: 0 2px 4px rgba(16, 32, 60, .08), 0 8px 24px rgba(16, 32, 60, .09);
+      --elev-3: 0 4px 8px rgba(16, 32, 60, .10), 0 20px 48px rgba(16, 32, 60, .14);
+      --scroll-thumb: rgba(16, 32, 60, .18);
+      --scroll-thumb-hover: rgba(16, 32, 60, .32);
     }
 
     /* Surfaces that hardcode white-alpha fills need a dark-alpha equivalent in

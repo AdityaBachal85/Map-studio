@@ -6,3 +6,5 @@
 @import './sidebar.css';
 @import './components.css';
 @import './layout.css';
+/* Polish layer — must stay last so it can refine the sheets above it. */
+@import './refine.css';

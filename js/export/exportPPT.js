@@ -65,6 +65,10 @@ function buildSlide(slide, s, ctx, log) {
     addBackground(slide, { data: s.map.data, x: fit.offX, y: fit.offY, w: fit.imgW, h: fit.imgH }, log);
   }
 
+  // Routes, boundaries, rings and measurements go in before the pins and labels
+  // so they sit under them, matching the on-screen z-order. They are native
+  // shapes, not part of the map picture, so they stay editable in PowerPoint.
+  (s.paths || []).forEach(p => addVectorPath(slide, p, tf, log, hex));
   (s.leaders || []).forEach(l => addLeaderLine(slide, l, tf, log, hex));
   (s.pins || []).forEach(p => addIconPin(slide, p, tf, log, hex));
   (s.routeLabels || []).forEach(w => addRouteLabel(slide, w, ctx, log));

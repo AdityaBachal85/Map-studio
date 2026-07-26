@@ -1,0 +1,357 @@
+/* refine.css — the product-polish layer.
+   Imported last so it can refine what the component sheets establish without
+   editing (or destabilising) them. Everything here is either a systematic
+   correction expressed through the tokens in themes.css, or a style for a
+   component introduced by the production-polish pass. Nothing here changes
+   layout structure or behaviour. */
+
+/* ---------------------------------------------------------------------------
+   1. Typography
+   The interface previously ran on the default system stack at a single weight
+   and size, which is what made dense panels read as a web form rather than a
+   tool. Three changes carry most of the improvement: a proper UI font when one
+   is present, tabular figures so coordinates and distances line up in columns,
+   and optical sizing so small caps-styled labels stay legible.
+   --------------------------------------------------------------------------- */
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Any field or readout carrying a number gets tabular, slashed-zero figures so
+   digits occupy identical width and 0 never reads as O. This is the single
+   most noticeable difference between a spreadsheet-grade tool and a web page. */
+input,
+select,
+textarea,
+button,
+.val,
+.sub,
+.coord,
+.lbl,
+#legendCard,
+.label-badge.route,
+.label-badge.ring,
+.leaflet-control-scale-line {
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Section labels: uppercase micro-type needs tracking to stay readable, and a
+   colour step down from body text to sit below it in the hierarchy. */
+.lbl,
+.prefs-lbl,
+.bm-group {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------------------
+   2. Focus, selection and scrollbars
+   --------------------------------------------------------------------------- */
+
+/* A visible keyboard focus ring was missing entirely. :focus-visible keeps it
+   off mouse interactions, so it costs the pointer experience nothing. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* The scrollbar thumb was hard-coded white-alpha, which made it invisible on
+   the light theme. Driving it from a token fixes both themes at once. */
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: var(--r-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   3. Controls
+   Consistent radius, one elevation step on lift, and a single easing curve.
+   --------------------------------------------------------------------------- */
+
+.btn {
+  border-radius: var(--r-md);
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  box-shadow: var(--elev-1);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--elev-2);
+}
+
+/* Tabs: the active tab now carries a solid indicator rather than only a tinted
+   fill, so which pane you are in is legible at a glance instead of on
+   inspection. */
+.tabs button {
+  position: relative;
+  border-radius: var(--r-sm);
+  letter-spacing: .04em;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.tabs button.active::after {
+  content: "";
+  position: absolute;
+  left: 26%;
+  right: 26%;
+  bottom: -11px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.item-card {
+  border-radius: var(--r-lg);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.item-card:hover {
+  box-shadow: var(--elev-1);
+}
+
+.acc-hd {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------------------
+   4. Map furniture
+   These sit over live imagery, so contrast has to come from the element rather
+   than from the page behind it.
+   --------------------------------------------------------------------------- */
+
+#titleCard,
+#legendCard,
+#mapCredit {
+  box-shadow: var(--elev-2);
+}
+
+#mapCredit {
+  /* Full provider attribution is long — several Esri services name a dozen
+     sources. It used to be one nowrap line, so everything past the window edge
+     was silently cut off, which is an attribution problem as much as a visual
+     one. Wrapping to a right-aligned block keeps the credit complete without
+     letting it eat into the map. */
+  font-size: 9.5px;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  max-width: min(56ch, 40vw);
+  white-space: normal;
+  text-align: right;
+  border-radius: var(--r-sm);
+  /* Clear the zoom buttons in the same corner now that the credit can be two
+     lines tall. The zoom control is hidden during capture, so exports are
+     unaffected. */
+  right: 52px;
+}
+
+.leaflet-control-scale-line {
+  border-radius: 3px;
+  padding: 2px 6px !important;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+/* Warn when the active basemap's tiles cannot be rasterised (no CORS header):
+   the export buttons will refuse, and this explains why before the click. */
+.map-wrap.basemap-unsafe #mapCredit::after {
+  content: " · on-screen only, exports disabled";
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------
+   5. Basemap switcher — grouped catalogue
+   --------------------------------------------------------------------------- */
+
+#bmPanel {
+  width: 268px;
+  border-radius: var(--r-lg);
+  padding: var(--sp-3);
+  box-shadow: var(--elev-3);
+}
+
+.bm-grid {
+  gap: var(--sp-2);
+}
+
+/* Group headings span the whole grid so families read as families. */
+.bm-group {
+  grid-column: 1 / -1;
+  margin: var(--sp-2) 0 calc(-1 * var(--sp-1));
+}
+
+.bm-group:first-child {
+  margin-top: 0;
+}
+
+.bm-tile {
+  border-radius: var(--r-md);
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.bm-tile:active {
+  transform: translateY(0);
+}
+
+/* The catalogue's gradient sits on .bm-tile-img and the real preview tile on
+   this inner span, so the picker never flashes empty squares while previews
+   load — and still shows the true tile once it arrives. */
+.bm-tile-tile {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.bm-tile-lbl {
+  font-size: 8.5px;
+  letter-spacing: .01em;
+  padding: 3px 4px;
+}
+
+.bm-thumb {
+  border-radius: var(--r-md);
+  box-shadow: var(--elev-2);
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------------------
+   6. Export resolution menu
+   Rendering at 4× takes real time, so the choice is made explicit — with the
+   pixel dimensions each preset produces, rather than a bare multiplier.
+   --------------------------------------------------------------------------- */
+
+.export-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--sp-2) 0;
+  padding: var(--sp-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
+  animation: exportMenuIn var(--dur-base) var(--ease-out);
+}
+
+.export-menu[hidden] {
+  display: none;
+}
+
+@keyframes exportMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.export-menu-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label dim" "hint dim";
+  align-items: center;
+  gap: 0 var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.export-menu-item:hover {
+  background: var(--accent-soft);
+  border-color: rgba(255, 122, 26, .3);
+}
+
+.export-menu-item .em-label {
+  grid-area: label;
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.export-menu-item .em-hint {
+  grid-area: hint;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+
+.export-menu-item .em-dim {
+  grid-area: dim;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Status line
+   It reports progress through multi-second renders, so it needs to read as a
+   live channel rather than as leftover text at the bottom of the panel.
+   --------------------------------------------------------------------------- */
+
+#statusMsg {
+  line-height: var(--lh-body);
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------------------
+   8. Honour the OS reduced-motion setting, not only the in-app preference.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

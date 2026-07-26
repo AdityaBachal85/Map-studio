@@ -81,29 +81,11 @@
       <div id="basemapSwitcher">
         <div id="bmPanel" class="frost" hidden>
           <div class="bm-grid" id="bmGrid"></div>
-          <label class="bm-hd"><input type="checkbox" id="hdTgl" checked> HD imagery (sharpest tiles)</label>
-          <select id="basemapSel" hidden>
-            <optgroup label="Satellite">
-              <option value="hybrid" selected>Satellite + roads &amp; labels (Esri)</option>
-              <option value="sat">Satellite — clean (Esri)</option>
-            </optgroup>
-            <optgroup label="Streets">
-              <option value="esristreet">Streets — Esri</option>
-              <option value="osm">Streets — OpenStreetMap</option>
-              <option value="voyager">Streets — Carto Voyager</option>
-            </optgroup>
-            <optgroup label="Executive / minimal">
-              <option value="lightgray">Light Gray Canvas (Esri)</option>
-              <option value="darkgray">Dark Gray Canvas (Esri)</option>
-              <option value="positron">Minimal light (Carto)</option>
-              <option value="dark">Minimal dark (Carto)</option>
-            </optgroup>
-            <optgroup label="Terrain">
-              <option value="topo">Terrain topo (Esri)</option>
-              <option value="natgeo">National Geographic (Esri)</option>
-              <option value="opentopo">OpenTopoMap</option>
-            </optgroup>
-          </select>
+          <label class="bm-hd"><input type="checkbox" id="hdTgl" checked> HD imagery (deepest, sharpest tiles)</label>
+          <!-- Options are generated from map/basemapProviders.js by
+               ui/basemapSwitcher.js; this select stays as the value-holder that
+               project save/load reads. -->
+          <select id="basemapSel" hidden></select>
         </div>
         <button id="bmToggle" class="bm-thumb" title="Change basemap">
           <span class="bm-thumb-img" id="bmThumbImg"></span>
@@ -424,7 +406,9 @@
   <script src="./js/map/routes.js"></script>
   <script src="./js/map/markers.js"></script>
   <script src="./js/map/snapping.js"></script>
+  <script src="./js/map/basemapProviders.js"></script>
   <script src="./js/map/mapEngine.js"></script>
+  <script src="./js/export/hiResRender.js"></script>
   <script src="./js/export/exportPNG.js"></script>
   <script src="./js/export/pptUtils.js"></script>
   <script src="./js/export/pptValidation.js"></script>
