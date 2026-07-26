@@ -1,8 +1,9 @@
 /**
- * services/geoapify.js — Geoapify-first geocoding with an automatic, silent
- * fallback to Nominatim. Exposes geocodeSearch(q, bias), which returns the
- * same {lat,lng,name,label,icon}[] shape geocoder.js's doSearch() already
- * expects, so nothing downstream (rendering, recents, keyboard nav, request
+ * services/geoapify.js — 3-tier geocoding chain, each hop silent and
+ * automatic: Geoapify (primary) -> Photon (fallback) -> Nominatim (final
+ * fallback). Exposes geocodeSearch(q, bias), which returns the same
+ * {lat,lng,name,label,icon}[] shape geocoder.js's doSearch() already expects,
+ * so nothing downstream (rendering, recents, keyboard nav, request
  * de-duplication) needs to change -- only the fetch itself is swapped.
  */
 
@@ -87,7 +88,39 @@ async function geoapifySearch(q, bias) {
   return out;
 }
 
-/** The original Nominatim search (unchanged), now the fallback path. */
+/**
+ * Photon (komoot) geocoder — the middle fallback. Free, no key, OSM-based, with
+ * good POI/address recall. osm_key/osm_value map cleanly onto Nominatim's
+ * class/type so we reuse iconFor().
+ * @param {string} q @param {L.LatLngBounds|null} bias @returns {Promise<Array>}
+ */
+async function photonSearch(q, bias) {
+  let url = 'https://photon.komoot.io/api/?limit=8&lang=en&q=' + encodeURIComponent(q);
+  if (bias) { const c = bias.getCenter(); url += `&lat=${c.lat}&lon=${c.lng}`; }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Photon HTTP ' + res.status);
+  const json = await res.json();
+  const seen = new Set();
+  const out = [];
+  for (const f of (json.features || [])) {
+    const g = f.geometry, p = f.properties || {};
+    if (!g || !g.coordinates) continue;
+    const lat = g.coordinates[1], lng = g.coordinates[0];
+    const label = [p.name, p.street, p.city || p.county, p.state, p.country].filter(Boolean).join(', ');
+    const key = label.toLowerCase() + '|' + lat.toFixed(4) + ',' + lng.toFixed(4);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      lat, lng,
+      name: p.name || p.street || label.split(',')[0] || 'Place',
+      label: label || (p.name || 'Place'),
+      icon: iconFor(p.osm_key, p.osm_value),
+    });
+  }
+  return out;
+}
+
+/** The original Nominatim search (unchanged), now the final fallback path. */
 async function nominatimSearch(q, bias) {
   let url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' + encodeURIComponent(q);
   if (bias) url += `&viewbox=${bias.getWest()},${bias.getNorth()},${bias.getEast()},${bias.getSouth()}&bounded=0`;
@@ -97,10 +130,12 @@ async function nominatimSearch(q, bias) {
 }
 
 /**
- * Geocode a search query: Geoapify first (cached), falling back to Nominatim
- * automatically and silently if Geoapify has no key, fails, or returns
- * nothing. Debouncing and duplicate-request supersession stay owned by the
- * caller (geocoder.js's existing searchTimer / token mechanism).
+ * Geocode a search query through a 3-tier chain, each step silent and
+ * automatic: Geoapify (primary) -> Photon (fallback) -> Nominatim (final
+ * fallback). Each tier only runs if the previous one errored or returned zero
+ * results, so a normal successful Geoapify search costs exactly one request.
+ * Debouncing and duplicate-request supersession stay owned by the caller
+ * (geocoder.js's existing searchTimer / token mechanism).
  * @param {string} q @param {L.LatLngBounds|null} bias
  * @returns {Promise<Array<{lat:number,lng:number,name:string,label:string,icon:string}>>}
  */
@@ -111,7 +146,8 @@ async function geocodeSearch(q, bias) {
   if (cached) return cached;
   let results = [];
   try { results = await geoapifySearch(q, bias); } catch (e) { results = []; }
-  if (!results.length) results = await nominatimSearch(q, bias);
+  if (!results.length) { try { results = await photonSearch(q, bias); } catch (e) { results = []; } }
+  if (!results.length) { try { results = await nominatimSearch(q, bias); } catch (e) { results = []; } }
   cacheSet(key, results);
   return results;
 }

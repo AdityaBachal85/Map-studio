@@ -64,7 +64,7 @@ const recents = [];
         setSpin(true);
         try {
           const bias = map.getZoom() >= 8 ? map.getBounds() : null;
-          const data = await geocodeSearch(q, bias); // Geoapify first, silent fallback to Nominatim
+          const data = await geocodeSearch(q, bias); // Geoapify -> Photon -> Nominatim, silent chain
           if (token !== searching) return;              // a newer keystroke superseded this request
           resultsData = data;
           selIdx = resultsData.length ? 0 : -1;
