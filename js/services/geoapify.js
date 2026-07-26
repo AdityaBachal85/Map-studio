@@ -60,7 +60,8 @@ function iconForGeoapifyCategory(cat, rt) {
  */
 async function geoapifySearch(q, bias) {
   if (!GEOAPIFY_API_KEY) return [];
-  let url = 'https://api.geoapify.com/v1/geocode/autocomplete'
+  let url =
+    SEARCH_PROVIDERS.geoapify.autocomplete
     + '?text=' + encodeURIComponent(q)
     + '&limit=8&format=json&lang=en'
     + '&apiKey=' + GEOAPIFY_API_KEY;
@@ -95,7 +96,7 @@ async function geoapifySearch(q, bias) {
  * @param {string} q @param {L.LatLngBounds|null} bias @returns {Promise<Array>}
  */
 async function photonSearch(q, bias) {
-  let url = 'https://photon.komoot.io/api/?limit=8&lang=en&q=' + encodeURIComponent(q);
+  let url = SEARCH_PROVIDERS.photon.autocomplete + '?limit=8&lang=en&q=' + encodeURIComponent(q);
   if (bias) { const c = bias.getCenter(); url += `&lat=${c.lat}&lon=${c.lng}`; }
   const res = await fetch(url);
   if (!res.ok) throw new Error('Photon HTTP ' + res.status);
@@ -122,7 +123,10 @@ async function photonSearch(q, bias) {
 
 /** The original Nominatim search (unchanged), now the final fallback path. */
 async function nominatimSearch(q, bias) {
-  let url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' + encodeURIComponent(q);
+  let url =
+    SEARCH_PROVIDERS.nominatim.search
+    + '?format=jsonv2&limit=6&q='
+    + encodeURIComponent(q);
   if (bias) url += `&viewbox=${bias.getWest()},${bias.getNorth()},${bias.getEast()},${bias.getSouth()}&bounded=0`;
   const res = await fetch(url);
   const data = await res.json();
@@ -145,9 +149,9 @@ async function geocodeSearch(q, bias) {
   const cached = cacheGet(key);
   if (cached) return cached;
   let results = [];
-  try { results = await geoapifySearch(q, bias); } catch (e) { results = []; }
-  if (!results.length) { try { results = await photonSearch(q, bias); } catch (e) { results = []; } }
-  if (!results.length) { try { results = await nominatimSearch(q, bias); } catch (e) { results = []; } }
+  try { results = await geoapifySearch(q, bias); } catch (e) { console.warn('Geoapify failed:', e); results = []; }
+  if (!results.length) { try { results = await photonSearch(q, bias); } catch (e) { console.warn('Photon failed:', e); results = []; } }
+  if (!results.length) { try { results = await nominatimSearch(q, bias); } catch (e) { console.warn('Nominatim failed:', e); results = []; } }
   cacheSet(key, results);
   return results;
 }

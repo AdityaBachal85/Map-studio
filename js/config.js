@@ -18,3 +18,35 @@ const ROUTERS = {
  * existing free fallbacks (Nominatim search, no nearby-places).
  */
 const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
+
+/**
+ * Search provider endpoints
+ */
+const SEARCH_PROVIDERS = Object.freeze({
+  geoapify: {
+    autocomplete: "https://api.geoapify.com/v1/geocode/autocomplete",
+    search: "https://api.geoapify.com/v1/geocode/search",
+    reverse: "https://api.geoapify.com/v1/geocode/reverse"
+  },
+
+  photon: {
+    autocomplete: "https://photon.komoot.io/api"
+  },
+
+  nominatim: {
+    search: "https://nominatim.openstreetmap.org/search",
+    reverse: "https://nominatim.openstreetmap.org/reverse"
+  }
+});
+
+const PLACES_PROVIDERS = Object.freeze({
+
+  geoapify: {
+    nearby: "https://api.geoapify.com/v2/places"
+  },
+
+  overpass: {
+    nearby: "https://overpass-api.de/api/interpreter"
+  }
+
+});

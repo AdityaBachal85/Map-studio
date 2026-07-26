@@ -103,16 +103,78 @@ const recents = [];
       });
 
 /**
- * Reverse-geocode a coordinate to a short place name (best-effort).
- * Used by click-to-add to pre-fill the new location's name.
+ * Reverse-geocode a coordinate to a short place name (best-effort). Used by
+ * click-to-add to pre-fill the new location's name. Geoapify first, then
+ * Nominatim fallback (same silent-chain pattern as forward search).
  * @param {number} lat @param {number} lng
  * @returns {Promise<string|null>}
  */
 async function reverseGeocodeName(lat, lng) {
+
+  /* ---------- Geoapify ---------- */
+
+  if (GEOAPIFY_API_KEY) {
+    try {
+
+      const url =
+        SEARCH_PROVIDERS.geoapify.reverse
+        + '?lat=' + lat
+        + '&lon=' + lng
+        + '&format=json'
+        + '&apiKey=' + GEOAPIFY_API_KEY;
+
+      const res = await fetch(url);
+
+      if (res.ok) {
+        const json = await res.json();
+
+        if (json.results && json.results.length) {
+
+          const r = json.results[0];
+
+          return (
+            r.name ||
+            r.address_line1 ||
+            (r.formatted || '').split(',')[0] ||
+            null
+          );
+
+        }
+      }
+
+    } catch (e) {
+      console.warn("Geoapify reverse failed:", e);
+    }
+  }
+
+  /* ---------- Nominatim ---------- */
+
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
-    const j = await r.json();
-    return j.name || (j.display_name || '').split(',')[0] || null;
-  } catch (e) { return null; }
+
+    const url =
+      SEARCH_PROVIDERS.nominatim.reverse
+      + '?format=jsonv2'
+      + '&lat=' + lat
+      + '&lon=' + lng;
+
+    const res = await fetch(url);
+
+    const json = await res.json();
+
+    return (
+      json.name ||
+      (json.display_name || '').split(',')[0] ||
+      null
+    );
+
+  } catch (e) {
+
+    console.warn("Nominatim reverse failed:", e);
+
+    return null;
+
+  }
+
 }
+
 
