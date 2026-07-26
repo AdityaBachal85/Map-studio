@@ -290,9 +290,22 @@ const BASEMAP_CATALOGUE = {
     credit: '© Mappls (MapmyIndia)',
     thumb: 'linear-gradient(150deg,#fdf6ec,#f0e2c9 60%,#d9c9a3)',
     layers: [{
-      url: typeof MAPPLS_TILE_URL !== 'undefined'
-        ? MAPPLS_TILE_URL
-        : 'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png',
+      // Empty until discovery resolves it — see resolveTileCandidates().
+      url: (typeof MAPPLS_TILE_URL !== 'undefined' && MAPPLS_TILE_URL) || '',
+      urlCandidates: typeof MAPPLS_TILE_CANDIDATES !== 'undefined' ? MAPPLS_TILE_CANDIDATES : [],
+      zIndex: 1, maxNative: 18,
+    }],
+  },
+
+  mapplsImagery: {
+    id: 'mapplsImagery', label: 'Mappls — Bhuvan imagery', group: 'India',
+    provider: 'mappls', needsKey: 'mappls', corsSafe: false, imagery: true,
+    credit: '© Mappls (MapmyIndia) · ISRO Bhuvan imagery',
+    thumb: 'linear-gradient(150deg,#2c4726,#5d7a41 50%,#8b9a63)',
+    layers: [{
+      url: typeof MAPPLS_IMAGERY_URL !== 'undefined'
+        ? MAPPLS_IMAGERY_URL
+        : 'https://apis.mappls.com/advancedmaps/v1/{token}/bhuvan_imagery/{z}/{x}/{y}.png',
       zIndex: 1, maxNative: 18,
     }],
   },

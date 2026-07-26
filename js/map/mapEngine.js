@@ -82,6 +82,83 @@
       }
 
       /**
+       * Load one tile from a template and report whether an image came back.
+       * @param {string} url Fully-substituted tile URL.
+       * @param {boolean} anon Request it with `crossOrigin="anonymous"`.
+       * @returns {Promise<boolean>}
+       */
+      function tryTileUrl(url, anon) {
+        return new Promise(res => {
+          const img = new Image();
+          if (anon) img.crossOrigin = 'anonymous';
+          const done = ok => { img.onload = img.onerror = null; res(ok); };
+          img.onload = () => done(img.naturalWidth > 0);
+          img.onerror = () => done(false);
+          setTimeout(() => done(false), 12000);
+          img.src = url;
+        });
+      }
+
+      /**
+       * Substitute a tile template for a concrete tile near the current view.
+       * @param {string} tpl @param {object} spec @param {object} lyr LayerSpec
+       * @returns {string}
+       */
+      function sampleTileUrl(tpl, spec, lyr) {
+        const z = Math.max(1, Math.min(lyr.maxNative, Math.round(map.getZoom())));
+        const pt = map.project(map.getCenter(), z).divideBy(lyr.tileSize || 256).floor();
+        return basemapUrl(tpl, spec)
+          .replace('{z}', z).replace('{x}', pt.x).replace('{y}', pt.y)
+          .replace('{-y}', pt.y).replace('{s}', (lyr.subdomains || 'a')[0]).replace('{r}', '');
+      }
+
+      /**
+       * Resolve a layer whose tile template is not known in advance.
+       *
+       * Mappls documents the URL *shape* — the layer is a path segment of
+       * `advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png` — but not which layer
+       * name serves the standard road basemap, and it cannot be checked from a
+       * build environment without network access to their API. Rather than ship
+       * another guess, the candidates from config.js are tried in order against
+       * the live service and the first that returns an actual image wins.
+       *
+       * The winner is cached in prefs so this costs one request per device, and
+       * reported in the status line so it can be pinned in config.js and
+       * discovery skipped entirely.
+       *
+       * @param {object} spec BasemapSpec
+       * @returns {Promise<boolean>} true when a template is in place.
+       */
+      async function resolveTileCandidates(spec) {
+        const lyr = spec.layers[0];
+        if (lyr.url) return true;                               // pinned or already resolved
+        const candidates = lyr.urlCandidates || [];
+        if (!candidates.length) return false;
+
+        const cacheKey = 'tileTemplate:' + spec.id;
+        const cached = (typeof getPref === 'function') ? getPref(cacheKey) : null;
+        if (cached && candidates.indexOf(cached) >= 0) { lyr.url = cached; return true; }
+
+        if (typeof status === 'function') status('Finding the Mappls tile endpoint…', true);
+        for (const tpl of candidates) {
+          if (await tryTileUrl(sampleTileUrl(tpl, spec, lyr), false)) {
+            lyr.url = tpl;
+            if (typeof setPref === 'function') setPref(cacheKey, tpl);
+            const name = (tpl.match(/\/([^/]+)\/\{z\}/) || [])[1] || tpl;
+            if (typeof status === 'function') {
+              status('Mappls tiles resolved to the “' + name + '” layer. Pin it as MAPPLS_TILE_URL in js/config.js to skip this check.');
+            }
+            return true;
+          }
+        }
+        if (typeof status === 'function') {
+          status('None of the candidate Mappls tile endpoints responded. Check the Map SDK key, then set MAPPLS_TILE_URL in js/config.js — the shape is ' +
+            'apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png, and the List Styles API on your account lists the valid layer names.');
+        }
+        return false;
+      }
+
+      /**
        * Ask a provider's tile server two questions with two image loads:
        * is the tile there at all, and can it be read cross-origin?
        *
@@ -101,26 +178,12 @@
        */
       function probeProviderTiles(spec) {
         const lyr = spec.layers[0];
-        const z = Math.max(1, Math.min(lyr.maxNative, Math.round(map.getZoom())));
-        const pt = map.project(map.getCenter(), z).divideBy(lyr.tileSize || 256).floor();
-        const url = basemapUrl(lyr.url, spec)
-          .replace('{z}', z).replace('{x}', pt.x).replace('{y}', pt.y)
-          .replace('{-y}', pt.y).replace('{s}', (lyr.subdomains || 'a')[0]).replace('{r}', '');
-
-        const load = (u, anon) => new Promise(res => {
-          const img = new Image();
-          if (anon) img.crossOrigin = 'anonymous';
-          const done = ok => { img.onload = img.onerror = null; res(ok); };
-          img.onload = () => done(true);
-          img.onerror = () => done(false);
-          setTimeout(() => done(false), 12000);
-          img.src = u;
-        });
-
-        return load(url, false).then(reachable => {
+        if (!lyr.url) return Promise.resolve({ reachable: false, corsOk: false });
+        const url = sampleTileUrl(lyr.url, spec, lyr);
+        return tryTileUrl(url, false).then(reachable => {
           if (!reachable) return { reachable: false, corsOk: false };
           const bust = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_cors=' + Date.now();
-          return load(bust, true).then(corsOk => ({ reachable: true, corsOk }));
+          return tryTileUrl(bust, true).then(corsOk => ({ reachable: true, corsOk }));
         });
       }
 
@@ -273,6 +336,16 @@
         const entry = BASEMAPS[key] || BASEMAPS[preferredBasemapId()];
         activeKey = entry.spec.id;
         activeBase.forEach(l => map.removeLayer(l));
+        // Providers with an undetermined tile template resolve it once, then
+        // re-enter here with a usable URL. Until then nothing is added, so the
+        // map shows its background rather than a grid of broken tiles.
+        if (!entry.spec.layers[0].url && (entry.spec.layers[0].urlCandidates || []).length) {
+          activeBase = [];
+          $('mapCredit').textContent = entry.credit;
+          resolveTileCandidates(entry.spec).then(ok => { if (ok && activeKey === entry.spec.id) setBasemap(entry.spec.id); });
+          if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
+          return;
+        }
         activeBase = entry.build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = entry.credit;

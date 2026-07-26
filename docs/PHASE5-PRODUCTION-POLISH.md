@@ -113,12 +113,31 @@ interception bypasses CORS enforcement and produced a false pass:
 | 200, ACAO `*` | rebuilds with crossOrigin; "supports image export"; PNG exports |
 | 403 | "tiles are not loading — needs the Map SDK key, not the REST API key" |
 
-**Still unverified:** the tile URL template itself. Mappls documents web
-integration through the `map_load` JS SDK rather than a public XYZ template, and
-outbound network to `apis.mappls.com` is blocked from the build environment. The
-template therefore lives in `MAPPLS_TILE_URL` in `js/config.js` so it can be
-corrected in one line. Licensing for redistributing rendered tiles inside client
-deliverables also needs confirming with Mappls before commercial use.
+**The tile template is discovered, not guessed.** Mappls documents the URL
+*shape* — the layer is a path segment —
+
+```
+https://apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png
+```
+
+— and `bhuvan_imagery` is a documented layer name, but which name serves the
+standard road basemap is not public, and `apis.mappls.com` is unreachable from
+the build environment. So `resolveTileCandidates()` requests one tile from each
+candidate in `MAPPLS_TILE_CANDIDATES` (`js/config.js`), in order, and keeps the
+first that returns an image. The winner is cached in prefs (one request per
+device) and named in the status line so it can be pinned as `MAPPLS_TILE_URL`
+and discovery skipped. If none respond, the message says so and points at the
+**List Styles API** — allocated on this account — as the authoritative source of
+valid layer names.
+
+While a template is unresolved no tile layer is added, so the map shows its
+background rather than a grid of broken tiles.
+
+`mapplsImagery` ("Mappls — Bhuvan imagery", ISRO satellite) uses the documented
+`bhuvan_imagery` template directly and needs no discovery.
+
+Licensing for redistributing rendered tiles inside client deliverables still
+needs confirming with Mappls before commercial use.
 
 Mappls *search and geocoding* have neither the CORS nor the licensing question
 and could be adopted independently of the basemap.

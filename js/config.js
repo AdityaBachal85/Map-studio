@@ -69,8 +69,37 @@ const MAP_PROVIDER_KEYS = {
  * ------------------------------------------------------------------------- */
 const MAPPLS_ENABLED = true;
 
-/** Mappls raster tile template. `{token}` ← MAP_PROVIDER_KEYS.mappls. */
-const MAPPLS_TILE_URL = 'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png';
+/**
+ * Mappls raster tiles.
+ *
+ * The URL *shape* is confirmed — the layer is a path segment:
+ *   https://apis.mappls.com/advancedmaps/v1/<key>/<layer>/{z}/{x}/{y}.png
+ * `bhuvan_imagery` is a documented layer name. Which name serves the standard
+ * road basemap is not documented publicly, and the build environment cannot
+ * reach apis.mappls.com to find out.
+ *
+ * So the app discovers it: on first use it requests one tile from each
+ * candidate below, in order, and keeps the first that returns an image. The
+ * winner is remembered on the device and reported in the status line so it can
+ * be pinned here permanently.
+ *
+ * To skip discovery, set MAPPLS_TILE_URL to the winning template.
+ * The authoritative list for an account is the **List Styles API**, which is
+ * allocated on this key.
+ *
+ * `{token}` ← MAP_PROVIDER_KEYS.mappls.
+ */
+const MAPPLS_TILE_URL = '';
+
+const MAPPLS_TILE_CANDIDATES = [
+  'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png',
+  'https://apis.mappls.com/advancedmaps/v1/{token}/raster_tiles/{z}/{x}/{y}.png',
+  'https://apis.mappls.com/advancedmaps/v1/{token}/standard/{z}/{x}/{y}.png',
+  'https://apis.mappls.com/advancedmaps/v1/{token}/tiles/{z}/{x}/{y}.png'
+];
+
+/** Confirmed-documented Mappls satellite layer (ISRO Bhuvan imagery). */
+const MAPPLS_IMAGERY_URL = 'https://apis.mappls.com/advancedmaps/v1/{token}/bhuvan_imagery/{z}/{x}/{y}.png';
 
 /**
  * Search provider endpoints
