@@ -30,22 +30,47 @@ const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
  *   which is the cartography the ArcGIS attribution in the brief refers to.
  *   This is the single biggest available upgrade to map quality.
  *
- * `mappls` — a Mappls (MapmyIndia) key. See MAPPLS_ENABLED below before using.
+ * `mappls` — a Mappls (MapmyIndia) map key. See the Mappls block below: the
+ *   credential type matters, and it is probably not the one from the REST API
+ *   page.
  */
 const MAP_PROVIDER_KEYS = {
   arcgis: '',
   mappls: 'qvbbxilcnllctbsgabklmdpsxnoucoabncre'
 };
 
-/**
- * Mappls basemap opt-in. OFF by default and deliberately so: Mappls raster
- * tiles are served without an `Access-Control-Allow-Origin` header, which
- * taints the export canvas and makes every PNG and PPTX export throw a
- * SecurityError. Mappls *search/geocoding* has no such problem — only the
- * basemap tiles do. Flip this on only for on-screen use, or once tiles are
- * proxied through a same-origin backend that adds the CORS header.
- */
-const MAPPLS_ENABLED = false;
+/* ---------------------------------------------------------------------------
+ * Mappls (MapmyIndia)
+ * -------------------------------------------------------------------------
+ *
+ * WHICH KEY. Mappls issues four separate credentials and they are NOT
+ * interchangeable: MAP_SDK_KEY, REST_API_KEY, CLIENT_ID and CLIENT_SECRET.
+ * Map tiles and `map_load` authenticate with the **Map SDK key**. A key taken
+ * from the REST API page (the one that lists Auto Suggest, Nearby, Geocoding,
+ * Routing…) will authenticate those REST calls but will be rejected for tiles.
+ * If the Mappls basemap loads blank or grey, that mismatch is the first thing
+ * to check — the app will say so in the status line, because tile auth
+ * failures are counted and reported.
+ *
+ * TILE URL. Mappls documents its web integration through the `map_load` JS
+ * SDK rather than a public XYZ tile template, so the template below could not
+ * be confirmed against the live service from the build environment. It is
+ * exposed here rather than buried in the catalogue precisely so it can be
+ * corrected without touching the provider code. If Mappls support gives you a
+ * different pattern, paste it here — `{token}` is replaced with the key above.
+ *
+ * EXPORT SAFETY is no longer assumed either way. Whether these tiles can be
+ * rasterised into a PNG/PPTX depends on a response header we cannot see from
+ * here, so the app now *measures* it: the first tile that loads is drawn into a
+ * scratch canvas, and if reading it back throws a SecurityError the basemap is
+ * marked export-blocked at runtime (see attachExportSafetyProbe in
+ * map/mapEngine.js). Turn this on, look at the map, and the app will tell you
+ * where it stands rather than relying on a guess baked into the source.
+ * ------------------------------------------------------------------------- */
+const MAPPLS_ENABLED = true;
+
+/** Mappls raster tile template. `{token}` ← MAP_PROVIDER_KEYS.mappls. */
+const MAPPLS_TILE_URL = 'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png';
 
 /**
  * Search provider endpoints

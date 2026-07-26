@@ -283,11 +283,16 @@ const BASEMAP_CATALOGUE = {
 
   mappls: {
     id: 'mappls', label: 'Mappls — India roads', group: 'India',
-    provider: 'mappls', needsKey: 'mappls', corsSafe: false,
+    provider: 'mappls', needsKey: 'mappls',
+    // Pessimistic until measured: exports are blocked only if the runtime probe
+    // actually observes a tainted canvas. See attachExportSafetyProbe().
+    corsSafe: false,
     credit: '© Mappls (MapmyIndia)',
     thumb: 'linear-gradient(150deg,#fdf6ec,#f0e2c9 60%,#d9c9a3)',
     layers: [{
-      url: 'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png',
+      url: typeof MAPPLS_TILE_URL !== 'undefined'
+        ? MAPPLS_TILE_URL
+        : 'https://apis.mappls.com/advancedmaps/v1/{token}/map_tiles/{z}/{x}/{y}.png',
       zIndex: 1, maxNative: 18,
     }],
   },
@@ -375,13 +380,39 @@ function basemapUrl(url, spec) {
 }
 
 /**
+ * Observed export safety per provider, filled in at runtime by the tile probe
+ * in map/mapEngine.js. An entry here always beats the declared `corsSafe`,
+ * because it is evidence from the live service rather than an assumption
+ * written into the source.
+ * @type {Object<string, boolean>}
+ */
+const EXPORT_SAFETY_OBSERVED = {};
+
+/**
+ * Record what a real tile fetch told us about a provider.
+ * @param {string} provider Provider id.
+ * @param {boolean} safe true when a loaded tile could be read back off a canvas.
+ */
+function recordExportSafety(provider, safe) {
+  EXPORT_SAFETY_OBSERVED[provider] = !!safe;
+}
+
+/**
  * Can this basemap be rasterised into an export without tainting the canvas?
+ *
+ * Measured beats declared: a provider whose tiles turn out to carry the right
+ * CORS header is usable for export even if the catalogue was pessimistic about
+ * it, and vice versa. Until the probe reports, the declared value stands.
+ *
  * @param {string} id
  * @returns {boolean}
  */
 function basemapExportSafe(id) {
   const spec = BASEMAP_CATALOGUE[id];
-  return !spec || spec.corsSafe !== false;
+  if (!spec) return true;
+  const observed = EXPORT_SAFETY_OBSERVED[spec.provider];
+  if (observed !== undefined) return observed;
+  return spec.corsSafe !== false;
 }
 
 /* ---------------------------------------------------------------------------
@@ -431,6 +462,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BASEMAP_CATALOGUE, HILLSHADE_LAYER, DEFAULT_BASEMAP_ID,
     isBasemapAvailable, availableBasemaps, resolveBasemap, preferredBasemapId,
-    basemapUrl, basemapKey, basemapExportSafe, looksLikeNoDataTile,
+    basemapUrl, basemapKey, basemapExportSafe, recordExportSafety, looksLikeNoDataTile,
   };
 }

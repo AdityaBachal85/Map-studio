@@ -62,32 +62,66 @@ committed — the free tier has to be provisioned per organisation.
 | **ArcGIS Static Tiles (key)** | best | re-rendered per zoom, 512 px | same imagery | fast | ArcGIS LP account | CORS ✓ |
 | **Esri Clarity** | best imagery | none (pair with reference) | to z22, often sharper | fast | free, attributed | CORS ✓ |
 | **Carto / OSM** | good | vector-derived, z20 | — | fast | ODbL | CORS ✓ |
-| **Mappls** | best Indian roads | best Indian roads | — | fast | free tier excludes redistribution in deliverables | **CORS ✗** |
+| **Mappls** | best Indian roads | best Indian roads | — | fast | check redistribution terms | measured at runtime |
 
-### Mappls finding
+### Mappls: enabled, with export safety measured rather than assumed
 
-Mappls has the best Indian road network of anything evaluated, and its
-JavaScript SDK is a Leaflet wrapper, so it would integrate cleanly. Two things
-keep it off by default:
+Mappls has the best Indian road network of anything evaluated and its JS SDK is
+a Leaflet wrapper, so it integrates cleanly. `MAPPLS_ENABLED` is **on** and it
+appears in the switcher under "India".
 
-1. **Its raster tiles carry no `Access-Control-Allow-Origin` header.** Drawing
-   them into a canvas taints it, and every PNG and PPTX export then throws a
-   `SecurityError`. This is not a styling preference — it disables the export
-   pipeline outright, which is the product's main output.
-2. The free developer tier does not cover redistributing rendered tiles inside
-   exported client deliverables.
+Two caveats, and neither is now hard-coded as a belief:
 
-The descriptor is therefore declared but gated behind both
-`MAP_PROVIDER_KEYS.mappls` and `MAPPLS_ENABLED` (off), and marked
-`corsSafe: false`. Both exporters check `basemapExportSafe(activeKey)` and
-refuse with an explanation rather than throwing. To adopt Mappls properly,
-proxy its tiles through a same-origin backend that adds the CORS header and
-confirm the licence — then flip `MAPPLS_ENABLED`. Mappls *search and geocoding*
-have neither problem and could be added independently.
+**Which key.** Mappls issues four non-interchangeable credentials —
+`MAP_SDK_KEY`, `REST_API_KEY`, `CLIENT_ID`, `CLIENT_SECRET`. Tiles and
+`map_load` authenticate with the **Map SDK key**; a key from the REST API
+console (Auto Suggest, Nearby, Geocoding, Routing…) will be rejected for tiles.
+`attachTileAuthDiagnostic()` counts tile errors and names this as the likely
+cause in the status line, so the failure mode is a sentence rather than a grey
+rectangle.
 
-**Note:** the Mappls tile template in the catalogue could not be verified
-against the live service from the build environment (outbound network is
-restricted). Confirm it before enabling.
+**Whether tiles can be exported.** This depends on a response header we cannot
+see from the build environment, so the app measures it.
+`probeProviderTiles()` issues two image loads for one tile:
+
+| Load | crossOrigin | Tells us |
+| --- | --- | --- |
+| 1 | — | is the tile there at all (key + URL correct)? |
+| 2 | `anonymous` (cache-busted) | does the server send `Access-Control-Allow-Origin`? |
+
+Comparing them separates *bad key / wrong URL* from *working service that
+forbids canvas reads* — different problems, different fixes. The result goes
+into `EXPORT_SAFETY_OBSERVED` and always beats the catalogue's declared
+`corsSafe`.
+
+This also fixed a subtle trap in the first cut of this work: declaring a
+provider `corsSafe: false` caused `buildTileLayer` to omit the
+`crossOrigin="anonymous"` attribute, which *by itself* taints the canvas — so
+the pessimistic guess made itself true and could never be disproved.
+`crossOriginFor()` now starts optimistic, and when the probe confirms CORS the
+basemap is silently rebuilt with the attribute so exports work. When the probe
+finds no CORS, the attribute is dropped so the map still *displays* (asking for
+`anonymous` against a header-less server blanks it entirely) and export is
+blocked with an explanation.
+
+Verified against real local tile servers — not mocked, because request
+interception bypasses CORS enforcement and produced a false pass:
+
+| Server | Result |
+| --- | --- |
+| 200, no ACAO | displays; export blocked; "loads on screen but its tiles cannot be exported" |
+| 200, ACAO `*` | rebuilds with crossOrigin; "supports image export"; PNG exports |
+| 403 | "tiles are not loading — needs the Map SDK key, not the REST API key" |
+
+**Still unverified:** the tile URL template itself. Mappls documents web
+integration through the `map_load` JS SDK rather than a public XYZ template, and
+outbound network to `apis.mappls.com` is blocked from the build environment. The
+template therefore lives in `MAPPLS_TILE_URL` in `js/config.js` so it can be
+corrected in one line. Licensing for redistributing rendered tiles inside client
+deliverables also needs confirming with Mappls before commercial use.
+
+Mappls *search and geocoding* have neither the CORS nor the licensing question
+and could be adopted independently of the basemap.
 
 ### Adaptive imagery depth
 

@@ -35,7 +35,7 @@
         const retina = !!lyr.retina && hd;
         const opts = {
           maxZoom: MAX_MAP_ZOOM,
-          crossOrigin: spec.corsSafe === false ? undefined : 'anonymous',
+          crossOrigin: crossOriginFor(spec),
           maxNativeZoom: hd ? lyr.maxNative : Math.max(1, lyr.maxNative - 2),
           zIndex: lyr.zIndex,
           // Reference overlays must not paint an opaque background over the imagery.
@@ -53,7 +53,164 @@
         else if (retina) opts.detectRetina = true;
         const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
         if (lyr.adaptive && hd) attachAdaptiveDepth(layer, lyr);
+        attachExportSafetyProbe(layer, spec);
+        attachTileAuthDiagnostic(layer, spec);
         return layer;
+      }
+
+      /**
+       * The `crossOrigin` attribute to request tiles with.
+       *
+       * This is a genuine fork, not a formality. With `anonymous`, a server that
+       * omits `Access-Control-Allow-Origin` refuses the image outright and the
+       * map goes blank; without it, the image loads but permanently taints any
+       * canvas it touches, killing export. So we cannot simply always ask for
+       * it — and we must not guess, because guessing "unsafe" and dropping the
+       * attribute is self-fulfilling: the tile then taints the canvas even when
+       * the provider would have allowed the read. Measured evidence wins, and
+       * until it arrives we start optimistic for everything except providers the
+       * catalogue explicitly flags.
+       *
+       * @param {object} spec BasemapSpec
+       * @returns {string|undefined}
+       */
+      function crossOriginFor(spec) {
+        const observed = EXPORT_SAFETY_OBSERVED[spec.provider];
+        if (observed === true) return 'anonymous';
+        if (observed === false) return undefined;      // display-only, but at least it displays
+        return spec.corsSafe === false ? undefined : 'anonymous';
+      }
+
+      /**
+       * Ask a provider's tile server two questions with two image loads:
+       * is the tile there at all, and can it be read cross-origin?
+       *
+       * One load without `crossOrigin` answers "does this URL and key work" —
+       * it succeeds whether or not CORS headers are present. A second load with
+       * `crossOrigin='anonymous'` succeeds only if the server sends the header.
+       * Comparing the two separates a bad key or wrong URL template from a
+       * working service that simply will not permit canvas reads, which are very
+       * different problems with very different fixes.
+       *
+       * The second request carries a cache-buster: a response already cached
+       * from the first (header-less) load would fail the CORS check regardless
+       * of what the server is willing to send.
+       *
+       * @param {object} spec BasemapSpec
+       * @returns {Promise<{reachable:boolean, corsOk:boolean}>}
+       */
+      function probeProviderTiles(spec) {
+        const lyr = spec.layers[0];
+        const z = Math.max(1, Math.min(lyr.maxNative, Math.round(map.getZoom())));
+        const pt = map.project(map.getCenter(), z).divideBy(lyr.tileSize || 256).floor();
+        const url = basemapUrl(lyr.url, spec)
+          .replace('{z}', z).replace('{x}', pt.x).replace('{y}', pt.y)
+          .replace('{-y}', pt.y).replace('{s}', (lyr.subdomains || 'a')[0]).replace('{r}', '');
+
+        const load = (u, anon) => new Promise(res => {
+          const img = new Image();
+          if (anon) img.crossOrigin = 'anonymous';
+          const done = ok => { img.onload = img.onerror = null; res(ok); };
+          img.onload = () => done(true);
+          img.onerror = () => done(false);
+          setTimeout(() => done(false), 12000);
+          img.src = u;
+        });
+
+        return load(url, false).then(reachable => {
+          if (!reachable) return { reachable: false, corsOk: false };
+          const bust = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_cors=' + Date.now();
+          return load(bust, true).then(corsOk => ({ reachable: true, corsOk }));
+        });
+      }
+
+      /**
+       * Probe a provider once, then re-apply the basemap if the answer means we
+       * can do better than the assumption we started with.
+       * @param {object} spec BasemapSpec
+       */
+      function maybeProbeProvider(spec) {
+        if (EXPORT_SAFETY_OBSERVED[spec.provider] !== undefined) return;
+        if (spec.corsSafe !== false) return;   // optimistic already; the tileload probe confirms
+        probeProviderTiles(spec).then(r => {
+          recordExportSafety(spec.provider, r.corsOk);
+          if (activeKey !== spec.id) return;
+          $('mapWrap').classList.toggle('basemap-unsafe', !r.corsOk);
+          if (r.corsOk) {
+            // The provider does allow canvas reads — rebuild with crossOrigin so
+            // exports work, instead of leaving it needlessly display-only.
+            setBasemap(spec.id);
+            if (typeof status === 'function') status('“' + spec.label + '” supports image export.');
+          } else if (typeof status === 'function') {
+            status(r.reachable
+              ? '“' + spec.label + '” loads on screen but its tiles cannot be exported (the server sends no CORS header). Switch basemap before exporting.'
+              : '“' + spec.label + '” tiles are not loading — check the key and tile URL in js/config.js.');
+          }
+        });
+      }
+
+      /**
+       * Measure — rather than assume — whether a provider's tiles can be
+       * rasterised into an export.
+       *
+       * Whether a tile taints the canvas comes down to one response header we
+       * cannot inspect from JavaScript. Rather than hard-code a belief about
+       * each provider, draw the first tile that loads into a 1×1 scratch canvas
+       * and try to read it back: `getImageData` throws a SecurityError on a
+       * tainted canvas and returns pixels otherwise. That single call is a
+       * definitive answer from the live service, it costs one tile, and it means
+       * a provider is never blocked from export on a guess — nor allowed
+       * through on one.
+       *
+       * @param {L.TileLayer} layer @param {object} spec BasemapSpec
+       */
+      function attachExportSafetyProbe(layer, spec) {
+        if (EXPORT_SAFETY_OBSERVED[spec.provider] !== undefined) return;   // already answered
+        const probe = document.createElement('canvas');
+        probe.width = probe.height = 1;
+        const pctx = probe.getContext('2d', { willReadFrequently: true });
+        const judge = ev => {
+          layer.off('tileload', judge);
+          let safe = true;
+          try {
+            pctx.drawImage(ev.tile, 0, 0, 1, 1);
+            pctx.getImageData(0, 0, 1, 1);
+          } catch (e) {
+            safe = false;
+          }
+          recordExportSafety(spec.provider, safe);
+          if (activeKey === spec.id) {
+            $('mapWrap').classList.toggle('basemap-unsafe', !basemapExportSafe(spec.id));
+          }
+        };
+        layer.on('tileload', judge);
+      }
+
+      /**
+       * Surface tile authentication failures instead of leaving a blank map.
+       *
+       * This matters most for Mappls, which issues four separate credentials —
+       * Map SDK key, REST API key, client id and client secret — that are not
+       * interchangeable. Tiles need the Map SDK key, so a key copied from the
+       * REST API console authenticates geocoding fine and then silently returns
+       * nothing for every tile. Counting errors and naming the likely cause
+       * turns a mystifying grey rectangle into an actionable message.
+       *
+       * @param {L.TileLayer} layer @param {object} spec BasemapSpec
+       */
+      function attachTileAuthDiagnostic(layer, spec) {
+        if (!spec.needsKey) return;
+        let errors = 0, reported = false;
+        layer.on('tileerror', () => {
+          if (reported || ++errors < 4) return;
+          reported = true;
+          const which = spec.needsKey === 'mappls'
+            ? 'Mappls tiles need the **Map SDK key**, not the REST API key — check MAP_PROVIDER_KEYS.mappls in js/config.js.'
+            : 'Check the ' + spec.needsKey + ' key in js/config.js.';
+          if (typeof status === 'function') {
+            status('“' + spec.label + '” tiles are not loading. ' + which.replace(/\*\*/g, ''));
+          }
+        });
       }
 
       /**
@@ -119,7 +276,8 @@
         activeBase = entry.build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = entry.credit;
-        $('mapWrap').classList.toggle('basemap-unsafe', entry.spec.corsSafe === false);
+        $('mapWrap').classList.toggle('basemap-unsafe', !basemapExportSafe(activeKey));
+        maybeProbeProvider(entry.spec);
         if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);   // update the floating switcher UI
       }
       $('basemapSel').addEventListener('change', e => setBasemap(e.target.value));
