@@ -97,6 +97,20 @@
     <pre id="stylesOut">Not run yet.</pre>
   </div>
 
+  <!-- ------------------------------------------------------------------ -->
+  <h2>4 · Read Mappls' own error text</h2>
+  <p class="muted">
+    When sections 1–3 all fail, the cause is authorisation rather than a wrong path: <code>&lt;script&gt;</code> and
+    <code>&lt;img&gt;</code> requests are not subject to CORS, so if even those fail the server is rejecting the key.
+    The browser hides the response body from this page, but not from a normal tab. Open these and read what Mappls
+    actually says — the message names the problem (invalid key, wrong key type, domain not whitelisted, plan not
+    entitled).
+  </p>
+  <div class="card">
+    <button class="sec" id="runRaw">Build the links</button>
+    <div id="rawOut"></div>
+  </div>
+
   <h2>What to do with the result</h2>
   <p class="muted">
     Copy whichever URL came back green and paste it into <code>MAPPLS_TILE_URL</code> in
@@ -257,6 +271,27 @@
       out.textContent = lines.join('\n' + '-'.repeat(60) + '\n');
     });
 
+    /* ---- 4. Raw links ---------------------------------------------------- */
+    $('runRaw').addEventListener('click', () => {
+      const k = key();
+      const links = [
+        ['Raster SDK loader', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
+        ['One map tile', `https://apis.mappls.com/advancedmaps/v1/${k}/map_tiles/${TILE.z}/${TILE.x}/${TILE.y}.png`],
+        ['Still-image API', `https://apis.mappls.com/advancedmaps/v1/${k}/still_image?center=28.61,77.21&zoom=12&size=400x400`],
+        ['Geocode (checks the key on a REST endpoint)', `https://apis.mappls.com/advancedmaps/v1/${k}/geo_code?addr=connaught+place+delhi`],
+      ];
+      $('rawOut').innerHTML =
+        '<p class="muted">Open each in a new tab and copy whatever text comes back:</p><ul>' +
+        links.map(([label, url]) =>
+          `<li style="margin-bottom:8px"><b>${label}</b><br>` +
+          `<a href="${url}" target="_blank" rel="noopener"><code style="font-size:11.5px">${url}</code></a></li>`
+        ).join('') + '</ul>' +
+        '<p class="muted"><b>Reading the answer.</b> “Domain not whitelisted” or similar → add this site under ' +
+        'Applications → your app → Whitelisting in the Mappls console. “Invalid/unauthorised key” on the SDK loader ' +
+        'but a working geocode → this is the REST API key, and tiles need the Map SDK key from the Credentials tab. ' +
+        'Everything failing → the key is not entitled to map tiles on this plan.</p>';
+    });
+
     /* ---- run everything -------------------------------------------------- */
     $('runAll').addEventListener('click', async () => {
       $('overall').textContent = 'Running all three checks…';
@@ -264,6 +299,7 @@
       await new Promise(r => setTimeout(r, 500));
       $('runProbe').click();
       $('runStyles').click();
+      $('runRaw').click();
       $('overall').textContent = 'Started — results appear in each section below.';
     });
   </script>
