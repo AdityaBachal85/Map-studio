@@ -117,7 +117,11 @@
         routes.push(rt);
         buildRtCard(rt);
         syncEmpties();
-        if (rt.alts) { drawRoute(rt); renderViaDots(rt); } else computeRoute(rt);
+        // `defer` leaves the routing call to the caller. The bulk importer uses
+        // it to run twenty routes one at a time: fired together they are twenty
+        // simultaneous requests to a public OSRM instance, which is how you get
+        // rate-limited into a map with half its routes missing.
+        if (rt.alts) { drawRoute(rt); renderViaDots(rt); } else if (!opts.defer) computeRoute(rt);
         rebuildLegend();
         if (typeof refreshLayers === 'function') refreshLayers();
         return rt;

@@ -43,6 +43,7 @@ wirePrintExport();
 wirePptxExport();
 wireSaveProject();
 initExportCenter();
+initImportDialog();
 initTabs();
 wireOpenProject();
 

@@ -428,7 +428,7 @@ function initExportCenter() {
   $('exportCenterBtn').addEventListener('click', () => { syncExportCenter(); exportCenter.open(); });
   // Format buttons close the dialog on their way out; their own handlers
   // (wired elsewhere) still run because those listeners were attached first.
-  ['pptxBtn', 'printBtn', 'saveBtn', 'geoExportBtn', 'kmlExportBtn'].forEach(id => {
+  ['pptxBtn', 'printBtn', 'saveBtn', 'geoExportBtn', 'kmlExportBtn', 'xlsxExportBtn'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => exportCenter.close());
   });

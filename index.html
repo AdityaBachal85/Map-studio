@@ -5,9 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DBOT · Property Map Studio</title>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0008">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0008">
-  <link rel="stylesheet" href="./css/main.css?v=5.0008">
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0009">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0009">
+  <link rel="stylesheet" href="./css/main.css?v=5.0009">
 </head>
 
 <body>
@@ -272,6 +272,12 @@
               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
 
+          <button class="acc acc-launch" type="button" id="importOpenBtn">
+            <span>Import locations<i class="acc-launch-sub">Bulk-add from an Excel or CSV sheet</i></span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
           <button class="acc acc-launch" type="button" id="basemapMgrBtn">
             <span>Basemap manager<i class="acc-launch-sub">Provider keys and custom tile servers</i></span>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -467,6 +473,16 @@
               <span class="xc-txt"><b>Everything as KML</b><i>Locations, routes and shapes for Google Earth</i></span>
               <span class="xc-meta">.kml</span>
             </button>
+            <button class="xc-row" id="xlsxExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18" />
+                </svg></span>
+              <span class="xc-txt"><b>Locations as a sheet</b><i>The import template, filled in &mdash; edit and
+                  import it back</i></span>
+              <span class="xc-meta">.xlsx</span>
+            </button>
           </div>
         </div>
 
@@ -481,6 +497,72 @@
        Basemap Manager — add and manage custom XYZ tile servers alongside the
        built-in catalogue.
        ------------------------------------------------------------------ -->
+  <div id="importOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel modal-wide frost" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="impTitle">Import locations</span>
+        <button class="modal-close" id="importClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="xc-group" id="impStep1">
+          <div class="xc-group-hd">1 · Choose a file</div>
+          <div class="imp-drop" id="impDrop">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <b>Drop your sheet here</b>
+            <i>.xlsx or .csv &middot; <span id="impFileName">No file chosen</span></i>
+            <div class="row2">
+              <button class="btn" id="impPick">Choose file</button>
+              <button class="btn" id="impTemplateBtn">Download template</button>
+            </div>
+            <input type="file" id="impInput" accept=".xlsx,.xlsm,.csv,text/csv"
+              style="display:none;">
+          </div>
+          <p class="imp-hint">The template has <b>Name</b>, <b>Lat, Long</b>, <b>Type</b>, <b>Route to</b> and
+            <b>Mode</b>, with dropdowns already set up &mdash; <b>Route to</b> lists the other rows, so a route is
+            picked rather than retyped. Nothing is added to your map until you have seen the check below.</p>
+        </div>
+
+        <div class="imp-error" id="impError" hidden></div>
+
+        <div id="impReport" hidden>
+          <div class="xc-group">
+            <div class="xc-group-hd">2 · Check</div>
+            <div class="imp-summary" id="impSummary"></div>
+            <div class="imp-extent" id="impExtent"></div>
+            <button class="btn btn-sm" id="impFixSwap" hidden></button>
+            <div class="imp-table-wrap">
+              <table class="imp-table">
+                <thead>
+                  <tr><th>Row</th><th></th><th>Name</th><th>Lat, Long</th><th>Route to</th><th>Notes</th></tr>
+                </thead>
+                <tbody id="impRows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="xc-group">
+            <div class="xc-group-hd">3 · How to add them</div>
+            <label class="chk wrap"><input type="radio" name="impMode" id="impAdd" checked> Add to the map, keeping
+              what is already there</label>
+            <label class="chk wrap"><input type="radio" name="impMode" id="impReplace"> Replace &mdash; remove the
+              current locations and routes first</label>
+          </div>
+        </div>
+      </div>
+      <!-- The primary action lives in the footer, outside the scrolling body:
+           a twenty-row report must never be able to push it off screen. -->
+      <div class="modal-foot modal-foot-act">
+        <span class="modal-note">Rows with a problem are skipped, never guessed at. Everything else still
+          imports.</span>
+        <button class="btn btn-primary" id="impGo" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
   <div id="bmMgrOverlay" class="modal-overlay" hidden>
     <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="bmMgrTitle">
       <div class="modal-head">
@@ -541,70 +623,73 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=5.0008"></script>
-  <script src="./vendor/leaflet-geoman.js?v=5.0008"></script>
-  <script src="./vendor/html2canvas.js?v=5.0008"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=5.0008"></script>
-  <script src="./vendor/jszip.js?v=5.0008"></script>
-  <script src="./vendor/anime.min.js?v=5.0008"></script>
+  <script src="./vendor/leaflet.js?v=5.0009"></script>
+  <script src="./vendor/leaflet-geoman.js?v=5.0009"></script>
+  <script src="./vendor/html2canvas.js?v=5.0009"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=5.0009"></script>
+  <script src="./vendor/jszip.js?v=5.0009"></script>
+  <script src="./vendor/anime.min.js?v=5.0009"></script>
 
-  <script src="./js/core/prefs.js?v=5.0008"></script>
-  <script src="./js/constants.js?v=5.0008"></script>
-  <script src="./js/utils/dom.js?v=5.0008"></script>
-  <script src="./js/export/exportPDF.js?v=5.0008"></script>
-  <script src="./js/export/captureMap.js?v=5.0008"></script>
-  <script src="./js/core/state.js?v=5.0008"></script>
-  <script src="./js/map/icons.js?v=5.0008"></script>
-  <script src="./js/config.js?v=5.0008"></script>
-  <script src="./js/ui/notifications.js?v=5.0008"></script>
-  <script src="./js/utils/math.js?v=5.0008"></script>
-  <script src="./js/map/billboard.js?v=5.0008"></script>
-  <script src="./js/ui/propertyPanel.js?v=5.0008"></script>
-  <script src="./js/ui/dialogs.js?v=5.0008"></script>
-  <script src="./js/utils/colors.js?v=5.0008"></script>
-  <script src="./js/utils/animate.js?v=5.0008"></script>
-  <script src="./js/map/routes.js?v=5.0008"></script>
-  <script src="./js/map/markers.js?v=5.0008"></script>
-  <script src="./js/map/snapping.js?v=5.0008"></script>
-  <script src="./js/map/imageryEnhance.js?v=5.0008"></script>
-  <script src="./js/map/providerKeys.js?v=5.0008"></script>
-  <script src="./js/map/basemapProviders.js?v=5.0008"></script>
-  <script src="./js/map/googleTiles.js?v=5.0008"></script>
-  <script src="./js/map/customBasemaps.js?v=5.0008"></script>
-  <script src="./js/map/mapEngine.js?v=5.0008"></script>
-  <script src="./js/export/hiResRender.js?v=5.0008"></script>
-  <script src="./js/export/exportPNG.js?v=5.0008"></script>
-  <script src="./js/export/pptUtils.js?v=5.0008"></script>
-  <script src="./js/export/pptValidation.js?v=5.0008"></script>
-  <script src="./js/export/pptShapes.js?v=5.0008"></script>
-  <script src="./js/export/pptImages.js?v=5.0008"></script>
-  <script src="./js/export/pptLabels.js?v=5.0008"></script>
-  <script src="./js/export/pptTables.js?v=5.0008"></script>
-  <script src="./js/export/exportPPT.js?v=5.0008"></script>
-  <script src="./js/services/places.js?v=5.0008"></script>
-  <script src="./js/services/geoapify.js?v=5.0008"></script>
-  <script src="./js/services/nearbyPlaces.js?v=5.0008"></script>
-  <script src="./js/services/geocoder.js?v=5.0008"></script>
-  <script src="./js/ui/searchBox.js?v=5.0008"></script>
-  <script src="./js/ui/sliders.js?v=5.0008"></script>
-  <script src="./js/ui/tooltips.js?v=5.0008"></script>
-  <script src="./js/ui/toolbar.js?v=5.0008"></script>
-  <script src="./js/map/aerialDistance.js?v=5.0008"></script>
-  <script src="./js/ui/geometryPanel.js?v=5.0008"></script>
-  <script src="./js/map/drawing.js?v=5.0008"></script>
-  <script src="./js/map/markerCluster.js?v=5.0008"></script>
-  <script src="./js/map/nearby.js?v=5.0008"></script>
-  <script src="./js/project/geojson.js?v=5.0008"></script>
-  <script src="./js/export/pptxHandler.js?v=5.0008"></script>
-  <script src="./js/project/kml.js?v=5.0008"></script>
-  <script src="./js/project/openProject.js?v=5.0008"></script>
-  <script src="./js/project/saveProject.js?v=5.0008"></script>
-  <script src="./js/ui/sidebar.js?v=5.0008"></script>
-  <script src="./js/ui/layerManager.js?v=5.0008"></script>
-  <script src="./js/ui/settingsDialog.js?v=5.0008"></script>
-  <script src="./js/ui/exportCenter.js?v=5.0008"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=5.0008"></script>
-  <script src="./js/app.js?v=5.0008"></script>
+  <script src="./js/core/prefs.js?v=5.0009"></script>
+  <script src="./js/constants.js?v=5.0009"></script>
+  <script src="./js/utils/dom.js?v=5.0009"></script>
+  <script src="./js/export/exportPDF.js?v=5.0009"></script>
+  <script src="./js/export/captureMap.js?v=5.0009"></script>
+  <script src="./js/core/state.js?v=5.0009"></script>
+  <script src="./js/map/icons.js?v=5.0009"></script>
+  <script src="./js/config.js?v=5.0009"></script>
+  <script src="./js/ui/notifications.js?v=5.0009"></script>
+  <script src="./js/utils/math.js?v=5.0009"></script>
+  <script src="./js/map/billboard.js?v=5.0009"></script>
+  <script src="./js/ui/propertyPanel.js?v=5.0009"></script>
+  <script src="./js/ui/dialogs.js?v=5.0009"></script>
+  <script src="./js/utils/colors.js?v=5.0009"></script>
+  <script src="./js/utils/animate.js?v=5.0009"></script>
+  <script src="./js/map/routes.js?v=5.0009"></script>
+  <script src="./js/map/markers.js?v=5.0009"></script>
+  <script src="./js/map/snapping.js?v=5.0009"></script>
+  <script src="./js/map/imageryEnhance.js?v=5.0009"></script>
+  <script src="./js/map/providerKeys.js?v=5.0009"></script>
+  <script src="./js/map/basemapProviders.js?v=5.0009"></script>
+  <script src="./js/map/googleTiles.js?v=5.0009"></script>
+  <script src="./js/map/customBasemaps.js?v=5.0009"></script>
+  <script src="./js/map/mapEngine.js?v=5.0009"></script>
+  <script src="./js/export/hiResRender.js?v=5.0009"></script>
+  <script src="./js/export/exportPNG.js?v=5.0009"></script>
+  <script src="./js/export/pptUtils.js?v=5.0009"></script>
+  <script src="./js/export/pptValidation.js?v=5.0009"></script>
+  <script src="./js/export/pptShapes.js?v=5.0009"></script>
+  <script src="./js/export/pptImages.js?v=5.0009"></script>
+  <script src="./js/export/pptLabels.js?v=5.0009"></script>
+  <script src="./js/export/pptTables.js?v=5.0009"></script>
+  <script src="./js/export/exportPPT.js?v=5.0009"></script>
+  <script src="./js/services/places.js?v=5.0009"></script>
+  <script src="./js/services/geoapify.js?v=5.0009"></script>
+  <script src="./js/services/nearbyPlaces.js?v=5.0009"></script>
+  <script src="./js/services/geocoder.js?v=5.0009"></script>
+  <script src="./js/ui/searchBox.js?v=5.0009"></script>
+  <script src="./js/ui/sliders.js?v=5.0009"></script>
+  <script src="./js/ui/tooltips.js?v=5.0009"></script>
+  <script src="./js/ui/toolbar.js?v=5.0009"></script>
+  <script src="./js/map/aerialDistance.js?v=5.0009"></script>
+  <script src="./js/ui/geometryPanel.js?v=5.0009"></script>
+  <script src="./js/map/drawing.js?v=5.0009"></script>
+  <script src="./js/map/markerCluster.js?v=5.0009"></script>
+  <script src="./js/map/nearby.js?v=5.0009"></script>
+  <script src="./js/project/geojson.js?v=5.0009"></script>
+  <script src="./js/export/pptxHandler.js?v=5.0009"></script>
+  <script src="./js/project/xlsx.js?v=5.0009"></script>
+  <script src="./js/project/importSheet.js?v=5.0009"></script>
+  <script src="./js/project/kml.js?v=5.0009"></script>
+  <script src="./js/project/openProject.js?v=5.0009"></script>
+  <script src="./js/project/saveProject.js?v=5.0009"></script>
+  <script src="./js/ui/sidebar.js?v=5.0009"></script>
+  <script src="./js/ui/layerManager.js?v=5.0009"></script>
+  <script src="./js/ui/settingsDialog.js?v=5.0009"></script>
+  <script src="./js/ui/exportCenter.js?v=5.0009"></script>
+  <script src="./js/ui/importDialog.js?v=5.0009"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=5.0009"></script>
+  <script src="./js/app.js?v=5.0009"></script>
 </body>
 
 </html>

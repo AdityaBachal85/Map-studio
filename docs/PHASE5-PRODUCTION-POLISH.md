@@ -496,3 +496,94 @@ otherwise a diagnosis that costs a round of debugging.
 A saved setting that turns out to be unusable otherwise reapplies itself on
 every visit, and "clear your site data" is not a reasonable thing to ask an
 operator for.
+
+
+---
+
+## 7. Bulk import from a spreadsheet
+
+**New files:** `js/project/xlsx.js`, `js/project/importSheet.js`, `js/ui/importDialog.js`.
+
+Twenty landmarks entered by hand is twenty chances to mistype a coordinate, and
+a mistyped coordinate does not look like an error — it looks like a pin three
+streets from where it should be, in a deck that has already gone to a client.
+So the import is deliberately **not** one click: read → check → report → confirm.
+
+### The template
+
+```
+Name | Lat, Long | Type | Route to | Mode
+```
+
+`Route to` holds *another row's name* rather than a yes/no, which is what allows
+landmark-to-landmark routes without a second sheet. In the generated `.xlsx` it
+is a data-validation dropdown whose list **is the Name column**, so a route is
+picked rather than retyped — a retyped name differing by one space is a route
+that silently does not appear.
+
+One `Lat, Long` column, not two, because the usual source is right-click → copy
+in Google Maps. Separate `Latitude`/`Longitude` columns are accepted on import.
+Header matching is on a normalised form, so `Location Name`, `Coordinates`,
+`Kind`, `Connect to` and `Travel` all resolve.
+
+### No SheetJS
+
+An `.xlsx` is a zip of XML and JSZip is already vendored for the PPTX exporter,
+so `xlsx.js` reads and writes what is needed directly: ~300 KB of dependency
+avoided in an app with no build step, where every byte is parsed on load.
+
+Writing is deliberately minimal OOXML — fewer parts, fewer ways to produce
+something Excel refuses. The reader follows workbook → relationship → worksheet
+rather than assuming `sheet1.xml`, and handles shared strings (including split
+runs), inline strings and cached formula results.
+
+### What the check catches
+
+| | |
+| --- | --- |
+| Name | missing; **duplicate** — first row wins, later ones are skipped |
+| Coordinates | unparseable, out of range, `0,0`, several notations |
+| Swapped lat/long | **certain** when abs(lat) > 90; **likely** by regional range, with a one-click fix |
+| Outlier | more than 10x the median spread from the median point |
+| Route to | unresolvable, self-referential, or pointing at a row being skipped |
+| Sanity | "20 points, spanning 6.4 km, centre ..." — one line that makes a sheet checkable at a glance |
+
+Two rules run through all of it. **One bad row must not cost a good one**: an
+early version failed every member of a duplicate-name group, which took out the
+original Site *and* the three routes pointing at it — one paste error becoming
+four. And **row numbers must match the operator's spreadsheet**: blank rows are
+kept in place through the reader so "row 5" means row 5 in Excel, not the fifth
+non-blank row.
+
+Per-row problems are snapshotted as `baseErrors`/`baseWarnings`, and the
+cross-row pass rebuilds from that baseline, so re-validating after an inline fix
+cannot leave a resolved message behind or double-report a live one.
+
+### Applying
+
+Locations land immediately — no network, so the map fills in at once. Routes are
+computed **one at a time** via a new `defer` option on `addRoute()`: twenty
+simultaneous requests to a public OSRM instance get rate-limited, and a map with
+eleven of twenty routes drawn is worse than one that took thirty seconds. A
+route that fails is counted and reported, not allowed to abandon the rest.
+
+The primary action lives in the modal footer, outside the scrolling body: a
+twenty-row report must never be able to push it off screen.
+
+### Round trip
+
+Export Centre → *Locations as a sheet* writes the same layout from the current
+map, so the flow is export → edit in Excel → import. Verified end-to-end: names,
+types, routes and modes all survive.
+
+### Verification
+
+LibreOffice is installed in the build environment but cannot load any file at
+all there — including a two-line CSV — so it was no use as a validator. The
+generated workbooks were checked with **openpyxl** instead, a strict independent
+implementation: both sheets, values, freeze pane, column widths, all three data
+validations, header styling and the `@` text format on the coordinate column.
+The reader was checked against a hand-built workbook using shared strings with
+split runs, a cached formula result, a non-sequential relationship id, a
+worksheet at `sheet3.xml` and a gap in the row numbering — the shapes real Excel
+produces that our own writer never does.
