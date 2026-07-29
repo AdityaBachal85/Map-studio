@@ -396,6 +396,10 @@
         $('mapWrap').classList.toggle('basemap-unsafe', !basemapExportSafe(activeKey));
         // Grading follows the basemap: photographic imagery gets it, designed
         // cartography does not.
+        // Map labels drawn over the basemap (nearby POIs) flip their ink to
+        // suit the surface: light text on imagery and dark canvases, dark text
+        // on pale cartography.
+        $('mapWrap').classList.toggle('np-light', !(entry.spec.imagery || entry.spec.dark));
         applyImageryLook(getImageryLook(), !!entry.spec.imagery);
         if (typeof syncImageryLookControl === 'function') syncImageryLookControl();
         maybeProbeProvider(entry.spec);

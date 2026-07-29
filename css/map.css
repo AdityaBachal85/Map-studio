@@ -616,27 +616,82 @@
     .nearby-chip.loading .nc-count::after {
       content: '…';
     }
-    .nearby-pin-wrap {
+    /* Nearby place-of-interest markers.
+       A small category-coloured dot with the name alongside, in the manner of
+       Google's POIs — the label is the thing you read, the dot only says what
+       kind of place it is and where exactly it sits. The label overflows the
+       marker box to the right, so the wrapper must not clip or hit-test it. */
+    .nearby-poi-wrap {
       background: none;
       border: none;
+      overflow: visible;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      pointer-events: none;
     }
-    .nearby-pin {
+
+    .np-dot {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .55);
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      height: 26px;
-      border-radius: 50% 50% 50% 2px;
-      transform: rotate(45deg);
-      border: 2px solid #fff;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
-      font-size: 12px;
+      font-size: 9.5px;
+      line-height: 1;
+      /* Only the dot is interactive — the label must never swallow map clicks. */
+      pointer-events: auto;
+      cursor: pointer;
     }
-    .nearby-pin > b {
-      transform: rotate(-45deg);
+
+    .np-dot > b {
       font-weight: normal;
       font-style: normal;
       line-height: 1;
+    }
+
+    /* White text with a dark halo: the pairing that stays readable over both
+       bright rooftops and dark vegetation, which a flat colour cannot do. Four
+       offset shadows approximate a stroke; a single blurred shadow greys out
+       against light imagery. */
+    .np-name {
+      /* Never shrink: the marker box is only as wide as the dot, and a
+         shrinkable flex child would collapse to zero width inside it. */
+      flex: 0 0 auto;
+      font: 700 11px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #fff;
+      letter-spacing: .005em;
+      max-width: 132px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow:
+        0 0 3px rgba(0, 0, 0, .95),
+        1px 1px 0 rgba(0, 0, 0, .8),
+        -1px 1px 0 rgba(0, 0, 0, .8),
+        1px -1px 0 rgba(0, 0, 0, .8),
+        -1px -1px 0 rgba(0, 0, 0, .8);
+    }
+
+    /* Dropped by the declutter pass when this label would overlap one already
+       placed, or when the view is zoomed out past legibility. */
+    .np-name.np-hidden {
+      display: none;
+    }
+
+    /* Light basemaps invert the relationship: dark ink, light halo. */
+    .np-light .np-name {
+      color: #17233B;
+      text-shadow:
+        0 0 3px rgba(255, 255, 255, .95),
+        1px 1px 0 rgba(255, 255, 255, .9),
+        -1px 1px 0 rgba(255, 255, 255, .9),
+        1px -1px 0 rgba(255, 255, 255, .9),
+        -1px -1px 0 rgba(255, 255, 255, .9);
     }
     .leaflet-tooltip.nearby-tip {
       background: #0A1E3C;
@@ -699,4 +754,14 @@
     .leaflet-container .marker-icon.rotate-marker {
       border-color: #0A1E3C;
       background-color: #FF7A1A;
+    }
+
+    /* Nearby tooltip: the name is already on the map, so the tooltip carries
+       the address and distance instead of repeating it. */
+    .leaflet-tooltip.nearby-tip .nt-sub {
+      display: block;
+      margin-top: 2px;
+      font-weight: 500;
+      font-size: 10px;
+      opacity: .78;
     }

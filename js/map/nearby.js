@@ -15,13 +15,84 @@ const nearbyEnabled = new Set();
 /** Human radius string, e.g. "750 m" or "2.0 km". @param {number} m */
 function fmtRadius(m) { return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`; }
 
-/** divIcon for a nearby place: category emoji on a coloured pin. @param {object} cat */
-function nearbyMarkerIcon(cat) {
+/**
+ * divIcon for a nearby place: a small category-coloured dot with the place name
+ * beside it.
+ *
+ * Modelled on how Google Maps draws points of interest, because that is the
+ * comparison users make. The important differences from the previous teardrop
+ * pin are that the name is *always* visible rather than hidden behind a hover
+ * tooltip — a printed map has no hover, so an unlabelled pin carries no
+ * information into an export — and that the marker is small enough for the
+ * label to be the thing you read.
+ *
+ * @param {object} cat Category descriptor from NEARBY_CATEGORIES.
+ * @param {string} name Place name.
+ */
+function nearbyMarkerIcon(cat, name) {
   return L.divIcon({
-    className: 'nearby-pin-wrap',
-    html: `<span class="nearby-pin" style="background:${cat.color}"><b>${cat.icon}</b></span>`,
-    iconSize: [26, 26], iconAnchor: [13, 26],
+    className: 'nearby-poi-wrap',
+    html:
+      `<span class="np-dot" style="background:${cat.color}"><b>${cat.icon}</b></span>` +
+      `<span class="np-name">${esc(name || '')}</span>`,
+    // iconSize null on purpose: Leaflet writes iconSize onto the element as a
+    // fixed width, which would squeeze the name — a flex child in a 16px box —
+    // down to nothing. Leaving it unset lets the marker size to its content
+    // while iconAnchor still centres the dot on the coordinate.
+    iconSize: null, iconAnchor: [8, 8],
   });
+}
+
+/* ---------------------------------------------------------------------------
+ * Label decluttering
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Hide the names that would collide, keeping the dots.
+ *
+ * Two categories at a 2 km radius can return fifty places; drawn naively their
+ * names overlap into an unreadable mat. Google solves this by dropping labels
+ * rather than markers, so the density of places still reads while the text
+ * stays legible — and by suppressing them entirely when zoomed too far out for
+ * any of them to be meaningful. This does the same, cheaply: walk the visible
+ * markers in draw order, keep a label if its box clears every label already
+ * kept, hide it otherwise.
+ *
+ * O(n²) over the labels actually on screen, which at these counts is a fraction
+ * of a millisecond — and it only runs when the view settles, not during a pan.
+ */
+const NEARBY_LABEL_MIN_ZOOM = 14;
+
+function declutterNearbyLabels() {
+  const shown = [];
+  const zoomOk = map.getZoom() >= NEARBY_LABEL_MIN_ZOOM;
+  const bounds = map.getBounds();
+
+  Object.keys(nearbyMarkers).forEach(key => {
+    (nearbyMarkers[key] || []).forEach(m => {
+      const el = m.getElement();
+      if (!el) return;
+      const label = el.querySelector('.np-name');
+      if (!label) return;
+      if (!zoomOk || !bounds.contains(m.getLatLng())) { label.classList.add('np-hidden'); return; }
+
+      // Measure with the label visible, then decide.
+      label.classList.remove('np-hidden');
+      const r = label.getBoundingClientRect();
+      if (!r.width) return;
+      const box = { l: r.left - 2, t: r.top - 1, r: r.right + 2, b: r.bottom + 1 };
+      const clash = shown.some(s => !(box.r < s.l || box.l > s.r || box.b < s.t || box.t > s.b));
+      if (clash) label.classList.add('np-hidden');
+      else shown.push(box);
+    });
+  });
+}
+
+/** Re-run decluttering once the view has settled. */
+let nearbyDeclutterTimer = null;
+function scheduleNearbyDeclutter() {
+  clearTimeout(nearbyDeclutterTimer);
+  nearbyDeclutterTimer = setTimeout(declutterNearbyLabels, 60);
 }
 
 function buildNearbyChips() {
@@ -56,21 +127,34 @@ function dropNearbyMarkers(key, places) {
   const arr = [];
   const pinEls = [];
   places.forEach(p => {
-    const m = L.marker([p.lat, p.lng], { icon: nearbyMarkerIcon(cat), keyboard: false, zIndexOffset: 200 });
-    m.bindTooltip(`${cat.icon} ${esc(p.name)}`, { direction: 'top', offset: [0, -12], className: 'nearby-tip' });
+    const m = L.marker([p.lat, p.lng], { icon: nearbyMarkerIcon(cat, p.name), keyboard: false, zIndexOffset: 200 });
+    // The name is on the marker now, so the tooltip carries what the label
+    // cannot: the address and how far out it is.
+    const detail = [p.address, p.distance != null ? Math.round(p.distance) + ' m away' : null]
+      .filter(Boolean).join(' · ');
+    if (detail) m.bindTooltip(`${esc(p.name)}<br><span class="nt-sub">${esc(detail)}</span>`, {
+      direction: 'top', offset: [0, -12], className: 'nearby-tip',
+    });
     m.addTo(map);
     arr.push(m);
     const iconEl = m.getElement();
-    const pinEl = iconEl && iconEl.querySelector('.nearby-pin');
+    const pinEl = iconEl && iconEl.querySelector('.np-dot');
     if (pinEl) pinEls.push(pinEl);
   });
   nearbyMarkers[key] = arr;
   if (typeof staggerPopIn === 'function') staggerPopIn(pinEls);
+  scheduleNearbyDeclutter();
   if (typeof refreshLayers === 'function') refreshLayers();
 }
 
-function showNearbyCategory(key) { (nearbyMarkers[key] || []).forEach(m => { if (!map.hasLayer(m)) m.addTo(map); }); }
-function hideNearbyCategory(key) { (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); }); }
+function showNearbyCategory(key) {
+  (nearbyMarkers[key] || []).forEach(m => { if (!map.hasLayer(m)) m.addTo(map); });
+  scheduleNearbyDeclutter();
+}
+function hideNearbyCategory(key) {
+  (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+  scheduleNearbyDeclutter();   // freed space may let other labels back in
+}
 
 /**
  * Show/hide a fetched nearby category, keeping its Nearby-tab chip in sync.
@@ -173,6 +257,10 @@ function clearAllNearby() {
 }
 
 buildNearbyChips();
+// Labels are decluttered against screen space, so the decision has to be
+// remade whenever the view changes. `moveend`/`zoomend` only — re-running
+// during a pan would thrash layout for no visible benefit.
+map.on('moveend zoomend', scheduleNearbyDeclutter);
 $('nearbyCenterBtn').addEventListener('click', setNearbyCenterToView);
 $('nearbyRadius').addEventListener('input', e => {
   nearbyRadiusM = +e.target.value;

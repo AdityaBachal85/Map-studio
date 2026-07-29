@@ -108,6 +108,9 @@ const esriStatic = style => ESRI_STATIC_TILES + style + '/static/tile/{z}/{y}/{x
  * @property {boolean} corsSafe   False when tiles taint the export canvas.
  * @property {string}  [needsKey] Provider key that must be present to offer it.
  * @property {boolean} [imagery]  True for photographic basemaps.
+ * @property {boolean} [dark]     True when the basemap reads as a dark surface,
+ *                                so overlaid text needs light ink. Imagery is
+ *                                treated as dark too.
  */
 
 const ESRI_IMAGERY_CREDIT =
@@ -228,7 +231,7 @@ const BASEMAP_CATALOGUE = {
 
   darkgray: {
     id: 'darkgray', label: 'Dark Gray Canvas', group: 'Executive',
-    provider: 'esri', credit: '© Esri · Dark Gray Canvas', corsSafe: true,
+    provider: 'esri', credit: '© Esri · Dark Gray Canvas', corsSafe: true, dark: true,
     thumb: 'linear-gradient(150deg,#3a3f45,#2b2f35 60%,#1e2126)',
     layers: [
       { url: esri('Canvas/World_Dark_Gray_Base'), zIndex: 1, maxNative: 16, retina: true },
@@ -248,7 +251,7 @@ const BASEMAP_CATALOGUE = {
 
   dark: {
     id: 'dark', label: 'Minimal dark', group: 'Executive',
-    provider: 'carto', credit: '© CARTO · © OpenStreetMap contributors', corsSafe: true,
+    provider: 'carto', credit: '© CARTO · © OpenStreetMap contributors', corsSafe: true, dark: true,
     thumb: 'linear-gradient(150deg,#2a2e33,#1b1e22 60%,#111316)',
     layers: [{
       url: CARTO_TILES + 'dark_all/{z}/{x}/{y}{r}.png',
