@@ -154,11 +154,6 @@ function toggleBasemapPanel() {
 
 buildBasemapGrid();
 $('bmToggle').addEventListener('click', toggleBasemapPanel);
-$('bmManageBtn').addEventListener('click', () => {
-  $('bmPanel').hidden = true;
-  $('bmToggle').classList.remove('open');
-  openBasemapManager();
-});
 document.addEventListener('click', e => { if (!e.target.closest('#basemapSwitcher')) { $('bmPanel').hidden = true; $('bmToggle').classList.remove('open'); } });
 
 // Remember-last: apply the saved basemap on startup (falls back to the best

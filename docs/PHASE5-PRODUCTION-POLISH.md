@@ -76,7 +76,7 @@ deployments where committing a key is genuinely fine. Everything downstream
 reads through `basemapKey()`, so no other module knows or cares which source
 answered.
 
-**Entering one:** Basemap manager → *Provider keys*. `verifyArcgisKey()` fetches
+**Entering one:** Settings → *Basemap manager* → *Provider keys*. `verifyArcgisKey()` fetches
 one real tile from the catalogue's own template — so the check always tests the
 endpoint the basemap will actually use — and reads the status and body, which is
 what separates *wrong key* from *right key, wrong referrer* from *Esri is down*.
@@ -93,6 +93,13 @@ showing a basemap the key unlocked. Until a key exists, one row at the end of
 the Satellite group says what is missing and opens the place to fix it — the HD
 basemaps are hidden rather than offered-and-broken, which would otherwise leave
 the best cartography undiscoverable.
+
+The dialog itself is launched from **Settings**, not from the basemap picker.
+Provider keys and tile-server URLs are configuration you set once; the picker is
+for choosing what to look at now, and a permanent "manage tile servers" button
+there charged every basemap switch for a feature almost nobody opens twice. The
+upsell row is the exception and stays in the picker, because it is about a
+basemap that would have appeared on that very row.
 
 ### Provider comparison
 

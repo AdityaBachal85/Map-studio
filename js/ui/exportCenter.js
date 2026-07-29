@@ -336,6 +336,9 @@ function initExportCenter() {
   });
   $('kmlExportBtn').addEventListener('click', exportKML);
   wireBasemapManager();
+  // Settings, not the basemap picker: provider keys and tile-server URLs are
+  // configuration you set once, not part of choosing which basemap to look at.
+  $('basemapMgrBtn').addEventListener('click', openBasemapManager);
 
   // Brand & logo is configuration rather than live tweaking, so it reads better
   // as a dialog than as a section you scroll past every time.
