@@ -52,7 +52,12 @@
 </head>
 
 <body>
-  <h1>Mappls tile URL finder</h1>
+  <!-- Bump on every change. Shown in the header so a stale cached copy is
+       obvious at a glance instead of being mistaken for a fresh result — which
+       has already cost two rounds of debugging the wrong build. -->
+  <h1>Mappls tile URL finder <span
+      style="font:600 11px/1 ui-monospace,monospace;vertical-align:middle;padding:4px 8px;border-radius:6px;background:#2563EB;color:#fff">BUILD
+      7 · callback handshake</span></h1>
   <p class="sub">
     Finds the raster tile URL for your Mappls key so the Mappls basemap can be switched on in Map Studio.
     Everything runs in this browser and talks only to <code>sdk.mappls.com</code> and <code>apis.mappls.com</code> —
@@ -68,6 +73,10 @@
       <button id="runAll">Run all checks</button>
       <span class="muted" id="overall"></span>
     </div>
+    <p class="muted" style="margin:10px 0 0">
+      If the badge beside the title does not say <b>BUILD 7</b>, this page came from cache. Reload with a different
+      query string — e.g. append <code>?7</code> to the address — to force a fresh copy.
+    </p>
   </div>
 
   <!-- ------------------------------------------------------------------ -->
