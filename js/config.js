@@ -67,7 +67,26 @@ const MAP_PROVIDER_KEYS = {
  * map/mapEngine.js). Turn this on, look at the map, and the app will tell you
  * where it stands rather than relying on a guess baked into the source.
  * ------------------------------------------------------------------------- */
-const MAPPLS_ENABLED = true;
+/*
+ * OFF — pending an answer from Mappls support.
+ *
+ * Established by testing against the live service from a whitelisted browser:
+ *   - the Static Key is valid. Requests return HTTP 412 (precondition failed),
+ *     not 401/403, which is what Mappls answers for a recognised key;
+ *   - the domain https://adityabachal85.github.io IS whitelisted in the console;
+ *   - the account's Credentials tab offers a Static Key and nothing else — no
+ *     separate Map SDK key exists on this plan;
+ *   - despite "Raster Tiles SDK" showing Active under Allocations, the SDK
+ *     loader script, 44 direct tile URLs and every List Styles request all fail.
+ *
+ * Since <script> and <img> requests ignore CORS, their failing too means the
+ * service is refusing the key for tiles rather than serving a wrong path. No
+ * tile URL will work until the account is entitled, so both Mappls basemaps stay
+ * hidden rather than offering something known to be broken. Flip this back to
+ * true once support confirms tile access; diagnostics/mappls-tiles.html will
+ * then find the layer name in one click.
+ */
+const MAPPLS_ENABLED = false;
 
 /**
  * Mappls ROAD basemap — needs a direct tile URL, which Mappls does not publish.
