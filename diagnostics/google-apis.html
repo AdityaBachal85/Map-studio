@@ -44,8 +44,9 @@
   </p>
 
   <div class="row">
-    <button id="run">Run all checks</button>
+    <button id="run" disabled>Loading…</button>
     <button class="ghost" id="copy">Copy results</button>
+    <button class="ghost" id="fix" hidden>Remove the wrong key</button>
     <span class="dim" id="origin"></span>
   </div>
 
@@ -60,18 +61,33 @@
     as the app reads it.</p>
 
   <!-- The app's real modules, so this tests the shipped code rather than a copy
-       of it that can drift. -->
-  <script src="../js/core/prefs.js"></script>
-  <script src="../js/constants.js"></script>
-  <script src="../js/config.js"></script>
-  <script src="../js/utils/math.js"></script>
-  <script src="../js/map/providerKeys.js"></script>
-  <script src="../js/map/basemapProviders.js"></script>
-  <script src="../js/map/googleTiles.js"></script>
-  <script src="../js/services/google.js"></script>
+       of it that can drift — loaded dynamically with a cache-buster, because a
+       diagnostic that can itself be served from cache is worse than none: it
+       reports on code the browser fetched some other day. -->
+  <script>
+    (function loadAppModules() {
+      var files = ['core/prefs', 'constants', 'config', 'utils/math',
+        'map/providerKeys', 'map/basemapProviders', 'map/googleTiles', 'services/google'];
+      var bust = '?nocache=' + Date.now();
+      var i = 0, failed = [];
+      (function next() {
+        if (i >= files.length) {
+          var b = document.getElementById('run');
+          b.disabled = false;
+          b.textContent = failed.length ? 'Run all checks (' + failed.length + ' file(s) missing)' : 'Run all checks';
+          return;
+        }
+        var el = document.createElement('script');
+        el.src = '../js/' + files[i++] + '.js' + bust;
+        el.onload = next;
+        el.onerror = function () { failed.push(el.src); next(); };
+        document.head.appendChild(el);
+      })();
+    })();
+  </script>
 
   <script>
-    var BUILD = 1;
+    var BUILD = 2;
     document.getElementById('build').textContent = 'BUILD ' + BUILD;
     document.getElementById('origin').textContent = 'Origin: ' + location.origin;
 
@@ -102,8 +118,15 @@
 
       var cfgKey = (typeof MAP_PROVIDER_KEYS !== 'undefined' && MAP_PROVIDER_KEYS.google) || '';
       var prefKey = (typeof storedProviderKey === 'function' && storedProviderKey('google')) || '';
+      // Checked inline rather than through the app's helper, so this works even
+      // against an older build that does not have the helper yet.
+      var misplaced = /^AAP[KT]/.test(prefKey);
+      document.getElementById('fix').hidden = !misplaced;
       push('Key in config.js', !!cfgKey, cfgKey ? cfgKey.slice(0, 10) + '… (' + cfgKey.length + ' chars)' : 'EMPTY — this build predates the committed key');
-      push('Key saved in this browser', prefKey ? true : null, prefKey ? prefKey.slice(0, 10) + '… (overrides config)' : 'none — the config key is used, which is the normal case');
+      push('Key saved in this browser', misplaced ? false : (prefKey ? true : null),
+        misplaced
+          ? prefKey.slice(0, 10) + '… — this is an ArcGIS key in the Google slot. It overrides the working key. Press “Remove the wrong key”.'
+          : (prefKey ? prefKey.slice(0, 10) + '… (overrides config)' : 'none — the config key is used, which is the normal case'));
 
       var ready = typeof googleReady === 'function' && googleReady();
       push('googleReady()', ready, ready ? 'the app will try Google first' : 'the app will go straight to Geoapify');
@@ -195,6 +218,14 @@
         return (r.ok === null ? 'INFO' : (r.ok ? 'OK  ' : 'FAIL')) + '  ' + r.n + '  —  ' + r.d;
       }).join('\n') + '\n\norigin: ' + location.origin + '\nUA: ' + navigator.userAgent;
     }
+
+    document.getElementById('fix').addEventListener('click', function () {
+      if (typeof clearProviderKey !== 'function') { alert('Could not load the app modules.'); return; }
+      clearProviderKey('google');
+      this.hidden = true;
+      alert('Removed. Running the checks again.');
+      document.getElementById('run').click();
+    });
 
     document.getElementById('copy').addEventListener('click', function () {
       if (!lastText) { alert('Run the checks first.'); return; }
