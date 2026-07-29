@@ -1218,3 +1218,93 @@ input[type=range]:focus-visible {
 .modal-panel.modal-sm {
   width: min(430px, 100%);
 }
+
+/* ---------------------------------------------------------------------------
+   21. Marker clustering (js/map/markerCluster.js)
+   A cluster badge has to read as "more of the same, grouped" rather than as a
+   different kind of object, so it takes the category's own colour and only the
+   count distinguishes it from a single dot.
+   --------------------------------------------------------------------------- */
+
+.poi-cluster-wrap {
+  background: none;
+  border: none;
+}
+
+.poi-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cl) 82%, #0b1220);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(5, 10, 20, .5);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* A soft ring of the same colour suggests the pins packed underneath. */
+.poi-cluster::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: var(--cl);
+  opacity: .22;
+  z-index: -1;
+}
+
+.poi-cluster b {
+  font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+
+.poi-cluster:hover {
+  transform: scale(1.09);
+  box-shadow: 0 4px 14px rgba(5, 10, 20, .6);
+}
+
+/* Folded into a cluster: hidden, but still on the map so a pan does not force
+   Leaflet to rebuild every marker's DOM. */
+.nearby-poi-wrap.poi-clustered {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   22. Marker hover & selection
+   Selection is a state, not an acknowledgement: it persists until cleared, and
+   both the pin and its sidebar card show it, so the map and the list read as
+   one object seen two ways.
+   --------------------------------------------------------------------------- */
+
+.bb.hover .pin-icon,
+.bb.hover .hwy-shield {
+  transform: scale(1.09);
+}
+
+.bb.hover .label-badge {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .34), 0 0 0 1px var(--accent);
+}
+
+/* The selected pin keeps a steady ring rather than the old 1.5s pulse — a
+   pulse says "noted", a ring says "this one". */
+.bb.selected .pin-icon {
+  animation: none;
+  box-shadow: 0 0 0 3px var(--accent), 0 6px 20px rgba(0, 0, 0, .38);
+}
+
+.bb.selected .label-badge {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .38), 0 0 0 2px var(--accent);
+}
+
+.item-card.hovered {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-1);
+}
+
+.item-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--elev-2);
+}

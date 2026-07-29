@@ -403,13 +403,16 @@
             recomputeRoutesTouching(loc.id);
           }
         });
-        wrap.addEventListener('pointerenter', () => wrap.classList.add('hover'));
-        wrap.addEventListener('pointerleave', () => wrap.classList.remove('hover'));
+        // Hover and selection are mirrored onto the location's sidebar card, so
+        // the map and the list read as one object seen two ways. Without the
+        // link, finding which of fifteen cards belongs to the pin you are
+        // looking at means reading coordinates.
+        wrap.addEventListener('pointerenter', () => setLocationHover(loc, true));
+        wrap.addEventListener('pointerleave', () => setLocationHover(loc, false));
         wrap.addEventListener('click', e => {
           if (dragMoved) { e.preventDefault(); return; }
-          document.querySelectorAll('#billboardLayer .bb.selected').forEach(el => el.classList.remove('selected'));
-          wrap.classList.add('selected');
-          setTimeout(() => wrap.classList.remove('selected'), 1500);
+          e.stopPropagation();
+          selectLocation(loc);
         });
         setTimeout(() => wrap.classList.remove('drop-anchor'), 600);
         bbLayer.appendChild(wrap);
@@ -456,6 +459,53 @@
 
       function removeBB(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
 
+      /* ---------- selection ---------- */
+
+      /**
+       * The selected location, or null.
+       *
+       * Selection persists until something clears it. The previous behaviour
+       * added a `.selected` class and stripped it again after 1.5s, which is a
+       * flash of acknowledgement rather than a state — nothing could depend on
+       * it, so the sidebar had no way to follow the map.
+       */
+      let selectedLocation = null;
+
+      /** Highlight a location's pin and card together. @param {object} loc @param {boolean} on */
+      function setLocationHover(loc, on) {
+        if (loc._pinEl) loc._pinEl.classList.toggle('hover', on);
+        if (loc._labelEl) loc._labelEl.classList.toggle('hover', on);
+        if (loc.card) loc.card.classList.toggle('hovered', on);
+      }
+
+      /**
+       * Select a location: ring the pin, mark its card, and bring the card into
+       * view. Scrolling the list is the half that makes this useful — a
+       * highlighted card the operator has to hunt for is no better than none.
+       * @param {object} loc
+       */
+      function selectLocation(loc) {
+        if (selectedLocation === loc) { clearLocationSelection(); return; }
+        clearLocationSelection();
+        selectedLocation = loc;
+        if (loc._pinEl) loc._pinEl.classList.add('selected');
+        if (loc._labelEl) loc._labelEl.classList.add('selected');
+        if (loc.card) {
+          loc.card.classList.add('selected');
+          loc.card.scrollIntoView({ block: 'nearest', behavior: motionReduced() ? 'auto' : 'smooth' });
+        }
+      }
+
+      /** Drop any current selection. */
+      function clearLocationSelection() {
+        if (!selectedLocation) return;
+        const l = selectedLocation;
+        selectedLocation = null;
+        if (l._pinEl) l._pinEl.classList.remove('selected');
+        if (l._labelEl) l._labelEl.classList.remove('selected');
+        if (l.card) l.card.classList.remove('selected');
+      }
+
 
       // ---------- geometry ----------
       function offsetCoords(coords, px) {
@@ -489,6 +539,8 @@
         setTimeout(resizeBB, 0);
         setTimeout(resizeBB, 200);   // second pass after fonts/layout settle
         map.on('move zoom moveend zoomend viewreset', scheduleRepaint);
+        map.on('click', clearLocationSelection);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') clearLocationSelection(); });
         map.on('zoomend', () => { routes.forEach(rt => { if (rt.offsetPx) drawRoute(rt); }); });
       }
 

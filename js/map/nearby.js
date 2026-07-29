@@ -74,7 +74,11 @@ function declutterNearbyLabels() {
       if (!el) return;
       const label = el.querySelector('.np-name');
       if (!label) return;
-      if (!zoomOk || !bounds.contains(m.getLatLng())) { label.classList.add('np-hidden'); return; }
+      // A marker folded into a cluster has no label to place.
+      if (!zoomOk || el.classList.contains('poi-clustered') || !bounds.contains(m.getLatLng())) {
+        label.classList.add('np-hidden');
+        return;
+      }
 
       // Measure with the label visible, then decide.
       label.classList.remove('np-hidden');
@@ -128,6 +132,7 @@ function dropNearbyMarkers(key, places) {
   const pinEls = [];
   places.forEach(p => {
     const m = L.marker([p.lat, p.lng], { icon: nearbyMarkerIcon(cat, p.name), keyboard: false, zIndexOffset: 200 });
+    m._poiName = p.name;
     // The name is on the marker now, so the tooltip carries what the label
     // cannot: the address and how far out it is.
     const detail = [p.address, p.distance != null ? Math.round(p.distance) + ' m away' : null]
@@ -143,17 +148,17 @@ function dropNearbyMarkers(key, places) {
   });
   nearbyMarkers[key] = arr;
   if (typeof staggerPopIn === 'function') staggerPopIn(pinEls);
-  scheduleNearbyDeclutter();
+  updateNearbyClusters();
   if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 function showNearbyCategory(key) {
   (nearbyMarkers[key] || []).forEach(m => { if (!map.hasLayer(m)) m.addTo(map); });
-  scheduleNearbyDeclutter();
+  updateNearbyClusters();
 }
 function hideNearbyCategory(key) {
   (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
-  scheduleNearbyDeclutter();   // freed space may let other labels back in
+  updateNearbyClusters();   // freed space may let other labels back in
 }
 
 /**
@@ -221,6 +226,7 @@ function clearNearbyMarkerCache() {
     delete nearbyMarkers[key];
   });
   $('nearbyGrid').querySelectorAll('.nc-count').forEach(el => (el.textContent = ''));
+  if (typeof clearClusters === 'function') clearClusters();
   if (typeof refreshLayers === 'function') refreshLayers();
 }
 
@@ -260,7 +266,7 @@ buildNearbyChips();
 // Labels are decluttered against screen space, so the decision has to be
 // remade whenever the view changes. `moveend`/`zoomend` only — re-running
 // during a pan would thrash layout for no visible benefit.
-map.on('moveend zoomend', scheduleNearbyDeclutter);
+map.on('moveend zoomend', updateNearbyClusters);
 $('nearbyCenterBtn').addEventListener('click', setNearbyCenterToView);
 $('nearbyRadius').addEventListener('input', e => {
   nearbyRadiusM = +e.target.value;

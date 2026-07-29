@@ -189,3 +189,144 @@ function exportKML() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { kmlColor, kmlEsc, kmlCoords, kmlCircleRing };
 }
+
+/* ---------------------------------------------------------------------------
+ * Import
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Parse a KML coordinate list into Leaflet `[lat, lng]` pairs.
+ * KML writes `lng,lat[,alt]` separated by any whitespace, and real files are
+ * generous with line breaks and indentation inside the element.
+ * @param {string} text
+ * @returns {Array<[number, number]>}
+ */
+function parseKmlCoords(text) {
+  return String(text || '').trim().split(/\s+/).map(t => {
+    const [lng, lat] = t.split(',').map(Number);
+    return (isFinite(lat) && isFinite(lng)) ? [lat, lng] : null;
+  }).filter(Boolean);
+}
+
+/** `aabbggrr` back to `#rrggbb`. @param {string} kml */
+function kmlColorToHex(kml) {
+  const h = String(kml || '').trim();
+  if (h.length !== 8) return null;
+  return '#' + h.slice(6, 8) + h.slice(4, 6) + h.slice(2, 4);
+}
+
+/**
+ * Collect `<Style>` definitions so a Placemark's `styleUrl` can be resolved.
+ * `<StyleMap>` is followed to its `normal` pair, which is how Google Earth
+ * writes most styles — ignoring it would drop the colour on the majority of
+ * real-world files.
+ * @param {Document} doc
+ * @returns {Object<string, {color:string|null, weight:number|null}>}
+ */
+function collectKmlStyles(doc) {
+  const out = {};
+  const text = (el, tag) => {
+    const n = el.getElementsByTagName(tag)[0];
+    return n && n.textContent ? n.textContent.trim() : null;
+  };
+
+  Array.from(doc.getElementsByTagName('Style')).forEach(st => {
+    const id = st.getAttribute('id');
+    if (!id) return;
+    const line = st.getElementsByTagName('LineStyle')[0];
+    out['#' + id] = {
+      color: line ? kmlColorToHex(text(line, 'color')) : null,
+      weight: line && text(line, 'width') ? parseFloat(text(line, 'width')) : null,
+    };
+  });
+
+  Array.from(doc.getElementsByTagName('StyleMap')).forEach(sm => {
+    const id = sm.getAttribute('id');
+    if (!id) return;
+    const pair = Array.from(sm.getElementsByTagName('Pair'))
+      .find(p => (text(p, 'key') || '') === 'normal') || sm.getElementsByTagName('Pair')[0];
+    const ref = pair && text(pair, 'styleUrl');
+    if (ref && out[ref]) out['#' + id] = out[ref];
+  });
+
+  return out;
+}
+
+/**
+ * Import a KML document into the map.
+ *
+ * Points become locations rather than marker shapes: a named point in a KML is
+ * almost always a place — a site, a landmark, a competitor — and locations are
+ * what the rest of the app reasons about (routes connect them, the legend lists
+ * them, exports label them). Lines and polygons become drawn geometry through
+ * the same registerGeom() path the GeoJSON importer uses, so they arrive with
+ * cards, styling and edit handles already wired.
+ *
+ * @param {string} text Raw KML.
+ * @returns {{locations:number, shapes:number, error?:string}}
+ */
+function importKML(text) {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(text, 'application/xml');
+  } catch (e) {
+    return { locations: 0, shapes: 0, error: 'That file could not be parsed as XML.' };
+  }
+  if (doc.getElementsByTagName('parsererror').length || !doc.getElementsByTagName('kml').length) {
+    return { locations: 0, shapes: 0, error: 'That does not look like a KML file.' };
+  }
+
+  const styles = collectKmlStyles(doc);
+  let nLoc = 0, nShape = 0;
+
+  Array.from(doc.getElementsByTagName('Placemark')).forEach(pm => {
+    const nameEl = pm.getElementsByTagName('name')[0];
+    const name = nameEl && nameEl.textContent ? nameEl.textContent.trim() : '';
+    const refEl = pm.getElementsByTagName('styleUrl')[0];
+    const st = (refEl && styles[refEl.textContent.trim()]) || {};
+
+    const point = pm.getElementsByTagName('Point')[0];
+    const line = pm.getElementsByTagName('LineString')[0];
+    const poly = pm.getElementsByTagName('Polygon')[0];
+
+    const coordsOf = el => {
+      const c = el && el.getElementsByTagName('coordinates')[0];
+      return c ? parseKmlCoords(c.textContent) : [];
+    };
+
+    if (point) {
+      const pts = coordsOf(point);
+      if (!pts.length) return;
+      addLocation({ lat: pts[0][0], lng: pts[0][1], name: name || undefined });
+      nLoc++;
+      return;
+    }
+
+    let layer = null, shape = null;
+    if (line) {
+      const pts = coordsOf(line);
+      if (pts.length < 2) return;
+      layer = L.polyline(pts);
+      shape = 'Line';
+    } else if (poly) {
+      const ring = poly.getElementsByTagName('outerBoundaryIs')[0] || poly;
+      const pts = coordsOf(ring);
+      if (pts.length < 3) return;
+      layer = L.polygon(pts);
+      shape = 'Polygon';
+    }
+    if (!layer) return;
+
+    // borderColor / borderWidth are the fields the geometry style system
+    // actually reads (see defaultGeomStyle in map/drawing.js); a plain `color`
+    // would be stored and then ignored, leaving every import at the default.
+    registerGeom(layer, shape, {
+      name: name || undefined,
+      borderColor: st.color || undefined,
+      borderWidth: st.weight || undefined,
+    });
+    nShape++;
+  });
+
+  return { locations: nLoc, shapes: nShape };
+}

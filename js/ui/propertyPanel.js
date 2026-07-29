@@ -228,6 +228,10 @@ function wireLocCard(card, loc) {
         card.querySelector('.x-btn').addEventListener('click', () => deleteLocation(loc));
 
         loc.card = card;
+        // The other half of the map/list link: hovering a card lights its pin,
+        // clicking the card selects and flies to it.
+        card.addEventListener('pointerenter', () => setLocationHover(loc, true));
+        card.addEventListener('pointerleave', () => setLocationHover(loc, false));
         $('locList').appendChild(card);
         renderRingRows(loc);
       }
