@@ -33,6 +33,7 @@ function clearAll() {
             if (proj.legendTitle) $('legendTitle').textContent = proj.legendTitle;
             if (proj.hd !== undefined) $('hdTgl').checked = !!proj.hd;
             if (proj.basemap && BASEMAPS[proj.basemap]) { $('basemapSel').value = proj.basemap; }
+            if (proj.imageryLook) setImageryLook(proj.imageryLook);
             setBasemap($('basemapSel').value);
             if (proj.tilt !== undefined) { setTiltDeg(+proj.tilt || 0); $('tiltRange').value = tiltDeg; applyTilt(); }
             if (proj.hill) { $('hillTgl').checked = true; hillshade.addTo(map); }

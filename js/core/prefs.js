@@ -14,6 +14,7 @@ const PREF_DEFAULTS = {
   unitDistance: 'auto',   // 'auto' | 'km' | 'm' | 'mi'
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'
   basemap: 'hybrid',      // last-selected basemap key (remembered by the switcher)
+  imageryLook: 'natural', // satellite colour grading (map/imageryEnhance.js)
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

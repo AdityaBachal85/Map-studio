@@ -394,6 +394,10 @@
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = entry.credit;
         $('mapWrap').classList.toggle('basemap-unsafe', !basemapExportSafe(activeKey));
+        // Grading follows the basemap: photographic imagery gets it, designed
+        // cartography does not.
+        applyImageryLook(getImageryLook(), !!entry.spec.imagery);
+        if (typeof syncImageryLookControl === 'function') syncImageryLookControl();
         maybeProbeProvider(entry.spec);
         if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);   // update the floating switcher UI
       }

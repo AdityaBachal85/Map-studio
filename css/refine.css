@@ -355,3 +355,22 @@ select:focus:not(:focus-visible) {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   9. Segmented control, sidebar variant
+   The Preferences dialog sizes its segments to their labels. In the narrow
+   sidebar the same control needs to fill the width so the options stay evenly
+   weighted and tappable.
+   --------------------------------------------------------------------------- */
+
+.seg.seg-block {
+  display: flex;
+  width: 100%;
+}
+
+.seg.seg-block .seg-btn {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}

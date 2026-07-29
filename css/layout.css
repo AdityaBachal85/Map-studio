@@ -55,6 +55,12 @@
        vector paths are rendered separately at export resolution (see
        js/export/hiResRender.js), so they must not appear in this pass or they
        would be composited twice — the upscaled copy over the sharp one. */
+    /* Vector-only pass of the offscreen export map: the tiles were already
+       captured (and graded) separately, so they must not appear again here. */
+    .hires-vectors-only .leaflet-tile-pane {
+      display: none !important;
+    }
+
     .map-wrap.hires-overlay-pass .leaflet-tile-pane,
     .map-wrap.hires-overlay-pass .leaflet-overlay-pane {
       display: none !important;

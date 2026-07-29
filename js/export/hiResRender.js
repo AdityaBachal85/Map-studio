@@ -263,27 +263,39 @@ async function renderGroundPass(o) {
       tileLayers.push(hs);
     }
 
-    if (o.includeVectors !== false) {
-      collectMapPaths(map).forEach(p => {
-        const clone = scaledPathClone(p, scale);
-        if (clone) clone.addTo(exportMap);
-      });
-    }
-
     const complete = await whenTilesSettled(tileLayers, 30000);
     exportMap.invalidateSize({ animate: false });
-    // One frame for the canvas renderer to flush its queued paths.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    const canvas = await html2canvas(host, {
+    const shot = extra => html2canvas(host, Object.assign({
       useCORS: true, allowTaint: false, logging: false,
-      backgroundColor: '#0d1522',
       width: W, height: H, windowWidth: W, windowHeight: H,
       // The DOM is already at target resolution — scaling again would upsample
       // the very tiles we went to the trouble of fetching at depth.
       scale: 1,
-    });
-    return { canvas, complete };
+    }, extra));
+
+    // Tiles first, on their own. Grading is a colour operation on *imagery*;
+    // running it over a canvas that also held the route and boundary strokes
+    // would shift their colours, so the vectors are captured separately and
+    // composited on top ungraded.
+    const tiles = await shot({ backgroundColor: '#0d1522' });
+
+    let vectors = null;
+    if (o.includeVectors !== false) {
+      const clones = [];
+      collectMapPaths(map).forEach(p => {
+        const clone = scaledPathClone(p, scale);
+        if (clone) { clone.addTo(exportMap); clones.push(clone); }
+      });
+      if (clones.length) {
+        host.classList.add('hires-vectors-only');   // hides the tile pane
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        vectors = await shot({ backgroundColor: null });
+        host.classList.remove('hires-vectors-only');
+      }
+    }
+    return { canvas: tiles, vectors, complete };
   } finally {
     if (exportMap) exportMap.remove();
     host.remove();
@@ -371,7 +383,19 @@ async function captureMapHiRes(opts) {
   const ctx = out.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+
+  // Grade the imagery exactly as the screen does, so an export is not a
+  // different-looking picture from the one the operator composed. Canvas
+  // `filter` takes the same syntax as CSS `filter`, so one string drives both.
+  const spec = (typeof BASEMAP_CATALOGUE !== 'undefined') ? BASEMAP_CATALOGUE[activeKey] : null;
+  const grade = (typeof imageryExportFilter === 'function')
+    ? imageryExportFilter(!!(spec && spec.imagery)) : 'none';
+  if (grade && grade !== 'none' && 'filter' in ctx) ctx.filter = grade;
   ctx.drawImage(ground.canvas, 0, 0);
+  ctx.filter = 'none';
+
+  // Vectors and furniture go on ungraded — their colours were chosen, not captured.
+  if (ground.vectors) ctx.drawImage(ground.vectors, 0, 0, out.width, out.height);
   ctx.drawImage(furniture, 0, 0, out.width, out.height);
 
   return { canvas: out, scale, complete: ground.complete };

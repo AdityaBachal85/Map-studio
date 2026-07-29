@@ -76,6 +76,51 @@
         $('chipRange').value = chipPct;
       }
       $('chipRange').addEventListener('input', e => { chipPct = +e.target.value; applyChipScale(); });
+
+      // ---------- imagery look ----------
+      /**
+       * Build the imagery-grading selector from IMAGERY_LOOKS and reflect the
+       * active choice. Grading only affects photographic basemaps, so the
+       * control explains itself rather than appearing to do nothing on a
+       * street map.
+       */
+      function buildImageryLookControl() {
+        const seg = $('imageryLook');
+        if (!seg) return;
+        seg.innerHTML = '';
+        Object.keys(IMAGERY_LOOKS).forEach(id => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'seg-btn';
+          b.dataset.v = id;
+          b.textContent = IMAGERY_LOOKS[id].label;
+          b.addEventListener('click', () => setImageryLook(id));
+          seg.appendChild(b);
+        });
+        syncImageryLookControl();
+      }
+
+      function syncImageryLookControl() {
+        const seg = $('imageryLook');
+        if (!seg) return;
+        const id = getImageryLook();
+        seg.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === id));
+        const spec = BASEMAP_CATALOGUE[activeKey];
+        const hint = $('imageryLookHint');
+        if (hint) {
+          hint.textContent = (spec && spec.imagery)
+            ? IMAGERY_LOOKS[id].hint + ' — applied to the satellite imagery and carried into exports.'
+            : 'Only affects photographic basemaps; the current basemap is drawn cartography and is left as designed.';
+        }
+      }
+
+      /** Choose an imagery look, persist it, and re-render. @param {string} id */
+      function setImageryLook(id) {
+        const spec = BASEMAP_CATALOGUE[activeKey];
+        applyImageryLook(id, !!(spec && spec.imagery));
+        if (typeof setPref === 'function') setPref('imageryLook', getImageryLook());
+        syncImageryLookControl();
+      }
       /** Set the label-chip scale (%) and re-apply it. Used by project load. @param {number} v */
       function setChipPct(v) { chipPct = v; applyChipScale(); }
       $('fsBtn').addEventListener('click', () => {

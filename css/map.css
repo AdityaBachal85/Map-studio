@@ -1,5 +1,14 @@
 /* map.css — Map surface: tilt stage, billboard overlay, pins, location/route label badges, via-point dots, route context menu.
    Extracted verbatim from index.html (v4.96) lines 93–467; order preserved via main.css. */
+    /* Imagery grading (map/imageryEnhance.js). Applied to the tile pane only, so
+       vector overlays, labels and map furniture keep their exact colours — a
+       grade that shifted route colours would be a bug, not a look. The variable
+       resolves to `none` for non-photographic basemaps and when grading is off,
+       which costs nothing. */
+    .leaflet-tile-pane {
+      filter: var(--imageryFilter, none);
+    }
+
     /* Billboard overlay — sits above the tilt stage, never rotates. */
     #billboardLayer {
       position: absolute;

@@ -112,7 +112,12 @@
           if (rt.showLabel) entries.push(rt);
         });
 
-        autoAvoidCollisions(entries);
+        // snapping.js loads *after* this file, so a repaint triggered while the
+        // page is still parsing scripts would throw on an undefined global and
+        // abort the whole repaint — pins and labels then sit at stale positions
+        // until the next one. Guarded the same way as the other cross-module
+        // calls here; collision avoidance simply does not run for that one frame.
+        if (typeof autoAvoidCollisions === 'function') autoAvoidCollisions(entries);
 
         entries.concat(decorEntries).forEach(e => {
           const pin = projectPin(e.anchor);
