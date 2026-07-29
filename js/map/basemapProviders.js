@@ -328,12 +328,23 @@ const HILLSHADE_LAYER = {
 
 /**
  * The API key configured for a provider, or `''`.
- * Reads the global declared in config.js without hard-depending on it, so this
- * module stays loadable on its own (tests, diagnostics pages).
+ *
+ * A key entered in the app (stored per device in prefs — see map/providerKeys.js)
+ * wins over one committed to config.js. That order is deliberate: this app is
+ * deployed from a public repository, so the in-app field is the safe way to
+ * supply a metered credential, and the config constant remains only as a
+ * fallback for private forks and internal deployments.
+ *
+ * Both sources are read through `typeof` guards so this module stays loadable on
+ * its own (tests, diagnostics pages) with neither present.
  * @param {string} provider `arcgis` | `mappls`
  * @returns {string}
  */
 function basemapKey(provider) {
+  if (typeof storedProviderKey === 'function') {
+    const stored = storedProviderKey(provider);
+    if (stored) return stored;
+  }
   const keys = (typeof MAP_PROVIDER_KEYS !== 'undefined' && MAP_PROVIDER_KEYS) || {};
   return String(keys[provider] || '').trim();
 }

@@ -20,12 +20,23 @@ const ROUTERS = {
 const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
 
 /**
- * Basemap provider API keys. The catalogue in map/basemapProviders.js hides any
- * basemap whose key is missing, so leaving these empty simply falls back to the
- * keyless Esri/Carto/OSM tiles — nothing breaks.
+ * Basemap provider API keys — the FALLBACK source only.
+ *
+ * PREFER THE IN-APP FIELD. Basemap manager → Provider keys stores a key in this
+ * browser's preferences, on this device. That is the right place for a metered
+ * credential when the app is deployed from a public repository: a key written
+ * into this file is readable by anyone who views the deployed page's source or
+ * clones the repo, and an ArcGIS key bills against your allowance. The in-app
+ * key wins over anything set here (see basemapKey() in map/basemapProviders.js),
+ * so these constants are for private forks and internal deployments where
+ * committing a key is genuinely fine.
+ *
+ * The catalogue in map/basemapProviders.js hides any basemap whose key is
+ * missing, so leaving these empty simply falls back to the keyless
+ * Esri/Carto/OSM tiles — nothing breaks.
  *
  * `arcgis` — an ArcGIS Location Platform key (free tier at
- *   developers.arcgis.com). Unlocks the "Imagery Hybrid HD" / "Navigation HD"
+ *   location.arcgis.com). Unlocks the "Imagery Hybrid HD" / "Navigation HD"
  *   basemaps: 512px tiles rendered from Esri's Basemap Styles v2 vector styles,
  *   which is the cartography the ArcGIS attribution in the brief refers to.
  *   This is the single biggest available upgrade to map quality.

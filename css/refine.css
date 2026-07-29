@@ -970,7 +970,7 @@ body.no-glass .sidebar.frost {
 }
 
 .bm-preview-txt b.good {
-  color: #34D399;
+  color: var(--ok);
 }
 
 .bm-preview-txt b.bad {
@@ -1307,4 +1307,221 @@ input[type=range]:focus-visible {
 .item-card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), var(--elev-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * 23. Provider keys (Basemap manager)
+ *
+ * A credential field has to read as *administrative* rather than as one more
+ * setting: bordered, set apart from the tile-server form beneath it, and
+ * carrying its own state line so "is a key saved?" is answerable at a glance
+ * without touching anything.
+ * ------------------------------------------------------------------------- */
+
+.bm-key {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .02);
+}
+
+.bm-key-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.bm-key-hd b {
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+
+.bm-key-state {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.bm-key-state.good {
+  color: var(--ok);
+  border-color: var(--ok-edge);
+  background: var(--ok-soft);
+}
+
+.bm-key-note {
+  margin: 0;
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.bm-key-note b {
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* The browser default link blue is close to unreadable on the dark surface
+   (~2.3:1). The accent already means "actionable" everywhere else here, and
+   --accent-ink is the readable-as-text cast of it in both themes. */
+.bm-key-note a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+/* The base control styling only ever matched `input[type=text]`, so the number
+   and password fields in the basemap manager rendered as raw native inputs
+   beside styled ones. Every text-entry type gets the same treatment — the type
+   attribute describes the keyboard, not the appearance. */
+input[type=password],
+input[type=number],
+input[type=search],
+input[type=url],
+input[type=email],
+input[type=tel] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--stroke2);
+  border-radius: 10px;
+  font-size: 12.5px;
+  background: rgba(0, 0, 0, .28);
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+/* No light-theme override needed here: themes.css already carries a
+   `:root[data-theme="light"] input` rule, and it outranks the type selectors
+   above, so these fields follow the theme like every other input. */
+
+/* The key and its reveal button are one control, so they share one border
+   rather than sitting as an input beside a stray button. */
+.bm-key-input {
+  display: flex;
+  align-items: stretch;
+}
+
+.bm-key-input input {
+  flex: 1;
+  min-width: 0;
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  /* A key is opaque, so proportional digits buy nothing, and a monospace face
+     makes a truncated paste visible at a glance. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: .02em;
+}
+
+.bm-key-eye {
+  flex: none;
+  padding: 0 11px;
+  border: 1px solid var(--stroke2);
+  border-radius: 0 10px 10px 0;
+  background: rgba(0, 0, 0, .28);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+:root[data-theme="light"] .bm-key-eye {
+  background: rgba(16, 32, 60, .04);
+}
+
+.bm-key-eye:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.bm-key-msg:empty {
+  display: none;
+}
+
+.bm-key-msg {
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.bm-key-msg.good {
+  color: var(--ok);
+}
+
+.bm-key-msg.bad {
+  color: var(--danger);
+}
+
+.bm-key-msg.warn {
+  color: #F59E0B;
+}
+
+.bm-key-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.bm-key-actions:not(:has(.btn:not([hidden]))) {
+  display: none;
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: var(--fs-micro);
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, .4);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, .12);
+  border-color: var(--danger);
+}
+
+/* The "add a key" row in the basemap picker. Sized and coloured to sit *below*
+   the tiles in the reading order — it is an offer, not a choice among them. */
+.bm-upsell {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 2px;
+  padding: 7px 9px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    background var(--dur-1) var(--ease-out);
+}
+
+.bm-upsell:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, .04);
+}
+
+.bm-upsell svg {
+  flex: none;
+  color: var(--accent);
 }

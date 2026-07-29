@@ -77,6 +77,45 @@ function buildBasemapGrid() {
       optGroup.appendChild(opt);
     }
   });
+
+  renderHdUpsell(grid);
+}
+
+/**
+ * When no ArcGIS key is configured, say so where the choice is being made.
+ *
+ * The HD basemaps are hidden until a key exists — correct, because offering a
+ * basemap that renders as 403s is worse than not offering it, but it leaves the
+ * best cartography invisible and undiscoverable. One row names what is missing
+ * and opens the place to fix it. Once a key is saved the row disappears: a nag
+ * that survives being acted on is just noise.
+ *
+ * It goes at the end of the Satellite group rather than at the foot of the
+ * panel, because that is where the basemap it unlocks would have appeared, and
+ * because the foot of a scrolling list is where notices go to be missed.
+ * @param {HTMLElement} grid
+ */
+function renderHdUpsell(grid) {
+  if (isBasemapAvailable(BASEMAP_CATALOGUE.imageryHybridHD)) return;
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'bm-upsell';
+  row.innerHTML =
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.5 6 .5-4.5 3.9 1.4 5.8L12 15.6 ' +
+    '6.7 18.7l1.4-5.8L3.6 9l6-.5z"/></svg>' +
+    '<span>Sharper imagery and labels — add a free ArcGIS key</span>';
+  row.addEventListener('click', () => {
+    $('bmPanel').hidden = true;
+    $('bmToggle').classList.remove('open');
+    openBasemapManager();
+  });
+
+  // The heading of whichever group follows Satellite marks the end of it.
+  const groups = Array.from(grid.querySelectorAll('.bm-group'));
+  const satIdx = groups.findIndex(g => g.textContent === 'Satellite');
+  const next = satIdx >= 0 ? groups[satIdx + 1] : null;
+  if (next) grid.insertBefore(row, next); else grid.appendChild(row);
 }
 
 /** Reflect the active basemap into the switcher (collapsed thumb + grid highlight). @param {string} key */

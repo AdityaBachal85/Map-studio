@@ -106,6 +106,117 @@ let exportCenter = null;
 
 let bmMgr = null;
 
+/* ---- Provider keys ----------------------------------------------------- */
+
+/**
+ * Reflect the stored ArcGIS key into the panel.
+ *
+ * The field is never repopulated with the saved key. Showing a credential back
+ * to whoever opens the dialog buys nothing — you cannot check a 60-character
+ * opaque string by eye — and it puts the key on screen for anyone standing
+ * behind the operator. "Saved on this device" plus a Remove button is the whole
+ * of what is useful.
+ */
+function renderProviderKeys() {
+  const state = $('bmArcgisState');
+  if (!state) return;
+  const saved = storedProviderKey('arcgis');
+  const fromConfig = !saved && hasProviderKey('arcgis');
+
+  state.textContent = saved ? 'Saved on this device' : (fromConfig ? 'Set in config.js' : 'Not set');
+  state.className = 'bm-key-state' + (saved || fromConfig ? ' good' : '');
+  $('bmArcgisClear').hidden = !saved;
+  $('bmArcgisUse').hidden = !isBasemapAvailable(BASEMAP_CATALOGUE.imageryHybridHD) ||
+    (typeof activeKey !== 'undefined' && activeKey === 'imageryHybridHD');
+  $('bmArcgisKey').value = '';
+  $('bmArcgisKey').placeholder = saved ? 'Paste a new key to replace it' : 'Paste your API key';
+}
+
+/** Write a result line under the key field. @param {string} msg @param {string} cls */
+function arcgisMsg(msg, cls) {
+  const el = $('bmArcgisMsg');
+  el.textContent = msg || '';
+  el.className = 'bm-key-msg' + (cls ? ' ' + cls : '');
+}
+
+/**
+ * Re-offer every basemap now that the set of usable keys has changed.
+ * The catalogue drives the picker but `chooseBasemap()` checks the registry, so
+ * both have to be rebuilt before an HD basemap can actually be selected.
+ */
+function refreshBasemapAvailability() {
+  rebuildBasemapRegistry();
+  buildBasemapGrid();
+  if (typeof syncBasemapSwitcher === 'function' && typeof activeKey !== 'undefined') syncBasemapSwitcher(activeKey);
+  renderProviderKeys();
+}
+
+function wireProviderKeys() {
+  const input = $('bmArcgisKey');
+  if (!input) return;
+
+  $('bmArcgisEye').addEventListener('click', () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    $('bmArcgisEye').textContent = show ? 'Hide' : 'Show';
+    $('bmArcgisEye').setAttribute('aria-label', show ? 'Hide key' : 'Show key');
+  });
+
+  input.addEventListener('input', () => arcgisMsg(''));
+
+  $('bmArcgisTest').addEventListener('click', async () => {
+    const key = input.value.trim();
+    arcgisMsg('Asking Esri for one tile…', '');
+    $('bmArcgisTest').disabled = true;
+    try {
+      const res = await verifyArcgisKey(key);
+      arcgisMsg(res.message, res.ok ? 'good' : 'bad');
+    } finally {
+      $('bmArcgisTest').disabled = false;
+    }
+  });
+
+  $('bmArcgisSave').addEventListener('click', async () => {
+    const key = input.value.trim();
+    const problem = looksLikeArcgisKey(key);
+    if (problem) { arcgisMsg(problem, 'bad'); return; }
+
+    // Verify before saving, but do not *require* it: a key that cannot be
+    // checked because the network is down is still probably the right key, and
+    // refusing to store it would strand the operator with no way forward.
+    arcgisMsg('Checking the key…', '');
+    $('bmArcgisSave').disabled = true;
+    let res;
+    try { res = await verifyArcgisKey(key); } finally { $('bmArcgisSave').disabled = false; }
+
+    setProviderKey('arcgis', key);
+    refreshBasemapAvailability();
+    arcgisMsg(res.ok
+      ? 'Key saved and verified — Imagery Hybrid HD and Navigation HD are now in the basemap picker.'
+      : res.message + ' Saved anyway; remove it here if the HD basemaps come up blank.',
+      res.ok ? 'good' : 'warn');
+    if (res.ok) status('ArcGIS key saved — HD basemaps unlocked.');
+  });
+
+  $('bmArcgisClear').addEventListener('click', () => {
+    clearProviderKey('arcgis');
+    const wasHD = typeof activeKey !== 'undefined' && !isBasemapAvailable(BASEMAP_CATALOGUE[activeKey]);
+    refreshBasemapAvailability();
+    // Never leave the map on a basemap the key no longer unlocks.
+    if (wasHD) chooseBasemap(preferredBasemapId());
+    arcgisMsg('Key removed from this device.', '');
+    status('ArcGIS key removed.');
+  });
+
+  $('bmArcgisUse').addEventListener('click', () => {
+    chooseBasemap('imageryHybridHD');
+    renderProviderKeys();
+    bmMgr.close();
+  });
+}
+
+/* ---- Custom tile servers ----------------------------------------------- */
+
 /** Render the list of stored custom basemaps. */
 function renderBasemapManager() {
   const list = $('bmMgrList');
@@ -169,6 +280,7 @@ function testCustomTile() {
 
 function wireBasemapManager() {
   bmMgr = wireModal('bmMgrOverlay', 'bmMgrClose');
+  wireProviderKeys();
   $('bmTestBtn').addEventListener('click', testCustomTile);
   $('bmUrl').addEventListener('input', () => {
     $('bmPreviewState').textContent = 'Preview';
@@ -202,7 +314,9 @@ function wireBasemapManager() {
 
 /** Open the basemap manager (from the basemap switcher panel). */
 function openBasemapManager() {
+  renderProviderKeys();
   renderBasemapManager();
+  arcgisMsg('');
   bmMgr.open();
 }
 

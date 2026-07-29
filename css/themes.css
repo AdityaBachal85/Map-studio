@@ -102,6 +102,17 @@
       --text-2: var(--dim);
       --accent: var(--orange);
       --accent-soft: rgba(255, 122, 26, .14);
+      /* Success ink. Split per theme because one green cannot clear 4.5:1
+         against both a near-black and a near-white surface: the mint that reads
+         well on dark drops to ~1.8:1 on white. */
+      --ok: #34D399;
+      --ok-soft: rgba(52, 211, 153, .12);
+      --ok-edge: rgba(52, 211, 153, .45);
+      /* The accent used as *ink* rather than as a fill. On dark it is the brand
+         orange unchanged; on light that orange only reaches 2.6:1 against the
+         panel, so text takes a darkened cast of it instead. Same hue, same
+         meaning, readable in both. */
+      --accent-ink: var(--orange);
       --focus-ring: rgba(255, 122, 26, .55);
       --scroll-thumb: rgba(255, 255, 255, .16);
       --scroll-thumb-hover: rgba(255, 255, 255, .28);
@@ -118,6 +129,10 @@
       --text: #17233B;
       --dim: #55627A;
       --surface-solid: #FFFFFF;
+      --ok: #0F7A55;
+      --ok-soft: rgba(15, 122, 85, .10);
+      --ok-edge: rgba(15, 122, 85, .38);
+      --accent-ink: #B4530A;
       --elev-1: 0 1px 2px rgba(16, 32, 60, .07), 0 2px 8px rgba(16, 32, 60, .05);
       --elev-2: 0 2px 4px rgba(16, 32, 60, .08), 0 8px 24px rgba(16, 32, 60, .09);
       --elev-3: 0 4px 8px rgba(16, 32, 60, .10), 0 20px 48px rgba(16, 32, 60, .14);

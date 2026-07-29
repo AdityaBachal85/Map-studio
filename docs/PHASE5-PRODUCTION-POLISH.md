@@ -50,9 +50,49 @@ https://static-map-tiles-api.arcgis.com/arcgis/rest/services/
 Those are drop-in raster tiles, so the app can use the modern cartography
 without swapping renderers. They are wired up as the `imageryHybridHD` and
 `navigationHD` basemaps and appear in the switcher **as soon as an ArcGIS
-Location Platform key is set** in `MAP_PROVIDER_KEYS.arcgis` (`js/config.js`).
-`preferredBasemapId()` then makes Imagery Hybrid HD the default. No key is
-committed — the free tier has to be provisioned per organisation.
+Location Platform key is set**. `preferredBasemapId()` then makes Imagery
+Hybrid HD the default.
+
+### Where a provider key lives — and why not in the repo
+
+**New file:** `js/map/providerKeys.js`.
+
+This app deploys from a public repository, so a key written into `js/config.js`
+is readable by anyone who views the page source or clones the repo, and an
+ArcGIS key is metered against the account that owns it. Keys therefore live
+where the custom tile servers already live: in prefs, **per device**. Same
+reasoning as `customBasemaps.js` — a credential is infrastructure, not content.
+It never enters a project file, so a map handed to a colleague carries no
+credentials, and it never reaches git.
+
+```
+basemapKey(provider)
+  1. storedProviderKey(provider)      prefs, this device      [preferred]
+  2. MAP_PROVIDER_KEYS[provider]      js/config.js            [fallback]
+```
+
+The config constants are kept as the fallback for private forks and internal
+deployments where committing a key is genuinely fine. Everything downstream
+reads through `basemapKey()`, so no other module knows or cares which source
+answered.
+
+**Entering one:** Basemap manager → *Provider keys*. `verifyArcgisKey()` fetches
+one real tile from the catalogue's own template — so the check always tests the
+endpoint the basemap will actually use — and reads the status and body, which is
+what separates *wrong key* from *right key, wrong referrer* from *Esri is down*.
+Three problems, three different fixes; an `<img>` probe can only ever say yes or
+no, so it is the fallback for when `fetch` itself is blocked.
+
+A key that fails verification is still **saved**, with a warning. A key that
+cannot be checked because the network is down is probably the right key, and
+refusing to store it would strand the operator with no way forward.
+
+Saving rebuilds both the catalogue-driven picker and the `BASEMAPS` registry
+(`refreshBasemapAvailability()`); removing one switches the map away if it was
+showing a basemap the key unlocked. Until a key exists, one row at the end of
+the Satellite group says what is missing and opens the place to fix it — the HD
+basemaps are hidden rather than offered-and-broken, which would otherwise leave
+the best cartography undiscoverable.
 
 ### Provider comparison
 
