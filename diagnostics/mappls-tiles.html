@@ -59,7 +59,9 @@
   </p>
 
   <div class="card">
-    <label for="key">Mappls key <span class="muted">(the one from MAP_PROVIDER_KEYS.mappls)</span></label>
+    <label for="key">Mappls Static Key
+      <span class="muted">— from Console → your app → Credentials. Angle brackets from the docs are stripped
+        automatically.</span></label>
     <input type="text" id="key" value="qvbbxilcnllctbsgabklmdpsxnoucoabncre" spellcheck="false">
     <div class="row">
       <button id="runAll">Run all checks</button>
@@ -70,9 +72,11 @@
   <!-- ------------------------------------------------------------------ -->
   <h2>1 · Ask the SDK what URL it uses</h2>
   <p class="muted">
-    Loads the official Mappls raster Web SDK in a hidden container, lets it draw a map, then reads the
-    <code>src</code> off a tile it actually requested. When this works it is the definitive answer, because it is
-    the URL Mappls themselves use.
+    Loads the Mappls Web Maps SDK v3.0 from <code>sdk.mappls.com</code> — the host introduced with the August 2025
+    authentication change, which takes the Static Key as an <code>access_token</code> query parameter. Every network
+    request the SDK makes is recorded, so the tile endpoint is captured whether the SDK uses
+    <code>&lt;img&gt;</code>, <code>fetch</code> or <code>XMLHttpRequest</code>. When this works it is the
+    definitive answer, because it is the URL Mappls themselves use.
   </p>
   <div class="card">
     <button class="sec" id="runSniff">Load SDK and read a tile URL</button>
@@ -129,7 +133,8 @@
        layer renders something obviously non-blank. */
     const TILE = { z: 12, x: 2926, y: 1708 };
     const $ = id => document.getElementById(id);
-    const key = () => $('key').value.trim();
+    /** The Static Key, with any <angle brackets> copied from the docs removed. */
+    const key = () => $('key').value.trim().replace(/[<>]/g, '');
 
     /** Layer names worth trying, roughly most to least likely. */
     const LAYERS = [
@@ -173,50 +178,111 @@
     }
 
     /* ---- 1. SDK sniff --------------------------------------------------- */
+
+    /**
+     * Record every URL the page requests, by any transport.
+     *
+     * The v3.0 SDK is WebGL/vector: it draws into a canvas, so there are no
+     * <img> elements to inspect the way the legacy Leaflet-based SDK had. The
+     * only reliable way to learn its tile endpoint is to watch the network
+     * layer itself — fetch, XHR and Image between them cover every route a
+     * browser SDK can take.
+     * @returns {{urls:Set<string>, stop:Function}}
+     */
+    function startNetworkSniffer() {
+      const urls = new Set();
+      const note = u => { if (typeof u === 'string' && /^https?:/i.test(u)) urls.add(u); };
+
+      const origFetch = window.fetch;
+      window.fetch = function (input, init) {
+        note(typeof input === 'string' ? input : (input && input.url));
+        return origFetch.apply(this, arguments);
+      };
+
+      const origOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url) { note(url); return origOpen.apply(this, arguments); };
+
+      const imgSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        configurable: true,
+        get() { return imgSrc.get.call(this); },
+        set(v) { note(v); return imgSrc.set.call(this, v); },
+      });
+
+      return {
+        urls,
+        stop() {
+          window.fetch = origFetch;
+          XMLHttpRequest.prototype.open = origOpen;
+          Object.defineProperty(HTMLImageElement.prototype, 'src', imgSrc);
+        },
+      };
+    }
+
+    /** Does this URL look like a map tile request? */
+    const looksLikeTile = u => /\/\d{1,2}\/\d{1,6}\/\d{1,6}(\.\w+)?(\?|$)/.test(u) || /tile/i.test(u);
+
     $('runSniff').addEventListener('click', async () => {
       const out = $('sniffOut'), host = $('sdkHost');
-      out.innerHTML = '<p class="muted">Loading the Mappls raster SDK…</p>';
       host.innerHTML = '';
 
-      const src = `https://apis.mappls.com/advancedmaps/api/${key()}/map_sdk?v=3.0&layer=raster`;
-      const loaded = await new Promise(res => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = () => res(true);
-        s.onerror = () => res(false);
-        setTimeout(() => res(false), 15000);
-        document.head.appendChild(s);
-      });
-      if (!loaded) {
-        out.innerHTML = '<p class="muted">The SDK script did not load. That usually means this key is not valid for ' +
-          'the Raster Tiles SDK, or the domain is not whitelisted in the Mappls console.<br>Script URL tried: <code>' +
-          src + '</code></p>';
-        return;
+      // The docs show the key inside <angle brackets> as a placeholder. Pasting
+      // them along with the key is an easy mistake and produces a silent 4xx.
+      const k = key();
+      const src = `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${encodeURIComponent(k)}&layer=raster`;
+      out.innerHTML = '<p class="muted">Loading the SDK from <code>' + src + '</code> …</p>';
+
+      const sniffer = startNetworkSniffer();
+      try {
+        const loaded = await new Promise(res => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = () => res(true);
+          s.onerror = () => res(false);
+          setTimeout(() => res(false), 15000);
+          document.head.appendChild(s);
+        });
+        if (!loaded) {
+          out.innerHTML = '<p class="muted">The SDK script did not load from <code>' + src + '</code>.<br>' +
+            'Open that URL in a tab — the response body will say whether it is the key, the domain whitelist, ' +
+            'or the entitlement.</p>';
+          return;
+        }
+
+        const Ctor = (window.mappls && window.mappls.Map) || (window.MapmyIndia && window.MapmyIndia.Map);
+        if (!Ctor) {
+          out.innerHTML = '<p class="muted">SDK script loaded but exposed no map constructor. Globals present: <code>' +
+            Object.keys(window).filter(x => /mappls|mapmyindia|maplibre|mapbox/i.test(x)).join(', ') + '</code></p>';
+          return;
+        }
+        try { new Ctor(host, { center: { lat: 28.612964, lng: 77.229463 }, zoom: 12 }); }
+        catch (e) {
+          out.innerHTML = '<p class="muted">SDK loaded but the map failed to construct: ' + e.message + '</p>';
+          return;
+        }
+
+        await new Promise(r => setTimeout(r, 6000));   // let it fetch a screenful
+      } finally {
+        sniffer.stop();
       }
 
-      // The SDK exposes a global map constructor; name varies by version.
-      const Ctor = (window.mappls && window.mappls.Map) || (window.MapmyIndia && window.MapmyIndia.Map);
-      if (!Ctor) {
-        out.innerHTML = '<p class="muted">SDK loaded but exposed no map constructor — nothing to sniff.</p>';
-        return;
-      }
-      try { new Ctor(host, { center: [28.61, 77.21], zoom: 12 }); }
-      catch (e) { out.innerHTML = '<p class="muted">SDK loaded but the map failed to construct: ' + e.message + '</p>'; return; }
-
-      // Give it a moment to request tiles, then read one back.
-      await new Promise(r => setTimeout(r, 4000));
-      const img = Array.from(host.querySelectorAll('img')).find(i => /\d+\/\d+/.test(i.src) && i.naturalWidth > 1);
-      if (!img) {
-        out.innerHTML = '<p class="muted">The SDK drew, but no tile image URL could be read from it ' +
-          '(it may be rendering to a canvas). Try section 2.</p>';
-        return;
-      }
+      const all = Array.from(sniffer.urls);
+      const tiles = all.filter(looksLikeTile);
       out.innerHTML = '';
-      out.appendChild(announce(img.src));
-      const raw = document.createElement('p');
-      raw.className = 'muted';
-      raw.innerHTML = 'Raw tile the SDK requested:<br><code>' + img.src + '</code>';
-      out.appendChild(raw);
+      if (tiles.length) {
+        out.appendChild(announce(tiles[0]));
+      } else {
+        const p = document.createElement('p');
+        p.className = 'muted';
+        p.innerHTML = '<b>The SDK loaded and ran, but requested nothing tile-shaped.</b> Every URL it did request is ' +
+          'listed below — a style or sprite URL among them still tells us the endpoint family.';
+        out.appendChild(p);
+      }
+      const dump = document.createElement('pre');
+      dump.textContent = all.length
+        ? all.join('\n')
+        : 'No network requests were observed at all.';
+      out.appendChild(dump);
     });
 
     /* ---- 2. Layer-name probe -------------------------------------------- */
@@ -281,7 +347,9 @@
     $('runRaw').addEventListener('click', () => {
       const k = key();
       const links = [
-        ['Raster SDK loader', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
+        ['SDK v3.0 loader — raster (current host)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster`],
+        ['SDK v3.0 loader — vector (current host)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
+        ['Legacy SDK loader (pre-Aug-2025 auth)', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
         ['One map tile', `https://apis.mappls.com/advancedmaps/v1/${k}/map_tiles/${TILE.z}/${TILE.x}/${TILE.y}.png`],
         ['Still-image API', `https://apis.mappls.com/advancedmaps/v1/${k}/still_image?center=28.61,77.21&zoom=12&size=400x400`],
         ['Geocode (checks the key on a REST endpoint)', `https://apis.mappls.com/advancedmaps/v1/${k}/geo_code?addr=connaught+place+delhi`],
