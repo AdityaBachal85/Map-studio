@@ -9,13 +9,75 @@
  * (apidocs.geoapify.com/docs/places) — everything else is category-agnostic.
  */
 
+/* ---------------------------------------------------------------------------
+ * Telling a school from a college, when Google cannot
+ *
+ * Google's taxonomy has no `college` type at all, and Indian listings do not
+ * respect the types it does have. Verified live at Airoli (19.1557, 72.9986,
+ * radius 3 km):
+ *
+ *   Shreeram Vidyalya & Junior College of Science  →  school
+ *   EuroSchool Airoli - ICSE School                →  educational_institution
+ *   Datta Meghe College Of Engineering             →  university
+ *   ROYAL INFOTECH / "Airoli" / Dhadkan 3415       →  university  (they are not)
+ *
+ * So a type filter on its own drops the junior college the user went looking
+ * for and keeps a computer shop. The fix is to ask Google for the broad parent
+ * type — `educational_institution` covers schools, colleges and preschools
+ * alike — and then let the *name* decide which chip a place belongs on. These
+ * four patterns are that vote, and every example above lands correctly.
+ * ------------------------------------------------------------------------- */
+
+/** Names that mean "this is a college", whatever Google typed it as. */
+const EDU_COLLEGE_RE = /(college|mahavidyalaya|vidyapeeth|polytechnic|university|institute|\biti\b|\bb\.?ed\b)/i;
+/**
+ * Names that mean "this is a school". `vid[h]?yal` rather than the full word:
+ * the transliteration is not standardised and all of Vidyalaya, Vidyalya and
+ * Vidhyalay are in use within three kilometres of Airoli — spelling out one of
+ * them is how "Shreeram Vidyalya & Junior College" got missed.
+ */
+const EDU_SCHOOL_RE = /(school|vid[h]?yal|vidya\s?mandir|shala|gurukul|convent|academy|\bhigh\b)/i;
+/** Coaching classes, driving schools and shops that list themselves as either. */
+const EDU_COACHING_RE = /(classes|tuitions?|tutorials?|coaching|abacus|driving|motor training|(spoken|speaking)\s+english|english\s+speaking|share market|infotech|distance learning|placement)/i;
+/** Real, but not what "schools nearby" means — kept, ranked below the rest. */
+const EDU_TINY_RE = /(play\s?group|pre-?school|pre-?primary|nursery|day\s?care|kindergarten|cr[eè]che|toddler)/i;
+
+/** Schools chip: everything educational except the colleges and the coaching. */
+function refineSchools(rows) {
+  return rows
+    .filter(r => {
+      if (EDU_COACHING_RE.test(r.name)) return false;
+      // A pure college — no school word anywhere in the name — belongs on the
+      // other chip. "Shreeram Vidyalya & Junior College" matches both and stays
+      // on both, which is right: it is both.
+      if (EDU_COLLEGE_RE.test(r.name) && !EDU_SCHOOL_RE.test(r.name)) return false;
+      // Catches the listings typed `university` that are not educational at all
+      // ("Airoli", "Dhadkan 3415") — they carry no school word either.
+      if (r.primaryType === 'university' && !EDU_SCHOOL_RE.test(r.name)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const ta = EDU_TINY_RE.test(a.name) || a.primaryType === 'preschool' ? 1 : 0;
+      const tb = EDU_TINY_RE.test(b.name) || b.primaryType === 'preschool' ? 1 : 0;
+      return ta - tb || a.distance - b.distance;
+    });
+}
+
+/** Colleges chip: name has to say so. Type is not evidence here. */
+function refineColleges(rows) {
+  return rows.filter(r => EDU_COLLEGE_RE.test(r.name) && !EDU_COACHING_RE.test(r.name));
+}
+
 /** Discoverable categories: friendly label + icon + marker colour + Geoapify category id(s). */
 const NEARBY_CATEGORIES = [
-  { key: 'school', label: 'Schools', icon: '🎓', color: '#4C9AFF', cats: 'education' , gtypes: ['school','primary_school','secondary_school'] },
-  { key: 'college', label: 'Colleges', icon: '🏛️', color: '#6554C0', cats: 'education' , gtypes: ['university'] },
+  { key: 'school', label: 'Schools', icon: '🎓', color: '#4C9AFF', cats: 'education' , gtypes: ['school','educational_institution'], grefine: refineSchools },
+  { key: 'college', label: 'Colleges', icon: '🏛️', color: '#6554C0', cats: 'education' , gtypes: ['university','educational_institution'], grefine: refineColleges },
   { key: 'hospital', label: 'Hospitals', icon: '🏥', color: '#FF5630', cats: 'healthcare.hospital' , gtypes: ['hospital'] },
   { key: 'pharmacy', label: 'Pharmacies', icon: '💊', color: '#FF7452', cats: 'healthcare.pharmacy' , gtypes: ['pharmacy'] },
-  { key: 'transit', label: 'Stations', icon: '🚉', color: '#00B8D9', cats: 'public_transport' , gtypes: ['train_station','subway_station','bus_station','transit_station'] },
+  // `transit_station` is the parent of train / subway / bus, so one type covers
+  // them all — verified at Airoli, where it returns Airoli railway station, the
+  // bus depot and the stops in a single request.
+  { key: 'transit', label: 'Stations', icon: '🚉', color: '#00B8D9', cats: 'public_transport' , gtypes: ['transit_station'] },
   { key: 'airport', label: 'Airports', icon: '✈️', color: '#2684FF', cats: 'airport' , gtypes: ['airport'] },
   { key: 'mall', label: 'Malls / Markets', icon: '🛍️', color: '#FFAB00', cats: 'commercial.shopping_mall,commercial.supermarket,commercial.marketplace' , gtypes: ['shopping_mall','supermarket','department_store'] },
   { key: 'fuel', label: 'Petrol pumps', icon: '⛽', color: '#FF8B00', cats: 'service.vehicle.fuel' , gtypes: ['gas_station'] },
@@ -35,7 +97,7 @@ const nearbyCatByKey = key => NEARBY_CATEGORIES.find(c => c.key === key);
  * @param {number} [limit]
  * @returns {Promise<Array<{lat:number,lng:number,name:string,address:string,distance:number}>>}
  */
-async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes) {
+async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefine) {
   // Google first when a key is present. Its Indian POI data is the reason this
   // integration exists — verified against the live API, a Pune search returns
   // Fergusson College, Deenanath Mangeshkar Hospital and Pune Station where the
@@ -43,7 +105,11 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes) {
   // untouched, so no key means no change in behaviour.
   if (gtypes && gtypes.length && typeof googleReady === 'function' && googleReady()) {
     try {
-      const g = await googleNearby(lat, lng, radiusM, gtypes, limit);
+      // Refine before the limit is applied — the filter drops rows, and taking
+      // the top 50 first would hand the refiner an already-truncated list.
+      let g = await googleNearby(lat, lng, radiusM, gtypes);
+      if (grefine) g = grefine(g);
+      if (limit) g = g.slice(0, limit);
       if (g.length) { g.source = 'google'; return g; }
     } catch (e) { console.warn('Google nearby failed:', e.message); }
   }

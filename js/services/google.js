@@ -292,17 +292,6 @@ async function googlePlaceDetails(placeId) {
  * ------------------------------------------------------------------------- */
 
 /**
- * Places of one or more Google types within a radius.
- *
- * `rankPreference: DISTANCE` rather than relevance, because the question a
- * property map asks is "what is *near* this site", not "what is popular".
- *
- * @param {number} lat @param {number} lng @param {number} radiusM
- * @param {string[]} types Google place types.
- * @param {number} [limit]
- * @returns {Promise<Array<{lat,lng,name,address,distance}>>}
- */
-/**
  * Place types that are technically in the category but are not what anyone
  * means by it. Kept as a demotion rather than an exclusion: a preschool IS
  * relevant to a homebuyer, it just should not push the actual secondary school
@@ -312,12 +301,40 @@ async function googlePlaceDetails(placeId) {
 const GOOGLE_DEMOTE_TYPES = new Set([
   'preschool', 'child_care_agency', 'fitness_center', 'makeup_artist',
   'service', 'association_or_organization',
+  // A Stations search at Airoli returns thirty-odd bus stops around one railway
+  // station. The stops are real and stay in the list; the station goes first.
+  'bus_stop',
 ]);
 
-async function googleNearby(lat, lng, radiusM, types, limit) {
-  const GOOGLE_NEARBY_CAP = 20;                     // hard ceiling per request
+/** Hard ceiling Google puts on one Nearby Search response. */
+const GOOGLE_NEARBY_CAP = 20;
 
-  const once = async ts => {
+/**
+ * Places of one or more Google types within a radius.
+ *
+ * WHY TWO PASSES
+ *
+ * The twenty-result ceiling is the whole problem. Ranked by DISTANCE, a schools
+ * search at Airoli spends all twenty slots inside 520 m and comes back as
+ * playgroups — Baby Steps, Tender Feet, Dada class, MASOOM NURSERY — while
+ * EuroSchool, DAV Public School, VIBGYOR High and St Xavier's, the schools a
+ * buyer actually asks about, never appear at all. Ranked by POPULARITY the same
+ * request returns those four and drops the playgroups. Neither order is right
+ * on its own: POPULARITY can skip the pump across the road, DISTANCE can miss
+ * the landmark 800 m away.
+ *
+ * So: POPULARITY first, and only if that came back full — meaning results were
+ * dropped — a second DISTANCE pass, merged on place id. A sparse category
+ * (petrol pumps at Airoli returns six, identical under both orders) still costs
+ * exactly one request.
+ *
+ * @param {number} lat @param {number} lng @param {number} radiusM
+ * @param {string[]} types Google place types.
+ * @param {number} [limit]
+ * @returns {Promise<Array<{lat,lng,name,address,primaryType,distance}>>}
+ */
+async function googleNearby(lat, lng, radiusM, types, limit) {
+  const once = async (ts, rank) => {
     const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
       // `includedPrimaryTypes`, not `includedTypes`. A dance studio and a
       // makeup academy both carry `school` somewhere in their type list;
@@ -326,7 +343,7 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
       // Academy" and a day-care from a schools search.
       includedPrimaryTypes: ts,
       maxResultCount: GOOGLE_NEARBY_CAP,
-      rankPreference: 'DISTANCE',
+      rankPreference: rank,
       languageCode: GOOGLE_LANG,
       regionCode: GOOGLE_REGION,
       locationRestriction: {
@@ -345,32 +362,35 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
     })).filter(r => r.lat != null && r.lng != null);
   };
 
-  let out = await once(types);
+  const out = [];
+  const seen = new Set();
+  const merge = rows => rows.forEach(r => {
+    const k = r.id || r.lat + ',' + r.lng;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(r);
+  });
 
-  // The cap is per *request*, not per type, so a category built from several
-  // types spends its twenty slots on whichever happen to be nearest — a
-  // "Stations" search can come back as twenty bus stops with the railway
-  // station missing. When the first call comes back full and there is more than
-  // one type, ask per type and merge. Only fires when the cap actually bit, so
-  // a sparse category still costs exactly one request.
-  if (out.length >= GOOGLE_NEARBY_CAP && types.length > 1) {
-    const seen = new Set(out.map(r => r.id || r.lat + ',' + r.lng));
-    for (const t of types) {
-      let more = [];
-      try { more = await once([t]); } catch (e) { continue; }
-      more.forEach(r => {
-        const k = r.id || r.lat + ',' + r.lng;
-        if (seen.has(k)) return;
-        seen.add(k);
-        out.push(r);
-      });
+  const first = await once(types, 'POPULARITY');
+  merge(first);
+
+  if (first.length >= GOOGLE_NEARBY_CAP) {
+    // Full response: results were dropped, so it is worth paying for more.
+    try { merge(await once(types, 'DISTANCE')); } catch (e) { /* keep pass one */ }
+
+    // The cap is per *request*, not per type, so a category built from several
+    // types spends its twenty slots on whichever score highest overall — a
+    // "Stations" search could come back as twenty bus stops with the railway
+    // station missing. Ask per type and merge.
+    if (types.length > 1) {
+      for (const t of types) {
+        try { merge(await once([t], 'POPULARITY')); } catch (e) { continue; }
+      }
     }
   }
 
-  // Nearest-first, but the genuine article ahead of its lookalikes. At Airoli a
-  // plain distance sort buried "Shreeram Vidyalya & Junior College" behind four
-  // playgroups; this lifts it to the top of the list while keeping preschools
-  // present, just after the schools.
+  // Nearest-first, but the genuine article ahead of its lookalikes: a preschool
+  // stays in the list, just below the schools.
   out.sort((a, b) => {
     const da = GOOGLE_DEMOTE_TYPES.has(a.primaryType) ? 1 : 0;
     const db = GOOGLE_DEMOTE_TYPES.has(b.primaryType) ? 1 : 0;

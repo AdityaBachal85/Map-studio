@@ -186,7 +186,7 @@ async function fetchNearbyKey(key) {
   const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
   if (chip) chip.classList.add('loading');
   try {
-    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes);
+    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes, cat.grefine);
     dropNearbyMarkers(key, places);
     setNearbyChipCount(key, places.length);
     const via = places.source === 'google' ? ' via Google' : (places.source ? ' via Geoapify' : '');
