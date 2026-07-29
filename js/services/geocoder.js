@@ -30,17 +30,31 @@ const recents = [];
         resultsData.forEach((r, i) => {
           const row = document.createElement('div');
           row.className = 'res' + (i === selIdx ? ' sel' : '');
-          const dist = haversineKm(ctr.lat, ctr.lng, r.lat, r.lng);
           const bits = [];
           if (r.recent) bits.push('recent');
-          else if (dist < 1500) bits.push(dist.toFixed(dist < 20 ? 1 : 0) + ' km from view');
+          else if (r.lat == null) {
+            // An autocomplete prediction has no coordinate yet, so there is no
+            // distance to show. Its address is the more useful thing anyway —
+            // it is what distinguishes two places of the same name.
+            if (r.secondary) bits.push(r.secondary);
+          } else {
+            const dist = haversineKm(ctr.lat, ctr.lng, r.lat, r.lng);
+            if (dist < 1500) bits.push(dist.toFixed(dist < 20 ? 1 : 0) + ' km from view');
+          }
           // Name the provider. "Google is not configured" and "Google returned
           // nothing" produce identical-looking results otherwise, and the only
           // way to tell was to open devtools.
           if (r.source && !r.recent) bits.push(SEARCH_SOURCE_LABEL[r.source] || r.source);
           const meta = bits.join(' · ');
-          row.innerHTML = `<span class="ico">${r.icon || '📍'}</span><span class="nm" title="${esc(r.label)}">${esc(r.label)}${meta ? `<span class="meta">· ${esc(meta)}</span>` : ''}</span><button class="add" title="Add as location">+</button>`;
-          row.querySelector('.nm').addEventListener('click', () => map.flyTo([r.lat, r.lng], 15));
+          // A prediction's label already ends in its address, and the address is
+          // also the meta line — printing both reads as a stutter. Predictions
+          // show the name alone and let the meta carry the place.
+          const shown = r.secondary ? r.name : r.label;
+          row.innerHTML = `<span class="ico">${r.icon || '📍'}</span><span class="nm" title="${esc(r.label)}">${esc(shown)}${meta ? `<span class="meta">· ${esc(meta)}</span>` : ''}</span><button class="add" title="Add as location">+</button>`;
+          row.querySelector('.nm').addEventListener('click', async () => {
+            const f = await resolveResult(r);
+            if (f) map.flyTo([f.lat, f.lng], 15);
+          });
           row.querySelector('.add').addEventListener('click', () => pickResult(r));
           box.appendChild(row);
         });
@@ -50,7 +64,33 @@ const recents = [];
         box.appendChild(hint);
         showBox();
       }
-      function pickResult(r) {
+      /**
+       * Make sure a result has coordinates, fetching them if it is a prediction.
+       *
+       * Autocomplete deliberately omits the location — Google charges for it and
+       * expects you to ask only for the one that gets chosen. So the lookup
+       * happens here, once, at the moment of choosing.
+       * @param {object} r @returns {Promise<object|null>}
+       */
+      async function resolveResult(r) {
+        if (r.lat != null) return r;
+        if (!r.needsDetails || typeof googlePlaceDetails !== 'function') return null;
+        setSpin(true);
+        try {
+          const full = await googlePlaceDetails(r.placeId);
+          if (!full) { status('Could not look that place up — try the search button.'); return null; }
+          Object.assign(r, full);           // so a second click costs nothing
+          return r;
+        } catch (e) {
+          status('Could not look that place up — try the search button.');
+          return null;
+        } finally { setSpin(false); }
+      }
+
+      async function pickResult(r) {
+        const f = await resolveResult(r);
+        if (!f) return;
+        r = f;
         addLocation({ name: r.name, lat: r.lat, lng: r.lng });
         map.flyTo([r.lat, r.lng], 15);
         if (!r.synthetic) {
@@ -76,7 +116,7 @@ const recents = [];
         setSpin(true);
         try {
           const bias = map.getZoom() >= 8 ? map.getBounds() : null;
-          const data = await geocodeSearch(q, bias); // Geoapify -> Photon -> Nominatim, silent chain
+          const data = await geocodeSearch(q, bias, !!live);   // Google -> Geoapify -> Photon -> Nominatim
           if (token !== searching) return;              // a newer keystroke superseded this request
           resultsData = data;
           selIdx = resultsData.length ? 0 : -1;
@@ -94,7 +134,10 @@ const recents = [];
         clearTimeout(searchTimer);
         const q = $('searchInput').value.trim();
         $('sClear').hidden = !q;
-        if (q.length < 3 && !parseCoord(q)) { resultsData = []; renderResults(); return; }
+        // Two characters is enough for predictions; the old threshold of three
+        // was tuned for whole-word geocoders that need most of the name.
+        const minChars = (typeof googleReady === 'function' && googleReady()) ? 2 : 3;
+        if (q.length < minChars && !parseCoord(q)) { resultsData = []; renderResults(); return; }
         searchTimer = setTimeout(() => doSearch(true), 300);
       });
       $('searchInput').addEventListener('focus', () => {

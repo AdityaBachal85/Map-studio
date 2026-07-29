@@ -155,9 +155,12 @@ async function nominatimSearch(q, bias) {
  * @param {string} q @param {L.LatLngBounds|null} bias
  * @returns {Promise<Array<{lat:number,lng:number,name:string,label:string,icon:string}>>}
  */
-async function geocodeSearch(q, bias) {
+async function geocodeSearch(q, bias, live) {
   const c = bias ? bias.getCenter() : null;
-  const key = q.trim().toLowerCase() + '|' + (c ? c.lat.toFixed(2) + ',' + c.lng.toFixed(2) : '');
+  // `live` is part of the cache key: predictions and full place results are
+  // different shapes, and serving one where the other is expected is how a
+  // typed suggestion ends up with no coordinates.
+  const key = (live ? 'a|' : 's|') + q.trim().toLowerCase() + '|' + (c ? c.lat.toFixed(2) + ',' + c.lng.toFixed(2) : '');
   const cached = cacheGet(key);
   if (cached) return cached;
   let results = [];
@@ -167,7 +170,12 @@ async function geocodeSearch(q, bias) {
   // so removing the key returns the app to exactly its previous behaviour and
   // a Google outage costs a result, not the search box.
   if (typeof googleReady === 'function' && googleReady()) {
-    try { results = await googleTextSearch(q, bias); } catch (e) { console.warn('Google search failed:', e.message); results = []; }
+    try {
+      // Autocomplete while typing — ranked predictions, disambiguated, and one
+      // cheap request per keystroke-batch. Text Search on an explicit search,
+      // because that wants places with coordinates rather than suggestions.
+      results = live ? await googleAutocomplete(q, bias) : await googleTextSearch(q, bias);
+    } catch (e) { console.warn('Google search failed:', e.message); results = []; }
   }
   if (!results.length) { try { results = await geoapifySearch(q, bias); } catch (e) { console.warn('Geoapify failed:', e); results = []; } }
   if (!results.length) { try { results = await photonSearch(q, bias); } catch (e) { console.warn('Photon failed:', e); results = []; } }

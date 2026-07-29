@@ -447,8 +447,12 @@ function isBasemapAvailable(spec) {
   if (first && !first.url && !(first.urlCandidates || []).length && typeof spec.prepare !== 'function') return false;
   if (!spec.needsKey) return true;
   if (!basemapKey(spec.needsKey)) return false;
-  // Mappls additionally needs an explicit opt-in.
+  // Two providers additionally need an explicit opt-in, because holding a key
+  // is not the same as the account being entitled to tiles. Google's key here
+  // is live for Places and Routes but 403s on Map Tiles; Mappls has never
+  // served a tile at all.
   if (spec.provider === 'mappls') return typeof MAPPLS_ENABLED !== 'undefined' && !!MAPPLS_ENABLED;
+  if (spec.provider === 'google') return typeof GOOGLE_BASEMAPS_ENABLED !== 'undefined' && !!GOOGLE_BASEMAPS_ENABLED;
   return true;
 }
 

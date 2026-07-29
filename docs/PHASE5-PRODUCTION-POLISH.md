@@ -655,3 +655,58 @@ console. Verifying one service would report "your key works" for a key that
 leaves three features dead, so **Verify key** probes all four and reports each —
 which is exactly what the supplied key does (search, nearby and routing enabled;
 Map Tiles not).
+
+
+---
+
+## 9. Search bar and nearby, tuned on Google
+
+The Google key is now committed in `js/config.js` alongside `GEOAPIFY_API_KEY`,
+on the owner's explicit instruction, so search and nearby work for everyone with
+nothing to paste. **The referrer restriction is what makes that acceptable** —
+a browser key is visible by necessity and the restriction is the only thing
+stopping a third party spending against it.
+
+`GOOGLE_BASEMAPS_ENABLED = false`: verified against this key, Places and Routes
+answer but Map Tiles returns 403 (not enabled on the project). Offering three
+basemaps that cannot draw is the "stranded on a blank map" failure this app has
+already been through, so they stay out of the picker until the flag flips.
+
+### Autocomplete, not one-shot text search
+
+Text Search wants a finished query. A search *bar* wants predictions: typing
+`ferg` now returns Fergusson College, Ferguson College Road and Fergusson
+College Junior Wing, disambiguated by address.
+
+```
+typing   places:autocomplete   predictions, no coordinates
+picking  places/{id}           coordinates, once, for the chosen one
+Enter    places:searchText     full places when there is no prediction to pick
+```
+
+Predictions carry no location by design — Google charges for it and expects you
+to fetch it only for the pick — so a prediction row shows its address instead of
+a distance, and `resolveResult()` fetches coordinates at the moment of choosing.
+A `sessionToken` ties the keystrokes and the pick into one billed session.
+
+The typing threshold drops from three characters to two when Google is
+available; three was tuned for whole-word geocoders that need most of the name.
+
+### Nearby: the 20-result cap is per request, not per type
+
+Verified live, and it was quietly costing real results. A "Stations" search
+sends four types in one call and Google returns **twenty bus stops with the
+railway station missing** — the cap is spent on whichever happen to be nearest.
+
+`googleNearby()` now detects a full response with more than one type, re-asks
+per type and merges on place id. The Pune test goes from 20 results to 37, and
+Pune Junction reappears. It only fires when the cap actually bit, so a sparse
+category still costs exactly one request.
+
+### Provenance is visible
+
+Every result carries a `source`, shown in the row (Google / Geoapify / Photon /
+OpenStreetMap), named in the status line ("3 results from Google.", "…via
+Google"). Before this, "Google is off", "Google was rejected" and "Google found
+nothing" were indistinguishable without devtools — which is precisely how a
+working integration went unnoticed for a full round.

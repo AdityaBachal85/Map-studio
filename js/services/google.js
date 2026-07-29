@@ -177,6 +177,117 @@ async function googleTextSearch(q, bias) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Autocomplete — what a search bar should actually do
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The session token that ties a run of keystrokes to the pick that ends it.
+ *
+ * Google bills autocomplete-then-details as one session when the same token is
+ * passed throughout, and as separate requests when it is not. Beyond cost, it
+ * is also what makes the predictions improve as the query grows, since Google
+ * treats the keystrokes as one search rather than several unrelated ones.
+ */
+let _gSessionToken = null;
+
+/** A fresh token. Any opaque unique string; a UUID is what Google suggests. */
+function newGoogleSessionToken() {
+  _gSessionToken = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : 'st-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  return _gSessionToken;
+}
+
+/** Called after a pick, so the next query starts a new billing session. */
+function endGoogleSession() { _gSessionToken = null; }
+
+/**
+ * Live predictions for a partial query.
+ *
+ * This is the difference between a search box and a search *bar*. Text Search
+ * wants a complete query and answers with places; Autocomplete answers "ferg"
+ * with five ranked, disambiguated predictions — Fergusson College, Ferguson
+ * College Road, Fergusson College Junior Wing — which is what the operator is
+ * actually choosing between.
+ *
+ * Predictions carry no coordinates, by design: Google charges for the location
+ * and expects you to fetch it only for the one that gets picked. So a row here
+ * shows the address as its secondary line instead of a distance, and
+ * `googlePlaceDetails` resolves the coordinates on selection.
+ *
+ * @param {string} q @param {L.LatLngBounds|null} bias
+ * @returns {Promise<Array<object>>}
+ */
+async function googleAutocomplete(q, bias) {
+  const body = {
+    input: q,
+    languageCode: GOOGLE_LANG,
+    regionCode: GOOGLE_REGION,
+    sessionToken: _gSessionToken || newGoogleSessionToken(),
+  };
+  if (bias) {
+    const c = bias.getCenter();
+    body.locationBias = {
+      circle: {
+        center: { latitude: c.lat, longitude: c.lng },
+        radius: Math.min(50000, Math.max(2000, bias.getNorthEast().distanceTo(bias.getSouthWest()) / 2)),
+      },
+    };
+  }
+  const json = await googlePost(GOOGLE_PLACES_HOST + '/places:autocomplete', body);
+
+  return (json.suggestions || []).map(sg => {
+    const p = sg.placePrediction;
+    if (!p) return null;
+    const sf = p.structuredFormat || {};
+    const main = (sf.mainText && sf.mainText.text) || (p.text && p.text.text) || '';
+    const secondary = (sf.secondaryText && sf.secondaryText.text) || '';
+    return {
+      placeId: p.placeId,
+      name: main,
+      label: secondary ? main + ' — ' + secondary : main,
+      secondary,
+      icon: iconForGoogleTypes(p.types),
+      source: 'google',
+      // No lat/lng yet — the caller resolves it if this one is chosen.
+      needsDetails: true,
+    };
+  }).filter(Boolean);
+}
+
+/**
+ * Resolve a prediction to a real coordinate.
+ * @param {string} placeId
+ * @returns {Promise<{lat,lng,name,label,icon}|null>}
+ */
+async function googlePlaceDetails(placeId) {
+  const key = googleKey();
+  if (!key || !placeId) return null;
+  const url = GOOGLE_PLACES_HOST + '/places/' + encodeURIComponent(placeId) +
+    '?languageCode=' + GOOGLE_LANG +
+    (_gSessionToken ? '&sessionToken=' + encodeURIComponent(_gSessionToken) : '');
+  const res = await fetch(url, {
+    headers: {
+      'X-Goog-Api-Key': key,
+      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,types',
+    },
+  });
+  if (!res.ok) return null;
+  const p = await res.json();
+  if (!p || !p.location) return null;
+  // The pick closes the billing session.
+  endGoogleSession();
+  const name = (p.displayName && p.displayName.text) || p.formattedAddress || 'Place';
+  return {
+    lat: p.location.latitude,
+    lng: p.location.longitude,
+    name,
+    label: p.formattedAddress ? name + ' — ' + p.formattedAddress : name,
+    icon: iconForGoogleTypes(p.types),
+    source: 'google',
+  };
+}
+
+/* ---------------------------------------------------------------------------
  * Nearby places
  * ------------------------------------------------------------------------- */
 
@@ -192,24 +303,54 @@ async function googleTextSearch(q, bias) {
  * @returns {Promise<Array<{lat,lng,name,address,distance}>>}
  */
 async function googleNearby(lat, lng, radiusM, types, limit) {
-  const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
-    includedTypes: types,
-    maxResultCount: Math.min(20, limit || 20),      // Google's ceiling is 20
-    rankPreference: 'DISTANCE',
-    languageCode: GOOGLE_LANG,
-    regionCode: GOOGLE_REGION,
-    locationRestriction: {
-      circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
-    },
-  }, 'places.displayName,places.formattedAddress,places.location');
+  const GOOGLE_NEARBY_CAP = 20;                     // hard ceiling per request
 
-  return (json.places || []).map(p => ({
-    lat: p.location.latitude,
-    lng: p.location.longitude,
-    name: (p.displayName && p.displayName.text) || 'Unnamed place',
-    address: p.formattedAddress || '',
-    distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
-  })).filter(r => r.lat != null && r.lng != null);
+  const once = async ts => {
+    const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
+      includedTypes: ts,
+      maxResultCount: GOOGLE_NEARBY_CAP,
+      rankPreference: 'DISTANCE',
+      languageCode: GOOGLE_LANG,
+      regionCode: GOOGLE_REGION,
+      locationRestriction: {
+        circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
+      },
+    }, 'places.id,places.displayName,places.formattedAddress,places.location');
+
+    return (json.places || []).map(p => ({
+      id: p.id,
+      lat: p.location.latitude,
+      lng: p.location.longitude,
+      name: (p.displayName && p.displayName.text) || 'Unnamed place',
+      address: p.formattedAddress || '',
+      distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
+    })).filter(r => r.lat != null && r.lng != null);
+  };
+
+  let out = await once(types);
+
+  // The cap is per *request*, not per type, so a category built from several
+  // types spends its twenty slots on whichever happen to be nearest — a
+  // "Stations" search can come back as twenty bus stops with the railway
+  // station missing. When the first call comes back full and there is more than
+  // one type, ask per type and merge. Only fires when the cap actually bit, so
+  // a sparse category still costs exactly one request.
+  if (out.length >= GOOGLE_NEARBY_CAP && types.length > 1) {
+    const seen = new Set(out.map(r => r.id || r.lat + ',' + r.lng));
+    for (const t of types) {
+      let more = [];
+      try { more = await once([t]); } catch (e) { continue; }
+      more.forEach(r => {
+        const k = r.id || r.lat + ',' + r.lng;
+        if (seen.has(k)) return;
+        seen.add(k);
+        out.push(r);
+      });
+    }
+    out.sort((a, b) => a.distance - b.distance);
+  }
+
+  return limit ? out.slice(0, limit) : out;
 }
 
 /* ---------------------------------------------------------------------------

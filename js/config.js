@@ -54,9 +54,32 @@ const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
  */
 const MAP_PROVIDER_KEYS = {
   arcgis: '',
-  google: '',
+  // Committed on the owner's explicit instruction, so search and nearby places
+  // work for everyone without each person pasting a key. Same trade as
+  // GEOAPIFY_API_KEY above, and the same mitigation applies and is the *only*
+  // thing making it acceptable: this key MUST carry an HTTP-referrer
+  // restriction in the Google Cloud console limiting it to this site, plus a
+  // quota cap. Referrer-restricted browser keys are what Google designs these
+  // APIs around — the key is visible by necessity, and the restriction is what
+  // stops a third party spending against it. Without that restriction this line
+  // is an open invoice.
+  google: 'AIzaSyCguQVakAfL4rwbtf4KwDzDgUBSmQFnhOQ',
   mappls: 'qvbbxilcnllctbsgabklmdpsxnoucoabncre'
 };
+
+/*
+ * Google basemaps: OFF.
+ *
+ * Verified against this key: Places and Routes answer, but Map Tiles returns
+ * 403 — "Map Tiles API has not been used in project 153913703230 before or it
+ * is disabled". Offering three basemaps that cannot draw is the "stranded on a
+ * blank map" failure this app has already been through once, so they stay out
+ * of the picker until the API is enabled. Search, nearby and routing are
+ * unaffected and are the reason the key is here.
+ *
+ * Flip to true once "Map Tiles API" is enabled in the Cloud console.
+ */
+const GOOGLE_BASEMAPS_ENABLED = false;
 
 /* ---------------------------------------------------------------------------
  * Mappls (MapmyIndia)
