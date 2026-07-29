@@ -44,7 +44,7 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes) {
   if (gtypes && gtypes.length && typeof googleReady === 'function' && googleReady()) {
     try {
       const g = await googleNearby(lat, lng, radiusM, gtypes, limit);
-      if (g.length) return g;
+      if (g.length) { g.source = 'google'; return g; }
     } catch (e) { console.warn('Google nearby failed:', e.message); }
   }
   if (!GEOAPIFY_API_KEY) return [];
@@ -57,7 +57,7 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes) {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Geoapify Places HTTP ' + res.status);
   const json = await res.json();
-  return (json.features || []).map(f => {
+  const out = (json.features || []).map(f => {
     const p = f.properties || {};
     const coords = (f.geometry && f.geometry.coordinates) || [p.lon, p.lat];
     return {
@@ -71,4 +71,6 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes) {
         : haversineKm(lat, lng, coords[1], coords[0]) * 1000,
     };
   }).filter(r => r.lat != null && r.lng != null);
+  out.source = 'geoapify';
+  return out;
 }

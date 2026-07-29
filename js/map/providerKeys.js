@@ -63,7 +63,13 @@ const PROVIDER_KEY_INFO = Object.freeze({
     perService: true,
     /** Tiles are metered per request, so the cost warning is part of the UI. */
     caution: 'Google bills per tile request. Restrict the key by HTTP referrer and set a quota cap before using it.',
-    onChange: () => { if (typeof clearGoogleSessions === 'function') clearGoogleSessions(); },
+    onChange: () => {
+      if (typeof clearGoogleSessions === 'function') clearGoogleSessions();
+      // Saving the key has to change the next search, not the one after a
+      // reload — the cache is keyed by query alone and would otherwise keep
+      // serving the pre-Google answer.
+      if (typeof clearSearchCache === 'function') clearSearchCache();
+    },
   },
 });
 

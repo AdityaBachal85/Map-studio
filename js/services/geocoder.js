@@ -9,6 +9,11 @@
 
 
 
+/** Provider id → what the result row shows. */
+const SEARCH_SOURCE_LABEL = {
+  google: 'Google', geoapify: 'Geoapify', photon: 'Photon', nominatim: 'OpenStreetMap',
+};
+
 let searchTimer = null, resultsData = [], selIdx = -1, searching = 0;
 const recents = [];
       function showBox() {
@@ -26,7 +31,14 @@ const recents = [];
           const row = document.createElement('div');
           row.className = 'res' + (i === selIdx ? ' sel' : '');
           const dist = haversineKm(ctr.lat, ctr.lng, r.lat, r.lng);
-          const meta = r.recent ? 'recent' : (dist < 1500 ? dist.toFixed(dist < 20 ? 1 : 0) + ' km from view' : '');
+          const bits = [];
+          if (r.recent) bits.push('recent');
+          else if (dist < 1500) bits.push(dist.toFixed(dist < 20 ? 1 : 0) + ' km from view');
+          // Name the provider. "Google is not configured" and "Google returned
+          // nothing" produce identical-looking results otherwise, and the only
+          // way to tell was to open devtools.
+          if (r.source && !r.recent) bits.push(SEARCH_SOURCE_LABEL[r.source] || r.source);
+          const meta = bits.join(' · ');
           row.innerHTML = `<span class="ico">${r.icon || '📍'}</span><span class="nm" title="${esc(r.label)}">${esc(r.label)}${meta ? `<span class="meta">· ${esc(meta)}</span>` : ''}</span><button class="add" title="Add as location">+</button>`;
           row.querySelector('.nm').addEventListener('click', () => map.flyTo([r.lat, r.lng], 15));
           row.querySelector('.add').addEventListener('click', () => pickResult(r));
@@ -69,7 +81,12 @@ const recents = [];
           resultsData = data;
           selIdx = resultsData.length ? 0 : -1;
           renderResults();
-          if (!live) status(resultsData.length ? '' : 'No results for "' + q + '".');
+          if (!live) {
+            const src = resultsData.length && resultsData[0].source;
+            status(resultsData.length
+              ? (src ? resultsData.length + ' result' + (resultsData.length > 1 ? 's' : '') + ' from ' + (SEARCH_SOURCE_LABEL[src] || src) + '.' : '')
+              : 'No results for "' + q + '".');
+          }
         } catch (e) { if (!live) status('Search failed — check internet connection.'); }
         finally { if (token === searching) setSpin(false); }
       }

@@ -189,7 +189,8 @@ async function fetchNearbyKey(key) {
     const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes);
     dropNearbyMarkers(key, places);
     setNearbyChipCount(key, places.length);
-    status(places.length ? `Found ${places.length} ${cat.label.toLowerCase()} within ${fmtRadius(nearbyRadiusM)}.`
+    const via = places.source === 'google' ? ' via Google' : (places.source ? ' via Geoapify' : '');
+    status(places.length ? `Found ${places.length} ${cat.label.toLowerCase()} within ${fmtRadius(nearbyRadiusM)}${via}.`
       : `No ${cat.label.toLowerCase()} found within ${fmtRadius(nearbyRadiusM)}.`);
     return true;
   } catch (e) {

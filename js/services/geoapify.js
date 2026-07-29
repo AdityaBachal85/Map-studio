@@ -23,6 +23,16 @@ function cacheSet(key, val) {
 }
 
 /**
+ * Drop every cached search.
+ *
+ * The cache is keyed by query and viewport only — not by which provider
+ * answered — so a search run before a Google key was saved kept being served
+ * from cache afterwards, and the key looked like it had done nothing. Called
+ * whenever a provider key changes.
+ */
+function clearSearchCache() { geoapifyCache.clear(); }
+
+/**
  * Map a Geoapify result category (e.g. "education.school") to an emoji,
  * mirroring services/places.js's iconFor() for Nominatim's class/type.
  * @param {string} cat @param {string} [rt] Geoapify result_type (city/street/postcode/...)
@@ -84,6 +94,7 @@ async function geoapifySearch(q, bias) {
       name: r.name || r.address_line1 || (r.formatted || '').split(',')[0],
       label,
       icon: iconForGeoapifyCategory(r.category || (r.categories && r.categories[0]) || '', r.result_type),
+      source: 'geoapify',
     });
   }
   return out;
@@ -116,6 +127,7 @@ async function photonSearch(q, bias) {
       name: p.name || p.street || label.split(',')[0] || 'Place',
       label: label || (p.name || 'Place'),
       icon: iconFor(p.osm_key, p.osm_value),
+      source: 'photon',
     });
   }
   return out;
@@ -130,7 +142,7 @@ async function nominatimSearch(q, bias) {
   if (bias) url += `&viewbox=${bias.getWest()},${bias.getNorth()},${bias.getEast()},${bias.getSouth()}&bounded=0`;
   const res = await fetch(url);
   const data = await res.json();
-  return data.map(r => ({ lat: +r.lat, lng: +r.lon, name: (r.name || r.display_name.split(',')[0]), label: r.display_name, icon: iconFor(r.class, r.type) }));
+  return data.map(r => ({ lat: +r.lat, lng: +r.lon, name: (r.name || r.display_name.split(',')[0]), label: r.display_name, icon: iconFor(r.class, r.type), source: 'nominatim' }));
 }
 
 /**
