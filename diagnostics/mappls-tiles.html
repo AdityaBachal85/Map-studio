@@ -228,23 +228,41 @@
       host.innerHTML = '';
 
       const k = encodeURIComponent(key());
-      // Try the exact form the documentation shows FIRST. `layer` defaults to
-      // `vector`; appending `layer=raster` is an extra requirement that an
-      // account entitled to vector tiles but not raster would reject, so
-      // testing only the raster variant can fail for a reason that has nothing
-      // to do with the key or the host.
+      // The SDK uses a Google-Maps-style callback handshake: Mappls' own CodePen
+      // sample loads it as `…&access_token=…&callback=initMap1` with `defer
+      // async`, and invokes that global once it is ready. The bare URL printed
+      // in the prose docs omits the parameter. Sending no callback is a real
+      // failure mode, not a cosmetic difference, so every candidate carries one.
+      //
+      // `layer` defaults to `vector`; appending `layer=raster` is an extra
+      // entitlement an account may not hold, so the documented default is tried
+      // first — testing only the raster variant can fail for a reason that has
+      // nothing to do with the key, the host or the whitelist.
+      const CB = 'initMapDiag';
       const candidates = [
-        ['documented default (vector)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
-        ['raster variant', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster`],
+        ['documented default (vector) + callback', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&callback=${CB}`],
+        ['raster variant + callback', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster&callback=${CB}`],
+        ['no callback (bare docs URL)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
         ['legacy host', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
       ];
 
+      /**
+       * Load an SDK candidate. Resolves true on whichever signal arrives first:
+       * the SDK invoking our callback, or the script's own load event followed
+       * by the `mappls` global actually being present — `onload` alone fires for
+       * an error page served with a 200, so it is not sufficient on its own.
+       */
       const loadScript = src => new Promise(res => {
+        let settled = false;
+        const finish = ok => { if (!settled) { settled = true; res(ok); } };
+        window[CB] = () => finish(true);
         const s = document.createElement('script');
         s.src = src;
-        s.onload = () => res(true);
-        s.onerror = () => res(false);
-        setTimeout(() => res(false), 15000);
+        s.defer = true;
+        s.async = true;
+        s.onload = () => setTimeout(() => finish(!!(window.mappls && window.mappls.Map)), 400);
+        s.onerror = () => finish(false);
+        setTimeout(() => finish(false), 15000);
         document.head.appendChild(s);
       });
 
@@ -364,8 +382,9 @@
     $('runRaw').addEventListener('click', () => {
       const k = key();
       const links = [
-        ['SDK v3.0 loader — raster (current host)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster`],
-        ['SDK v3.0 loader — vector (current host)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
+        ['SDK v3.0 — vector + callback (Mappls’ own sample form)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&callback=initMap1`],
+        ['SDK v3.0 — raster + callback', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster&callback=initMap1`],
+        ['SDK v3.0 — no callback', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
         ['Legacy SDK loader (pre-Aug-2025 auth)', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
         ['One map tile', `https://apis.mappls.com/advancedmaps/v1/${k}/map_tiles/${TILE.z}/${TILE.x}/${TILE.y}.png`],
         ['Still-image API', `https://apis.mappls.com/advancedmaps/v1/${k}/still_image?center=28.61,77.21&zoom=12&size=400x400`],
