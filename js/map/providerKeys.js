@@ -48,16 +48,19 @@ const PROVIDER_KEY_INFO = Object.freeze({
   },
   google: {
     label: 'Google Maps Platform',
-    blurb: 'Adds Google’s satellite, roads and terrain basemaps for finding routes and places on screen. ' +
-      '<b>On-screen only</b>: Google’s terms do not cover copying map content into files, so PNG, PDF and PPTX ' +
-      'exports render the equivalent Esri imagery instead — same view, same labels, licensed for client work. ' +
-      'Needs the <b>Map Tiles API</b> enabled and billing on, at {signup}.',
+    blurb: 'Puts Google first for <b>search</b>, <b>nearby places</b> and <b>routing</b> — its Indian addresses, ' +
+      'POIs and road network are the best available — with the existing providers kept behind it as fallback. ' +
+      'Also adds Google basemaps, which are <b>on-screen only</b>: Google’s terms do not cover copying map content ' +
+      'into files, so exports render the equivalent Esri imagery instead. Needs <b>Places API (New)</b>, ' +
+      '<b>Routes API</b> and <b>Map Tiles API</b> enabled, with billing on, at {signup}.',
     signup: 'https://console.cloud.google.com/google/maps-apis/api-list',
     signupLabel: 'the Google Cloud console',
     unlocks: ['googleHybrid', 'googleRoadmap', 'googleTerrain'],
     primary: 'googleHybrid',
     primaryLabel: 'Google satellite + roads',
     verify: k => verifyGoogleKey(k),
+    /** Each service is enabled separately in the console, so each is reported. */
+    perService: true,
     /** Tiles are metered per request, so the cost warning is part of the UI. */
     caution: 'Google bills per tile request. Restrict the key by HTTP referrer and set a quota cap before using it.',
     onChange: () => { if (typeof clearGoogleSessions === 'function') clearGoogleSessions(); },

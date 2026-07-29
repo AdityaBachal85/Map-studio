@@ -264,37 +264,43 @@ async function verifyGoogleKey(key) {
  * @param {string} key
  */
 async function verifyGoogleKeyWith(key) {
-  const results = [];
-  const cfgs = [
-    { label: 'Google Hybrid', cfg: { mapType: 'satellite', layerTypes: ['layerRoadmap'] } },
-    { label: 'Google Roadmap', cfg: { mapType: 'roadmap' } },
-  ];
-
-  for (const c of cfgs) {
-    const body = Object.assign({ language: 'en-GB', region: 'IN' }, c.cfg);
-    let r;
-    try {
-      const res = await fetch(GOOGLE_TILE_HOST + '/v1/createSession?key=' + encodeURIComponent(key), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      const txt = await res.text().catch(() => '');
-      let ok = false;
-      if (res.ok) { try { ok = !!JSON.parse(txt).session; } catch (e) { ok = false; } }
-      r = { ok, status: res.status, message: ok ? '' : googleErrorText(txt, res.status), reachable: true };
-    } catch (e) {
-      r = { ok: false, status: 0, message: 'Could not reach Google (' + e.message + ').', reachable: false };
+  // A Maps Platform key is enabled per API: the same string is routinely live
+  // for Places and 403 for Map Tiles, because that is a separate checkbox in the
+  // Cloud console. Verifying only one service would report "your key works" for
+  // a key that leaves three of the four features dead, so each is probed for
+  // real — one cheap call apiece against the endpoint the app actually uses.
+  const prevCfg = (typeof MAP_PROVIDER_KEYS !== 'undefined') ? MAP_PROVIDER_KEYS.google : undefined;
+  if (typeof MAP_PROVIDER_KEYS !== 'undefined' && !(typeof storedProviderKey === 'function' && storedProviderKey('google'))) {
+    MAP_PROVIDER_KEYS.google = key;
+  }
+  let results;
+  try {
+    results = typeof googleCapabilities === 'function' ? await googleCapabilities() : [];
+  } finally {
+    if (typeof MAP_PROVIDER_KEYS !== 'undefined' && !(typeof storedProviderKey === 'function' && storedProviderKey('google'))) {
+      MAP_PROVIDER_KEYS.google = prevCfg;
     }
-    results.push(Object.assign({ label: c.label }, r));
   }
+  if (!results.length) return { ok: false, results: [], message: 'Could not check the key.' };
 
+  const good = results.filter(r => r.ok);
   const bad = results.filter(r => !r.ok);
+
   if (!bad.length) {
-    return { ok: true, results, message: 'Key accepted — Google issued a tile session. These basemaps are on-screen only; exports use the Esri imagery underneath.' };
+    return {
+      ok: true, results,
+      message: 'Key accepted — search, nearby, routing and basemaps all responded. Basemaps are on-screen only; exports use the Esri imagery underneath.',
+    };
   }
-  if (!results.some(r => r.reachable)) {
-    return { ok: false, results, message: bad[0].message + ' The key can still be saved and will simply show blank tiles if it is wrong.' };
+  if (!good.length) {
+    return { ok: false, results, message: bad[0].message };
   }
-  return { ok: false, results, message: bad[0].message };
+  // The interesting case, and the common one: some APIs enabled, some not.
+  return {
+    ok: false, results,
+    message: good.map(r => r.label.replace(/ \(.*/, '')).join(', ') + ' work. ' +
+      bad.map(r => r.label.replace(/ \(.*/, '')).join(' and ') + ' did not — ' + bad[0].message,
+  };
 }
 
 /* Node/test interop — harmless in the browser. */

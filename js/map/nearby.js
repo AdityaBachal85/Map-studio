@@ -186,7 +186,7 @@ async function fetchNearbyKey(key) {
   const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
   if (chip) chip.classList.add('loading');
   try {
-    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats);
+    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes);
     dropNearbyMarkers(key, places);
     setNearbyChipCount(key, places.length);
     status(places.length ? `Found ${places.length} ${cat.label.toLowerCase()} within ${fmtRadius(nearbyRadiusM)}.`

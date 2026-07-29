@@ -587,3 +587,71 @@ The reader was checked against a hand-built workbook using shared strings with
 split runs, a cached formula result, a non-sequential relationship id, a
 worksheet at `sheet3.xml` and a gap in the row numbering — the shapes real Excel
 produces that our own writer never does.
+
+
+---
+
+## 8. Google for search, nearby and routing
+
+**New file:** `js/services/google.js`.
+
+The Google basemap landed earlier (§ Google: on screen, never in a file). This
+adds the three services where Google's Indian data is markedly better than the
+free providers: **search**, **nearby places** and **routing**. Each one is tried
+first when a key is present, with the existing chain kept behind it untouched —
+remove the key and the app behaves exactly as it did before.
+
+### Only one generation of these APIs works in a browser
+
+| | |
+| --- | --- |
+| `maps.googleapis.com/maps/api/{place,geocode,directions}` | No CORS header. Every browser call is blocked. Server-side or the JS SDK only. |
+| `places.googleapis.com/v1/…`, `routes.googleapis.com/…v2:computeRoutes` | POST + `X-Goog-Api-Key`, CORS-enabled, meant for browsers. |
+
+This app has no backend, so the legacy endpoints were never available. Worth
+recording because every tutorial still reaches for them, and the failure
+presents as a CORS bug rather than as Google's deliberate design.
+
+### Verified against the live service
+
+Unusually for this codebase, the proxy permits Google, so every call was checked
+before it was written. Findings that changed the code:
+
+- **`languageCode` is not optional.** Without it, route descriptions for an
+  Indian query returned in Assamese — *"Sangamwadi Rd আৰু Airport Rd"*.
+- **`BICYCLE` has no data in India.** Empty result set in Pune, a real route in
+  London. Bike routing therefore returns `null` and falls through to OSRM rather
+  than reporting "no route" for a journey OSRM handles fine.
+- **Alternatives work**: a Pune request returned three distinct routes with
+  encoded polylines and named roads, which now appear in the status line
+  ("via Sangamwadi Rd").
+- **A field mask is mandatory**, and over-asking is billed, so each call
+  requests exactly what it consumes.
+
+`decodePolyline()` is twenty lines rather than a dependency, and is verified
+against Google's own published example (`_p~iF~ps|U…` → 38.5,-120.2 /
+40.7,-120.95 / 43.252,-126.453).
+
+### Testing strategy
+
+Playwright cannot reach Google from the page — `route.continue()` re-issues on
+Playwright's own network stack, which ignores the proxy, and setting Playwright's
+proxy option breaks the local test server. So verification is split:
+
+1. **API behaviour** — checked live with curl: all four services, the language
+   fix, the bicycle gap, all twelve nearby categories, alternatives, polylines.
+2. **Wiring** — checked in-browser by replaying the *genuine captured payloads*
+   from step 1. Deterministic, real response shapes, and it can simulate a
+   Google outage to prove the fallbacks still run.
+
+That combination covers what a live browser test would, and the second half is
+repeatable without spending the key's quota.
+
+### Per-service capability reporting
+
+A Maps Platform key is enabled per API: the same string is routinely live for
+Places and 403 for Map Tiles because that is a separate checkbox in the Cloud
+console. Verifying one service would report "your key works" for a key that
+leaves three features dead, so **Verify key** probes all four and reports each —
+which is exactly what the supplied key does (search, nearby and routing enabled;
+Map Tiles not).

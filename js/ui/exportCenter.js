@@ -225,7 +225,8 @@ function providerKeyMsg(id, msg, cls, results) {
     rows.forEach(r => {
       const li = document.createElement('li');
       li.className = r.ok ? 'good' : 'bad';
-      li.textContent = r.label + ' — ' + (r.ok ? 'tile returned' : (r.status ? 'HTTP ' + r.status : 'no response'));
+      // Neutral wording: these rows cover tile services and JSON APIs alike.
+      li.textContent = r.label + ' — ' + (r.ok ? 'responded' : (r.status ? 'HTTP ' + r.status : 'no response'));
       list.appendChild(li);
     });
   }

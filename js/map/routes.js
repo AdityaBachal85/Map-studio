@@ -70,7 +70,28 @@
         // Alternatives only work for direct A→B (no via). OSRM refuses alternatives with waypoints.
         const altsParam = vias.length ? '' : '&alternatives=3';
         let ok = false;
-        for (const base of ROUTERS[rt.mode] || ROUTERS.car) {
+
+        // Google first when a key is present. It knows Indian roads, service
+        // lanes and one-ways that OSRM's extract does not, which is the point
+        // of the integration. It returns null rather than throwing when it
+        // cannot help — notably for bicycles, which it has no data for in
+        // India — and the OSRM chain below then runs exactly as it always did.
+        if (typeof googleReady === 'function' && googleReady()) {
+          try {
+            const g = await googleRoute(A, B, rt.mode, vias);
+            if (g && g.length) {
+              rt.alts = g.map(r => ({ d: r.d, t: r.t, coords: r.coords }));
+              rt.altIndex = Math.min(rt.altIndex || 0, rt.alts.length - 1);
+              rt.approx = false;
+              ok = true;
+              const named = g[0].desc ? ' via ' + g[0].desc : '';
+              const altSuffix = g.length > 1 ? ' (' + g.length + ' alternatives — ⇆ to compare)' : '';
+              status('Route found: ' + A.name + ' → ' + B.name + viaLabel + named + altSuffix);
+            }
+          } catch (e) { console.warn('Google routing failed:', e.message); }
+        }
+
+        for (const base of ok ? [] : (ROUTERS[rt.mode] || ROUTERS.car)) {
           try {
             const url = `${base}/route/v1/driving/${coordStr}?overview=full&geometries=geojson${altsParam}`;
             const res = await fetch(url);

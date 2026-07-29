@@ -149,7 +149,15 @@ async function geocodeSearch(q, bias) {
   const cached = cacheGet(key);
   if (cached) return cached;
   let results = [];
-  try { results = await geoapifySearch(q, bias); } catch (e) { console.warn('Geoapify failed:', e); results = []; }
+  // Google first when a key is present: for Indian addresses, estate names and
+  // building-level results it is markedly better than the others, which is the
+  // whole reason for having it. The existing chain stays untouched behind it,
+  // so removing the key returns the app to exactly its previous behaviour and
+  // a Google outage costs a result, not the search box.
+  if (typeof googleReady === 'function' && googleReady()) {
+    try { results = await googleTextSearch(q, bias); } catch (e) { console.warn('Google search failed:', e.message); results = []; }
+  }
+  if (!results.length) { try { results = await geoapifySearch(q, bias); } catch (e) { console.warn('Geoapify failed:', e); results = []; } }
   if (!results.length) { try { results = await photonSearch(q, bias); } catch (e) { console.warn('Photon failed:', e); results = []; } }
   if (!results.length) { try { results = await nominatimSearch(q, bias); } catch (e) { console.warn('Nominatim failed:', e); results = []; } }
   cacheSet(key, results);
