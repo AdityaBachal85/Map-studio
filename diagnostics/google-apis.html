@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="cache-control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="pragma" content="no-cache">
+  <title>Google APIs — diagnostic</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; padding:22px 24px 60px; background:#0B1322; color:#EAF0F9;
+      font:13px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    h1 { font-size:17px; margin:0 0 4px; }
+    .build { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:999px;
+      background:#FF7A1A; color:#17233B; font-size:10px; font-weight:800; letter-spacing:.06em; vertical-align:middle; }
+    p.lede { color:#8B99B0; max-width:76ch; margin:0 0 18px; }
+    button { padding:9px 16px; border-radius:9px; border:1px solid rgba(255,255,255,.18);
+      background:#FF7A1A; color:#17233B; font-weight:800; font-size:12px; cursor:pointer; }
+    button.ghost { background:rgba(255,255,255,.06); color:#EAF0F9; }
+    button:disabled { opacity:.5; cursor:default; }
+    .row { display:flex; gap:10px; align-items:center; margin:14px 0 20px; flex-wrap:wrap; }
+    table { border-collapse:collapse; width:100%; font-size:12px; margin-bottom:18px; }
+    th,td { text-align:left; padding:7px 10px; border-bottom:1px solid rgba(255,255,255,.09); vertical-align:top; }
+    th { font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#8B99B0; }
+    .ok { color:#34D399; font-weight:700; } .bad { color:#FF6B81; font-weight:700; } .dim { color:#8B99B0; }
+    td.detail { color:#B8C3D4; font-size:11.5px; word-break:break-word; }
+    .verdict { margin:16px 0 0; padding:14px 16px; border-radius:11px; border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.04); max-width:88ch; }
+    .verdict b { display:block; margin-bottom:5px; font-size:13.5px; }
+    code { background:rgba(255,255,255,.08); padding:1px 5px; border-radius:4px;
+      font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+    .note { color:#8B99B0; font-size:11.5px; max-width:80ch; margin-top:22px; }
+  </style>
+</head>
+
+<body>
+  <h1>Google APIs — diagnostic<span class="build" id="build">BUILD 1</span></h1>
+  <p class="lede">
+    Runs the app's own Google calls <em>from this browser, on this origin, with the key the app is actually
+    using</em>. That is the whole point: the same calls succeed from a terminal and can still fail here, because
+    a browser adds an origin, a referrer and a CORS preflight that a terminal never sends. If the app is falling
+    back to Geoapify, the reason is in this table.
+  </p>
+
+  <div class="row">
+    <button id="run">Run all checks</button>
+    <button class="ghost" id="copy">Copy results</button>
+    <span class="dim" id="origin"></span>
+  </div>
+
+  <table id="tbl" hidden>
+    <thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="verdict" id="verdict" hidden></div>
+
+  <p class="note">Nothing is stored or sent anywhere but Google. The key is read from the app's own config, exactly
+    as the app reads it.</p>
+
+  <!-- The app's real modules, so this tests the shipped code rather than a copy
+       of it that can drift. -->
+  <script src="../js/core/prefs.js"></script>
+  <script src="../js/constants.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/utils/math.js"></script>
+  <script src="../js/map/providerKeys.js"></script>
+  <script src="../js/map/basemapProviders.js"></script>
+  <script src="../js/map/googleTiles.js"></script>
+  <script src="../js/services/google.js"></script>
+
+  <script>
+    var BUILD = 1;
+    document.getElementById('build').textContent = 'BUILD ' + BUILD;
+    document.getElementById('origin').textContent = 'Origin: ' + location.origin;
+
+    function addRow(name, ok, detail) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + name + '</td>' +
+        '<td class="' + (ok === null ? 'dim' : (ok ? 'ok' : 'bad')) + '">' +
+        (ok === null ? '—' : (ok ? 'OK' : 'FAIL')) + '</td>' +
+        '<td class="detail">' + String(detail).replace(/</g, '&lt;') + '</td>';
+      document.getElementById('rows').appendChild(tr);
+      return ok;
+    }
+
+    var lastText = '';
+
+    document.getElementById('run').addEventListener('click', async function () {
+      var btn = this;
+      btn.disabled = true; btn.textContent = 'Running…';
+      document.getElementById('rows').innerHTML = '';
+      document.getElementById('tbl').hidden = false;
+      document.getElementById('verdict').hidden = true;
+
+      var res = [];
+      var push = function (n, ok, d) { res.push({ n: n, ok: ok, d: d }); addRow(n, ok, d); };
+
+      // 1 — which build is this, and is a key visible at all?
+      push('App version', null, typeof APP_VERSION !== 'undefined' ? APP_VERSION : '(constants.js not loaded)');
+
+      var cfgKey = (typeof MAP_PROVIDER_KEYS !== 'undefined' && MAP_PROVIDER_KEYS.google) || '';
+      var prefKey = (typeof storedProviderKey === 'function' && storedProviderKey('google')) || '';
+      push('Key in config.js', !!cfgKey, cfgKey ? cfgKey.slice(0, 10) + '… (' + cfgKey.length + ' chars)' : 'EMPTY — this build predates the committed key');
+      push('Key saved in this browser', prefKey ? true : null, prefKey ? prefKey.slice(0, 10) + '… (overrides config)' : 'none — the config key is used, which is the normal case');
+
+      var ready = typeof googleReady === 'function' && googleReady();
+      push('googleReady()', ready, ready ? 'the app will try Google first' : 'the app will go straight to Geoapify');
+
+      if (!ready) {
+        verdict(res);
+        btn.disabled = false; btn.textContent = 'Run all checks';
+        return;
+      }
+
+      // 2 — the four real calls, each exactly as the app makes it.
+      var here = { lat: 19.1557, lng: 72.9986 };     // Airoli
+
+      try {
+        var s = await googleTextSearch('Shree Ram Vidyalaya Junior College Airoli', null);
+        push('Search — Text Search', s.length > 0, s.length ? s.length + ' results, first: ' + s[0].name : 'no results');
+      } catch (e) { push('Search — Text Search', false, e.message); }
+
+      try {
+        var a = await googleAutocomplete('shree ram vid', null);
+        push('Search — Autocomplete', a.length > 0, a.length ? a.length + ' predictions, first: ' + a[0].name : 'no predictions');
+      } catch (e) { push('Search — Autocomplete', false, e.message); }
+
+      try {
+        var n = await googleNearby(here.lat, here.lng, 2000, ['school', 'primary_school', 'secondary_school'], 50);
+        var hit = n.filter(function (x) { return /vidyal|vidyaly|junior college/i.test(x.name); });
+        push('Nearby — schools at Airoli', n.length > 0,
+          n.length + ' places. ' + (hit.length ? 'Found "' + hit[0].name + '" at position ' + (n.indexOf(hit[0]) + 1) + '.' : 'Shreeram Vidyalya NOT in the list.') +
+          ' Top 3: ' + n.slice(0, 3).map(function (x) { return x.name; }).join(', '));
+      } catch (e) { push('Nearby — schools at Airoli', false, e.message); }
+
+      try {
+        var r = await googleRoute(here, { lat: 19.076, lng: 72.877 }, 'car');
+        push('Routing — Routes API', !!(r && r.length), r && r.length ? r.length + ' route(s), ' + (r[0].d / 1000).toFixed(1) + ' km' : 'no route');
+      } catch (e) { push('Routing — Routes API', false, e.message); }
+
+      try {
+        var t = await createGoogleSession({ mapType: 'roadmap' });
+        push('Basemaps — Map Tiles API', t.ok, t.ok ? 'session issued' : t.message);
+      } catch (e) { push('Basemaps — Map Tiles API', false, e.message); }
+
+      verdict(res);
+      btn.disabled = false; btn.textContent = 'Run all checks';
+    });
+
+    function verdict(res) {
+      var el = document.getElementById('verdict');
+      var by = {};
+      res.forEach(function (r) { by[r.n] = r; });
+      var html;
+
+      if (!by['googleReady()'].ok) {
+        html = by['Key in config.js'].ok
+          ? '<b class="bad">A key is present but the app is not using it.</b>Unexpected — send me this table.'
+          : '<b class="bad">This build has no key in it.</b>The key was committed in <code>v5.0015</code>. ' +
+            'This page loaded <code>' + (by['App version'].d) + '</code>. The browser or GitHub Pages is serving an ' +
+            'older copy — hard-reload (Ctrl+Shift+R / Cmd+Shift+R), and check the version marker in the sidebar reads 5.0015 or later.';
+      } else {
+        var failed = res.filter(function (r) { return r.ok === false; });
+        var searchOk = by['Search — Text Search'] && by['Search — Text Search'].ok;
+        var nearbyOk = by['Nearby — schools at Airoli'] && by['Nearby — schools at Airoli'].ok;
+        if (searchOk && nearbyOk) {
+          html = '<b class="ok">Google is working from this browser.</b>' +
+            'Search and nearby both answered. If the app still shows Geoapify, it is running a different build than ' +
+            'this page — hard-reload it and check the sidebar version marker.';
+        } else if (failed.length) {
+          var msg = failed.map(function (f) { return f.d; }).join(' ');
+          if (/referer|referrer|API_KEY_HTTP_REFERRER/i.test(msg)) {
+            html = '<b class="bad">The key is rejected from this origin.</b>Add <code>' + location.origin +
+              '/*</code> to the key\'s HTTP-referrer restrictions in the Google Cloud console.';
+          } else if (/has not been used|is disabled|SERVICE_DISABLED|PERMISSION_DENIED/i.test(msg)) {
+            html = '<b class="bad">An API is not enabled on the project.</b>The Detail column names which. ' +
+              'Enable it in the Cloud console — Places API (New) and Routes API are the two that matter for search and nearby.';
+          } else if (/billing/i.test(msg)) {
+            html = '<b class="bad">Billing is not enabled on the project.</b>Google will not serve these APIs without it.';
+          } else if (/Failed to fetch|NetworkError|load failed/i.test(msg)) {
+            html = '<b class="bad">The request never reached Google.</b>Something between this browser and Google is ' +
+              'blocking it — an extension, a corporate proxy, or an offline connection. Try an incognito window with extensions off.';
+          } else {
+            html = '<b class="bad">Some calls failed.</b>The Detail column has Google\'s own words for each.';
+          }
+        } else {
+          html = '<b class="ok">All checks passed.</b>';
+        }
+      }
+      el.innerHTML = html;
+      el.hidden = false;
+      lastText = res.map(function (r) {
+        return (r.ok === null ? 'INFO' : (r.ok ? 'OK  ' : 'FAIL')) + '  ' + r.n + '  —  ' + r.d;
+      }).join('\n') + '\n\norigin: ' + location.origin + '\nUA: ' + navigator.userAgent;
+    }
+
+    document.getElementById('copy').addEventListener('click', function () {
+      if (!lastText) { alert('Run the checks first.'); return; }
+      navigator.clipboard.writeText(lastText).then(function () {
+        var b = document.getElementById('copy');
+        b.textContent = 'Copied';
+        setTimeout(function () { b.textContent = 'Copy results'; }, 1600);
+      });
+    });
+  </script>
+</body>
+
+</html>

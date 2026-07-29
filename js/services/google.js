@@ -302,12 +302,29 @@ async function googlePlaceDetails(placeId) {
  * @param {number} [limit]
  * @returns {Promise<Array<{lat,lng,name,address,distance}>>}
  */
+/**
+ * Place types that are technically in the category but are not what anyone
+ * means by it. Kept as a demotion rather than an exclusion: a preschool IS
+ * relevant to a homebuyer, it just should not push the actual secondary school
+ * off the end of a twenty-item list, which is what "the college is not showing"
+ * turned out to be.
+ */
+const GOOGLE_DEMOTE_TYPES = new Set([
+  'preschool', 'child_care_agency', 'fitness_center', 'makeup_artist',
+  'service', 'association_or_organization',
+]);
+
 async function googleNearby(lat, lng, radiusM, types, limit) {
   const GOOGLE_NEARBY_CAP = 20;                     // hard ceiling per request
 
   const once = async ts => {
     const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
-      includedTypes: ts,
+      // `includedPrimaryTypes`, not `includedTypes`. A dance studio and a
+      // makeup academy both carry `school` somewhere in their type list;
+      // filtering on the *primary* type drops them at the server. Verified at
+      // Airoli: it removes "FMS Dance & Fitness", "Albatraoz Makeup & Hair
+      // Academy" and a day-care from a schools search.
+      includedPrimaryTypes: ts,
       maxResultCount: GOOGLE_NEARBY_CAP,
       rankPreference: 'DISTANCE',
       languageCode: GOOGLE_LANG,
@@ -315,7 +332,7 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
       locationRestriction: {
         circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
       },
-    }, 'places.id,places.displayName,places.formattedAddress,places.location');
+    }, 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType');
 
     return (json.places || []).map(p => ({
       id: p.id,
@@ -323,6 +340,7 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
       lng: p.location.longitude,
       name: (p.displayName && p.displayName.text) || 'Unnamed place',
       address: p.formattedAddress || '',
+      primaryType: p.primaryType || '',
       distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
     })).filter(r => r.lat != null && r.lng != null);
   };
@@ -347,8 +365,17 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
         out.push(r);
       });
     }
-    out.sort((a, b) => a.distance - b.distance);
   }
+
+  // Nearest-first, but the genuine article ahead of its lookalikes. At Airoli a
+  // plain distance sort buried "Shreeram Vidyalya & Junior College" behind four
+  // playgroups; this lifts it to the top of the list while keeping preschools
+  // present, just after the schools.
+  out.sort((a, b) => {
+    const da = GOOGLE_DEMOTE_TYPES.has(a.primaryType) ? 1 : 0;
+    const db = GOOGLE_DEMOTE_TYPES.has(b.primaryType) ? 1 : 0;
+    return da - db || a.distance - b.distance;
+  });
 
   return limit ? out.slice(0, limit) : out;
 }
