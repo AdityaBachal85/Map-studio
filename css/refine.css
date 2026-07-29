@@ -1919,3 +1919,10 @@ input[type=tel] {
 :root[data-theme="light"] .act-group .btn:focus-visible {
   border-color: var(--accent);
 }
+
+/* A key stored against the wrong provider is an error state, not a neutral one. */
+.bm-key-state.bad {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, .45);
+  background: rgba(239, 68, 68, .10);
+}

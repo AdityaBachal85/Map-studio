@@ -421,7 +421,12 @@ const HILLSHADE_LAYER = {
  * @returns {string}
  */
 function basemapKey(provider) {
-  if (typeof storedProviderKey === 'function') {
+  // `usableProviderKey`, not `storedProviderKey`: a key saved against the wrong
+  // provider is ignored so it cannot shadow a working one in config.js.
+  if (typeof usableProviderKey === 'function') {
+    const stored = usableProviderKey(provider);
+    if (stored) return stored;
+  } else if (typeof storedProviderKey === 'function') {
     const stored = storedProviderKey(provider);
     if (stored) return stored;
   }

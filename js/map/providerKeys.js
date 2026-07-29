@@ -76,6 +76,37 @@ const PROVIDER_KEY_INFO = Object.freeze({
 /** Provider ids with a key panel, in the order they are shown. */
 const PROVIDER_KEY_ORDER = ['arcgis', 'google'];
 
+/**
+ * Detect a key stored against the wrong provider.
+ *
+ * This is not hypothetical tidiness. An ArcGIS token pasted into the Google
+ * field is a silent, total failure: a stored key *overrides* the working one in
+ * config.js, every Google call comes back "API key not valid", and the app
+ * quietly falls through to its fallback providers. Nothing on screen says why.
+ * It took a purpose-built diagnostic page to find, which is one page too many.
+ *
+ * Only the unmistakable cases are claimed. Google Maps Platform keys begin with
+ * `AIza` and have for a decade; ArcGIS uses `AAPK`/`AAPT`. Anything else is
+ * left alone rather than guessed at — refusing a valid key because its prefix
+ * is unfamiliar would be a worse bug than the one this prevents.
+ *
+ * @param {string} provider @param {string} key
+ * @returns {string} '' when plausible, otherwise what it actually looks like.
+ */
+function wrongProviderKey(provider, key) {
+  const k = String(key || '').trim();
+  if (!k) return '';
+  const looksGoogle = /^AIza[0-9A-Za-z_-]{10,}$/.test(k);
+  const looksArcgis = /^AAP[KT][0-9A-Za-z._-]{10,}$/.test(k);
+  if (provider === 'google' && looksArcgis) {
+    return 'That looks like an ArcGIS key (it starts with “' + k.slice(0, 4) + '”). Google Maps Platform keys start with “AIza”.';
+  }
+  if (provider === 'arcgis' && looksGoogle) {
+    return 'That looks like a Google Maps Platform key (it starts with “AIza”). ArcGIS keys start with “AAPK” or “AAPT”.';
+  }
+  return '';
+}
+
 /** @returns {Object<string,string>} the stored keys, always an object. */
 function loadProviderKeys() {
   if (typeof getPref !== 'function') return {};
@@ -89,6 +120,19 @@ function loadProviderKeys() {
  */
 function storedProviderKey(provider) {
   return String(loadProviderKeys()[provider] || '').trim();
+}
+
+/**
+ * The stored key, but only if it is actually that provider's.
+ *
+ * A key of the wrong shape is ignored rather than deleted — the operator put it
+ * there and may want to move it — but it must not shadow the working key in
+ * config.js, which is what turned one mis-paste into "Google never works".
+ * @param {string} provider @returns {string}
+ */
+function usableProviderKey(provider) {
+  const k = storedProviderKey(provider);
+  return (k && wrongProviderKey(provider, k)) ? '' : k;
 }
 
 /**

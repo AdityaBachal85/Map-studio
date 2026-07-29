@@ -184,8 +184,15 @@ function renderProviderKey(id) {
   const saved = storedProviderKey(id);
   const fromConfig = !saved && hasProviderKey(id);
 
-  state.textContent = saved ? 'Saved on this device' : (fromConfig ? 'Set in config.js' : 'Not set');
-  state.className = 'bm-key-state' + (saved || fromConfig ? ' good' : '');
+  // A key of the wrong provider is worse than no key: it shadows the working
+  // one in config.js and every call fails. Say so, loudly, with Remove offered.
+  const mismatch = saved ? wrongProviderKey(id, saved) : '';
+  state.textContent = mismatch ? 'Wrong key stored'
+    : (saved ? 'Saved on this device' : (fromConfig ? 'Set in config.js' : 'Not set'));
+  state.className = 'bm-key-state' + (mismatch ? ' bad' : ((saved || fromConfig) ? ' good' : ''));
+  if (mismatch) {
+    providerKeyMsg(id, mismatch + ' It is being ignored, so the built-in key is used instead — press Remove key to clear it.', 'bad');
+  }
   cardEl(id, 'clear').hidden = !saved;
   cardEl(id, 'use').hidden = !isBasemapAvailable(BASEMAP_CATALOGUE[info.primary]) ||
     (typeof activeKey !== 'undefined' && activeKey === info.primary);
@@ -277,6 +284,10 @@ function wireProviderKeyCard(id, card) {
   save.addEventListener('click', async () => {
     const key = input.value.trim();
     if (!key) { providerKeyMsg(id, 'Paste a key first.', 'bad'); return; }
+    // Two providers, two cards, two similar-looking fields. Catching the swap
+    // here is the difference between an obvious message and a silent outage.
+    const wrong = wrongProviderKey(id, key);
+    if (wrong) { providerKeyMsg(id, wrong + ' Nothing was saved.', 'bad'); return; }
 
     // Verify before saving, but do not *require* it: a key that cannot be
     // checked because the network is down is still probably the right key, and
@@ -413,9 +424,13 @@ function wireBasemapManager() {
 
 /** Open the basemap manager (from the basemap switcher panel). */
 function openBasemapManager() {
+  // Clear stale messages *before* rendering, not after: renderProviderKey emits
+  // the wrong-key warning, and a blanket clear afterwards wiped the one message
+  // the operator most needs to see.
+  buildProviderKeyCards();
+  PROVIDER_KEY_ORDER.forEach(id => providerKeyMsg(id, ''));
   renderProviderKeys();
   renderBasemapManager();
-  PROVIDER_KEY_ORDER.forEach(id => providerKeyMsg(id, ''));
   bmMgr.open();
 }
 
