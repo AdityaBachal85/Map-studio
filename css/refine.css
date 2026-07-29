@@ -400,3 +400,242 @@ select:focus:not(:focus-visible) {
 :root[data-theme="light"] .appVer {
   background: rgba(16, 32, 60, .05);
 }
+
+/* ---------------------------------------------------------------------------
+   11. Tooltips (js/ui/tooltips.js)
+   One fixed-position element for the whole app, replacing the browser's native
+   `title` tooltip — which appears after an uncontrollable delay, in the OS's
+   style, never on keyboard focus, and not at all on touch.
+   --------------------------------------------------------------------------- */
+
+.tip {
+  position: fixed;
+  z-index: 4000;
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-solid);
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: .005em;
+  box-shadow: var(--elev-3);
+  pointer-events: none;
+  opacity: 0;
+  /* Rises the last few pixels into place — enough to read as arriving from the
+     control, not enough to make a hover feel slow. */
+  transform: translateY(3px);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.tip[data-placement="bottom"] {
+  transform: translateY(-3px);
+}
+
+.tip.on {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------------------------------------------------------------------------
+   12. Interaction state consistency
+   Every control should answer the same four questions the same way: can I click
+   it, am I hovering it, am I pressing it, is it unavailable. These were
+   previously answered differently (or not at all) per component.
+   --------------------------------------------------------------------------- */
+
+button:not(:disabled),
+.nearby-chip,
+.bm-tile,
+.acc-hd,
+.tabs button,
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Disabled: dimmed, not-allowed, and non-interactive — all three, always. */
+button:disabled,
+input:disabled,
+select:disabled,
+.is-disabled {
+  opacity: .42;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Pressed feedback on everything that takes a press, at one consistent depth. */
+.btn:active,
+.nearby-chip:active,
+.seg-btn:active,
+.export-menu-item:active {
+  transform: translateY(1px);
+}
+
+.seg-btn,
+.nearby-chip {
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+/* The single primary action on the panel earns the accent glow. Nothing else
+   does — a glow on every button is a glow on none. */
+.btn-primary {
+  box-shadow: var(--accent-glow);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--accent-glow), var(--elev-2);
+}
+
+/* ---------------------------------------------------------------------------
+   13. Loading states
+   A control that is working should say so in place, rather than going quiet and
+   leaving the operator wondering whether the click registered.
+   --------------------------------------------------------------------------- */
+
+@keyframes tipShimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Shimmer sweep for anything mid-fetch. Reads as "working" without needing the
+   layout to change, so nothing shifts when the data lands. */
+.is-loading,
+.nearby-chip.loading {
+  background-image: linear-gradient(100deg,
+      transparent 20%,
+      rgba(255, 255, 255, .09) 40%,
+      rgba(255, 255, 255, .09) 60%,
+      transparent 80%);
+  background-size: 200% 100%;
+  animation: tipShimmer 1.15s linear infinite;
+  pointer-events: none;
+}
+
+:root[data-theme="light"] .is-loading,
+:root[data-theme="light"] .nearby-chip.loading {
+  background-image: linear-gradient(100deg,
+      transparent 20%,
+      rgba(16, 32, 60, .07) 40%,
+      rgba(16, 32, 60, .07) 60%,
+      transparent 80%);
+}
+
+/* ---------------------------------------------------------------------------
+   14. Empty states
+   Three panes each rolled their own. One treatment: centred, quiet, with the
+   heading carrying the fact and the body carrying the way out.
+   --------------------------------------------------------------------------- */
+
+.empty,
+.lp-empty {
+  padding: var(--sp-5) var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px dashed var(--border-strong);
+  background: rgba(255, 255, 255, .02);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+  text-align: center;
+}
+
+:root[data-theme="light"] .empty,
+:root[data-theme="light"] .lp-empty {
+  background: rgba(16, 32, 60, .02);
+}
+
+.empty b {
+  display: block;
+  margin-bottom: var(--sp-1);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+/* ---------------------------------------------------------------------------
+   15. Spacing rhythm
+   The panes mixed 6/9/10/14px gaps. Snapping the repeating ones to the 4px
+   scale is most of what makes a dense panel read as designed rather than
+   accumulated.
+   --------------------------------------------------------------------------- */
+
+.panes {
+  padding: var(--sp-4);
+}
+
+.field {
+  margin-bottom: var(--sp-4);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.row2 {
+  gap: var(--sp-2);
+}
+
+.acc {
+  border-radius: var(--r-lg);
+  margin-bottom: var(--sp-2);
+  overflow: hidden;
+}
+
+.acc-body {
+  padding: var(--sp-3);
+}
+
+.item-card {
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+/* ---------------------------------------------------------------------------
+   16. Glass composition on the large surfaces
+   `.sidebar` and `.frost` are both single-class selectors, so the later sheet
+   won — and the sidebar's own drop shadow silently replaced the glass
+   catch-light. Composing both here restores the lit top edge while keeping the
+   cast shadow that separates the panel from the map.
+   --------------------------------------------------------------------------- */
+
+.sidebar.frost {
+  box-shadow: var(--glass-highlight), 8px 0 40px rgba(5, 10, 20, .32);
+}
+
+body.no-glass .sidebar.frost {
+  box-shadow: 8px 0 40px rgba(5, 10, 20, .32);
+}
+
+/* Floating map controls read as small panes of the same material. */
+#bmPanel,
+#layerPanel,
+.search-box .inner,
+.search-results {
+  box-shadow: var(--glass-highlight), var(--elev-3);
+}
+
+/* Accordions: the header is the surface, the body is the recess beneath it. */
+.acc {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .035);
+}
+
+:root[data-theme="light"] .acc {
+  background: rgba(16, 32, 60, .022);
+}
+
+.acc.open {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-1);
+}

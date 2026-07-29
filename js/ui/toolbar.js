@@ -64,7 +64,6 @@
       $('titleTgl').addEventListener('change', e => { $('titleCard').style.display = e.target.checked ? '' : 'none'; });
       $('legendTgl').addEventListener('change', rebuildLegend);
       $('creditTgl').addEventListener('change', e => document.body.classList.toggle('no-credit', !e.target.checked));
-      $('glassTgl').addEventListener('change', e => document.body.classList.toggle('no-glass', !e.target.checked));
       $('brandTgl').addEventListener('change', e => document.body.classList.toggle('no-brand', !e.target.checked));
       $('northTgl').addEventListener('change', e => document.body.classList.toggle('no-north', !e.target.checked));
       let chipPct = 100;

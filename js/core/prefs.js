@@ -55,7 +55,7 @@ function effectiveTheme() { const t = getPref('theme'); return t === 'system' ? 
 function applyTheme() { document.documentElement.dataset.theme = effectiveTheme(); }
 _sysThemeMq.addEventListener('change', () => { if (getPref('theme') === 'system') applyTheme(); });
 
-// ---------- glass / motion (mirrored by the existing #glassTgl checkbox too) ----------
+// ---------- glass / motion (owned solely by the Preferences dialog) ----------
 function applyGlass() { document.body.classList.toggle('no-glass', !getPref('glass')); }
 function applyMotion() { document.body.classList.toggle('reduce-motion', !!getPref('reduceMotion')); }
 

@@ -32,20 +32,15 @@ $('prefTheme').querySelectorAll('.seg-btn').forEach(btn => {
 });
 $('prefGlass').addEventListener('change', e => {
   setPref('glass', e.target.checked); applyGlass();
-  const tgl = $('glassTgl'); if (tgl) tgl.checked = e.target.checked;   // keep the Settings-tab checkbox in sync
 });
 $('prefMotion').addEventListener('change', e => { setPref('reduceMotion', e.target.checked); applyMotion(); });
 $('prefUnitDistance').addEventListener('change', e => { setPref('unitDistance', e.target.value); refreshMeasurementsForUnits(); });
 $('prefUnitArea').addEventListener('change', e => { setPref('unitArea', e.target.value); refreshMeasurementsForUnits(); });
 $('prefReset').addEventListener('click', () => { resetPrefs(); reflectPrefs(); refreshMeasurementsForUnits(); status('Preferences reset to defaults.'); });
 
-// Apply persisted glass / motion once at startup and keep the existing
-// Settings-tab "Glass / frost effects" checkbox as a second entry point.
+// Apply persisted glass / motion once at startup. Preferences is the single
+// home for both: the Settings tab used to carry a duplicate "Glass / frost
+// effects" checkbox, and two controls for one setting is a consistency bug —
+// they can disagree, and neither reads as authoritative.
 applyGlass();
 applyMotion();
-(function syncGlassCheckbox() {
-  const tgl = $('glassTgl');
-  if (!tgl) return;
-  tgl.checked = getPref('glass');
-  tgl.addEventListener('change', e => { setPref('glass', e.target.checked); applyGlass(); });
-})();

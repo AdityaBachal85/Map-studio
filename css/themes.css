@@ -69,6 +69,30 @@
       --ease-out: cubic-bezier(.22, .8, .3, 1);
       --ease-in-out: cubic-bezier(.4, 0, .2, 1);
 
+      /* ------------------------------------------------------------------
+         Glass system.
+         Real glass is not "a translucent panel" — it is three things at once:
+         it *blurs* what is behind it, it *saturates* those colours (which is
+         what stops a blurred backdrop looking like grey sludge), and it catches
+         a highlight along its top edge where light enters. Doing only the first
+         is what makes most "glassmorphism" look cheap.
+         Blur radius and opacity are tokens because they are the two values that
+         have to move together: more blur needs less opacity to still read as
+         glass, and vice versa.
+         ------------------------------------------------------------------ */
+      --glass-blur: 20px;
+      --glass-saturate: 1.7;
+      --glass-tint: rgba(20, 30, 52, .70);
+      --glass-tint-2: rgba(14, 22, 40, .82);
+      --glass-edge: rgba(255, 255, 255, .11);
+      /* The top-edge catch-light and the inner floor shadow, as one inset pair. */
+      --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .13),
+        inset 0 -1px 0 rgba(0, 0, 0, .22);
+      --glass-solid: #0E1626;
+
+      /* Accent glow — used only on the primary action, never decoratively. */
+      --accent-glow: 0 0 0 1px rgba(255, 122, 26, .35), 0 6px 22px rgba(255, 122, 26, .28);
+
       /* Semantic surfaces, derived from the brand palette. */
       --surface: var(--glass);
       --surface-2: var(--glass2);
@@ -99,6 +123,15 @@
       --elev-3: 0 4px 8px rgba(16, 32, 60, .10), 0 20px 48px rgba(16, 32, 60, .14);
       --scroll-thumb: rgba(16, 32, 60, .18);
       --scroll-thumb-hover: rgba(16, 32, 60, .32);
+      /* Light glass is thinner and brighter: a white veil rather than a tinted
+         pane, with the catch-light on top and a soft grey floor. */
+      --glass-tint: rgba(255, 255, 255, .88);
+      --glass-tint-2: rgba(255, 255, 255, .82);
+      --glass-edge: rgba(16, 32, 60, .10);
+      --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .9),
+        inset 0 -1px 0 rgba(16, 32, 60, .06);
+      --glass-solid: #F4F7FB;
+      --accent-glow: 0 0 0 1px rgba(255, 122, 26, .3), 0 6px 20px rgba(255, 122, 26, .22);
     }
 
     /* Surfaces that hardcode white-alpha fills need a dark-alpha equivalent in

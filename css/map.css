@@ -393,17 +393,29 @@
       cursor: crosshair;
     }
 
+    /* Glass surface. See the token block in themes.css for why blur alone is
+       not enough — the saturation boost and the top-edge catch-light are what
+       separate real glass from a grey translucent rectangle.
+       The background is a gradient rather than a flat fill so the pane is
+       fractionally lighter where light enters, which is what gives it the sense
+       of being a physical sheet rather than a hole in the page. */
     .frost {
-      background: var(--glass);
-      backdrop-filter: blur(14px) saturate(1.25);
-      -webkit-backdrop-filter: blur(14px) saturate(1.25);
-      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, var(--glass-tint), var(--glass-tint-2));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border: 1px solid var(--glass-edge);
+      box-shadow: var(--glass-highlight);
     }
 
+    /* Glass off (Preferences → Appearance): backdrop-filter is the expensive
+       part — it forces the compositor to re-sample everything behind the pane
+       on every frame. Falling back to a solid fill keeps the identical layout
+       and contrast, so nothing shifts when it is switched. */
     body.no-glass .frost {
-      background: #0E1626;
+      background: var(--glass-solid);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+      box-shadow: none;
     }
 
 

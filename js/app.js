@@ -31,6 +31,9 @@ document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;ba
 // Wire the billboard overlay to the map (see map/billboard.js).
 initBillboard();
 
+// Replace the browser's native `title` tooltips with the app's own.
+initTooltips();
+
 // export/* and project/* each export a wire*() function instead of wiring at
 // module-load time, so every DOM listener they own is visible from one place.
 initLegendDrag();
