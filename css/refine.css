@@ -1046,3 +1046,175 @@ body.no-glass .sidebar.frost {
 body.reduce-motion .tabs::after {
   transition: none;
 }
+
+/* ---------------------------------------------------------------------------
+   19. Range sliders
+   Native range inputs with only `accent-color` give a hairline track and a
+   small default thumb, with no read on how far along the range you are. These
+   controls are used while watching the map, so the track has to show its own
+   value at a glance. `--fill` is written by js/ui/sliders.js — CSS has no
+   access to an input's value, so the gradient stop cannot come from anywhere
+   else.
+   --------------------------------------------------------------------------- */
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+  cursor: grab;
+}
+
+input[type=range]:active {
+  cursor: grabbing;
+}
+
+/* --- track --- */
+input[type=range]::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: var(--r-pill);
+  background:
+    linear-gradient(90deg, var(--orange), var(--orange2)) 0 / var(--fill, 0%) 100% no-repeat,
+    rgba(255, 255, 255, .13);
+}
+
+input[type=range]::-moz-range-track {
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, .13);
+}
+
+input[type=range]::-moz-range-progress {
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--orange), var(--orange2));
+}
+
+:root[data-theme="light"] input[type=range]::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(90deg, var(--orange), var(--orange2)) 0 / var(--fill, 0%) 100% no-repeat,
+    rgba(16, 32, 60, .14);
+}
+
+:root[data-theme="light"] input[type=range]::-moz-range-track {
+  background: rgba(16, 32, 60, .14);
+}
+
+/* --- thumb --- */
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--orange);
+  box-shadow: 0 1px 3px rgba(5, 10, 20, .45);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--orange);
+  box-shadow: 0 1px 3px rgba(5, 10, 20, .45);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+input[type=range]:hover::-webkit-slider-thumb {
+  transform: scale(1.14);
+}
+
+input[type=range]:hover::-moz-range-thumb {
+  transform: scale(1.14);
+}
+
+/* Pressed: a soft halo rather than more scale, so the thumb stays exactly over
+   the value while it is being dragged. */
+input[type=range]:active::-webkit-slider-thumb,
+input[type=range]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgba(255, 122, 26, .2), 0 1px 3px rgba(5, 10, 20, .45);
+}
+
+input[type=range]:active::-moz-range-thumb,
+input[type=range]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 6px rgba(255, 122, 26, .2), 0 1px 3px rgba(5, 10, 20, .45);
+}
+
+input[type=range]:focus-visible {
+  outline: none;
+}
+
+/* The readout is what the operator reads; give it room and weight. */
+.inline-ctl .val {
+  min-width: 46px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text);
+  display: inline-block;
+}
+
+/* ---------------------------------------------------------------------------
+   20. Settings pane structure
+   Top-level actions sit above the groups rather than buried inside one of them,
+   and a group whose content belongs in a dialog gets a launcher shaped like the
+   accordion headers so the column still reads as one list.
+   --------------------------------------------------------------------------- */
+
+.pane-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.acc-launch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 13px;
+  color: var(--text-2);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.acc-launch:hover {
+  background: rgba(255, 255, 255, .045);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .acc-launch:hover {
+  background: rgba(16, 32, 60, .05);
+}
+
+/* Height is animated by js/utils/animate.js, so the sheet must not also be
+   display:none — there would be nothing to measure or transition. */
+.acc-body {
+  display: block;
+  overflow: hidden;
+  height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.acc.open > .acc-body {
+  height: auto;
+  padding-top: 2px;
+  padding-bottom: 13px;
+}
+
+.acc.open > .acc-body {
+  animation: none;
+}
+
+.modal-panel.modal-sm {
+  width: min(430px, 100%);
+}

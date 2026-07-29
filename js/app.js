@@ -33,6 +33,7 @@ initBillboard();
 
 // Replace the browser's native `title` tooltips with the app's own.
 initTooltips();
+initSliders();
 
 // export/* and project/* each export a wire*() function instead of wiring at
 // module-load time, so every DOM listener they own is visible from one place.

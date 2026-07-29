@@ -222,4 +222,9 @@ function initExportCenter() {
   });
   $('kmlExportBtn').addEventListener('click', exportKML);
   wireBasemapManager();
+
+  // Brand & logo is configuration rather than live tweaking, so it reads better
+  // as a dialog than as a section you scroll past every time.
+  const brand = wireModal('brandOverlay', 'brandClose');
+  $('brandOpenBtn').addEventListener('click', brand.open);
 }

@@ -57,6 +57,9 @@
       // Each .acc header toggles its own .open state independently, so users can
       // open exactly the groups they need instead of scrolling one long list.
       document.querySelectorAll('.acc .acc-hd').forEach(hd => {
-        hd.addEventListener('click', () => hd.parentElement.classList.toggle('open'));
+        hd.addEventListener('click', () => {
+          const acc = hd.parentElement;
+          animateAccordion(acc, !acc.classList.contains('open'));
+        });
       });
 

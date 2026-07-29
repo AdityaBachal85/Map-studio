@@ -31,3 +31,78 @@ function staggerPopIn(els, staggerMs) {
     delay: anime.stagger(staggerMs || 40),
   });
 }
+
+/**
+ * Expand or collapse an accordion body with a real height transition.
+ *
+ * The previous behaviour toggled `display:none` and cross-faded, so the panel
+ * appeared at full size and everything below it jumped. Height cannot be
+ * animated to `auto` in CSS, which is why this needs JS: measure the natural
+ * height, animate to that number, then hand height back to `auto` so the panel
+ * still reflows if its contents change while open.
+ *
+ * Padding animates alongside height — animating height alone leaves the padding
+ * snapping in at frame one, which reads as a glitch rather than a transition.
+ *
+ * @param {HTMLElement} acc The `.acc` element.
+ * @param {boolean} open
+ */
+function animateAccordion(acc, open) {
+  const body = acc.querySelector('.acc-body');
+  if (!body) return;
+  const PAD = 13;
+
+  if (motionReduced() || typeof anime !== 'function') {
+    acc.classList.toggle('open', open);
+    body.style.height = open ? 'auto' : '';
+    return;
+  }
+
+  anime.remove(body);
+  if (open) {
+    acc.classList.add('open');
+    body.style.height = '0px';
+    body.style.paddingTop = '0px';
+    body.style.paddingBottom = '0px';
+    const target = body.scrollHeight + PAD;
+    anime({
+      targets: body,
+      height: [0, target],
+      paddingTop: [0, 2],
+      paddingBottom: [0, PAD],
+      duration: 260,
+      easing: 'cubicBezier(.22,.8,.3,1)',
+      // Back to auto so later content changes are not clipped by a fixed height.
+      complete: () => { body.style.height = 'auto'; },
+    });
+    // The contents arrive just behind the panel edge, which makes the opening
+    // read as one movement instead of a box that fills instantly.
+    const kids = Array.from(body.children);
+    if (kids.length) {
+      anime({
+        targets: kids,
+        opacity: [0, 1],
+        translateY: [-4, 0],
+        duration: 220,
+        delay: anime.stagger(24, { start: 70 }),
+        easing: 'cubicBezier(.22,.8,.3,1)',
+      });
+    }
+  } else {
+    body.style.height = body.scrollHeight + 'px';
+    anime({
+      targets: body,
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      duration: 200,
+      easing: 'cubicBezier(.4,0,.2,1)',
+      complete: () => {
+        acc.classList.remove('open');
+        body.style.height = '';
+        body.style.paddingTop = '';
+        body.style.paddingBottom = '';
+      },
+    });
+  }
+}
