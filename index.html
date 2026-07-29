@@ -5,9 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DBOT · Property Map Studio</title>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0001">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0001">
-  <link rel="stylesheet" href="./css/main.css?v=5.0001">
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0002">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0002">
+  <link rel="stylesheet" href="./css/main.css?v=5.0002">
 </head>
 
 <body>
@@ -82,6 +82,11 @@
         <div id="bmPanel" class="frost" hidden>
           <div class="bm-grid" id="bmGrid"></div>
           <label class="bm-hd"><input type="checkbox" id="hdTgl" checked> HD imagery (deepest, sharpest tiles)</label>
+          <button type="button" class="bm-manage" id="bmManageBtn">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            Add or manage tile servers
+          </button>
           <!-- Options are generated from map/basemapProviders.js by
                ui/basemapSwitcher.js; this select stays as the value-holder that
                project save/load reads. -->
@@ -252,12 +257,6 @@
                 <label class="chk"><input type="checkbox" id="creditTgl" checked> Imagery credit line</label>
                 <div class="inline-ctl"><span class="sub">Label size</span><input type="range" id="chipRange" min="50"
                     max="200" step="5" value="100"><span class="val" id="chipVal">100%</span></div>
-                <div class="lbl" style="margin-top:8px;">Imagery look</div>
-                <div class="seg seg-block" id="imageryLook"></div>
-                <div class="sub" id="imageryLookHint" style="white-space:normal;line-height:1.5;"></div>
-                <div class="lbl" style="margin-top:10px;">Roads &amp; labels</div>
-                <div class="seg seg-block" id="roadLook"></div>
-                <div class="sub" id="roadLookHint" style="white-space:normal;line-height:1.5;"></div>
               </div>
             </div>
           </div>
@@ -296,9 +295,9 @@
             <button class="acc-hd" type="button">Export<span class="acc-ch">▾</span></button>
             <div class="acc-body">
               <div class="stack">
-                <button class="btn btn-primary" id="pptxBtn">Export PPTX — editable slide</button>
-                <button class="btn" id="pngBtn">Export PNG image</button>
-                <button class="btn" id="printBtn">Print / Save as PDF</button>
+                <button class="btn btn-primary btn-block" id="exportCenterBtn">Export…</button>
+                <div class="sub" style="white-space:normal;line-height:1.5;">Images, presentation slides, print and data
+                  formats in one place.</div>
               </div>
             </div>
           </div>
@@ -349,6 +348,19 @@
           <label class="prefs-check"><input type="checkbox" id="prefMotion"> Reduce motion (fewer animations)</label>
         </div>
         <div class="prefs-sec">
+          <div class="prefs-lbl">Map rendering</div>
+          <div class="prefs-field">
+            <span class="prefs-field-lbl">Imagery look</span>
+            <div class="seg seg-block" id="imageryLook"></div>
+            <p class="prefs-hint" id="imageryLookHint"></p>
+          </div>
+          <div class="prefs-field">
+            <span class="prefs-field-lbl">Roads &amp; labels</span>
+            <div class="seg seg-block" id="roadLook"></div>
+            <p class="prefs-hint" id="roadLookHint"></p>
+          </div>
+        </div>
+        <div class="prefs-sec">
           <div class="prefs-lbl">Measurements</div>
           <div class="prefs-row"><span>Distance units</span>
             <select id="prefUnitDistance">
@@ -377,6 +389,139 @@
     </div>
   </div>
 
+  <!-- ------------------------------------------------------------------
+       Export Centre — every output format in one place, so choosing a format
+       is one decision in one dialog rather than three buttons in an accordion.
+       The PPTX / print / save / GeoJSON controls keep their original ids, so
+       all existing wiring binds to them unchanged.
+       ------------------------------------------------------------------ -->
+  <div id="exportOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="exportTitle">Export</span>
+        <button class="modal-close" id="exportClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Image</div>
+          <div class="xc-rows" id="xcPng"></div>
+        </div>
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Presentation &amp; print</div>
+          <div class="xc-rows">
+            <button class="xc-row" id="pptxBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" />
+                </svg></span>
+              <span class="xc-txt"><b>PowerPoint slide</b><i>Routes, shapes and labels stay editable</i></span>
+              <span class="xc-meta">.pptx</span>
+            </button>
+            <button class="xc-row" id="printBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9V3h12v6M6 18H4v-6h16v6h-2" /><rect x="8" y="14" width="8" height="7" rx="1" />
+                </svg></span>
+              <span class="xc-txt"><b>Print / Save as PDF</b><i>Uses the browser print dialog</i></span>
+              <span class="xc-meta">PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Data</div>
+          <div class="xc-rows">
+            <button class="xc-row" id="saveBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <path d="M17 21v-8H7v8M7 3v5h8" />
+                </svg></span>
+              <span class="xc-txt"><b>Project file</b><i>Everything, reopenable in Map Studio</i></span>
+              <span class="xc-meta">.json</span>
+            </button>
+            <button class="xc-row" id="geoExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" /><polyline points="2 15.5 12 22 22 15.5" />
+                </svg></span>
+              <span class="xc-txt"><b>Shapes as GeoJSON</b><i>Drawn geometry for GIS tools</i></span>
+              <span class="xc-meta">.geojson</span>
+            </button>
+            <button class="xc-row" id="kmlExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z" />
+                </svg></span>
+              <span class="xc-txt"><b>Everything as KML</b><i>Locations, routes and shapes for Google Earth</i></span>
+              <span class="xc-meta">.kml</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <span class="modal-note" id="exportNote">Exports use the current map view.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------------
+       Basemap Manager — add and manage custom XYZ tile servers alongside the
+       built-in catalogue.
+       ------------------------------------------------------------------ -->
+  <div id="bmMgrOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="bmMgrTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="bmMgrTitle">Basemap manager</span>
+        <button class="modal-close" id="bmMgrClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="xc-group">
+          <div class="xc-group-hd">Your tile servers</div>
+          <div id="bmMgrList"></div>
+          <div class="empty" id="bmMgrEmpty"><b>No custom basemaps yet.</b>Add any XYZ tile server below — it will
+            appear in the basemap picker alongside the built-in ones.</div>
+        </div>
+        <div class="xc-group">
+          <div class="xc-group-hd">Add a tile server</div>
+          <div class="bm-form">
+            <label class="bm-f"><span>Name</span><input type="text" id="bmName" placeholder="e.g. Company aerial 2026"></label>
+            <label class="bm-f"><span>Tile URL template</span><input type="text" id="bmUrl" spellcheck="false"
+                placeholder="https://tiles.example.com/{z}/{x}/{y}.png"></label>
+            <div class="bm-f-row">
+              <label class="bm-f bm-f-sm"><span>Max zoom</span><input type="number" id="bmMaxZoom" min="1" max="24" value="19"></label>
+              <label class="bm-f"><span>Attribution</span><input type="text" id="bmAttrib" placeholder="© Provider"></label>
+            </div>
+            <label class="chk wrap"><input type="checkbox" id="bmIsImagery"> Photographic imagery (enables colour
+              grading)</label>
+            <div class="bm-preview-row">
+              <span class="bm-preview" id="bmPreview"></span>
+              <div class="bm-preview-txt">
+                <b id="bmPreviewState">Preview</b>
+                <i>Paste a URL containing <code>{z}/{x}/{y}</code> to test one tile before adding it.</i>
+              </div>
+            </div>
+            <div class="row2">
+              <button class="btn" id="bmTestBtn">Test tile</button>
+              <button class="btn btn-primary" id="bmAddBtn">Add basemap</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-note">Custom basemaps are stored on this device.</span>
+      </div>
+    </div>
+  </div>
+
   <!-- PPTX export is handled by the bundled v5 engine (js/export/*), which pins
        pptxgenjs 4.0.1 + jszip and repairs the duplicate-cNvPr-id / roundRect-adj
        defects that make PowerPoint 365 refuse the file. Replaces the old CDN
@@ -385,63 +530,66 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=5.0001"></script>
-  <script src="./vendor/leaflet-geoman.js?v=5.0001"></script>
-  <script src="./vendor/html2canvas.js?v=5.0001"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=5.0001"></script>
-  <script src="./vendor/jszip.js?v=5.0001"></script>
-  <script src="./vendor/anime.min.js?v=5.0001"></script>
+  <script src="./vendor/leaflet.js?v=5.0002"></script>
+  <script src="./vendor/leaflet-geoman.js?v=5.0002"></script>
+  <script src="./vendor/html2canvas.js?v=5.0002"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=5.0002"></script>
+  <script src="./vendor/jszip.js?v=5.0002"></script>
+  <script src="./vendor/anime.min.js?v=5.0002"></script>
 
-  <script src="./js/core/prefs.js?v=5.0001"></script>
-  <script src="./js/constants.js?v=5.0001"></script>
-  <script src="./js/utils/dom.js?v=5.0001"></script>
-  <script src="./js/export/exportPDF.js?v=5.0001"></script>
-  <script src="./js/export/captureMap.js?v=5.0001"></script>
-  <script src="./js/core/state.js?v=5.0001"></script>
-  <script src="./js/map/icons.js?v=5.0001"></script>
-  <script src="./js/config.js?v=5.0001"></script>
-  <script src="./js/ui/notifications.js?v=5.0001"></script>
-  <script src="./js/utils/math.js?v=5.0001"></script>
-  <script src="./js/map/billboard.js?v=5.0001"></script>
-  <script src="./js/ui/propertyPanel.js?v=5.0001"></script>
-  <script src="./js/ui/dialogs.js?v=5.0001"></script>
-  <script src="./js/utils/colors.js?v=5.0001"></script>
-  <script src="./js/utils/animate.js?v=5.0001"></script>
-  <script src="./js/map/routes.js?v=5.0001"></script>
-  <script src="./js/map/markers.js?v=5.0001"></script>
-  <script src="./js/map/snapping.js?v=5.0001"></script>
-  <script src="./js/map/imageryEnhance.js?v=5.0001"></script>
-  <script src="./js/map/basemapProviders.js?v=5.0001"></script>
-  <script src="./js/map/mapEngine.js?v=5.0001"></script>
-  <script src="./js/export/hiResRender.js?v=5.0001"></script>
-  <script src="./js/export/exportPNG.js?v=5.0001"></script>
-  <script src="./js/export/pptUtils.js?v=5.0001"></script>
-  <script src="./js/export/pptValidation.js?v=5.0001"></script>
-  <script src="./js/export/pptShapes.js?v=5.0001"></script>
-  <script src="./js/export/pptImages.js?v=5.0001"></script>
-  <script src="./js/export/pptLabels.js?v=5.0001"></script>
-  <script src="./js/export/pptTables.js?v=5.0001"></script>
-  <script src="./js/export/exportPPT.js?v=5.0001"></script>
-  <script src="./js/services/places.js?v=5.0001"></script>
-  <script src="./js/services/geoapify.js?v=5.0001"></script>
-  <script src="./js/services/nearbyPlaces.js?v=5.0001"></script>
-  <script src="./js/services/geocoder.js?v=5.0001"></script>
-  <script src="./js/ui/searchBox.js?v=5.0001"></script>
-  <script src="./js/ui/tooltips.js?v=5.0001"></script>
-  <script src="./js/ui/toolbar.js?v=5.0001"></script>
-  <script src="./js/map/aerialDistance.js?v=5.0001"></script>
-  <script src="./js/ui/geometryPanel.js?v=5.0001"></script>
-  <script src="./js/map/drawing.js?v=5.0001"></script>
-  <script src="./js/map/nearby.js?v=5.0001"></script>
-  <script src="./js/project/geojson.js?v=5.0001"></script>
-  <script src="./js/export/pptxHandler.js?v=5.0001"></script>
-  <script src="./js/project/openProject.js?v=5.0001"></script>
-  <script src="./js/project/saveProject.js?v=5.0001"></script>
-  <script src="./js/ui/sidebar.js?v=5.0001"></script>
-  <script src="./js/ui/layerManager.js?v=5.0001"></script>
-  <script src="./js/ui/settingsDialog.js?v=5.0001"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=5.0001"></script>
-  <script src="./js/app.js?v=5.0001"></script>
+  <script src="./js/core/prefs.js?v=5.0002"></script>
+  <script src="./js/constants.js?v=5.0002"></script>
+  <script src="./js/utils/dom.js?v=5.0002"></script>
+  <script src="./js/export/exportPDF.js?v=5.0002"></script>
+  <script src="./js/export/captureMap.js?v=5.0002"></script>
+  <script src="./js/core/state.js?v=5.0002"></script>
+  <script src="./js/map/icons.js?v=5.0002"></script>
+  <script src="./js/config.js?v=5.0002"></script>
+  <script src="./js/ui/notifications.js?v=5.0002"></script>
+  <script src="./js/utils/math.js?v=5.0002"></script>
+  <script src="./js/map/billboard.js?v=5.0002"></script>
+  <script src="./js/ui/propertyPanel.js?v=5.0002"></script>
+  <script src="./js/ui/dialogs.js?v=5.0002"></script>
+  <script src="./js/utils/colors.js?v=5.0002"></script>
+  <script src="./js/utils/animate.js?v=5.0002"></script>
+  <script src="./js/map/routes.js?v=5.0002"></script>
+  <script src="./js/map/markers.js?v=5.0002"></script>
+  <script src="./js/map/snapping.js?v=5.0002"></script>
+  <script src="./js/map/imageryEnhance.js?v=5.0002"></script>
+  <script src="./js/map/basemapProviders.js?v=5.0002"></script>
+  <script src="./js/map/customBasemaps.js?v=5.0002"></script>
+  <script src="./js/map/mapEngine.js?v=5.0002"></script>
+  <script src="./js/export/hiResRender.js?v=5.0002"></script>
+  <script src="./js/export/exportPNG.js?v=5.0002"></script>
+  <script src="./js/export/pptUtils.js?v=5.0002"></script>
+  <script src="./js/export/pptValidation.js?v=5.0002"></script>
+  <script src="./js/export/pptShapes.js?v=5.0002"></script>
+  <script src="./js/export/pptImages.js?v=5.0002"></script>
+  <script src="./js/export/pptLabels.js?v=5.0002"></script>
+  <script src="./js/export/pptTables.js?v=5.0002"></script>
+  <script src="./js/export/exportPPT.js?v=5.0002"></script>
+  <script src="./js/services/places.js?v=5.0002"></script>
+  <script src="./js/services/geoapify.js?v=5.0002"></script>
+  <script src="./js/services/nearbyPlaces.js?v=5.0002"></script>
+  <script src="./js/services/geocoder.js?v=5.0002"></script>
+  <script src="./js/ui/searchBox.js?v=5.0002"></script>
+  <script src="./js/ui/tooltips.js?v=5.0002"></script>
+  <script src="./js/ui/toolbar.js?v=5.0002"></script>
+  <script src="./js/map/aerialDistance.js?v=5.0002"></script>
+  <script src="./js/ui/geometryPanel.js?v=5.0002"></script>
+  <script src="./js/map/drawing.js?v=5.0002"></script>
+  <script src="./js/map/nearby.js?v=5.0002"></script>
+  <script src="./js/project/geojson.js?v=5.0002"></script>
+  <script src="./js/export/pptxHandler.js?v=5.0002"></script>
+  <script src="./js/project/kml.js?v=5.0002"></script>
+  <script src="./js/project/openProject.js?v=5.0002"></script>
+  <script src="./js/project/saveProject.js?v=5.0002"></script>
+  <script src="./js/ui/sidebar.js?v=5.0002"></script>
+  <script src="./js/ui/layerManager.js?v=5.0002"></script>
+  <script src="./js/ui/settingsDialog.js?v=5.0002"></script>
+  <script src="./js/ui/exportCenter.js?v=5.0002"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=5.0002"></script>
+  <script src="./js/app.js?v=5.0002"></script>
 </body>
 
 </html>

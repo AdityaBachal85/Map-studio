@@ -58,33 +58,13 @@ async function runPngExport(scale) {
   }
 }
 
+/**
+ * Legacy entry point. The resolution presets now live in the Export Centre
+ * (ui/exportCenter.js), which calls runPngExport() directly; this remains so
+ * app.js's wiring block keeps its shape and an older layout with a #pngBtn
+ * still works.
+ */
 function wirePngExport() {
   const btn = $('pngBtn');
-  const menu = document.createElement('div');
-  menu.className = 'export-menu frost';
-  menu.hidden = true;
-  PNG_PRESETS.forEach(p => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'export-menu-item';
-    item.innerHTML = `<span class="em-label">${p.label}</span><span class="em-hint">${p.hint}</span><span class="em-dim"></span>`;
-    item.addEventListener('click', () => {
-      menu.hidden = true;
-      if (typeof setPref === 'function') setPref('pngScale', p.scale);
-      runPngExport(p.scale);
-    });
-    menu.appendChild(item);
-  });
-  btn.parentNode.insertBefore(menu, btn.nextSibling);
-
-  btn.addEventListener('click', () => {
-    // Fill in the live pixel dimensions each time — they depend on the window.
-    Array.from(menu.querySelectorAll('.export-menu-item')).forEach((el, i) => {
-      el.querySelector('.em-dim').textContent = pngPresetDimensions(PNG_PRESETS[i].scale);
-    });
-    menu.hidden = !menu.hidden;
-  });
-  document.addEventListener('click', e => {
-    if (!menu.hidden && !e.target.closest('.export-menu') && e.target !== btn && !btn.contains(e.target)) menu.hidden = true;
-  });
+  if (btn) btn.addEventListener('click', () => runPngExport(EXPORT_SCALES.print));
 }

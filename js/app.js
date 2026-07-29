@@ -41,6 +41,8 @@ wirePngExport();
 wirePrintExport();
 wirePptxExport();
 wireSaveProject();
+initExportCenter();
+initTabs();
 wireOpenProject();
 
 buildImageryLookControl();

@@ -639,3 +639,410 @@ body.no-glass .sidebar.frost {
   border-color: var(--border-strong);
   box-shadow: var(--elev-1);
 }
+
+/* ---------------------------------------------------------------------------
+   17. Modal dialogs (Export Centre, Basemap Manager)
+   Both scale up from slightly under full size rather than sliding in: the
+   dialog is a focus of attention, not a panel arriving from somewhere, and a
+   short scale reads as "this opened" without the travel that makes a dialog
+   feel slow to appear.
+   --------------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(4, 8, 16, .5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-overlay.on {
+  opacity: 1;
+}
+
+.modal-panel {
+  width: min(560px, 100%);
+  max-height: min(86vh, 780px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-xl);
+  box-shadow: var(--glass-highlight), var(--elev-3);
+  transform: scale(.965) translateY(6px);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.modal-overlay.on .modal-panel {
+  transform: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+
+.modal-close {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.modal-close:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+
+.modal-foot {
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+.modal-note {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+
+.modal-note.warn {
+  color: var(--danger);
+}
+
+/* ---- Export Centre rows ---- */
+
+.xc-group + .xc-group {
+  margin-top: var(--sp-5);
+}
+
+.xc-group-hd {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.xc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.xc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .03);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+:root[data-theme="light"] .xc-row {
+  background: rgba(16, 32, 60, .025);
+}
+
+.xc-row:hover {
+  background: var(--accent-soft);
+  border-color: rgba(255, 122, 26, .34);
+}
+
+.xc-row:active {
+  transform: translateY(1px);
+}
+
+.xc-ico {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .05);
+  color: var(--accent);
+}
+
+.xc-txt {
+  flex: 1;
+  min-width: 0;
+}
+
+.xc-txt b {
+  display: block;
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.xc-txt i {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+
+.xc-meta {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ---- Basemap manager ---- */
+
+.bm-manage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.bm-manage:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.bm-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-1);
+}
+
+.bm-item-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  background: #2a3550 center/cover no-repeat;
+  border: 1px solid var(--border);
+}
+
+.bm-item-txt {
+  flex: 1;
+  min-width: 0;
+}
+
+.bm-item-txt b {
+  display: block;
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.bm-item-txt i {
+  display: block;
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bm-item-del {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bm-item-del:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.bm-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.bm-f {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.bm-f span {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.bm-f-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.bm-f-sm {
+  max-width: 96px;
+}
+
+.bm-preview-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.bm-preview {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .04) center/cover no-repeat;
+}
+
+.bm-preview-txt b {
+  display: block;
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+
+.bm-preview-txt b.good {
+  color: #34D399;
+}
+
+.bm-preview-txt b.bad {
+  color: var(--danger);
+}
+
+.bm-preview-txt i {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+
+/* ---- Preferences: fields for the moved rendering controls ---- */
+
+.prefs-field {
+  margin-bottom: var(--sp-3);
+}
+
+.prefs-field-lbl {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prefs-hint {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------------------
+   18. Toolbar responsiveness
+   The tabs previously cross-faded a background colour, which reads as sluggish
+   because nothing moves. A single indicator that slides between tabs gives the
+   switch a direction, and shortening the state transitions makes every control
+   answer immediately rather than easing towards a response.
+   --------------------------------------------------------------------------- */
+
+.tabs {
+  position: relative;
+}
+
+/* One shared indicator, positioned by JS, replacing a per-tab pseudo-element:
+   it can then travel between tabs instead of fading out here and in there. */
+.tabs::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  height: 2px;
+  width: var(--tab-w, 0);
+  transform: translateX(var(--tab-x, 0));
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--orange), var(--orange2));
+  transition: transform var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+
+/* The per-tab underline is now redundant. */
+.tabs button.active::after {
+  content: none;
+}
+
+.tabs button.active {
+  color: var(--text);
+}
+
+body.reduce-motion .tabs::after {
+  transition: none;
+}

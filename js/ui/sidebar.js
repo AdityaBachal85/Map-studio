@@ -22,11 +22,36 @@
       TABS.forEach(([b, p]) => {
         $(b).addEventListener('click', () => {
           TABS.forEach(([b2, p2]) => { $(b2).classList.toggle('active', b2 === b); $(p2).classList.toggle('active', p2 === p); });
+          moveTabIndicator();
         });
       });
 
-      /** Re-apply the active tab's pane visibility (no-op helper for symmetry with other UI setup). */
-      function initTabs() { /* tabs wire themselves above at module load */ }
+      /**
+       * Slide the shared tab indicator under the active tab.
+       *
+       * A single travelling indicator rather than one underline per tab: the
+       * movement gives the switch a direction, which is what makes the tab bar
+       * feel responsive. Cross-fading a background between two static elements
+       * reads as sluggish however fast it is, because nothing moves.
+       * Position is written as CSS variables so the transition stays on the
+       * compositor (transform + width) instead of triggering layout.
+       */
+      function moveTabIndicator() {
+        const active = TABS.map(([b]) => $(b)).find(el => el && el.classList.contains('active'));
+        const bar = document.querySelector('.tabs');
+        if (!active || !bar) return;
+        const a = active.getBoundingClientRect(), r = bar.getBoundingClientRect();
+        bar.style.setProperty('--tab-w', a.width + 'px');
+        bar.style.setProperty('--tab-x', (a.left - r.left) + 'px');
+      }
+
+      /** Place the indicator once the sidebar has its final width. */
+      function initTabs() {
+        moveTabIndicator();
+        // Fonts and the scrollbar can both change tab widths after first paint.
+        setTimeout(moveTabIndicator, 220);
+        window.addEventListener('resize', moveTabIndicator);
+      }
 
       // ---------- collapsible accordion sections (Settings tab) ----------
       // Each .acc header toggles its own .open state independently, so users can

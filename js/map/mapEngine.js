@@ -321,13 +321,26 @@
        * @type {Object<string, {credit:string, build:(hd:boolean)=>L.TileLayer[], spec:object}>}
        */
       const BASEMAPS = {};
-      availableBasemaps().forEach(spec => {
-        BASEMAPS[spec.id] = {
-          spec,
-          credit: spec.credit,
-          build: hd => spec.layers.map(l => buildTileLayer(l, spec, hd)),
-        };
-      });
+
+      /**
+       * (Re)build the legacy registry from the catalogue.
+       *
+       * Must be callable again after the catalogue changes: custom tile servers
+       * are merged in at runtime, and a registry built once at load would leave
+       * chooseBasemap() silently refusing a basemap the picker was already
+       * offering — it checks BASEMAPS, not the catalogue.
+       */
+      function rebuildBasemapRegistry() {
+        Object.keys(BASEMAPS).forEach(k => delete BASEMAPS[k]);
+        availableBasemaps().forEach(spec => {
+          BASEMAPS[spec.id] = {
+            spec,
+            credit: spec.credit,
+            build: hd => spec.layers.map(l => buildTileLayer(l, spec, hd)),
+          };
+        });
+      }
+      rebuildBasemapRegistry();
 
       const hillshade = L.tileLayer(HILLSHADE_LAYER.url, {
         maxZoom: MAX_MAP_ZOOM, crossOrigin: 'anonymous',
