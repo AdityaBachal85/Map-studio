@@ -189,9 +189,14 @@ async function fetchNearbyKey(key) {
     const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes, cat.grefine);
     dropNearbyMarkers(key, places);
     setNearbyChipCount(key, places.length);
-    const via = places.source === 'google' ? ' via Google' : (places.source ? ' via Geoapify' : '');
+    // `note` is set when Google failed and Geoapify answered instead. Saying so
+    // matters: an exhausted daily quota makes every chip go quiet at once, and
+    // silently falling back just looks like the feature broke.
+    const via = places.note ? ` — ${places.note}`
+      : places.source === 'google' ? ' via Google'
+      : places.source ? ' via Geoapify' : '';
     status(places.length ? `Found ${places.length} ${cat.label.toLowerCase()} within ${fmtRadius(nearbyRadiusM)}${via}.`
-      : `No ${cat.label.toLowerCase()} found within ${fmtRadius(nearbyRadiusM)}.`);
+      : `No ${cat.label.toLowerCase()} found within ${fmtRadius(nearbyRadiusM)}${via}.`);
     return true;
   } catch (e) {
     status(`Couldn't load ${cat.label.toLowerCase()} — check the Geoapify key or this category.`);

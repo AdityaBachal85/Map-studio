@@ -312,21 +312,20 @@ const GOOGLE_NEARBY_CAP = 20;
 /**
  * Places of one or more Google types within a radius.
  *
- * WHY TWO PASSES
+ * WHY POPULARITY, AND WHY EXACTLY ONE REQUEST
  *
  * The twenty-result ceiling is the whole problem. Ranked by DISTANCE, a schools
  * search at Airoli spends all twenty slots inside 520 m and comes back as
  * playgroups — Baby Steps, Tender Feet, Dada class, MASOOM NURSERY — while
  * EuroSchool, DAV Public School, VIBGYOR High and St Xavier's, the schools a
  * buyer actually asks about, never appear at all. Ranked by POPULARITY the same
- * request returns those four and drops the playgroups. Neither order is right
- * on its own: POPULARITY can skip the pump across the road, DISTANCE can miss
- * the landmark 800 m away.
+ * request returns those four and drops the playgroups.
  *
- * So: POPULARITY first, and only if that came back full — meaning results were
- * dropped — a second DISTANCE pass, merged on place id. A sparse category
- * (petrol pumps at Airoli returns six, identical under both orders) still costs
- * exactly one request.
+ * An earlier version chased the last few percent of coverage with a second
+ * DISTANCE pass and a per-type fan-out, three or four requests per chip. That
+ * emptied the project's daily `SearchNearbyRequest` quota in an afternoon, and
+ * an exhausted quota does not degrade gracefully — every chip goes quiet. One
+ * request per chip is the budget; POPULARITY is what makes one request enough.
  *
  * @param {number} lat @param {number} lng @param {number} radiusM
  * @param {string[]} types Google place types.
@@ -334,60 +333,31 @@ const GOOGLE_NEARBY_CAP = 20;
  * @returns {Promise<Array<{lat,lng,name,address,primaryType,distance}>>}
  */
 async function googleNearby(lat, lng, radiusM, types, limit) {
-  const once = async (ts, rank) => {
-    const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
-      // `includedPrimaryTypes`, not `includedTypes`. A dance studio and a
-      // makeup academy both carry `school` somewhere in their type list;
-      // filtering on the *primary* type drops them at the server. Verified at
-      // Airoli: it removes "FMS Dance & Fitness", "Albatraoz Makeup & Hair
-      // Academy" and a day-care from a schools search.
-      includedPrimaryTypes: ts,
-      maxResultCount: GOOGLE_NEARBY_CAP,
-      rankPreference: rank,
-      languageCode: GOOGLE_LANG,
-      regionCode: GOOGLE_REGION,
-      locationRestriction: {
-        circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
-      },
-    }, 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType');
+  const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchNearby', {
+    // `includedPrimaryTypes`, not `includedTypes`. A dance studio and a makeup
+    // academy both carry `school` somewhere in their type list; filtering on
+    // the *primary* type drops them at the server. Verified at Airoli: it
+    // removes "FMS Dance & Fitness", "Albatraoz Makeup & Hair Academy" and a
+    // day-care from a schools search.
+    includedPrimaryTypes: types,
+    maxResultCount: GOOGLE_NEARBY_CAP,
+    rankPreference: 'POPULARITY',
+    languageCode: GOOGLE_LANG,
+    regionCode: GOOGLE_REGION,
+    locationRestriction: {
+      circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
+    },
+  }, 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType');
 
-    return (json.places || []).map(p => ({
-      id: p.id,
-      lat: p.location.latitude,
-      lng: p.location.longitude,
-      name: (p.displayName && p.displayName.text) || 'Unnamed place',
-      address: p.formattedAddress || '',
-      primaryType: p.primaryType || '',
-      distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
-    })).filter(r => r.lat != null && r.lng != null);
-  };
-
-  const out = [];
-  const seen = new Set();
-  const merge = rows => rows.forEach(r => {
-    const k = r.id || r.lat + ',' + r.lng;
-    if (seen.has(k)) return;
-    seen.add(k);
-    out.push(r);
-  });
-
-  const first = await once(types, 'POPULARITY');
-  merge(first);
-
-  if (first.length >= GOOGLE_NEARBY_CAP) {
-    // Full response: results were dropped, so it is worth paying for more.
-    try { merge(await once(types, 'DISTANCE')); } catch (e) { /* keep pass one */ }
-
-    // The cap is per *request*, not per type, so a category built from several
-    // types spends its twenty slots on whichever score highest overall — a
-    // "Stations" search could come back as twenty bus stops with the railway
-    // station missing. Ask per type and merge.
-    if (types.length > 1) {
-      for (const t of types) {
-        try { merge(await once([t], 'POPULARITY')); } catch (e) { continue; }
-      }
-    }
-  }
+  const out = (json.places || []).map(p => ({
+    id: p.id,
+    lat: p.location.latitude,
+    lng: p.location.longitude,
+    name: (p.displayName && p.displayName.text) || 'Unnamed place',
+    address: p.formattedAddress || '',
+    primaryType: p.primaryType || '',
+    distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
+  })).filter(r => r.lat != null && r.lng != null);
 
   // Nearest-first, but the genuine article ahead of its lookalikes: a preschool
   // stays in the list, just below the schools.

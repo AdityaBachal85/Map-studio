@@ -69,6 +69,7 @@ const PROVIDER_KEY_INFO = Object.freeze({
       // reload — the cache is keyed by query alone and would otherwise keep
       // serving the pre-Google answer.
       if (typeof clearSearchCache === 'function') clearSearchCache();
+      if (typeof clearNearbyCache === 'function') clearNearbyCache();
     },
   },
 });

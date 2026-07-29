@@ -91,6 +91,36 @@ const NEARBY_CATEGORIES = [
 const nearbyCatByKey = key => NEARBY_CATEGORIES.find(c => c.key === key);
 
 /**
+ * Answers already paid for, keyed by category + centre + radius. Toggling a
+ * chip off and back on, or re-opening the panel without moving, is a common
+ * gesture and used to cost a fresh request every time — which is how a daily
+ * quota disappears. Centre is rounded to ~1 m so an imperceptible drag does not
+ * count as a new place.
+ */
+const nearbyCache = new Map();
+const NEARBY_CACHE_MAX = 60;
+
+/** @returns {string} cache key for one category at one place. */
+function nearbyCacheKey(lat, lng, radiusM, cats, gtypes) {
+  return [cats, (gtypes || []).join('+'), lat.toFixed(5), lng.toFixed(5), Math.round(radiusM)].join('|');
+}
+
+/** Drop every cached answer. Called when the Google key changes. */
+function clearNearbyCache() { nearbyCache.clear(); }
+
+/**
+ * Turn a provider error into something a person can act on. A spent daily quota
+ * is the one failure that looks exactly like "the feature broke": every chip
+ * goes quiet at once, with nothing on screen to say why.
+ * @param {string} msg
+ */
+function nearbyErrorNote(msg) {
+  if (/quota/i.test(msg)) return 'Google daily quota reached — results are from Geoapify';
+  if (/api key|permission|denied|forbidden/i.test(msg)) return 'Google rejected the key — results are from Geoapify';
+  return 'Google unavailable — results are from Geoapify';
+}
+
+/**
  * Fetch places of one category within a radius of a point via Geoapify Places.
  * @param {number} lat @param {number} lng @param {number} radiusM
  * @param {string} cats Geoapify category id(s), comma-separated
@@ -98,6 +128,17 @@ const nearbyCatByKey = key => NEARBY_CATEGORIES.find(c => c.key === key);
  * @returns {Promise<Array<{lat:number,lng:number,name:string,address:string,distance:number}>>}
  */
 async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefine) {
+  const ck = nearbyCacheKey(lat, lng, radiusM, cats, gtypes);
+  if (nearbyCache.has(ck)) return nearbyCache.get(ck);
+
+  const keep = rows => {
+    if (nearbyCache.size >= NEARBY_CACHE_MAX) nearbyCache.delete(nearbyCache.keys().next().value);
+    nearbyCache.set(ck, rows);
+    return rows;
+  };
+
+  let note = '';
+
   // Google first when a key is present. Its Indian POI data is the reason this
   // integration exists — verified against the live API, a Pune search returns
   // Fergusson College, Deenanath Mangeshkar Hospital and Pune Station where the
@@ -110,10 +151,16 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefi
       let g = await googleNearby(lat, lng, radiusM, gtypes);
       if (grefine) g = grefine(g);
       if (limit) g = g.slice(0, limit);
-      if (g.length) { g.source = 'google'; return g; }
-    } catch (e) { console.warn('Google nearby failed:', e.message); }
+      if (g.length) { g.source = 'google'; return keep(g); }
+    } catch (e) {
+      note = nearbyErrorNote(e.message || '');
+      console.warn('Google nearby failed:', e.message);
+    }
   }
-  if (!GEOAPIFY_API_KEY) return [];
+  if (!GEOAPIFY_API_KEY) {
+    if (note) throw new Error(note);
+    return keep([]);
+  }
   const url = PLACES_PROVIDERS.geoapify.nearby
     + '?categories=' + encodeURIComponent(cats)
     + '&filter=circle:' + lng + ',' + lat + ',' + radiusM
@@ -138,5 +185,6 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefi
     };
   }).filter(r => r.lat != null && r.lng != null);
   out.source = 'geoapify';
-  return out;
+  if (note) out.note = note;
+  return keep(out);
 }
