@@ -15,6 +15,7 @@ const PREF_DEFAULTS = {
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'
   basemap: 'hybrid',      // last-selected basemap key (remembered by the switcher)
   imageryLook: 'natural', // satellite colour grading (map/imageryEnhance.js)
+  roadLook: 'subtle',     // roads/labels overlay treatment (map/imageryEnhance.js)
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

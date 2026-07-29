@@ -114,6 +114,54 @@
         }
       }
 
+      /**
+       * Build the roads/labels treatment selector. Only basemaps that stack a
+       * separate reference overlay on imagery have anything to tone, so the
+       * control reports when it does not apply rather than silently doing
+       * nothing.
+       */
+      function buildRoadLookControl() {
+        const seg = $('roadLook');
+        if (!seg) return;
+        seg.innerHTML = '';
+        Object.keys(ROAD_LOOKS).forEach(id => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'seg-btn';
+          b.dataset.v = id;
+          b.textContent = ROAD_LOOKS[id].label;
+          b.addEventListener('click', () => setRoadLook(id));
+          seg.appendChild(b);
+        });
+        syncRoadLookControl();
+      }
+
+      /** True when the active basemap draws a roads/labels overlay we can tone. */
+      function activeBasemapHasReference() {
+        const spec = BASEMAP_CATALOGUE[activeKey];
+        return !!(spec && (spec.layers || []).some(l => l.role === 'reference'));
+      }
+
+      function syncRoadLookControl() {
+        const seg = $('roadLook');
+        if (!seg) return;
+        const id = getRoadLook();
+        seg.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === id));
+        const hint = $('roadLookHint');
+        if (hint) {
+          hint.textContent = activeBasemapHasReference()
+            ? ROAD_LOOKS[id].hint + ' — carried into exports.'
+            : 'This basemap has no separate road overlay to tone. Use a “Satellite + labels” basemap.';
+        }
+      }
+
+      /** Choose a roads/labels treatment, persist it, and re-render. @param {string} id */
+      function setRoadLook(id) {
+        applyRoadLook(id);
+        if (typeof setPref === 'function') setPref('roadLook', getRoadLook());
+        syncRoadLookControl();
+      }
+
       /** Choose an imagery look, persist it, and re-render. @param {string} id */
       function setImageryLook(id) {
         const spec = BASEMAP_CATALOGUE[activeKey];

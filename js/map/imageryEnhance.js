@@ -50,6 +50,87 @@ const IMAGERY_LOOKS = {
 
 const DEFAULT_IMAGERY_LOOK = 'natural';
 
+/**
+ * Road / label overlay treatments.
+ *
+ * Esri's reference tiles paint roads as broad, strongly saturated salmon bands
+ * with dark road names on top. Over aerial imagery that reads as paint laid on
+ * the photograph rather than as an annotation of it — the overlay wins the
+ * image, which is the opposite of what a satellite basemap is for. Google draws
+ * the same information thin, desaturated and slightly transparent, so the
+ * imagery still carries the map and the roads only orient you.
+ *
+ * The geometry is baked into the raster, so line width cannot be changed. What
+ * can be changed is weight of colour: pulling the saturation down turns the
+ * salmon toward neutral grey, and a little transparency lets the ground show
+ * through. That gets most of the way to the same effect.
+ *
+ * `subtle` is the default because the complaint about the stock rendering is
+ * that it is overbearing. `bold` preserves the original Esri look for anyone
+ * who wants maximum road legibility over a busy image.
+ *
+ * @type {Object<string, {label:string, hint:string, filter:string, opacity:number}>}
+ */
+const ROAD_LOOKS = {
+  subtle: {
+    label: 'Subtle',
+    hint: 'desaturated and translucent, like Google over satellite',
+    filter: 'saturate(0.18) brightness(1.06)',
+    opacity: 0.78,
+  },
+  balanced: {
+    label: 'Balanced',
+    hint: 'muted, but roads still clearly coloured',
+    filter: 'saturate(0.55)',
+    opacity: 0.9,
+  },
+  bold: {
+    label: 'Bold',
+    hint: 'stock Esri rendering — strongest road legibility',
+    filter: '',
+    opacity: 1,
+  },
+  off: {
+    label: 'Off',
+    hint: 'pure imagery, no roads or labels',
+    filter: '',
+    opacity: 0,
+  },
+};
+
+const DEFAULT_ROAD_LOOK = 'subtle';
+
+/** CSS custom properties the reference tile layers read. */
+const ROAD_FILTER_VAR = '--roadFilter';
+const ROAD_OPACITY_VAR = '--roadOpacity';
+
+let currentRoadLook = DEFAULT_ROAD_LOOK;
+
+/**
+ * Apply a road/label overlay treatment to the live map.
+ * @param {string} id Look id.
+ */
+function applyRoadLook(id) {
+  currentRoadLook = ROAD_LOOKS[id] ? id : DEFAULT_ROAD_LOOK;
+  const look = ROAD_LOOKS[currentRoadLook];
+  const root = document.documentElement.style;
+  root.setProperty(ROAD_FILTER_VAR, look.filter || 'none');
+  root.setProperty(ROAD_OPACITY_VAR, String(look.opacity));
+  // Opacity cannot ride on the CSS variable: Leaflet writes style.opacity
+  // inline on the layer container, and inline wins over a normal rule. The map
+  // engine pushes it through Leaflet's own API instead.
+  if (typeof syncRoadLayerOpacity === 'function') syncRoadLayerOpacity();
+}
+
+/** @returns {string} The active road look id. */
+function getRoadLook() { return currentRoadLook; }
+
+/** @returns {{filter:string, opacity:number}} Treatment to use when exporting. */
+function roadExportStyle() {
+  const look = ROAD_LOOKS[currentRoadLook] || ROAD_LOOKS[DEFAULT_ROAD_LOOK];
+  return { filter: look.filter || 'none', opacity: look.opacity };
+}
+
 /** CSS custom property the tile pane reads. */
 const IMAGERY_FILTER_VAR = '--imageryFilter';
 
@@ -97,9 +178,12 @@ function imageryExportFilter(isImagery) {
 if (typeof getPref === 'function') {
   const saved = getPref('imageryLook');
   if (IMAGERY_LOOKS[saved]) currentImageryLook = saved;
+  const savedRoad = getPref('roadLook');
+  if (ROAD_LOOKS[savedRoad]) currentRoadLook = savedRoad;
 }
+applyRoadLook(currentRoadLook);
 
 /* Node/test interop — harmless in the browser. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { IMAGERY_LOOKS, DEFAULT_IMAGERY_LOOK, imageryFilterFor };
+  module.exports = { IMAGERY_LOOKS, DEFAULT_IMAGERY_LOOK, imageryFilterFor, ROAD_LOOKS, DEFAULT_ROAD_LOOK };
 }

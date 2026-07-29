@@ -94,6 +94,9 @@ const esriStatic = style => ESRI_STATIC_TILES + style + '/static/tile/{z}/{y}/{x
  *                                available" placeholder and walk `maxNative`
  *                                back when the service runs out of coverage.
  * @property {string}  [retinaSuffix] Token substituted for `{r}` on hi-dpi.
+ * @property {string}  [role]     `imagery` for the photographic base, `reference`
+ *                                for a roads/labels overlay drawn on top of it.
+ *                                The two are graded and exported separately.
  */
 
 /**
@@ -131,9 +134,9 @@ const BASEMAP_CATALOGUE = {
     provider: 'esri', credit: ESRI_HYBRID_CREDIT, imagery: true, corsSafe: true,
     thumb: 'linear-gradient(150deg,#2e4a2a,#6a7f4a 45%,#8a9a63)',
     layers: [
-      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true },
-      { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true },
-      { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true },
+      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true, role: 'imagery' },
+      { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true, role: 'reference' },
+      { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true, role: 'reference' },
     ],
   },
 
@@ -142,7 +145,7 @@ const BASEMAP_CATALOGUE = {
     provider: 'esri', credit: ESRI_IMAGERY_CREDIT, imagery: true, corsSafe: true,
     thumb: 'linear-gradient(150deg,#26402a,#4f6b3c 50%,#7d8f5c)',
     layers: [
-      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true },
+      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true, role: 'imagery' },
     ],
   },
 
@@ -152,7 +155,7 @@ const BASEMAP_CATALOGUE = {
     credit: 'Imagery © Esri World Imagery (Clarity) · Vantor · Airbus DS · USGS · NGA · NASA',
     thumb: 'linear-gradient(150deg,#22401f,#5c7a3e 45%,#94a468)',
     layers: [
-      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true },
+      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true, role: 'imagery' },
     ],
   },
 
@@ -162,9 +165,9 @@ const BASEMAP_CATALOGUE = {
     credit: 'Imagery © Esri World Imagery (Clarity) · Labels © Esri · TomTom · Garmin · © OpenStreetMap contributors',
     thumb: 'linear-gradient(150deg,#22401f,#5c7a3e 45%,#a8b47c)',
     layers: [
-      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true },
-      { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true },
-      { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true },
+      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true, role: 'imagery' },
+      { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true, role: 'reference' },
+      { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true, role: 'reference' },
     ],
   },
 
@@ -176,8 +179,8 @@ const BASEMAP_CATALOGUE = {
     credit: 'Esri · TomTom · Garmin · METI/NASA · USGS · Vantor · Airbus DS · © OpenStreetMap contributors · Microsoft · Esri Community Maps',
     thumb: 'linear-gradient(150deg,#233f22,#5f7d42 45%,#b3bd86)',
     layers: [
-      { url: esriStatic('arcgis/imagery/base'), zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1 },
-      { url: esriStatic('arcgis/imagery/labels'), zIndex: 3, maxNative: 21, tileSize: 512, zoomOffset: -1 },
+      { url: esriStatic('arcgis/imagery/base'), zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'imagery' },
+      { url: esriStatic('arcgis/imagery/labels'), zIndex: 3, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'reference' },
     ],
   },
 

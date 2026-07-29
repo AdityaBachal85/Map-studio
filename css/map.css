@@ -1,12 +1,24 @@
 /* map.css — Map surface: tilt stage, billboard overlay, pins, location/route label badges, via-point dots, route context menu.
    Extracted verbatim from index.html (v4.96) lines 93–467; order preserved via main.css. */
-    /* Imagery grading (map/imageryEnhance.js). Applied to the tile pane only, so
-       vector overlays, labels and map furniture keep their exact colours — a
-       grade that shifted route colours would be a bug, not a look. The variable
-       resolves to `none` for non-photographic basemaps and when grading is off,
-       which costs nothing. */
-    .leaflet-tile-pane {
+    /* Basemap tile treatments (map/imageryEnhance.js).
+       Imagery and the roads/labels overlay are styled independently: grading
+       the photograph should not also saturate the road paint sitting on top of
+       it, and toning the roads down must not wash out the ground. Layers carry
+       a `basemap-imagery` / `basemap-reference` class from their catalogue role.
+       Untagged layers (street and canvas basemaps, which are a single designed
+       raster) are left entirely alone. */
+    .leaflet-tile-pane .basemap-imagery {
       filter: var(--imageryFilter, none);
+    }
+
+    /* Esri paints roads as broad saturated salmon bands that overpower the
+       imagery beneath. Desaturating and softening them is what makes the
+       overlay read as annotation rather than as paint. */
+    .leaflet-tile-pane .basemap-reference {
+      /* Colour treatment only. Opacity is applied through Leaflet's own
+         setOpacity(), because GridLayer writes style.opacity inline on the
+         layer container and an inline declaration beats a normal CSS rule. */
+      filter: var(--roadFilter, none);
     }
 
     /* Billboard overlay — sits above the tilt stage, never rotates. */

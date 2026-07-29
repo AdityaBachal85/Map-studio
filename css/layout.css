@@ -55,10 +55,24 @@
        vector paths are rendered separately at export resolution (see
        js/export/hiResRender.js), so they must not appear in this pass or they
        would be composited twice — the upscaled copy over the sharp one. */
-    /* Vector-only pass of the offscreen export map: the tiles were already
-       captured (and graded) separately, so they must not appear again here. */
-    .hires-vectors-only .leaflet-tile-pane {
+    /* The offscreen export map is captured in three passes, each isolating one
+       layer group so its own colour treatment can be applied at composite time
+       (html2canvas ignores CSS filters, so they cannot be baked in here). */
+    .hires-vectors-only .leaflet-tile-pane,
+    .hires-imagery-only .basemap-reference,
+    .hires-reference-only .basemap-imagery {
       display: none !important;
+    }
+
+    /* Captured unfiltered and at full opacity — the treatment is applied when
+       the pass is composited, not while it is being rasterised. */
+    .hires-reference-only .basemap-reference {
+      filter: none !important;
+      opacity: 1 !important;
+    }
+
+    .hires-imagery-only .basemap-imagery {
+      filter: none !important;
     }
 
     .map-wrap.hires-overlay-pass .leaflet-tile-pane,

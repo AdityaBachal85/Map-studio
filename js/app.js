@@ -33,5 +33,6 @@ wireSaveProject();
 wireOpenProject();
 
 buildImageryLookControl();
+buildRoadLookControl();
 syncEmpties();
 status('Start blank: type in the search bar for live suggestions, paste "lat, lng" directly, or use Click-to-add.');

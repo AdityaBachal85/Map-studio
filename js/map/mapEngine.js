@@ -49,6 +49,9 @@
         // Two different retina mechanisms: CARTO-style `{r}` → `@2x` filename
         // suffix, and Leaflet's detectRetina which fetches one zoom deeper and
         // paints it at half size. Never both — that would double-count density.
+        // Role drives styling: imagery is graded, the roads/labels overlay is
+        // toned separately, and the export pipeline captures the two apart.
+        if (lyr.role) opts.className = 'basemap-' + lyr.role;
         if (lyr.retinaSuffix) opts.r = (retina && L.Browser.retina) ? lyr.retinaSuffix : '';
         else if (retina) opts.detectRetina = true;
         const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
@@ -335,6 +338,18 @@
       let activeKey = preferredBasemapId();
 
       /**
+       * Push the active road/label treatment's opacity onto the live reference
+       * layers. Leaflet owns that property (it writes it inline), so it has to
+       * be set through setOpacity rather than from a stylesheet.
+       */
+      function syncRoadLayerOpacity() {
+        const o = (typeof roadExportStyle === 'function') ? roadExportStyle().opacity : 1;
+        activeBase.forEach(l => {
+          if (String(l.options.className || '').indexOf('basemap-reference') >= 0) l.setOpacity(o);
+        });
+      }
+
+      /**
        * The last basemap that actually drew a tile. A basemap is only written to
        * prefs once it proves it can render, so a broken choice cannot be
        * remembered and re-applied on the next visit.
@@ -402,6 +417,8 @@
         $('mapWrap').classList.toggle('np-light', !(entry.spec.imagery || entry.spec.dark));
         applyImageryLook(getImageryLook(), !!entry.spec.imagery);
         if (typeof syncImageryLookControl === 'function') syncImageryLookControl();
+        if (typeof syncRoadLookControl === 'function') syncRoadLookControl();
+        syncRoadLayerOpacity();
         maybeProbeProvider(entry.spec);
         if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);   // update the floating switcher UI
       }

@@ -275,11 +275,26 @@ async function renderGroundPass(o) {
       scale: 1,
     }, extra));
 
-    // Tiles first, on their own. Grading is a colour operation on *imagery*;
-    // running it over a canvas that also held the route and boundary strokes
-    // would shift their colours, so the vectors are captured separately and
-    // composited on top ungraded.
+    // Three separate captures, because three different colour treatments apply.
+    // html2canvas does not honour CSS filters, so anything that needs one has
+    // to be isolated and filtered at composite time instead:
+    //   imagery   — graded
+    //   reference — desaturated/softened road & label overlay
+    //   vectors   — untouched; their colours were chosen, not captured
+    // Splitting also fixes a subtler error: grading the whole tile pane at once
+    // saturated the road paint along with the ground.
+    host.classList.add('hires-imagery-only');
     const tiles = await shot({ backgroundColor: '#0d1522' });
+    host.classList.remove('hires-imagery-only');
+
+    let reference = null;
+    const roadOpacity = (typeof roadExportStyle === 'function') ? roadExportStyle().opacity : 1;
+    if (roadOpacity > 0 && host.querySelector('.basemap-reference')) {
+      host.classList.add('hires-reference-only');
+      await new Promise(r => requestAnimationFrame(r));
+      reference = await shot({ backgroundColor: null });
+      host.classList.remove('hires-reference-only');
+    }
 
     let vectors = null;
     if (o.includeVectors !== false) {
@@ -295,7 +310,7 @@ async function renderGroundPass(o) {
         host.classList.remove('hires-vectors-only');
       }
     }
-    return { canvas: tiles, vectors, complete };
+    return { canvas: tiles, reference, vectors, complete };
   } finally {
     if (exportMap) exportMap.remove();
     host.remove();
@@ -393,6 +408,19 @@ async function captureMapHiRes(opts) {
   if (grade && grade !== 'none' && 'filter' in ctx) ctx.filter = grade;
   ctx.drawImage(ground.canvas, 0, 0);
   ctx.filter = 'none';
+
+  // Roads and labels next, carrying their own treatment so the export matches
+  // what the operator toned on screen.
+  if (ground.reference) {
+    const road = (typeof roadExportStyle === 'function') ? roadExportStyle() : { filter: 'none', opacity: 1 };
+    if (road.opacity > 0) {
+      if (road.filter && road.filter !== 'none' && 'filter' in ctx) ctx.filter = road.filter;
+      ctx.globalAlpha = road.opacity;
+      ctx.drawImage(ground.reference, 0, 0, out.width, out.height);
+      ctx.globalAlpha = 1;
+      ctx.filter = 'none';
+    }
+  }
 
   // Vectors and furniture go on ungraded — their colours were chosen, not captured.
   if (ground.vectors) ctx.drawImage(ground.vectors, 0, 0, out.width, out.height);
