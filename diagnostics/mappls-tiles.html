@@ -227,28 +227,44 @@
       const out = $('sniffOut'), host = $('sdkHost');
       host.innerHTML = '';
 
-      // The docs show the key inside <angle brackets> as a placeholder. Pasting
-      // them along with the key is an easy mistake and produces a silent 4xx.
-      const k = key();
-      const src = `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${encodeURIComponent(k)}&layer=raster`;
-      out.innerHTML = '<p class="muted">Loading the SDK from <code>' + src + '</code> …</p>';
+      const k = encodeURIComponent(key());
+      // Try the exact form the documentation shows FIRST. `layer` defaults to
+      // `vector`; appending `layer=raster` is an extra requirement that an
+      // account entitled to vector tiles but not raster would reject, so
+      // testing only the raster variant can fail for a reason that has nothing
+      // to do with the key or the host.
+      const candidates = [
+        ['documented default (vector)', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}`],
+        ['raster variant', `https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=${k}&layer=raster`],
+        ['legacy host', `https://apis.mappls.com/advancedmaps/api/${k}/map_sdk?v=3.0&layer=raster`],
+      ];
+
+      const loadScript = src => new Promise(res => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => res(true);
+        s.onerror = () => res(false);
+        setTimeout(() => res(false), 15000);
+        document.head.appendChild(s);
+      });
 
       const sniffer = startNetworkSniffer();
       try {
-        const loaded = await new Promise(res => {
-          const s = document.createElement('script');
-          s.src = src;
-          s.onload = () => res(true);
-          s.onerror = () => res(false);
-          setTimeout(() => res(false), 15000);
-          document.head.appendChild(s);
-        });
-        if (!loaded) {
-          out.innerHTML = '<p class="muted">The SDK script did not load from <code>' + src + '</code>.<br>' +
-            'Open that URL in a tab — the response body will say whether it is the key, the domain whitelist, ' +
-            'or the entitlement.</p>';
+        let used = null;
+        const tried = [];
+        for (const [label, src] of candidates) {
+          out.innerHTML = '<p class="muted">Trying the ' + label + ':<br><code>' + src + '</code></p>';
+          if (await loadScript(src)) { used = { label, src }; break; }
+          tried.push(`✕ ${label}\n  ${src}`);
+        }
+        if (!used) {
+          out.innerHTML = '<p class="muted"><b>No SDK loader responded.</b> All three were tried:</p>' +
+            '<pre>' + tried.join('\n\n') + '</pre>' +
+            '<p class="muted">Open any of them in a tab — the response body names the cause.</p>';
           return;
         }
+        out.innerHTML = '<p class="muted">Loaded via the <b>' + used.label + '</b>: <code>' + used.src +
+          '</code><br>Watching what it requests…</p>';
 
         const Ctor = (window.mappls && window.mappls.Map) || (window.MapmyIndia && window.MapmyIndia.Map);
         if (!Ctor) {
