@@ -1843,16 +1843,17 @@ input[type=tel] {
  *
  * Each tab opens with the two or three things you came to that tab to do. They
  * were previously loose buttons with per-pane inline margins, which made every
- * tab start slightly differently for no reason. One group, one treatment: a
- * bordered block, a grid, and a hover that leans forward — accent edge, a soft
- * cast of it underneath, a 1px lift.
+ * tab start slightly differently for no reason. One group: a grid for layout,
+ * and a hover that leans forward — accent edge, a soft cast of it underneath,
+ * a 1px lift.
+ *
+ * No frame. An earlier pass boxed these in a bordered panel, which added a
+ * second container to a sidebar that is already a stack of them and pushed the
+ * list below further down for nothing. The buttons are their own grouping; the
+ * hover is the whole treatment.
  *
  * Column count is a modifier rather than a new component, because the only
  * thing that differs between the tabs is how many buttons sit on a row.
- *
- * The group border is solid rather than dashed on purpose — several panes have
- * a dashed empty state directly below, and two dashed boxes stacked read as one
- * broken one.
  *
  * Motion is killed globally by body.reduce-motion and the prefers-reduced-motion
  * query, so the glow needs nothing extra to behave.
@@ -1863,18 +1864,10 @@ input[type=tel] {
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
-  padding: var(--sp-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, .02);
 }
 
 .act-group.act-1 { grid-template-columns: 1fr; }
 .act-group.act-3 { grid-template-columns: repeat(3, 1fr); }
-
-:root[data-theme="light"] .act-group {
-  background: rgba(16, 32, 60, .02);
-}
 
 /* A control that does more than the ones beside it takes the whole width. */
 .act-group .btn-span {
@@ -1913,8 +1906,8 @@ input[type=tel] {
   box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px rgba(255, 122, 26, .20);
 }
 
-/* The Draw tab's shape buttons bring their own grid; the group supplies only
-   the frame and the hover, so their icon-over-label layout is untouched. */
+/* The Draw tab's shape buttons keep their own icon-over-label layout and their
+   tighter gap; the group contributes only the hover. */
 .act-group.draw-grid {
   gap: 7px;
 }
