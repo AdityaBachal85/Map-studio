@@ -1837,3 +1837,78 @@ input[type=tel] {
 #impStep1.done .imp-hint {
   display: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * 26. Locations — the add-actions group
+ *
+ * Two single-point actions on the top row, the bulk import spanning the width
+ * beneath them. The span is not only layout: an import can do in one step what
+ * twenty clicks of the other two would, and the control should read that way.
+ *
+ * The group border is solid rather than dashed on purpose — the empty state
+ * sits directly below and is already dashed, and two dashed boxes stacked read
+ * as one broken one.
+ * ------------------------------------------------------------------------- */
+
+.loc-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, .02);
+}
+
+:root[data-theme="light"] .loc-actions {
+  background: rgba(16, 32, 60, .02);
+}
+
+.loc-actions .btn-span {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.loc-actions .btn-span svg {
+  flex: none;
+  color: var(--accent);
+}
+
+/* The glow. Every control here adds something to the map, so the hover state
+   leans forward: the accent edge, a soft cast of it underneath, and a 1px
+   lift. Motion is killed globally by body.reduce-motion and the
+   prefers-reduced-motion query, so nothing extra is needed here. */
+.loc-actions .btn {
+  transition: background var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.loc-actions .btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px rgba(255, 122, 26, .20);
+  transform: translateY(-1px);
+}
+
+.loc-actions .btn:active {
+  transform: translateY(0);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.loc-actions .btn:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px rgba(255, 122, 26, .20);
+}
+
+/* themes.css sets a generic light-mode .btn:hover border at a higher
+   specificity than the rule above, which quietly swallowed the accent edge
+   here. Matched, rather than reached for with !important. */
+:root[data-theme="light"] .loc-actions .btn:hover,
+:root[data-theme="light"] .loc-actions .btn:focus-visible {
+  border-color: var(--accent);
+}
