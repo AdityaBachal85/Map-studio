@@ -1839,18 +1839,26 @@ input[type=tel] {
 }
 
 /* ---------------------------------------------------------------------------
- * 26. Locations — the add-actions group
+ * 26. Action groups — the primary controls at the head of every tab
  *
- * Two single-point actions on the top row, the bulk import spanning the width
- * beneath them. The span is not only layout: an import can do in one step what
- * twenty clicks of the other two would, and the control should read that way.
+ * Each tab opens with the two or three things you came to that tab to do. They
+ * were previously loose buttons with per-pane inline margins, which made every
+ * tab start slightly differently for no reason. One group, one treatment: a
+ * bordered block, a grid, and a hover that leans forward — accent edge, a soft
+ * cast of it underneath, a 1px lift.
  *
- * The group border is solid rather than dashed on purpose — the empty state
- * sits directly below and is already dashed, and two dashed boxes stacked read
- * as one broken one.
+ * Column count is a modifier rather than a new component, because the only
+ * thing that differs between the tabs is how many buttons sit on a row.
+ *
+ * The group border is solid rather than dashed on purpose — several panes have
+ * a dashed empty state directly below, and two dashed boxes stacked read as one
+ * broken one.
+ *
+ * Motion is killed globally by body.reduce-motion and the prefers-reduced-motion
+ * query, so the glow needs nothing extra to behave.
  * ------------------------------------------------------------------------- */
 
-.loc-actions {
+.act-group {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
@@ -1861,11 +1869,15 @@ input[type=tel] {
   background: rgba(255, 255, 255, .02);
 }
 
-:root[data-theme="light"] .loc-actions {
+.act-group.act-1 { grid-template-columns: 1fr; }
+.act-group.act-3 { grid-template-columns: repeat(3, 1fr); }
+
+:root[data-theme="light"] .act-group {
   background: rgba(16, 32, 60, .02);
 }
 
-.loc-actions .btn-span {
+/* A control that does more than the ones beside it takes the whole width. */
+.act-group .btn-span {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -1873,42 +1885,44 @@ input[type=tel] {
   gap: 7px;
 }
 
-.loc-actions .btn-span svg {
+.act-group .btn-span svg {
   flex: none;
   color: var(--accent);
 }
 
-/* The glow. Every control here adds something to the map, so the hover state
-   leans forward: the accent edge, a soft cast of it underneath, and a 1px
-   lift. Motion is killed globally by body.reduce-motion and the
-   prefers-reduced-motion query, so nothing extra is needed here. */
-.loc-actions .btn {
+.act-group .btn {
   transition: background var(--dur-base) var(--ease-out),
     border-color var(--dur-base) var(--ease-out),
     box-shadow var(--dur-base) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
 }
 
-.loc-actions .btn:hover {
+.act-group .btn:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px rgba(255, 122, 26, .20);
   transform: translateY(-1px);
 }
 
-.loc-actions .btn:active {
+.act-group .btn:active {
   transform: translateY(0);
   box-shadow: 0 0 0 1px var(--accent-soft);
 }
 
-.loc-actions .btn:focus-visible {
+.act-group .btn:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px rgba(255, 122, 26, .20);
+}
+
+/* The Draw tab's shape buttons bring their own grid; the group supplies only
+   the frame and the hover, so their icon-over-label layout is untouched. */
+.act-group.draw-grid {
+  gap: 7px;
 }
 
 /* themes.css sets a generic light-mode .btn:hover border at a higher
    specificity than the rule above, which quietly swallowed the accent edge
    here. Matched, rather than reached for with !important. */
-:root[data-theme="light"] .loc-actions .btn:hover,
-:root[data-theme="light"] .loc-actions .btn:focus-visible {
+:root[data-theme="light"] .act-group .btn:hover,
+:root[data-theme="light"] .act-group .btn:focus-visible {
   border-color: var(--accent);
 }
