@@ -4,6 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Diagnostics must never be served from cache: a stale copy reports on an
+       older set of checks, which is worse than no diagnostic at all. This page
+       is not covered by tools/stamp-assets.js (that stamps index.html's
+       assets), so it asks not to be stored at all. -->
+  <meta http-equiv="Cache-Control" content="no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>Mappls tile URL finder — Map Studio diagnostics</title>
   <style>
     :root { color-scheme: light dark; }
