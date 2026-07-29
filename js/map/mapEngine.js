@@ -55,6 +55,9 @@
         if (lyr.retinaSuffix) opts.r = (retina && L.Browser.retina) ? lyr.retinaSuffix : '';
         else if (retina) opts.detectRetina = true;
         const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
+        // Back-reference so a failure handler can find which LayerSpec it came
+        // from, and therefore which alternative templates it may try.
+        layer._lyrSpec = lyr;
         if (lyr.adaptive && hd) attachAdaptiveDepth(layer, lyr);
         attachExportSafetyProbe(layer, spec);
         attachTileAuthDiagnostic(layer, spec);
@@ -267,16 +270,73 @@
        *
        * @param {L.TileLayer} layer @param {object} spec BasemapSpec
        */
+      /**
+       * A layer's tile template is failing — try the alternatives before giving up.
+       *
+       * Esri has renamed basemap styles at least once, and which names a given
+       * account answers to could not be checked from the build environment. That
+       * uncertainty would otherwise land on the operator as a blank map with a
+       * valid key, which is the worst possible way to learn a string is wrong.
+       * Each candidate gets one real tile request; the first that returns an
+       * image is pinned in prefs so this happens once per device.
+       *
+       * @param {object} spec @param {object} lyr LayerSpec @param {number} i Layer index.
+       * @returns {Promise<boolean>} true when a working template was found.
+       */
+      async function resolveLayerAlternates(spec, lyr, i) {
+        const alts = (lyr.urlCandidates || []).filter(u => u !== lyr.url);
+        if (!alts.length) return false;
+        for (const tpl of alts) {
+          if (await tryTileUrl(sampleTileUrl(tpl, spec, lyr), false)) {
+            lyr.url = tpl;
+            if (typeof setPref === 'function') setPref(templatePrefKey(spec, i), tpl);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      /**
+       * How a key-gated basemap explains itself when its tiles will not load.
+       * @param {object} spec @returns {string}
+       */
+      function keyFailureHint(spec) {
+        if (spec.needsKey === 'mappls') {
+          return 'Mappls tiles need the Map SDK key, not the REST API key — check MAP_PROVIDER_KEYS.mappls in js/config.js.';
+        }
+        if (spec.needsKey === 'arcgis') {
+          // Naming the two causes that actually occur beats naming the file: an
+          // ArcGIS key that reaches this point is usually valid but missing the
+          // basemap privilege, or is being sent from an origin it does not allow.
+          return 'The key is reaching Esri but no tiles came back. In the Location Platform dashboard, check the API key has the ' +
+            'Basemaps privilege and that this site is in its referrer list — then re-run Verify key in Settings → Basemap manager.';
+        }
+        return 'Check the ' + spec.needsKey + ' key in Settings → Basemap manager.';
+      }
+
       function attachTileAuthDiagnostic(layer, spec) {
         if (!spec.needsKey) return;
         let errors = 0, reported = false;
-        layer.on('tileerror', () => {
+        layer.on('tileerror', async () => {
           if (reported || ++errors < 4) return;
           reported = true;
-          const which = spec.needsKey === 'mappls'
-            ? 'Mappls tiles need the Map SDK key, not the REST API key — check MAP_PROVIDER_KEYS.mappls in js/config.js.'
-            : 'Check the ' + spec.needsKey + ' key in js/config.js.';
-          revertBasemap(spec.id, '“' + spec.label + '” tiles are not loading. ' + which);
+
+          // A wrong style name and a wrong key look identical from here — both
+          // are just tiles that never arrive. Try the alternates first, because
+          // if one works there is nothing wrong with the key at all.
+          const i = spec.layers.indexOf(layer._lyrSpec);
+          if (i >= 0 && await resolveLayerAlternates(spec, spec.layers[i], i)) {
+            if (activeKey === spec.id) {
+              setBasemap(spec.id);
+              if (typeof status === 'function') {
+                const name = (spec.layers[i].url.match(/v1\/(.+?)\/static\/tile/) || [])[1] || 'an alternative style';
+                status('“' + spec.label + '” resolved to the “' + name + '” style.');
+              }
+            }
+            return;
+          }
+
+          revertBasemap(spec.id, '“' + spec.label + '” tiles are not loading. ' + keyFailureHint(spec));
         });
       }
 
@@ -330,7 +390,51 @@
        * chooseBasemap() silently refusing a basemap the picker was already
        * offering — it checks BASEMAPS, not the catalogue.
        */
+      /**
+       * The prefs key under which a resolved tile template is pinned.
+       * Keyed by basemap *and* layer, because a basemap can have more than one
+       * uncertain layer (Imagery Hybrid HD has two: the picture and the labels).
+       * @param {object} spec @param {number} i Layer index.
+       */
+      const templatePrefKey = (spec, i) => 'tileTemplate:' + spec.id + ':' + i;
+
+      /**
+       * Re-apply templates discovered on a previous visit.
+       *
+       * Discovery costs a handful of failed tile requests, and there is no
+       * reason to pay it twice on the same device. Only templates still present
+       * in the layer's candidate list are honoured, so a pinned value cannot
+       * outlive a catalogue change and resurrect a URL the app no longer ships.
+       */
+      function applyCachedTemplates() {
+        if (typeof getPref !== 'function') return;
+        Object.keys(BASEMAP_CATALOGUE).forEach(id => {
+          const spec = BASEMAP_CATALOGUE[id];
+          (spec.layers || []).forEach((lyr, i) => {
+            const cached = getPref(templatePrefKey(spec, i));
+            if (cached && (lyr.urlCandidates || []).indexOf(cached) >= 0) lyr.url = cached;
+          });
+        });
+      }
+
+      /**
+       * Record a template that a live probe proved works, and use it now.
+       *
+       * Called by verifyArcgisKey when a layer's default style name is rejected
+       * but one of its alternatives is served — so pressing Verify does the
+       * discovery, and the map never has to learn the same thing by failing a
+       * screenful of tiles.
+       * @param {string} specId @param {number} i Layer index. @param {string} tpl
+       */
+      function pinResolvedTemplate(specId, i, tpl) {
+        const spec = BASEMAP_CATALOGUE[specId];
+        if (!spec || !spec.layers[i] || !tpl) return;
+        spec.layers[i].url = tpl;
+        if (typeof setPref === 'function') setPref(templatePrefKey(spec, i), tpl);
+      }
+
       function rebuildBasemapRegistry() {
+        applyCachedTemplates();
         Object.keys(BASEMAPS).forEach(k => delete BASEMAPS[k]);
         availableBasemaps().forEach(spec => {
           BASEMAPS[spec.id] = {

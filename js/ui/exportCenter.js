@@ -132,11 +132,35 @@ function renderProviderKeys() {
   $('bmArcgisKey').placeholder = saved ? 'Paste a new key to replace it' : 'Paste your API key';
 }
 
-/** Write a result line under the key field. @param {string} msg @param {string} cls */
-function arcgisMsg(msg, cls) {
+/**
+ * Write a result line under the key field, plus the per-style breakdown.
+ *
+ * A single sentence cannot carry "the key works for streets but not satellite",
+ * which is the failure that leaves someone staring at a blank map convinced the
+ * key is wrong. One line per style says which half is broken.
+ * @param {string} msg @param {string} cls @param {object[]} [results]
+ */
+function arcgisMsg(msg, cls, results) {
   const el = $('bmArcgisMsg');
   el.textContent = msg || '';
   el.className = 'bm-key-msg' + (cls ? ' ' + cls : '');
+
+  const list = $('bmArcgisStyles');
+  const rows = (results || []).filter(r => r.label);
+  list.innerHTML = '';
+  // Only worth showing when the results disagree — an all-pass or an all-fail
+  // is already said in one sentence above.
+  const mixed = rows.some(r => r.ok) && rows.some(r => !r.ok);
+  list.hidden = !mixed;
+  if (mixed) {
+    rows.forEach(r => {
+      const li = document.createElement('li');
+      li.className = r.ok ? 'good' : 'bad';
+      li.textContent = r.label + ' — ' + (r.ok ? 'tile returned' : (r.status ? 'HTTP ' + r.status : 'no response'));
+      list.appendChild(li);
+    });
+  }
+  $('bmArcgisDiag').hidden = !(cls === 'bad' || cls === 'warn');
 }
 
 /**
@@ -170,7 +194,7 @@ function wireProviderKeys() {
     $('bmArcgisTest').disabled = true;
     try {
       const res = await verifyArcgisKey(key);
-      arcgisMsg(res.message, res.ok ? 'good' : 'bad');
+      arcgisMsg(res.message, res.ok ? 'good' : 'bad', res.results);
     } finally {
       $('bmArcgisTest').disabled = false;
     }
@@ -194,7 +218,7 @@ function wireProviderKeys() {
     arcgisMsg(res.ok
       ? 'Key saved and verified — Imagery Hybrid HD and Navigation HD are now in the basemap picker.'
       : res.message + ' Saved anyway; remove it here if the HD basemaps come up blank.',
-      res.ok ? 'good' : 'warn');
+      res.ok ? 'good' : 'warn', res.results);
     if (res.ok) status('ArcGIS key saved — HD basemaps unlocked.');
   });
 

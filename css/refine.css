@@ -1527,3 +1527,44 @@ input[type=tel] {
   flex: none;
   color: var(--accent);
 }
+
+/* Per-style verification breakdown. Shown only when the styles disagree — the
+   case a single sentence cannot carry. */
+.bm-key-styles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bm-key-styles li {
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  padding-left: 14px;
+  position: relative;
+  color: var(--text-2);
+}
+
+.bm-key-styles li::before {
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.bm-key-styles li.good::before {
+  content: "✓";
+  color: var(--ok);
+}
+
+.bm-key-styles li.bad::before {
+  content: "✕";
+  color: var(--danger);
+}
+
+#bmArcgisDiag a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

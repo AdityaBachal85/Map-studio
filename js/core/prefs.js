@@ -21,18 +21,37 @@ const PREF_DEFAULTS = {
 const _prefs = Object.assign({}, PREF_DEFAULTS);
 const _prefSubs = {};
 
+/**
+ * Prefs that hold something the operator *entered*, not something they toggled.
+ *
+ * A reset is for escaping a bad setting — a basemap that stopped working, a
+ * look that renders badly on this screen. It is not for deleting a pasted API
+ * key or a list of tile-server URLs, which have to be typed in again from
+ * somewhere else. Keeping these across a reset is the difference between an
+ * escape hatch and a trapdoor, and matters most because "reload with ?reset=1"
+ * is exactly the advice given when the app looks stale.
+ *
+ * `?reset=all` still clears everything, for when that is genuinely wanted.
+ */
+const PREF_KEEP_ON_RESET = ['providerKeys', 'customBasemaps'];
+
 function loadPrefs() {
-  // Support escape hatch: ?reset=1 starts from defaults and clears stored
-  // preferences. A saved setting that turns out to be unusable — a basemap that
-  // stopped working, say — otherwise reapplies itself on every visit, and
-  // "clear your site data" is not a reasonable thing to ask an operator for.
+  let saved = null;
+  try { const raw = localStorage.getItem(PREFS_KEY); if (raw) saved = JSON.parse(raw); } catch (e) { /* private mode / disabled storage */ }
+
   try {
-    if (/[?&]reset=1\b/.test(location.search)) {
+    if (/[?&]reset=(1|all)\b/.test(location.search)) {
+      const all = /[?&]reset=all\b/.test(location.search);
+      const keep = {};
+      if (!all && saved) PREF_KEEP_ON_RESET.forEach(k => { if (saved[k] !== undefined) keep[k] = saved[k]; });
       localStorage.removeItem(PREFS_KEY);
+      Object.assign(_prefs, keep);
+      if (Object.keys(keep).length) savePrefs();
       return;
     }
   } catch (e) { /* no location (tests) */ }
-  try { const raw = localStorage.getItem(PREFS_KEY); if (raw) Object.assign(_prefs, JSON.parse(raw)); } catch (e) { /* private mode / disabled storage */ }
+
+  if (saved) Object.assign(_prefs, saved);
 }
 function savePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(_prefs)); } catch (e) { /* ignore */ }
@@ -44,8 +63,14 @@ function getPref(k) { return _prefs[k] !== undefined ? _prefs[k] : PREF_DEFAULTS
 function setPref(k, v) { _prefs[k] = v; savePrefs(); (_prefSubs[k] || []).forEach(cb => { try { cb(v); } catch (e) { } }); }
 /** Subscribe to changes of one preference. @param {string} k @param {(v:*)=>void} cb */
 function onPref(k, cb) { (_prefSubs[k] = _prefSubs[k] || []).push(cb); }
-/** Reset every preference to its default and re-apply. */
-function resetPrefs() { Object.assign(_prefs, PREF_DEFAULTS); savePrefs(); applyTheme(); applyGlass(); applyMotion(); }
+/** Reset every preference to its default and re-apply, keeping entered data. */
+function resetPrefs() {
+  const keep = {};
+  PREF_KEEP_ON_RESET.forEach(k => { if (_prefs[k] !== undefined) keep[k] = _prefs[k]; });
+  Object.keys(_prefs).forEach(k => delete _prefs[k]);
+  Object.assign(_prefs, PREF_DEFAULTS, keep);
+  savePrefs(); applyTheme(); applyGlass(); applyMotion();
+}
 
 // ---------- theme ----------
 const _sysThemeMq = window.matchMedia('(prefers-color-scheme: light)');

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Browsers cached earlier revisions of the Mappls diagnostic and reported
+       results from code that had already been replaced, twice. Never again. -->
+  <meta http-equiv="cache-control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="pragma" content="no-cache">
+  <title>ArcGIS static basemap tiles — diagnostic</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; padding: 22px 24px 60px;
+      background: #0B1322; color: #EAF0F9;
+      font: 13px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    h1 { font-size: 17px; margin: 0 0 4px; }
+    .build {
+      display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+      background: #FF7A1A; color: #17233B; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+      vertical-align: middle;
+    }
+    p.lede { color: #8B99B0; max-width: 74ch; margin: 0 0 18px; }
+    label { display: block; font-size: 10px; font-weight: 800; letter-spacing: .07em;
+      text-transform: uppercase; color: #8B99B0; margin-bottom: 5px; }
+    input[type=text] {
+      width: 100%; max-width: 900px; padding: 9px 11px; border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, .18); background: rgba(0, 0, 0, .3);
+      color: #EAF0F9; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px;
+    }
+    .row { display: flex; gap: 10px; align-items: center; margin: 14px 0 20px; flex-wrap: wrap; }
+    button {
+      padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .18);
+      background: #FF7A1A; color: #17233B; font-weight: 800; font-size: 12px; cursor: pointer;
+    }
+    button.ghost { background: rgba(255, 255, 255, .06); color: #EAF0F9; }
+    button:disabled { opacity: .5; cursor: default; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid rgba(255, 255, 255, .09);
+      vertical-align: top; }
+    th { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #8B99B0; }
+    td.style { font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; }
+    .ok { color: #34D399; font-weight: 700; }
+    .bad { color: #FF6B81; font-weight: 700; }
+    .dim { color: #8B99B0; }
+    td.detail { color: #B8C3D4; font-size: 11.5px; word-break: break-word; }
+    .thumb { width: 44px; height: 44px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .14);
+      background-size: cover; background-position: center; }
+    .verdict { margin: 20px 0 0; padding: 14px 16px; border-radius: 11px;
+      border: 1px solid rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .04); max-width: 82ch; }
+    .verdict b { display: block; margin-bottom: 5px; font-size: 13.5px; }
+    code { background: rgba(255, 255, 255, .08); padding: 1px 5px; border-radius: 4px;
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+    .note { color: #8B99B0; font-size: 11.5px; max-width: 80ch; margin-top: 22px; }
+  </style>
+</head>
+
+<body>
+  <h1>ArcGIS static basemap tiles — diagnostic<span class="build" id="build">BUILD 1</span></h1>
+  <p class="lede">
+    Asks Esri for one real tile of every candidate basemap style, using your key, from this browser and this
+    origin — the same three things the app itself uses. The point is to separate <em>the key is wrong</em>
+    from <em>the key lacks the basemap privilege</em> from <em>the style name is wrong</em>, which all look
+    identical from inside the app: a map that does not draw.
+  </p>
+
+  <label for="key">ArcGIS Location Platform API key</label>
+  <input type="text" id="key" spellcheck="false" autocomplete="off" placeholder="AAPT… or AAPK…">
+  <div class="row">
+    <button id="run">Run all probes</button>
+    <button class="ghost" id="copy">Copy results</button>
+    <span class="dim" id="origin"></span>
+  </div>
+
+  <table id="tbl" hidden>
+    <thead>
+      <tr><th></th><th>Style</th><th>Result</th><th>Detail</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="verdict" id="verdict" hidden></div>
+
+  <p class="note">
+    Nothing is stored or sent anywhere by this page — the key stays in the field and goes only to
+    <code>static-map-tiles-api.arcgis.com</code>. Close the tab and it is gone.
+  </p>
+
+  <script>
+    var BUILD = 1;
+    document.getElementById('build').textContent = 'BUILD ' + BUILD;
+    document.getElementById('origin').textContent = 'Origin sent to Esri: ' + location.origin;
+
+    var HOST = 'https://static-map-tiles-api.arcgis.com/arcgis/rest/services/static-basemap-tiles-service/v1/';
+
+    /* Every style the app might ask for, plus the near-neighbours that could be
+       the correct name if the first guess is wrong. The order Esri uses for the
+       last two path segments is also in question, so the winning style is
+       re-tested with the axes swapped at the end. */
+    var STYLES = [
+      'arcgis/navigation',
+      'arcgis/imagery',
+      'arcgis/imagery/standard',
+      'arcgis/imagery/base',
+      'arcgis/imagery/labels',
+      'arcgis/imagery/hybrid',
+      'arcgis/streets',
+      'arcgis/topographic',
+      'arcgis/light-gray',
+      'arcgis/light-gray/base',
+      'arcgis/dark-gray',
+      'arcgis/outdoor',
+      'arcgis/community',
+      'osm/standard'
+    ];
+
+    /* z8 over the western Indian coast — land and sea in one tile, so a blank
+       ocean square cannot be mistaken for a failure. */
+    var Z = 8, X = 180, Y = 116;
+
+    function tileUrl(style, key, swap) {
+      var a = swap ? X : Y, b = swap ? Y : X;
+      return HOST + style + '/static/tile/' + Z + '/' + a + '/' + b +
+        '?token=' + encodeURIComponent(key);
+    }
+
+    /* fetch tells us the status code and the error body; an <img> load tells us
+       only yes or no but is immune to CORS and to extensions blocking fetch.
+       Both are worth having, and disagreement between them is itself a finding. */
+    function probe(url) {
+      return fetch(url, { cache: 'no-store' }).then(function (res) {
+        var type = res.headers.get('content-type') || '';
+        if (res.ok && /image\//i.test(type)) {
+          return { ok: true, status: res.status, detail: type };
+        }
+        return res.text().catch(function () { return ''; }).then(function (body) {
+          var msg = body;
+          try {
+            var j = JSON.parse(body);
+            if (j && j.error) msg = '[' + (j.error.code || res.status) + '] ' + (j.error.message || '') +
+              ((j.error.details && j.error.details.length) ? ' — ' + j.error.details.join('; ') : '');
+          } catch (e) { /* not JSON; show it raw */ }
+          return { ok: false, status: res.status, detail: (msg || '(empty body)').slice(0, 400) };
+        });
+      }).catch(function (err) {
+        return imgProbe(url).then(function (loaded) {
+          return loaded
+            ? { ok: true, status: 0, detail: 'fetch blocked (' + err.message + ') but the image loaded' }
+            : { ok: false, status: 0, detail: 'no response — ' + err.message };
+        });
+      });
+    }
+
+    function imgProbe(url) {
+      return new Promise(function (res) {
+        var img = new Image();
+        var done = function (v) { img.onload = img.onerror = null; res(v); };
+        img.onload = function () { done(img.naturalWidth > 0); };
+        img.onerror = function () { done(false); };
+        setTimeout(function () { done(false); }, 12000);
+        img.src = url;
+      });
+    }
+
+    function addRow(style, r, url) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + (r.ok ? '<span class="thumb" style="background-image:url(\'' + url + '\')"></span>' : '') + '</td>' +
+        '<td class="style">' + style + '</td>' +
+        '<td class="' + (r.ok ? 'ok' : 'bad') + '">' + (r.ok ? 'TILE' : (r.status || 'FAIL')) + '</td>' +
+        '<td class="detail">' + r.detail.replace(/</g, '&lt;') + '</td>';
+      document.getElementById('rows').appendChild(tr);
+    }
+
+    var lastText = '';
+
+    function verdict(results, key) {
+      var good = results.filter(function (r) { return r.ok; });
+      var el = document.getElementById('verdict');
+      var html;
+
+      if (good.length) {
+        var imagery = good.filter(function (r) { return /imagery/.test(r.style); });
+        html = '<b class="ok">The key works.</b>Esri served ' + good.length + ' of ' + results.length +
+          ' styles. Working: <code>' + good.map(function (r) { return r.style; }).join('</code> <code>') + '</code>.';
+        html += imagery.length
+          ? '<br><br>Imagery Hybrid HD needs an imagery style and a labels style; both are in that list, so the app should draw it. If it still does not, the app is running a cached build — reload with <code>?reset=1</code>.'
+          : '<br><br>No <code>arcgis/imagery…</code> style responded, which is why the satellite HD basemap is blank while the street one works. Send me this table and I will point the catalogue at the names that did.';
+      } else {
+        var codes = {};
+        results.forEach(function (r) { codes[r.status] = (codes[r.status] || 0) + 1; });
+        var body = results.map(function (r) { return r.detail; }).join(' ');
+        if (/referer|referrer|origin/i.test(body)) {
+          html = '<b class="bad">The key is being rejected for this origin.</b>Add <code>' + location.origin +
+            '/*</code> to the key’s referrer list in the Location Platform dashboard.';
+        } else if (/privilege|not licensed|not authorized|insufficient/i.test(body)) {
+          html = '<b class="bad">The key is valid but has no basemap entitlement.</b>Edit the API key in the ' +
+            'Location Platform dashboard and tick the <b>Basemaps</b> privilege (Location services → Basemap styles), ' +
+            'then run this again.';
+        } else if (codes[498] || codes[499] || /invalid token/i.test(body)) {
+          html = '<b class="bad">Esri does not recognise this key.</b>Check it is an <em>API key</em> from the ' +
+            'Location Platform dashboard — not a client ID, an OAuth secret, or an ArcGIS Online username.';
+        } else if (codes[0] === results.length) {
+          html = '<b class="bad">Nothing reached Esri at all.</b>Every request failed before getting a status code, ' +
+            'which points at the network, a proxy, or a blocking extension rather than the key.';
+        } else {
+          html = '<b class="bad">No style returned a tile.</b>Status codes seen: <code>' +
+            Object.keys(codes).join('</code> <code>') + '</code>. The Detail column has Esri’s own words for it.';
+        }
+      }
+      el.innerHTML = html;
+      el.hidden = false;
+
+      lastText = results.map(function (r) {
+        return (r.ok ? 'OK  ' : 'ERR ') + (r.status || '---') + '  ' + r.style + '  ' + r.detail;
+      }).join('\n') + '\n\norigin: ' + location.origin + '\nkey length: ' + key.length +
+        '\nkey prefix: ' + key.slice(0, 8) + '…';
+    }
+
+    document.getElementById('run').addEventListener('click', function () {
+      var key = document.getElementById('key').value.trim();
+      if (!key) { alert('Paste your API key first.'); return; }
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = 'Probing…';
+      document.getElementById('rows').innerHTML = '';
+      document.getElementById('tbl').hidden = false;
+      document.getElementById('verdict').hidden = true;
+
+      var results = [];
+      var chain = Promise.resolve();
+      STYLES.forEach(function (style) {
+        chain = chain.then(function () {
+          var url = tileUrl(style, key, false);
+          return probe(url).then(function (r) {
+            r.style = style;
+            results.push(r);
+            addRow(style, r, url);
+          });
+        });
+      });
+
+      // If a style worked, confirm the tile-axis order by asking for the
+      // mirrored coordinates: a service using the other convention answers
+      // both, and only comparing the two images tells them apart.
+      chain.then(function () {
+        var win = results.filter(function (r) { return r.ok; })[0];
+        if (!win) return;
+        var url = tileUrl(win.style, key, true);
+        return probe(url).then(function (r) {
+          r.style = win.style + '  (x/y swapped)';
+          addRow(r.style, r, url);
+          if (r.ok) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td></td><td class="style dim">axis check</td><td class="dim">—</td>' +
+              '<td class="detail">Both orders returned a tile. Compare the two thumbnails above: the app uses ' +
+              '<code>{z}/{y}/{x}</code>, so its thumbnail is the first of the pair. If they differ and the ' +
+              'second looks like the correct place, the order in the catalogue needs swapping.</td>';
+            document.getElementById('rows').appendChild(tr);
+          }
+        });
+      }).then(function () {
+        verdict(results, key);
+        btn.disabled = false;
+        btn.textContent = 'Run all probes';
+      });
+    });
+
+    document.getElementById('copy').addEventListener('click', function () {
+      if (!lastText) { alert('Run the probes first.'); return; }
+      navigator.clipboard.writeText(lastText).then(function () {
+        var b = document.getElementById('copy');
+        b.textContent = 'Copied';
+        setTimeout(function () { b.textContent = 'Copy results'; }, 1600);
+      });
+    });
+  </script>
+</body>
+
+</html>

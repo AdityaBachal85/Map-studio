@@ -87,6 +87,45 @@ A key that fails verification is still **saved**, with a warning. A key that
 cannot be checked because the network is down is probably the right key, and
 refusing to store it would strand the operator with no way forward.
 
+### Style names are discovered, not assumed
+
+Esri has renamed its basemap styles at least once — the photographic half of
+Imagery Hybrid is documented both as `arcgis/imagery/standard` and as
+`arcgis/imagery/base` — and with no route to `static-map-tiles-api.arcgis.com`
+from the build environment, the right one could not be checked. A wrong guess is
+invisible here and presents to the operator as *a blank map with a valid key*,
+which is the worst way to learn that a string is wrong.
+
+So the app does not depend on the guess. Each layer carries `url` (best guess)
+plus `urlCandidates`, and there are two places that walk the list:
+
+| Where | When |
+| --- | --- |
+| `verifyArcgisKey()` | on **Verify key** — probes each candidate in order and reports what actually works |
+| `attachTileAuthDiagnostic()` → `resolveLayerAlternates()` | on four consecutive tile errors, before declaring failure |
+
+Either way the winner is pinned to prefs (`tileTemplate:<basemap>:<layer>`) and
+re-applied on the next load by `applyCachedTemplates()`, so discovery costs at
+most one round per device. A pin is only honoured while it is still in the
+layer's candidate list, so it cannot outlive a catalogue change.
+
+Because verification walks the same list the map would, "the key works but
+Imagery Hybrid HD resolved to `arcgis/imagery/base`" is a **pass**, not a
+failure — the app reports what it will do, not what it first tried.
+
+`diagnostics/arcgis-tiles.html` is the escalation: it probes fourteen candidate
+styles plus the tile-axis order, shows Esri's own error body per style, and
+turns the result into a verdict naming the one thing to change.
+
+### `?reset=1` keeps what you typed
+
+Reset exists to escape a bad *setting*. It must not delete a pasted API key or a
+list of tile-server URLs, which have to be fetched from somewhere else to
+restore — and it very nearly did, because "reload with `?reset=1`" is exactly
+the advice given when the app looks stale. `PREF_KEEP_ON_RESET` carries
+`providerKeys` and `customBasemaps` across a reset; `?reset=all` still clears
+everything.
+
 Saving rebuilds both the catalogue-driven picker and the `BASEMAPS` registry
 (`refreshBasemapAvailability()`); removing one switches the map away if it was
 showing a basemap the key unlocked. Until a key exists, one row at the end of

@@ -74,6 +74,28 @@ const esri = (path, host) => (host || ESRI_TILES) + path + '/MapServer/tile/{z}/
  */
 const esriStatic = style => ESRI_STATIC_TILES + style + '/static/tile/{z}/{y}/{x}?token={token}';
 
+/**
+ * Candidate style names per HD basemap layer, best guess first.
+ *
+ * Esri's Basemap Styles v2 enumeration has been renamed at least once —
+ * `arcgis/imagery` is the composite hybrid, and the photographic half has been
+ * documented both as `.../standard` and as `.../base`. Which one a given
+ * deployment answers to cannot be checked from a build environment with no
+ * route to `static-map-tiles-api.arcgis.com`, and a wrong guess is invisible
+ * until someone with a key sees an empty map.
+ *
+ * So the app does not depend on the guess. Each layer ships its best candidate
+ * as `url` and the alternatives as `urlCandidates`; if the first one returns no
+ * tiles, mapEngine tries the rest against the live service and pins whichever
+ * works (see resolveLayerAlternates). Discovery costs nothing when the first
+ * guess is right, which is the common case.
+ */
+const ARCGIS_STYLES = Object.freeze({
+  imagery: ['arcgis/imagery/standard', 'arcgis/imagery/base', 'arcgis/imagery'],
+  imageryLabels: ['arcgis/imagery/labels', 'arcgis/imagery/hybrid'],
+  navigation: ['arcgis/navigation', 'arcgis/navigation/night'],
+});
+
 /* ---------------------------------------------------------------------------
  * Layer descriptors
  * ------------------------------------------------------------------------- */
@@ -179,8 +201,16 @@ const BASEMAP_CATALOGUE = {
     credit: 'Esri · TomTom · Garmin · METI/NASA · USGS · Vantor · Airbus DS · © OpenStreetMap contributors · Microsoft · Esri Community Maps',
     thumb: 'linear-gradient(150deg,#233f22,#5f7d42 45%,#b3bd86)',
     layers: [
-      { url: esriStatic('arcgis/imagery/base'), zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'imagery' },
-      { url: esriStatic('arcgis/imagery/labels'), zIndex: 3, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'reference' },
+      {
+        url: esriStatic(ARCGIS_STYLES.imagery[0]),
+        urlCandidates: ARCGIS_STYLES.imagery.map(esriStatic),
+        zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'imagery',
+      },
+      {
+        url: esriStatic(ARCGIS_STYLES.imageryLabels[0]),
+        urlCandidates: ARCGIS_STYLES.imageryLabels.map(esriStatic),
+        zIndex: 3, maxNative: 21, tileSize: 512, zoomOffset: -1, role: 'reference',
+      },
     ],
   },
 
@@ -190,7 +220,11 @@ const BASEMAP_CATALOGUE = {
     credit: 'Esri · TomTom · Garmin · © OpenStreetMap contributors · Microsoft · Esri Community Maps',
     thumb: 'linear-gradient(150deg,#f7f5f0,#e6e1d6 60%,#d6cfbe)',
     layers: [
-      { url: esriStatic('arcgis/navigation'), zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1 },
+      {
+        url: esriStatic(ARCGIS_STYLES.navigation[0]),
+        urlCandidates: ARCGIS_STYLES.navigation.map(esriStatic),
+        zIndex: 1, maxNative: 21, tileSize: 512, zoomOffset: -1,
+      },
     ],
   },
 
