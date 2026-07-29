@@ -156,10 +156,14 @@ buildBasemapGrid();
 $('bmToggle').addEventListener('click', toggleBasemapPanel);
 document.addEventListener('click', e => { if (!e.target.closest('#basemapSwitcher')) { $('bmPanel').hidden = true; $('bmToggle').classList.remove('open'); } });
 
-// Remember-last: apply the saved basemap on startup (falls back to the best
-// imagery basemap the current keys unlock).
+// Remember-last is resolved by mapEngine's initialBasemapId() before the first
+// tile is requested — it has to be, or a cached tile rendering mid-startup
+// persists the default over the remembered choice. All that is left here is
+// reflecting the decision into this UI, plus re-applying it in the case where
+// the engine could not (an unavailable basemap that has since become available).
 (function initBasemap() {
   const saved = (typeof getPref === 'function') ? getPref('basemap') : null;
-  if (saved && BASEMAPS[saved]) chooseBasemap(saved);
-  else syncBasemapSwitcher(typeof activeKey !== 'undefined' ? activeKey : preferredBasemapId());
+  const current = typeof activeKey !== 'undefined' ? activeKey : preferredBasemapId();
+  if (saved && saved !== current && BASEMAPS[saved]) chooseBasemap(saved);
+  else syncBasemapSwitcher(current);
 })();

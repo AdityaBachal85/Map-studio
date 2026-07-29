@@ -24,11 +24,11 @@
           status('Export engine still loading — wait a moment and try again.');
           return;
         }
-        if (!basemapExportSafe(activeKey)) {
+        if (!exportReady(activeKey)) {
           status('This basemap’s tiles block canvas export (no CORS header). Switch to an Esri or Carto basemap to export.');
           return;
         }
-        status('Building editable PPTX… (several seconds)', true);
+        status(exportSubstituteNote('Building editable PPTX… (several seconds)'), true);
         const wrap = $('mapWrap');
         const wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;
 

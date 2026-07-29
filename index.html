@@ -5,9 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DBOT · Property Map Studio</title>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0007">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0007">
-  <link rel="stylesheet" href="./css/main.css?v=5.0007">
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=5.0008">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=5.0008">
+  <link rel="stylesheet" href="./css/main.css?v=5.0008">
 </head>
 
 <body>
@@ -490,37 +490,9 @@
       <div class="modal-body">
         <div class="xc-group">
           <div class="xc-group-hd">Provider keys</div>
-          <div class="bm-key" id="bmKeyArcgis">
-            <div class="bm-key-hd">
-              <b>ArcGIS Location Platform</b>
-              <span class="bm-key-state" id="bmArcgisState">Not set</span>
-            </div>
-            <p class="bm-key-note">Unlocks <b>Imagery Hybrid HD</b> and <b>Navigation HD</b> — Esri's current
-              cartography rendered to 512&nbsp;px tiles, so roads and labels carry twice the detail per screen pixel
-              and stay legible at every zoom. Free tier at
-              <a href="https://location.arcgis.com/sign-up/" target="_blank" rel="noopener noreferrer">location.arcgis.com</a>.</p>
-            <label class="bm-f"><span>API key</span>
-              <span class="bm-key-input">
-                <input type="password" id="bmArcgisKey" spellcheck="false" autocomplete="off"
-                  placeholder="Paste your API key">
-                <button type="button" class="bm-key-eye" id="bmArcgisEye" title="Show key"
-                  aria-label="Show key">Show</button>
-              </span>
-            </label>
-            <div class="row2">
-              <button class="btn" id="bmArcgisTest">Verify key</button>
-              <button class="btn btn-primary" id="bmArcgisSave">Save key</button>
-            </div>
-            <div class="bm-key-msg" id="bmArcgisMsg" role="status" aria-live="polite"></div>
-            <ul class="bm-key-styles" id="bmArcgisStyles" hidden></ul>
-            <p class="bm-key-note" id="bmArcgisDiag" hidden>Still not drawing? <a
-                href="./diagnostics/arcgis-tiles.html" target="_blank" rel="noopener noreferrer">Run the tile
-                diagnostic</a> — it asks Esri for every candidate style and shows exactly what it says back.</p>
-            <div class="bm-key-actions">
-              <button class="btn btn-sm" id="bmArcgisUse" hidden>Switch to Imagery Hybrid HD</button>
-              <button class="btn btn-sm btn-danger" id="bmArcgisClear" hidden>Remove key</button>
-            </div>
-          </div>
+          <!-- Cards are generated from PROVIDER_KEY_INFO by ui/exportCenter.js,
+               so adding a provider is a data change rather than more markup. -->
+          <div id="bmKeys"></div>
         </div>
         <div class="xc-group">
           <div class="xc-group-hd">Your tile servers</div>
@@ -569,69 +541,70 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=5.0007"></script>
-  <script src="./vendor/leaflet-geoman.js?v=5.0007"></script>
-  <script src="./vendor/html2canvas.js?v=5.0007"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=5.0007"></script>
-  <script src="./vendor/jszip.js?v=5.0007"></script>
-  <script src="./vendor/anime.min.js?v=5.0007"></script>
+  <script src="./vendor/leaflet.js?v=5.0008"></script>
+  <script src="./vendor/leaflet-geoman.js?v=5.0008"></script>
+  <script src="./vendor/html2canvas.js?v=5.0008"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=5.0008"></script>
+  <script src="./vendor/jszip.js?v=5.0008"></script>
+  <script src="./vendor/anime.min.js?v=5.0008"></script>
 
-  <script src="./js/core/prefs.js?v=5.0007"></script>
-  <script src="./js/constants.js?v=5.0007"></script>
-  <script src="./js/utils/dom.js?v=5.0007"></script>
-  <script src="./js/export/exportPDF.js?v=5.0007"></script>
-  <script src="./js/export/captureMap.js?v=5.0007"></script>
-  <script src="./js/core/state.js?v=5.0007"></script>
-  <script src="./js/map/icons.js?v=5.0007"></script>
-  <script src="./js/config.js?v=5.0007"></script>
-  <script src="./js/ui/notifications.js?v=5.0007"></script>
-  <script src="./js/utils/math.js?v=5.0007"></script>
-  <script src="./js/map/billboard.js?v=5.0007"></script>
-  <script src="./js/ui/propertyPanel.js?v=5.0007"></script>
-  <script src="./js/ui/dialogs.js?v=5.0007"></script>
-  <script src="./js/utils/colors.js?v=5.0007"></script>
-  <script src="./js/utils/animate.js?v=5.0007"></script>
-  <script src="./js/map/routes.js?v=5.0007"></script>
-  <script src="./js/map/markers.js?v=5.0007"></script>
-  <script src="./js/map/snapping.js?v=5.0007"></script>
-  <script src="./js/map/imageryEnhance.js?v=5.0007"></script>
-  <script src="./js/map/providerKeys.js?v=5.0007"></script>
-  <script src="./js/map/basemapProviders.js?v=5.0007"></script>
-  <script src="./js/map/customBasemaps.js?v=5.0007"></script>
-  <script src="./js/map/mapEngine.js?v=5.0007"></script>
-  <script src="./js/export/hiResRender.js?v=5.0007"></script>
-  <script src="./js/export/exportPNG.js?v=5.0007"></script>
-  <script src="./js/export/pptUtils.js?v=5.0007"></script>
-  <script src="./js/export/pptValidation.js?v=5.0007"></script>
-  <script src="./js/export/pptShapes.js?v=5.0007"></script>
-  <script src="./js/export/pptImages.js?v=5.0007"></script>
-  <script src="./js/export/pptLabels.js?v=5.0007"></script>
-  <script src="./js/export/pptTables.js?v=5.0007"></script>
-  <script src="./js/export/exportPPT.js?v=5.0007"></script>
-  <script src="./js/services/places.js?v=5.0007"></script>
-  <script src="./js/services/geoapify.js?v=5.0007"></script>
-  <script src="./js/services/nearbyPlaces.js?v=5.0007"></script>
-  <script src="./js/services/geocoder.js?v=5.0007"></script>
-  <script src="./js/ui/searchBox.js?v=5.0007"></script>
-  <script src="./js/ui/sliders.js?v=5.0007"></script>
-  <script src="./js/ui/tooltips.js?v=5.0007"></script>
-  <script src="./js/ui/toolbar.js?v=5.0007"></script>
-  <script src="./js/map/aerialDistance.js?v=5.0007"></script>
-  <script src="./js/ui/geometryPanel.js?v=5.0007"></script>
-  <script src="./js/map/drawing.js?v=5.0007"></script>
-  <script src="./js/map/markerCluster.js?v=5.0007"></script>
-  <script src="./js/map/nearby.js?v=5.0007"></script>
-  <script src="./js/project/geojson.js?v=5.0007"></script>
-  <script src="./js/export/pptxHandler.js?v=5.0007"></script>
-  <script src="./js/project/kml.js?v=5.0007"></script>
-  <script src="./js/project/openProject.js?v=5.0007"></script>
-  <script src="./js/project/saveProject.js?v=5.0007"></script>
-  <script src="./js/ui/sidebar.js?v=5.0007"></script>
-  <script src="./js/ui/layerManager.js?v=5.0007"></script>
-  <script src="./js/ui/settingsDialog.js?v=5.0007"></script>
-  <script src="./js/ui/exportCenter.js?v=5.0007"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=5.0007"></script>
-  <script src="./js/app.js?v=5.0007"></script>
+  <script src="./js/core/prefs.js?v=5.0008"></script>
+  <script src="./js/constants.js?v=5.0008"></script>
+  <script src="./js/utils/dom.js?v=5.0008"></script>
+  <script src="./js/export/exportPDF.js?v=5.0008"></script>
+  <script src="./js/export/captureMap.js?v=5.0008"></script>
+  <script src="./js/core/state.js?v=5.0008"></script>
+  <script src="./js/map/icons.js?v=5.0008"></script>
+  <script src="./js/config.js?v=5.0008"></script>
+  <script src="./js/ui/notifications.js?v=5.0008"></script>
+  <script src="./js/utils/math.js?v=5.0008"></script>
+  <script src="./js/map/billboard.js?v=5.0008"></script>
+  <script src="./js/ui/propertyPanel.js?v=5.0008"></script>
+  <script src="./js/ui/dialogs.js?v=5.0008"></script>
+  <script src="./js/utils/colors.js?v=5.0008"></script>
+  <script src="./js/utils/animate.js?v=5.0008"></script>
+  <script src="./js/map/routes.js?v=5.0008"></script>
+  <script src="./js/map/markers.js?v=5.0008"></script>
+  <script src="./js/map/snapping.js?v=5.0008"></script>
+  <script src="./js/map/imageryEnhance.js?v=5.0008"></script>
+  <script src="./js/map/providerKeys.js?v=5.0008"></script>
+  <script src="./js/map/basemapProviders.js?v=5.0008"></script>
+  <script src="./js/map/googleTiles.js?v=5.0008"></script>
+  <script src="./js/map/customBasemaps.js?v=5.0008"></script>
+  <script src="./js/map/mapEngine.js?v=5.0008"></script>
+  <script src="./js/export/hiResRender.js?v=5.0008"></script>
+  <script src="./js/export/exportPNG.js?v=5.0008"></script>
+  <script src="./js/export/pptUtils.js?v=5.0008"></script>
+  <script src="./js/export/pptValidation.js?v=5.0008"></script>
+  <script src="./js/export/pptShapes.js?v=5.0008"></script>
+  <script src="./js/export/pptImages.js?v=5.0008"></script>
+  <script src="./js/export/pptLabels.js?v=5.0008"></script>
+  <script src="./js/export/pptTables.js?v=5.0008"></script>
+  <script src="./js/export/exportPPT.js?v=5.0008"></script>
+  <script src="./js/services/places.js?v=5.0008"></script>
+  <script src="./js/services/geoapify.js?v=5.0008"></script>
+  <script src="./js/services/nearbyPlaces.js?v=5.0008"></script>
+  <script src="./js/services/geocoder.js?v=5.0008"></script>
+  <script src="./js/ui/searchBox.js?v=5.0008"></script>
+  <script src="./js/ui/sliders.js?v=5.0008"></script>
+  <script src="./js/ui/tooltips.js?v=5.0008"></script>
+  <script src="./js/ui/toolbar.js?v=5.0008"></script>
+  <script src="./js/map/aerialDistance.js?v=5.0008"></script>
+  <script src="./js/ui/geometryPanel.js?v=5.0008"></script>
+  <script src="./js/map/drawing.js?v=5.0008"></script>
+  <script src="./js/map/markerCluster.js?v=5.0008"></script>
+  <script src="./js/map/nearby.js?v=5.0008"></script>
+  <script src="./js/project/geojson.js?v=5.0008"></script>
+  <script src="./js/export/pptxHandler.js?v=5.0008"></script>
+  <script src="./js/project/kml.js?v=5.0008"></script>
+  <script src="./js/project/openProject.js?v=5.0008"></script>
+  <script src="./js/project/saveProject.js?v=5.0008"></script>
+  <script src="./js/ui/sidebar.js?v=5.0008"></script>
+  <script src="./js/ui/layerManager.js?v=5.0008"></script>
+  <script src="./js/ui/settingsDialog.js?v=5.0008"></script>
+  <script src="./js/ui/exportCenter.js?v=5.0008"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=5.0008"></script>
+  <script src="./js/app.js?v=5.0008"></script>
 </body>
 
 </html>

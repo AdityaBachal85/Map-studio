@@ -41,12 +41,20 @@ const GEOAPIFY_API_KEY = '72551776e5ff41cca6cec522fa9062cd';
  *   which is the cartography the ArcGIS attribution in the brief refers to.
  *   This is the single biggest available upgrade to map quality.
  *
+ * `google` — a Google Maps Platform key with the **Map Tiles API** enabled and
+ *   billing on. Adds Google's satellite/roads/terrain as ON-SCREEN basemaps.
+ *   Google's terms do not cover copying map content into files, so exports
+ *   render the equivalent Esri imagery instead — see `displayOnly` and
+ *   `exportFallback` in map/basemapProviders.js. Tiles are metered per request:
+ *   restrict the key by HTTP referrer and set a quota cap.
+ *
  * `mappls` — a Mappls (MapmyIndia) map key. See the Mappls block below: the
  *   credential type matters, and it is probably not the one from the REST API
  *   page.
  */
 const MAP_PROVIDER_KEYS = {
   arcgis: '',
+  google: '',
   mappls: 'qvbbxilcnllctbsgabklmdpsxnoucoabncre'
 };
 

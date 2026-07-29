@@ -252,7 +252,14 @@ async function renderGroundPass(o) {
 
     // Same basemap, but uncapped `maxZoom` so Leaflet never clamps the view
     // itself — each layer still stops at its own maxNativeZoom.
-    const entry = BASEMAPS[activeKey] || BASEMAPS[preferredBasemapId()];
+    //
+    // Not always literally the same one: a basemap that is licensed for display
+    // but not for redistribution (Google), or whose tiles taint the canvas,
+    // renders here as its licensed equivalent. Only the ground changes —
+    // geometry, labels, framing and scale are computed from the live map, so the
+    // export is the same picture on different imagery. See exportBasemapId().
+    const exportKey = typeof exportBasemapId === 'function' ? exportBasemapId(activeKey) : activeKey;
+    const entry = BASEMAPS[exportKey] || BASEMAPS[activeKey] || BASEMAPS[preferredBasemapId()];
     const tileLayers = entry.build($('hdTgl').checked);
     tileLayers.forEach(l => { l.options.maxZoom = 30; l.addTo(exportMap); });
     if ($('hillTgl').checked) {
@@ -340,6 +347,18 @@ async function renderFurniturePass(o) {
   if (typeof setLeaderRenderScale === 'function') setLeaderRenderScale(scale);
   if (typeof flattenBillboardForCapture === 'function') flattenBillboardForCapture();
 
+  // The credit line is captured from the live DOM, so when the ground pass has
+  // substituted a different basemap the on-screen credit would be printed over
+  // imagery it does not describe. Crediting the wrong provider in a document
+  // that leaves the building is the one error here with consequences outside the
+  // app, so the exported line names what was actually rendered.
+  const creditEl = $('mapCredit');
+  const savedCredit = creditEl ? creditEl.textContent : null;
+  if (creditEl && typeof exportBasemapId === 'function') {
+    const sub = BASEMAP_CATALOGUE[exportBasemapId(activeKey)];
+    if (sub && sub.id !== activeKey) creditEl.textContent = sub.credit;
+  }
+
   try {
     return await html2canvas(wrap, {
       useCORS: true, allowTaint: false, logging: false,
@@ -348,6 +367,7 @@ async function renderFurniturePass(o) {
       scale,
     });
   } finally {
+    if (creditEl && savedCredit !== null) creditEl.textContent = savedCredit;
     if (typeof restoreBillboardAfterCapture === 'function') restoreBillboardAfterCapture();
     if (typeof setLeaderRenderScale === 'function') setLeaderRenderScale(0);
     wrap.classList.remove('capturing', 'hires-overlay-pass');

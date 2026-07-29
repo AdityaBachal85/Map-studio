@@ -319,6 +319,52 @@ const BASEMAP_CATALOGUE = {
     layers: [{ url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', zIndex: 1, maxNative: 17, subdomains: 'abc' }],
   },
 
+  /* ---- Google (on-screen only) ------------------------------------------
+   * Best-in-class road network, place names and building footprints for
+   * navigating and planning. Marked `displayOnly` because Google's terms
+   * restrict copying map content into derivative works — which is what an
+   * exported PNG or client deck is — so exports substitute `exportFallback`
+   * rather than refusing or quietly shipping something unlicensed.
+   *
+   * `url` is empty until prepareGoogleBasemap() trades the API key for a
+   * session token; see map/googleTiles.js.
+   * --------------------------------------------------------------------- */
+
+  googleHybrid: {
+    id: 'googleHybrid', label: 'Google — satellite + roads', group: 'Google',
+    provider: 'google', needsKey: 'google', imagery: true,
+    // Never exported, so the crossOrigin attribute buys nothing and asking for
+    // it could only stop tiles displaying.
+    corsSafe: false, displayOnly: true, exportFallback: 'hybrid',
+    credit: 'Map data © Google',
+    thumb: 'linear-gradient(150deg,#2b4029,#5c7a45 45%,#93a76c)',
+    google: { mapType: 'satellite', layerTypes: ['layerRoadmap'] },
+    prepare: spec => prepareGoogleBasemap(spec),
+    layers: [{ url: '', zIndex: 1, maxNative: 20, role: 'imagery' }],
+  },
+
+  googleRoadmap: {
+    id: 'googleRoadmap', label: 'Google — roads', group: 'Google',
+    provider: 'google', needsKey: 'google',
+    corsSafe: false, displayOnly: true, exportFallback: 'esristreet',
+    credit: 'Map data © Google',
+    thumb: 'linear-gradient(150deg,#f6f4ef,#e8e5dd 55%,#cfe3d0)',
+    google: { mapType: 'roadmap' },
+    prepare: spec => prepareGoogleBasemap(spec),
+    layers: [{ url: '', zIndex: 1, maxNative: 20 }],
+  },
+
+  googleTerrain: {
+    id: 'googleTerrain', label: 'Google — terrain', group: 'Google',
+    provider: 'google', needsKey: 'google',
+    corsSafe: false, displayOnly: true, exportFallback: 'topo',
+    credit: 'Map data © Google',
+    thumb: 'linear-gradient(150deg,#eee9dc,#d5cfb6 55%,#b6c39c)',
+    google: { mapType: 'terrain', layerTypes: ['layerRoadmap'] },
+    prepare: spec => prepareGoogleBasemap(spec),
+    layers: [{ url: '', zIndex: 1, maxNative: 20 }],
+  },
+
   /* ---- India (opt-in) --------------------------------------------------- */
 
   mappls: {
@@ -396,7 +442,9 @@ function isBasemapAvailable(spec) {
   // is the whole point: a basemap the user can select but that cannot draw
   // leaves them staring at an empty map wondering what broke.
   const first = spec.layers && spec.layers[0];
-  if (first && !first.url && !(first.urlCandidates || []).length) return false;
+  // A spec with a `prepare` hook fetches its own template (Google trades the API
+  // key for a session token), so an empty url is expected rather than broken.
+  if (first && !first.url && !(first.urlCandidates || []).length && typeof spec.prepare !== 'function') return false;
   if (!spec.needsKey) return true;
   if (!basemapKey(spec.needsKey)) return false;
   // Mappls additionally needs an explicit opt-in.
@@ -482,6 +530,59 @@ function basemapExportSafe(id) {
   const observed = EXPORT_SAFETY_OBSERVED[spec.provider];
   if (observed !== undefined) return observed;
   return spec.corsSafe !== false;
+}
+
+/**
+ * Which basemap an export should actually render.
+ *
+ * Two different reasons a basemap cannot go into a file, with the same answer:
+ *
+ *   - **licence** — Google's terms restrict copying map content into derivative
+ *     works, and a PNG or a client deck is exactly that. Flagged `displayOnly`.
+ *   - **technique** — a provider without an `Access-Control-Allow-Origin` header
+ *     taints the export canvas, so the read throws. Measured at runtime.
+ *
+ * Both used to end at the same dead end: the export button refused and told the
+ * operator to go and change basemap first. Substituting the equivalent licensed
+ * basemap is better in every way — the export still happens, it comes out on
+ * imagery that is cleared for it, and the geometry, labels and framing are
+ * identical because only the ground layer differs. The caller says so in the
+ * status line; a silent swap would be its own kind of wrong.
+ *
+ * @param {string} id Active basemap id.
+ * @returns {string} The basemap id to render into the file.
+ */
+function exportBasemapId(id) {
+  const spec = BASEMAP_CATALOGUE[id];
+  if (!spec) return id;
+  if (!spec.displayOnly && basemapExportSafe(id)) return id;
+  const fallback = spec.exportFallback || DEFAULT_BASEMAP_ID;
+  return isBasemapAvailable(BASEMAP_CATALOGUE[fallback]) ? fallback : DEFAULT_BASEMAP_ID;
+}
+
+/**
+ * Does exporting this basemap swap in a different one?
+ * @param {string} id @returns {boolean}
+ */
+function exportSubstitutes(id) { return exportBasemapId(id) !== id; }
+
+/**
+ * Can an export run at all?
+ *
+ * Only false in the case nothing can rescue: tiles that taint the canvas *and*
+ * no licensed stand-in to render instead.
+ * @param {string} id @returns {boolean}
+ */
+function exportReady(id) { return basemapExportSafe(id) || exportSubstitutes(id); }
+
+/**
+ * Append the substitution notice to a progress message, when there is one.
+ * @param {string} msg @returns {string}
+ */
+function exportSubstituteNote(msg) {
+  if (typeof activeKey === 'undefined' || !exportSubstitutes(activeKey)) return msg;
+  const sub = BASEMAP_CATALOGUE[exportBasemapId(activeKey)];
+  return msg + ' Using “' + (sub ? sub.label : 'a licensed basemap') + '” imagery — the current basemap is on-screen only.';
 }
 
 /* ---------------------------------------------------------------------------

@@ -91,10 +91,16 @@ function syncExportCenter() {
   });
   const note = $('exportNote');
   if (note) {
-    note.textContent = basemapExportSafe(activeKey)
-      ? 'Exports use the current map view.'
-      : 'This basemap’s tiles cannot be rasterised — image and slide exports are unavailable.';
-    note.classList.toggle('warn', !basemapExportSafe(activeKey));
+    const sub = BASEMAP_CATALOGUE[exportBasemapId(activeKey)];
+    if (exportSubstitutes(activeKey)) {
+      note.textContent = 'Exports use the current map view, rendered on “' + sub.label +
+        '” imagery — the basemap on screen is licensed for viewing, not for files.';
+    } else if (!basemapExportSafe(activeKey)) {
+      note.textContent = 'This basemap’s tiles cannot be rasterised — image and slide exports are unavailable.';
+    } else {
+      note.textContent = 'Exports use the current map view.';
+    }
+    note.classList.toggle('warn', !exportReady(activeKey));
   }
 }
 
@@ -109,43 +115,106 @@ let bmMgr = null;
 /* ---- Provider keys ----------------------------------------------------- */
 
 /**
- * Reflect the stored ArcGIS key into the panel.
+ * The provider-key cards are generated rather than written out per provider.
+ *
+ * Two providers with the same six controls is where copy-paste starts costing:
+ * the second one silently misses whichever fix the first one got. Everything
+ * that genuinely differs between them — the copy, the sign-up link, how a key is
+ * verified, which basemap to offer as a one-click switch — lives in
+ * PROVIDER_KEY_INFO, beside the code that uses it.
+ */
+function buildProviderKeyCards() {
+  const host = $('bmKeys');
+  if (!host || host.dataset.built) return;
+  host.dataset.built = '1';
+
+  PROVIDER_KEY_ORDER.forEach(id => {
+    const info = PROVIDER_KEY_INFO[id];
+    if (!info) return;
+    const card = document.createElement('div');
+    card.className = 'bm-key';
+    card.dataset.provider = id;
+    const link = `<a href="${info.signup}" target="_blank" rel="noopener noreferrer">${info.signupLabel}</a>`;
+    card.innerHTML =
+      '<div class="bm-key-hd"><b>' + esc(info.label) + '</b>' +
+      '<span class="bm-key-state" data-role="state">Not set</span></div>' +
+      '<p class="bm-key-note">' + info.blurb.replace('{signup}', link) + '</p>' +
+      (info.caution ? '<p class="bm-key-caution">' + esc(info.caution) + '</p>' : '') +
+      '<label class="bm-f"><span>API key</span><span class="bm-key-input">' +
+      '<input type="password" data-role="key" spellcheck="false" autocomplete="off" placeholder="Paste your API key">' +
+      '<button type="button" class="bm-key-eye" data-role="eye" aria-label="Show key">Show</button></span></label>' +
+      '<div class="row2"><button class="btn" data-role="test">Verify key</button>' +
+      '<button class="btn btn-primary" data-role="save">Save key</button></div>' +
+      '<div class="bm-key-msg" data-role="msg" role="status" aria-live="polite"></div>' +
+      '<ul class="bm-key-styles" data-role="styles" hidden></ul>' +
+      (info.diagnostic
+        ? '<p class="bm-key-note bm-key-diag" data-role="diag" hidden>Still not drawing? ' +
+          `<a href="${info.diagnostic}" target="_blank" rel="noopener noreferrer">Run the tile diagnostic</a>` +
+          ' — it asks the provider for every candidate style and shows exactly what it says back.</p>'
+        : '') +
+      '<div class="bm-key-actions">' +
+      '<button class="btn btn-sm" data-role="use" hidden>Switch to ' + esc(info.primaryLabel) + '</button>' +
+      '<button class="btn btn-sm btn-danger" data-role="clear" hidden>Remove key</button></div>';
+    host.appendChild(card);
+    wireProviderKeyCard(id, card);
+  });
+}
+
+/** Element lookup within one provider card. */
+const cardEl = (id, role) => {
+  const host = $('bmKeys');
+  const card = host && host.querySelector('.bm-key[data-provider="' + id + '"]');
+  return card ? card.querySelector('[data-role="' + role + '"]') : null;
+};
+
+/**
+ * Reflect a stored key into its card.
  *
  * The field is never repopulated with the saved key. Showing a credential back
  * to whoever opens the dialog buys nothing — you cannot check a 60-character
  * opaque string by eye — and it puts the key on screen for anyone standing
  * behind the operator. "Saved on this device" plus a Remove button is the whole
  * of what is useful.
+ * @param {string} id Provider id.
  */
-function renderProviderKeys() {
-  const state = $('bmArcgisState');
+function renderProviderKey(id) {
+  const state = cardEl(id, 'state');
   if (!state) return;
-  const saved = storedProviderKey('arcgis');
-  const fromConfig = !saved && hasProviderKey('arcgis');
+  const info = PROVIDER_KEY_INFO[id];
+  const saved = storedProviderKey(id);
+  const fromConfig = !saved && hasProviderKey(id);
 
   state.textContent = saved ? 'Saved on this device' : (fromConfig ? 'Set in config.js' : 'Not set');
   state.className = 'bm-key-state' + (saved || fromConfig ? ' good' : '');
-  $('bmArcgisClear').hidden = !saved;
-  $('bmArcgisUse').hidden = !isBasemapAvailable(BASEMAP_CATALOGUE.imageryHybridHD) ||
-    (typeof activeKey !== 'undefined' && activeKey === 'imageryHybridHD');
-  $('bmArcgisKey').value = '';
-  $('bmArcgisKey').placeholder = saved ? 'Paste a new key to replace it' : 'Paste your API key';
+  cardEl(id, 'clear').hidden = !saved;
+  cardEl(id, 'use').hidden = !isBasemapAvailable(BASEMAP_CATALOGUE[info.primary]) ||
+    (typeof activeKey !== 'undefined' && activeKey === info.primary);
+  const input = cardEl(id, 'key');
+  input.value = '';
+  input.placeholder = saved ? 'Paste a new key to replace it' : 'Paste your API key';
+}
+
+/** Re-render every provider card. */
+function renderProviderKeys() {
+  buildProviderKeyCards();
+  PROVIDER_KEY_ORDER.forEach(renderProviderKey);
 }
 
 /**
- * Write a result line under the key field, plus the per-style breakdown.
+ * Write a result line under a key field, plus the per-check breakdown.
  *
  * A single sentence cannot carry "the key works for streets but not satellite",
  * which is the failure that leaves someone staring at a blank map convinced the
- * key is wrong. One line per style says which half is broken.
- * @param {string} msg @param {string} cls @param {object[]} [results]
+ * key is wrong. One line per check says which half is broken.
+ * @param {string} id @param {string} msg @param {string} cls @param {object[]} [results]
  */
-function arcgisMsg(msg, cls, results) {
-  const el = $('bmArcgisMsg');
+function providerKeyMsg(id, msg, cls, results) {
+  const el = cardEl(id, 'msg');
+  if (!el) return;
   el.textContent = msg || '';
   el.className = 'bm-key-msg' + (cls ? ' ' + cls : '');
 
-  const list = $('bmArcgisStyles');
+  const list = cardEl(id, 'styles');
   const rows = (results || []).filter(r => r.label);
   list.innerHTML = '';
   // Only worth showing when the results disagree — an all-pass or an all-fail
@@ -160,13 +229,14 @@ function arcgisMsg(msg, cls, results) {
       list.appendChild(li);
     });
   }
-  $('bmArcgisDiag').hidden = !(cls === 'bad' || cls === 'warn');
+  const diag = cardEl(id, 'diag');
+  if (diag) diag.hidden = !(cls === 'bad' || cls === 'warn');
 }
 
 /**
  * Re-offer every basemap now that the set of usable keys has changed.
  * The catalogue drives the picker but `chooseBasemap()` checks the registry, so
- * both have to be rebuilt before an HD basemap can actually be selected.
+ * both have to be rebuilt before a key-gated basemap can actually be selected.
  */
 function refreshBasemapAvailability() {
   rebuildBasemapRegistry();
@@ -175,65 +245,69 @@ function refreshBasemapAvailability() {
   renderProviderKeys();
 }
 
-function wireProviderKeys() {
-  const input = $('bmArcgisKey');
-  if (!input) return;
+/** @param {string} id @param {HTMLElement} card */
+function wireProviderKeyCard(id, card) {
+  const info = PROVIDER_KEY_INFO[id];
+  const input = card.querySelector('[data-role="key"]');
+  const eye = card.querySelector('[data-role="eye"]');
+  const test = card.querySelector('[data-role="test"]');
+  const save = card.querySelector('[data-role="save"]');
 
-  $('bmArcgisEye').addEventListener('click', () => {
+  eye.addEventListener('click', () => {
     const show = input.type === 'password';
     input.type = show ? 'text' : 'password';
-    $('bmArcgisEye').textContent = show ? 'Hide' : 'Show';
-    $('bmArcgisEye').setAttribute('aria-label', show ? 'Hide key' : 'Show key');
+    eye.textContent = show ? 'Hide' : 'Show';
+    eye.setAttribute('aria-label', show ? 'Hide key' : 'Show key');
   });
 
-  input.addEventListener('input', () => arcgisMsg(''));
+  input.addEventListener('input', () => providerKeyMsg(id, ''));
 
-  $('bmArcgisTest').addEventListener('click', async () => {
-    const key = input.value.trim();
-    arcgisMsg('Asking Esri for one tile…', '');
-    $('bmArcgisTest').disabled = true;
+  test.addEventListener('click', async () => {
+    providerKeyMsg(id, 'Checking the key with ' + info.label + '…', '');
+    test.disabled = true;
     try {
-      const res = await verifyArcgisKey(key);
-      arcgisMsg(res.message, res.ok ? 'good' : 'bad', res.results);
+      const res = await info.verify(input.value.trim());
+      providerKeyMsg(id, res.message, res.ok ? 'good' : 'bad', res.results);
     } finally {
-      $('bmArcgisTest').disabled = false;
+      test.disabled = false;
     }
   });
 
-  $('bmArcgisSave').addEventListener('click', async () => {
+  save.addEventListener('click', async () => {
     const key = input.value.trim();
-    const problem = looksLikeArcgisKey(key);
-    if (problem) { arcgisMsg(problem, 'bad'); return; }
+    if (!key) { providerKeyMsg(id, 'Paste a key first.', 'bad'); return; }
 
     // Verify before saving, but do not *require* it: a key that cannot be
     // checked because the network is down is still probably the right key, and
     // refusing to store it would strand the operator with no way forward.
-    arcgisMsg('Checking the key…', '');
-    $('bmArcgisSave').disabled = true;
+    providerKeyMsg(id, 'Checking the key…', '');
+    save.disabled = true;
     let res;
-    try { res = await verifyArcgisKey(key); } finally { $('bmArcgisSave').disabled = false; }
+    try { res = await info.verify(key); } finally { save.disabled = false; }
 
-    setProviderKey('arcgis', key);
+    setProviderKey(id, key);
+    if (info.onChange) info.onChange();
     refreshBasemapAvailability();
-    arcgisMsg(res.ok
-      ? 'Key saved and verified — Imagery Hybrid HD and Navigation HD are now in the basemap picker.'
-      : res.message + ' Saved anyway; remove it here if the HD basemaps come up blank.',
+    providerKeyMsg(id, res.ok
+      ? 'Key saved and verified — the ' + info.label + ' basemaps are now in the picker.'
+      : res.message + ' Saved anyway; remove it here if those basemaps come up blank.',
       res.ok ? 'good' : 'warn', res.results);
-    if (res.ok) status('ArcGIS key saved — HD basemaps unlocked.');
+    if (res.ok) status(info.label + ' key saved — new basemaps unlocked.');
   });
 
-  $('bmArcgisClear').addEventListener('click', () => {
-    clearProviderKey('arcgis');
-    const wasHD = typeof activeKey !== 'undefined' && !isBasemapAvailable(BASEMAP_CATALOGUE[activeKey]);
-    refreshBasemapAvailability();
+  card.querySelector('[data-role="clear"]').addEventListener('click', () => {
+    clearProviderKey(id);
+    if (info.onChange) info.onChange();
     // Never leave the map on a basemap the key no longer unlocks.
-    if (wasHD) chooseBasemap(preferredBasemapId());
-    arcgisMsg('Key removed from this device.', '');
-    status('ArcGIS key removed.');
+    const stranded = typeof activeKey !== 'undefined' && !isBasemapAvailable(BASEMAP_CATALOGUE[activeKey]);
+    refreshBasemapAvailability();
+    if (stranded) chooseBasemap(preferredBasemapId());
+    providerKeyMsg(id, 'Key removed from this device.', '');
+    status(info.label + ' key removed.');
   });
 
-  $('bmArcgisUse').addEventListener('click', () => {
-    chooseBasemap('imageryHybridHD');
+  card.querySelector('[data-role="use"]').addEventListener('click', () => {
+    chooseBasemap(info.primary);
     renderProviderKeys();
     bmMgr.close();
   });
@@ -304,7 +378,7 @@ function testCustomTile() {
 
 function wireBasemapManager() {
   bmMgr = wireModal('bmMgrOverlay', 'bmMgrClose');
-  wireProviderKeys();
+  buildProviderKeyCards();
   $('bmTestBtn').addEventListener('click', testCustomTile);
   $('bmUrl').addEventListener('input', () => {
     $('bmPreviewState').textContent = 'Preview';
@@ -340,7 +414,7 @@ function wireBasemapManager() {
 function openBasemapManager() {
   renderProviderKeys();
   renderBasemapManager();
-  arcgisMsg('');
+  PROVIDER_KEY_ORDER.forEach(id => providerKeyMsg(id, ''));
   bmMgr.open();
 }
 

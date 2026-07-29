@@ -1568,3 +1568,38 @@ input[type=tel] {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ---------------------------------------------------------------------------
+ * 24. Google basemaps — display-only state
+ * ------------------------------------------------------------------------- */
+
+/* Provider cards stack with the same rhythm as the rest of the dialog. */
+#bmKeys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* A cost or licence warning is not a hint — it reads as a distinct band so it
+   is not skimmed past with the surrounding explanation. */
+.bm-key-caution {
+  margin: 0;
+  padding: 6px 9px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--accent-soft);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Two distinct credit-line states. "Exports disabled" is a dead end;
+   "exports use X" is not, so it must not read like a warning. */
+.map-wrap.basemap-substituted #mapCredit::after {
+  content: " · on-screen only — exports use licensed imagery";
+  color: var(--text-2);
+}
+
+.map-wrap.basemap-substituted.capturing #mapCredit::after {
+  content: "";
+}

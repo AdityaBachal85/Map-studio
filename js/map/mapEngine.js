@@ -452,7 +452,28 @@
       });
 
       let activeBase = [];
-      let activeKey = preferredBasemapId();
+
+      /**
+       * The basemap to open on — the remembered one when it is still usable.
+       *
+       * This has to be decided *here*, not later in ui/basemapSwitcher.js, and
+       * the reason is a race that only shows up on a warm cache. The engine used
+       * to start on `preferredBasemapId()` and let the switcher correct it once
+       * that file parsed, twenty-odd script tags later. A cached tile can decode
+       * inside that window — and the first tile to render calls
+       * rememberBasemapWorks(), which writes the *default* basemap over the
+       * remembered choice in prefs. The switcher then read the value it had just
+       * lost and dutifully restored the default. The user's basemap survived
+       * exactly as long as their tile cache was cold.
+       *
+       * @returns {string} basemap id
+       */
+      function initialBasemapId() {
+        const saved = (typeof getPref === 'function') ? getPref('basemap') : null;
+        return (saved && isBasemapAvailable(BASEMAP_CATALOGUE[saved])) ? saved : preferredBasemapId();
+      }
+
+      let activeKey = initialBasemapId();
 
       /**
        * Push the active road/label treatment's opacity onto the live reference
@@ -508,6 +529,31 @@
         setBasemap(fallback);
         if (typeof status === 'function') status(reason + ' Switched back to “' + label + '”.', true);
       }
+      /**
+       * Keep a provider-supplied attribution line current.
+       *
+       * Most credits are constants in the catalogue. Google's is not: their
+       * terms require the copyright string their own service returns for the
+       * viewport being displayed, which changes as you pan across data sources.
+       * Debounced on move, because attribution is a legal obligation, not a
+       * reason to make a request per frame of a drag.
+       * @param {object} spec
+       */
+      let creditTimer = null;
+      function refreshDynamicCredit(spec) {
+        clearTimeout(creditTimer);
+        if (spec.provider !== 'google' || typeof googleViewportCredit !== 'function') return;
+        creditTimer = setTimeout(() => {
+          googleViewportCredit(spec, map.getBounds(), map.getZoom()).then(text => {
+            if (activeKey === spec.id && text) $('mapCredit').textContent = text;
+          });
+        }, 600);
+      }
+      map.on('moveend zoomend', () => {
+        const spec = (BASEMAPS[activeKey] || {}).spec;
+        if (spec) refreshDynamicCredit(spec);
+      });
+
       function setBasemap(key) {
         const entry = BASEMAPS[key] || BASEMAPS[preferredBasemapId()];
         activeKey = entry.spec.id;
@@ -522,10 +568,29 @@
           if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
           return;
         }
+        // Same idea, one step earlier: a provider that has to trade its key for
+        // a session token before any tile URL exists at all (Google Map Tiles).
+        // The hook owns its own failure reporting, so there is nothing to say here.
+        if (!entry.spec.layers[0].url && typeof entry.spec.prepare === 'function') {
+          activeBase = [];
+          $('mapCredit').textContent = entry.credit;
+          if (typeof status === 'function') status('Starting ' + entry.spec.label + '…', true);
+          entry.spec.prepare(entry.spec).then(ok => {
+            if (ok && activeKey === entry.spec.id) { setBasemap(entry.spec.id); status(''); }
+          });
+          if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
+          return;
+        }
         activeBase = entry.build($('hdTgl').checked);
         activeBase.forEach(l => l.addTo(map));
         $('mapCredit').textContent = entry.credit;
-        $('mapWrap').classList.toggle('basemap-unsafe', !basemapExportSafe(activeKey));
+        // Two different states, deliberately distinguished: `basemap-substituted`
+        // means an export still works but on different imagery;
+        // `basemap-unsafe` means it cannot be exported at all.
+        $('mapWrap').classList.toggle('basemap-substituted', exportSubstitutes(activeKey));
+        $('mapWrap').classList.toggle('basemap-unsafe',
+          !basemapExportSafe(activeKey) && !exportSubstitutes(activeKey));
+        refreshDynamicCredit(entry.spec);
         // Grading follows the basemap: photographic imagery gets it, designed
         // cartography does not.
         // Map labels drawn over the basemap (nearby POIs) flip their ink to

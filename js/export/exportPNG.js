@@ -31,11 +31,14 @@ function pngPresetDimensions(scale) {
  * @param {number} scale
  */
 async function runPngExport(scale) {
-  if (!basemapExportSafe(activeKey)) {
+  // A basemap that cannot be put in a file is no longer a dead end: the ground
+  // pass renders its licensed equivalent instead. Saying so beats both refusing
+  // and swapping silently.
+  if (!exportReady(activeKey)) {
     status('This basemap’s tiles block canvas export (no CORS header). Switch to an Esri or Carto basemap to export.');
     return;
   }
-  status('Rendering PNG…', true);
+  status(exportSubstituteNote('Rendering PNG…'), true);
   try {
     const res = await captureMapHiRes({
       scale,

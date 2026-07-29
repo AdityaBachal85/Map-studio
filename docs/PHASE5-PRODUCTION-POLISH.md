@@ -140,6 +140,60 @@ there charged every basemap switch for a feature almost nobody opens twice. The
 upsell row is the exception and stays in the picker, because it is about a
 basemap that would have appeared on that very row.
 
+### Google: on screen, never in a file
+
+Google's map is available as a basemap for finding routes and places. Three
+things make it a different shape from every other provider:
+
+**1. It needs a session before it needs a URL.** The Map Tiles API trades the
+API key for a session token, then serves tiles against that token:
+
+```
+POST /v1/createSession  { mapType, layerTypes, … }  →  { session, expiry, … }
+GET  /v1/2dtiles/{z}/{x}/{y}?session=…&key=…
+```
+
+Every other basemap is a static template the engine can build synchronously, so
+rather than special-case the engine, the spec carries a `prepare()` hook. The
+engine shows nothing while it runs and rebuilds when it resolves. Sessions are
+cached in prefs against their `expiry`, so a reload costs no round-trip.
+
+The undocumented `mt0.google.com/vt/lyrs=s&…` tile URLs are **not** used. They
+work, and using them breaks Google's terms — not something to put under a tool
+that produces client deliverables.
+
+**2. Exports substitute Esri.** Google's terms restrict copying map content into
+derivative works, which is what rasterising imagery into a PNG or a PPTX is. The
+basemaps are flagged `displayOnly` with an `exportFallback`, and
+`exportBasemapId()` swaps the ground layer at export time. Only the ground
+changes — geometry, labels, framing and scale all come from the live map, so the
+deliverable is the same picture on licensed imagery.
+
+This replaced a worse behaviour that also covered the CORS case: the export
+button used to refuse and tell the operator to go and change basemap first. Now
+both reasons a basemap cannot go in a file end in a substitution, announced in
+the export dialog and in the progress line. `exportReady()` is false only when
+tiles taint the canvas *and* there is no stand-in.
+
+The furniture pass swaps `#mapCredit` to the substituted basemap's credit for the
+duration of the capture. Crediting the wrong provider in a document that leaves
+the building is the one error here with consequences outside the app.
+
+**3. Attribution is dynamic.** Google requires the copyright string their own
+viewport endpoint returns for the view being displayed, so the credit line is
+refreshed (debounced) on move rather than read from a constant.
+
+### The remember-last race
+
+`initialBasemapId()` in mapEngine decides the opening basemap. It used to start
+on `preferredBasemapId()` and let ui/basemapSwitcher.js correct it once that file
+parsed, twenty-odd script tags later — and a cached tile can decode inside that
+window. The first tile to render calls `rememberBasemapWorks()`, which wrote the
+*default* over the remembered choice; the switcher then read the value it had
+just lost and restored the default. The user's basemap survived exactly as long
+as their tile cache was cold. Resolving the preference before the first tile is
+requested removes the window entirely.
+
 ### Provider comparison
 
 | | Rendering | Roads / labels | Satellite | Perf | Licence | Export |
@@ -149,6 +203,7 @@ basemap that would have appeared on that very row.
 | **Esri Clarity** | best imagery | none (pair with reference) | to z22, often sharper | fast | free, attributed | CORS ✓ |
 | **Carto / OSM** | good | vector-derived, z20 | — | fast | ODbL | CORS ✓ |
 | **Mappls** | best Indian roads | best Indian roads | — | fast | check redistribution terms | measured at runtime |
+| **Google (key)** | best roads + places | best-in-class, POIs baked in | very good | fast | display only, metered per tile | substituted with Esri |
 
 ### Mappls: enabled, with export safety measured rather than assumed
 

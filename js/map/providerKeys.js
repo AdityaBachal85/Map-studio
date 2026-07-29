@@ -34,10 +34,38 @@ const PROVIDER_KEY_PREF = 'providerKeys';
 const PROVIDER_KEY_INFO = Object.freeze({
   arcgis: {
     label: 'ArcGIS Location Platform',
-    unlocks: ['imageryHybridHD', 'navigationHD'],
+    blurb: 'Unlocks <b>Imagery Hybrid HD</b> and <b>Navigation HD</b> — Esri’s current cartography rendered to ' +
+      '512&nbsp;px tiles, so roads and labels carry twice the detail per screen pixel and stay legible at every zoom. ' +
+      'Licensed for exports. Free tier at {signup}.',
     signup: 'https://location.arcgis.com/sign-up/',
+    signupLabel: 'location.arcgis.com',
+    unlocks: ['imageryHybridHD', 'navigationHD'],
+    /** Offered as a one-click switch once the key works. */
+    primary: 'imageryHybridHD',
+    primaryLabel: 'Imagery Hybrid HD',
+    verify: k => verifyArcgisKey(k),
+    diagnostic: './diagnostics/arcgis-tiles.html',
+  },
+  google: {
+    label: 'Google Maps Platform',
+    blurb: 'Adds Google’s satellite, roads and terrain basemaps for finding routes and places on screen. ' +
+      '<b>On-screen only</b>: Google’s terms do not cover copying map content into files, so PNG, PDF and PPTX ' +
+      'exports render the equivalent Esri imagery instead — same view, same labels, licensed for client work. ' +
+      'Needs the <b>Map Tiles API</b> enabled and billing on, at {signup}.',
+    signup: 'https://console.cloud.google.com/google/maps-apis/api-list',
+    signupLabel: 'the Google Cloud console',
+    unlocks: ['googleHybrid', 'googleRoadmap', 'googleTerrain'],
+    primary: 'googleHybrid',
+    primaryLabel: 'Google satellite + roads',
+    verify: k => verifyGoogleKey(k),
+    /** Tiles are metered per request, so the cost warning is part of the UI. */
+    caution: 'Google bills per tile request. Restrict the key by HTTP referrer and set a quota cap before using it.',
+    onChange: () => { if (typeof clearGoogleSessions === 'function') clearGoogleSessions(); },
   },
 });
+
+/** Provider ids with a key panel, in the order they are shown. */
+const PROVIDER_KEY_ORDER = ['arcgis', 'google'];
 
 /** @returns {Object<string,string>} the stored keys, always an object. */
 function loadProviderKeys() {
