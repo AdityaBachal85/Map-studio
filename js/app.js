@@ -17,6 +17,14 @@
 // PPTX button handler (export/pptxHandler.js) via this same reference.
 window.DBOTExport = { exportDeck };
 
+// ---------- version marker ----------
+// Matches the ?v= stamp on every asset URL, so a mismatch between what this
+// shows and the released version means the browser is serving a stale build.
+(function showVersion() {
+  const el = document.getElementById('appVer');
+  if (el) el.textContent = 'v' + APP_VERSION;
+})();
+
 // ---------- DBOT brand asset ----------
 document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
 

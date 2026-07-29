@@ -14,6 +14,7 @@
         const proj = {
           v: 4.96, title: $('titleCard').textContent, legendTitle: $('legendTitle').textContent,
           view: { c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() },
+          appVersion: APP_VERSION,
           basemap: activeKey, imageryLook: getImageryLook(), roadLook: getRoadLook(), tilt: tiltDeg, hill: $('hillTgl').checked, chipPct: chipPct,
           hd: $('hdTgl').checked, brand: $('brandTgl').checked, north: $('northTgl').checked,
           projectLogo: brand.projectLogo, siteUsesProjLogo: brand.siteUsesProjLogo,

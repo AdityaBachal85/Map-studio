@@ -374,3 +374,29 @@ select:focus:not(:focus-visible) {
   font-size: var(--fs-small);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   10. Build version marker
+   Deliberately quiet — it is a diagnostic, not a feature. It earns its place
+   because it is the same string as the ?v= stamp on every asset, so "is this
+   the current build?" is answerable at a glance instead of by investigation.
+   --------------------------------------------------------------------------- */
+
+.appVer {
+  margin-left: var(--sp-2);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .05);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  color: var(--text-2);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+:root[data-theme="light"] .appVer {
+  background: rgba(16, 32, 60, .05);
+}

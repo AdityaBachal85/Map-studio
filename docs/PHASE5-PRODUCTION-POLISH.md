@@ -331,17 +331,25 @@ fails in stranger ways than being wholly out of date. That is what a blank map
 after the basemap change turned out to be: correct code on the server, a stale
 mixture in the browser.
 
-`tools/stamp-assets.js` appends `?v=<version>` to every local asset reference,
-making each release a distinct set of URLs so a deploy is all-or-nothing and a
-hard refresh is never required.
+`tools/stamp-assets.js` appends `?v=<APP_VERSION>` to every local asset
+reference, making each release a distinct set of URLs so a deploy is
+all-or-nothing and a hard refresh is never required.
 
 ```
-node tools/stamp-assets.js          # stamp with the current UTC time
-node tools/stamp-assets.js 5.2.0    # stamp with an explicit version
-node tools/stamp-assets.js --check  # exit 1 if anything is unstamped
+node tools/stamp-assets.js --bump   # 5.0000 -> 5.0001, then stamp   [usual]
+node tools/stamp-assets.js          # re-stamp at the current version
+node tools/stamp-assets.js 5.1000   # set an explicit version, then stamp
+node tools/stamp-assets.js --check  # exit 1 if anything is unstamped or stale
 ```
 
-**Run it before committing whenever a `.js` or `.css` file changed.**
+**Run `--bump` before committing whenever a `.js` or `.css` file changed.**
+
+`APP_VERSION` lives in `js/constants.js`, starts at `5.0000`, and is the single
+source of truth: it is shown in the sidebar beside the tagline, stamped onto
+every asset URL, and recorded in saved project files. The on-screen version and
+the asset stamp being the *same string* is the point — if the version displayed
+is not the one that was released, the browser is on a stale build, which is
+otherwise a diagnosis that costs a round of debugging.
 
 `?reset=1` on the app URL clears stored preferences and starts from defaults.
 A saved setting that turns out to be unusable otherwise reapplies itself on
