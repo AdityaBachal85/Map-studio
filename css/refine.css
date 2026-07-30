@@ -997,33 +997,120 @@ body.no-glass .sidebar.frost {
   position: relative;
 }
 
-/* One shared indicator, positioned by JS, replacing a per-tab pseudo-element:
-   it can then travel between tabs instead of fading out here and in there. */
+/* Kokonut UI "Smooth Tab", rebuilt for this codebase.
+   https://kokonutui.com/docs/navigation/smooth-tab  (MIT, @dorianbaffier)
+
+   The original is React + Motion + Tailwind and this app is none of those, so
+   it is reimplemented rather than dropped in. What is reproduced exactly:
+
+     - a sliding filled pill behind the active tab, inset 4px from the bar,
+       full height minus 8px, rounded, rather than an underline;
+     - its spring. Motion's spring(stiffness 400, damping 30, mass 1) is an
+       underdamped curve — damping ratio 0.75, 2.8% overshoot, settling at
+       400ms — sampled into a CSS linear() ramp below so the movement is the
+       same curve rather than an eyeballed cubic-bezier;
+     - the panel transition: slide in from the side you came from, with blur
+       and a slight scale, 400ms on cubic-bezier(.32, .72, 0, 1).
+
+   Two deliberate departures, both forced:
+
+     - Kokonut fills the pill with blue-500 and puts white text on it. This
+       app's accent is orange, and white on #FF7A1A measures 2.6:1 — an
+       accessibility failure. The ink is #2A1200 instead, 6.8:1 on the same
+       fill, which keeps the brand colour and the legibility.
+     - The panel transition animates only the incoming pane. Kokonut absolutely
+       positions both panes inside a fixed 200px card and cross-slides them;
+       these panes have wildly different heights and scroll, so cross-sliding
+       would need a fixed-height container and would break the scroll position.
+       One-sided entry reads the same at this speed. */
+
 .tabs::after {
   content: "";
   position: absolute;
-  bottom: 6px;
+  top: 4px;
   left: 0;
-  height: 2px;
+  height: calc(100% - 8px);
   width: var(--tab-w, 0);
   transform: translateX(var(--tab-x, 0));
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--orange), var(--orange2));
-  transition: transform var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  box-shadow: 0 1px 2px rgba(5, 10, 20, .18), 0 2px 8px rgba(255, 122, 26, .22);
+  transition:
+    transform var(--tab-spring-dur) var(--tab-spring),
+    width var(--tab-spring-dur) var(--tab-spring);
   pointer-events: none;
+  z-index: 0;
 }
 
-/* The per-tab underline is now redundant. */
+:root {
+  /* Motion spring(400, 30, 1) sampled at 36 points. See the note above. */
+  --tab-spring: linear(0, 0.0221, 0.0788, 0.158, 0.2499, 0.3471, 0.4441, 0.5369,
+    0.6227, 0.7, 0.7679, 0.8263, 0.8754, 0.9157, 0.9482, 0.9736, 0.993, 1.0071,
+    1.0169, 1.0233, 1.0268, 1.0283, 1.0281, 1.0268, 1.0248, 1.0223, 1.0196,
+    1.0168, 1.0141, 1.0116, 1.0093, 1.0073, 1.0055, 1.004, 1.0028, 1.0018, 1.001);
+  --tab-spring-dur: 400ms;
+}
+
+/* linear() is recent. Where it is not understood the whole custom property is
+   invalid and the transition falls back to this bezier, which is the same shape
+   without the overshoot. */
+@supports not (transition-timing-function: linear(0, 1)) {
+  :root { --tab-spring: cubic-bezier(.32, .72, .28, 1); }
+}
+
+/* The buttons sit above the pill, and the label on the pill takes the dark ink. */
+.tabs button {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--r-md);
+  transition: color var(--dur-base) var(--ease-out);
+}
+
 .tabs button.active::after {
   content: none;
 }
 
 .tabs button.active {
+  color: #2A1200;
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.tabs button:not(.active):hover {
   color: var(--text);
+}
+
+/* Panel transition. `--pane-dir` is +1 moving right through the tabs and -1
+   moving left, so the pane arrives from the side you came from. */
+.pane.active {
+  animation: paneSlideIn var(--dur-slow) cubic-bezier(.32, .72, 0, 1);
+}
+
+@keyframes paneSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--pane-dir, 1) * 26px)) scale(.97);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
 }
 
 body.reduce-motion .tabs::after {
   transition: none;
+}
+
+body.reduce-motion .pane.active {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabs::after { transition: none; }
+  .pane.active { animation: none; }
 }
 
 /* ---------------------------------------------------------------------------

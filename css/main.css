@@ -7,11 +7,11 @@
    theoretical: a whole release's worth of CSS shipped invisibly this way, and it
    surfaced as a popup button nobody could see, because the sheet that styled it
    never arrived while the markup and scripts did. Bump these with the version. */
-@import './themes.css?v=5.0026';
-@import './style.css?v=5.0026';
-@import './map.css?v=5.0026';
-@import './sidebar.css?v=5.0026';
-@import './components.css?v=5.0026';
-@import './layout.css?v=5.0026';
+@import './themes.css?v=5.0027';
+@import './style.css?v=5.0027';
+@import './map.css?v=5.0027';
+@import './sidebar.css?v=5.0027';
+@import './components.css?v=5.0027';
+@import './layout.css?v=5.0027';
 /* Polish layer — must stay last so it can refine the sheets above it. */
-@import './refine.css?v=5.0026';
+@import './refine.css?v=5.0027';
