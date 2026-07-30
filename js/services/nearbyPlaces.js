@@ -101,13 +101,9 @@ const nearbyCache = new Map();
 const NEARBY_CACHE_MAX = 60;
 
 /** @returns {string} identity of a category at a place, radius aside. */
-function nearbyFamilyKey(lat, lng, cats, gtypes) {
-  return [cats, (gtypes || []).join('+'), lat.toFixed(5), lng.toFixed(5)].join('|');
-}
-
-/** @returns {string} cache key for one category at one place and radius. */
-function nearbyCacheKey(lat, lng, radiusM, cats, gtypes) {
-  return nearbyFamilyKey(lat, lng, cats, gtypes) + '|' + Math.round(radiusM);
+function nearbyFamilyKey(lat, lng, cat) {
+  return [cat.cats || '', (cat.gtypes || []).join('+'), cat.gquery || '',
+    lat.toFixed(5), lng.toFixed(5)].join('|');
 }
 
 /**
@@ -147,14 +143,22 @@ function nearbyErrorNote(msg) {
 }
 
 /**
- * Fetch places of one category within a radius of a point via Geoapify Places.
+ * Fetch the places of one category within a radius of a point.
+ *
+ * Takes the whole category descriptor rather than its fields one by one. Every
+ * capability so far — Geoapify categories, then Google types, then a refiner,
+ * then a free-text query — arrived as another parameter on the end, and the
+ * signature was running out of room. A descriptor means the next one is a new
+ * key on an object, not a change to every caller.
+ *
  * @param {number} lat @param {number} lng @param {number} radiusM
- * @param {string} cats Geoapify category id(s), comma-separated
+ * @param {{cats?:string, gtypes?:string[], gquery?:string, grefine?:function}} cat
  * @param {number} [limit]
  * @returns {Promise<Array<{lat:number,lng:number,name:string,address:string,distance:number}>>}
  */
-async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefine) {
-  const fam = nearbyFamilyKey(lat, lng, cats, gtypes);
+async function fetchNearbyCategory(lat, lng, radiusM, cat, limit) {
+  const { cats, gtypes, gquery, grefine } = cat || {};
+  const fam = nearbyFamilyKey(lat, lng, cat || {});
   const ck = fam + '|' + Math.round(radiusM);
   if (nearbyCache.has(ck)) return nearbyCache.get(ck);
 
@@ -175,29 +179,44 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefi
   }
 
   let note = '';
+  const googleOn = typeof googleReady === 'function' && googleReady();
 
   // Google first when a key is present. Its Indian POI data is the reason this
   // integration exists — verified against the live API, a Pune search returns
   // Fergusson College, Deenanath Mangeshkar Hospital and Pune Station where the
   // free providers return partial or unnamed results. Geoapify stays behind it
   // untouched, so no key means no change in behaviour.
-  if (gtypes && gtypes.length && typeof googleReady === 'function' && googleReady()) {
+  if (googleOn && (gquery || (gtypes && gtypes.length))) {
     try {
-      // Refine before the limit is applied — the filter drops rows, and taking
-      // the top 50 first would hand the refiner an already-truncated list.
-      let g = await googleNearby(lat, lng, radiusM, gtypes);
-      // `grefine` and `slice` both return fresh arrays, so carry the flag over
-      // by hand. Losing it would let a truncated list be narrowed to a smaller
-      // radius, silently dropping places that belong in the smaller circle.
-      const capped = g.capped;
+      // A typed query goes to Text Search, a category to Nearby Search. Both
+      // return the same row shape, so nothing downstream cares which ran.
+      let g = gquery
+        ? await googleTextNearby(lat, lng, radiusM, gquery)
+        : await googleNearby(lat, lng, radiusM, gtypes);
+      // `grefine` and `slice` both return fresh arrays, so carry the flags over
+      // by hand. Losing `capped` would let a truncated list be narrowed to a
+      // smaller radius, silently dropping places inside the smaller circle.
+      const { capped, outside } = g;
       if (grefine) g = grefine(g);
       if (limit) g = g.slice(0, limit);
       g.capped = capped;
-      if (g.length) { g.source = 'google'; return keep(g); }
+      if (outside) g.outside = outside;
+      g.source = 'google';
+      // A typed query has nowhere to fall back to, so an empty answer is the
+      // answer — "nothing of that name within the circle" is a real result, and
+      // `outside` lets the caller suggest a wider radius.
+      if (g.length || gquery) return keep(g);
     } catch (e) {
       note = nearbyErrorNote(e.message || '');
       console.warn('Google nearby failed:', e.message);
     }
+  }
+  // A free-text search has no Geoapify equivalent — its Places API is driven by
+  // a fixed category list, which is the very limitation the text box exists to
+  // get around. So say why rather than returning a silently empty list.
+  if (gquery) {
+    throw new Error(note
+      || 'Searching by name needs a Google Maps key — add one under Settings › Map providers & keys.');
   }
   if (!GEOAPIFY_API_KEY) {
     if (note) throw new Error(note);

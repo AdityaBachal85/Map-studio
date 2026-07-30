@@ -1926,3 +1926,101 @@ input[type=tel] {
   border-color: rgba(239, 68, 68, .45);
   background: rgba(239, 68, 68, .10);
 }
+
+/* ===========================================================================
+   27. Nearby: free-text search, custom chips, and the add-to-map popup
+
+   The twelve category chips can only offer what Google has a type for. The
+   search box covers everything else, and a discovered place is only useful if
+   it can become a real pin — hence the popup with one action in it.
+   ========================================================================= */
+
+.np-search {
+  display: flex;
+  gap: 6px;
+}
+.np-search input {
+  flex: 1;
+  min-width: 0;
+}
+.np-search .btn {
+  flex: none;
+  padding-inline: 14px;
+}
+
+/* A custom search chip carries a remove button. It spans both grid columns
+   because a typed query is usually longer than a category name and truncating
+   "under construction projects" to half a row tells the user nothing. */
+.nearby-chip.is-custom {
+  grid-column: 1 / -1;
+  padding-right: 6px;
+}
+.nearby-chip .nc-del {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--dim);
+  transition: background .15s, color .15s;
+}
+.nearby-chip .nc-del:hover {
+  background: rgba(239, 68, 68, .16);
+  color: var(--danger);
+}
+
+/* The popup on a discovered place. Leaflet's default popup chrome is white and
+   square; this matches the app's surfaces in both themes. */
+.nearby-pop .leaflet-popup-content-wrapper {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--stroke2);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+}
+.nearby-pop .leaflet-popup-tip {
+  background: var(--panel);
+  border-left: 1px solid var(--stroke2);
+  border-bottom: 1px solid var(--stroke2);
+}
+.nearby-pop .leaflet-popup-content {
+  margin: 10px 12px;
+}
+.np-pop-name {
+  font-weight: 800;
+  font-size: 12.5px;
+  line-height: 1.35;
+  margin-bottom: 2px;
+}
+.np-pop-sub {
+  font-size: 10.5px;
+  color: var(--dim);
+  line-height: 1.45;
+  margin-bottom: 8px;
+  white-space: normal;
+}
+.np-pop-add {
+  font-size: 11px;
+  padding: 6px 10px;
+}
+.np-pop-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, .18);
+}
+.np-pop-add.is-added {
+  color: var(--ok);
+  border-color: var(--ok-edge);
+  background: var(--ok-soft);
+  cursor: default;
+  opacity: 1;
+}
+
+/* A discovered place that is now a real location: the location pin draws the
+   name, so the POI keeps only its category dot. Two labels at one coordinate
+   is the duplicate that showed up in QA. */
+.nearby-poi-wrap.np-promoted .np-name {
+  display: none;
+}

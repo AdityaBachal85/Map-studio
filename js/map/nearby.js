@@ -99,17 +99,109 @@ function scheduleNearbyDeclutter() {
   nearbyDeclutterTimer = setTimeout(declutterNearbyLabels, 60);
 }
 
+/**
+ * Build one chip. Custom searches get a remove button; the twelve built-in
+ * categories do not, because they are always available and never accumulate.
+ * @param {object} cat @param {HTMLElement} grid
+ */
+function buildNearbyChip(cat, grid) {
+  const chip = document.createElement('button');
+  chip.className = 'nearby-chip' + (cat.custom ? ' is-custom' : '');
+  chip.dataset.key = cat.key;
+  chip.type = 'button';
+  chip.innerHTML = `<span class="nc-ico">${cat.icon}</span><span class="nc-lbl">${esc(cat.label)}</span><span class="nc-count"></span>`;
+  chip.addEventListener('click', () => toggleNearbyCategory(cat.key));
+  if (cat.custom) {
+    chip.title = 'Search: ' + cat.gquery;
+    const x = document.createElement('span');
+    x.className = 'nc-del';
+    x.textContent = '×';
+    x.title = 'Remove this search';
+    x.addEventListener('click', e => { e.stopPropagation(); removeCustomNearby(cat.key); });
+    chip.appendChild(x);
+  }
+  grid.appendChild(chip);
+  return chip;
+}
+
 function buildNearbyChips() {
   const grid = $('nearbyGrid');
-  NEARBY_CATEGORIES.forEach(cat => {
-    const chip = document.createElement('button');
-    chip.className = 'nearby-chip';
-    chip.dataset.key = cat.key;
-    chip.type = 'button';
-    chip.innerHTML = `<span class="nc-ico">${cat.icon}</span><span class="nc-lbl">${cat.label}</span><span class="nc-count"></span>`;
-    chip.addEventListener('click', () => toggleNearbyCategory(cat.key));
-    grid.appendChild(chip);
-  });
+  NEARBY_CATEGORIES.forEach(cat => buildNearbyChip(cat, grid));
+}
+
+/* ---------------------------------------------------------------------------
+ * Searching for anything the chips do not cover
+ *
+ * The twelve categories can only offer what Google has a type for, which leaves
+ * out most of what a property map wants to point at — "real estate agents",
+ * "cake shops", "under construction projects". A typed search becomes a chip of
+ * its own so that everything downstream (the marker layer, the Layer Manager,
+ * clustering, Clear) treats it exactly like a built-in category and needed no
+ * changes to support it.
+ * ------------------------------------------------------------------------- */
+
+/** Colours for custom chips, cycled. Deliberately distinct from the built-ins. */
+const CUSTOM_NEARBY_COLORS = ['#E8590C', '#0B7285', '#5F3DC4', '#087F5B', '#A61E4D', '#5C940D'];
+let customNearbyCount = 0;
+
+/** @param {string} q @returns {string} a stable key for one query. */
+function customNearbyKey(q) {
+  return 'q:' + q.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Run a typed search and give it a chip. Re-running an existing search reuses
+ * its chip and colour rather than stacking duplicates.
+ * @param {string} raw
+ */
+async function runCustomNearbySearch(raw) {
+  const q = (raw || '').trim();
+  if (!q) return;
+  if (q.length < 2) { status('Type at least two characters to search nearby.'); return; }
+
+  if (!nearbyCenter) { nearbyCenter = map.getCenter(); drawNearbyCircle(); }
+
+  const key = customNearbyKey(q);
+  let cat = nearbyCatByKey(key);
+  if (!cat) {
+    cat = {
+      key, label: q, icon: '🔎', custom: true, gquery: q,
+      color: CUSTOM_NEARBY_COLORS[customNearbyCount++ % CUSTOM_NEARBY_COLORS.length],
+    };
+    NEARBY_CATEGORIES.push(cat);
+    buildNearbyChip(cat, $('nearbyGrid'));
+  } else if (nearbyMarkers[key]) {
+    // Already fetched at this centre — just make sure it is showing.
+    setNearbyCategoryVisible(key, true);
+    status(`"${q}" is already on the map.`);
+    return;
+  }
+
+  nearbyEnabled.add(key);
+  const chip = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"]`);
+  if (chip) chip.classList.add('active');
+  const ok = await fetchNearbyKey(key);
+  if (!ok) {
+    nearbyEnabled.delete(key);
+    if (chip) chip.classList.remove('active');
+  }
+  updateNearbyClearBtn();
+  if (typeof refreshLayers === 'function') refreshLayers();
+}
+
+/** Drop a custom search: its markers, its chip and its descriptor. @param {string} key */
+function removeCustomNearby(key) {
+  hideNearbyCategory(key);
+  (nearbyMarkers[key] || []).forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+  delete nearbyMarkers[key];
+  nearbyEnabled.delete(key);
+  const i = NEARBY_CATEGORIES.findIndex(c => c.key === key);
+  if (i >= 0) NEARBY_CATEGORIES.splice(i, 1);
+  const chip = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"]`);
+  if (chip) chip.remove();
+  updateNearbyClusters();
+  updateNearbyClearBtn();
+  if (typeof refreshLayers === 'function') refreshLayers();
 }
 
 function drawNearbyCircle() {
@@ -122,8 +214,117 @@ function drawNearbyCircle() {
 }
 
 function setNearbyChipCount(key, n) {
-  const el = $('nearbyGrid').querySelector(`[data-key="${key}"] .nc-count`);
+  const el = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"] .nc-count`);
   if (el) el.textContent = n != null ? n : '';
+}
+
+/* ---------------------------------------------------------------------------
+ * Promoting a discovered place into the project
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Is this place already a location on the map?
+ *
+ * Matched on coordinates rather than name, because the same place added twice
+ * from two different categories (a junior college shows under both Schools and
+ * Colleges) is the same pin, whereas two branches of one bank are not.
+ * @param {{lat:number,lng:number}} p
+ */
+function nearbyAlreadyAdded(p) {
+  return locations.some(l => Math.abs(l.lat - p.lat) < 1e-6 && Math.abs(l.lng - p.lng) < 1e-6);
+}
+
+/**
+ * Add a discovered place to the locations list.
+ * @param {object} cat @param {object} p
+ * @param {HTMLElement} [btn] @param {object} [marker] the POI marker it came from
+ */
+function addNearbyToLocations(cat, p, btn, marker) {
+  if (nearbyAlreadyAdded(p)) {
+    status(`"${p.name}" is already in the locations list.`);
+    if (btn) markAddButtonDone(btn);
+    markPoiPromoted(marker, true);
+    return null;
+  }
+  // The category colour carries over, so a school added from the Schools chip
+  // keeps reading as a school once it is a project pin.
+  const loc = addLocation({ name: p.name, lat: p.lat, lng: p.lng, color: cat.color });
+  if (btn) markAddButtonDone(btn);
+  markPoiPromoted(marker, true);
+  status(`Added "${p.name}" to locations.`);
+  return loc;
+}
+
+/** @param {HTMLElement} btn */
+function markAddButtonDone(btn) {
+  btn.textContent = '✓ In locations';
+  btn.disabled = true;
+  btn.classList.add('is-added');
+}
+
+/**
+ * Silence a POI's own label once it is a real location.
+ *
+ * The location pin draws its own label at the same coordinate, so leaving the
+ * POI label on stacks two copies of the same name on top of each other. The dot
+ * stays — it still says which category the place came from — but the name is
+ * left to the pin that now owns it.
+ * @param {object} [marker] @param {boolean} on
+ */
+function markPoiPromoted(marker, on) {
+  const el = marker && marker.getElement && marker.getElement();
+  if (el) el.classList.toggle('np-promoted', !!on);
+}
+
+/**
+ * The popup shown when a discovered place is clicked: what it is, how far, and
+ * the one action worth offering — put it on the map for real.
+ *
+ * Built as a DOM node rather than an HTML string so the button carries a real
+ * listener. Leaflet re-uses the node each time the popup opens, which is also
+ * why the added/not-added state is refreshed on open rather than baked in.
+ *
+ * @param {object} cat @param {object} p @param {object} marker
+ * @returns {HTMLElement}
+ */
+function nearbyPopupNode(cat, p, marker) {
+  const box = document.createElement('div');
+  box.className = 'np-pop';
+
+  const title = document.createElement('div');
+  title.className = 'np-pop-name';
+  title.textContent = p.name;
+  box.appendChild(title);
+
+  const detail = [p.address, p.distance != null ? fmtRadius(Math.round(p.distance)) + ' away' : null]
+    .filter(Boolean).join(' · ');
+  if (detail) {
+    const sub = document.createElement('div');
+    sub.className = 'np-pop-sub';
+    sub.textContent = detail;
+    box.appendChild(sub);
+  }
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-block np-pop-add';
+  btn.textContent = '+ Add to locations';
+  btn.addEventListener('click', () => addNearbyToLocations(cat, p, btn, marker));
+  box.appendChild(btn);
+
+  // Re-derived on every open rather than remembered, so deleting the location
+  // again puts the action back instead of leaving a dead "✓ In locations".
+  box._resetAdd = () => {
+    const added = nearbyAlreadyAdded(p);
+    if (added) markAddButtonDone(btn);
+    else {
+      btn.textContent = '+ Add to locations';
+      btn.disabled = false;
+      btn.classList.remove('is-added');
+    }
+    markPoiPromoted(marker, added);
+  };
+  return box;
 }
 
 function dropNearbyMarkers(key, places) {
@@ -140,7 +341,15 @@ function dropNearbyMarkers(key, places) {
     if (detail) m.bindTooltip(`${esc(p.name)}<br><span class="nt-sub">${esc(detail)}</span>`, {
       direction: 'top', offset: [0, -12], className: 'nearby-tip',
     });
+    // Click to add. A discovered place is useless until it can become a pin,
+    // which is what "I can see ten schools but cannot put one on the map" meant.
+    const node = nearbyPopupNode(cat, p, m);
+    m.bindPopup(node, { className: 'nearby-pop', closeButton: true, minWidth: 180, autoPanPadding: [24, 24] });
+    m.on('popupopen', () => node._resetAdd());
     m.addTo(map);
+    // A place already on the map when its category is (re)fetched must not show
+    // a second copy of its name.
+    if (nearbyAlreadyAdded(p)) markPoiPromoted(m, true);
     arr.push(m);
     const iconEl = m.getElement();
     const pinEl = iconEl && iconEl.querySelector('.np-dot');
@@ -167,7 +376,7 @@ function hideNearbyCategory(key) {
  * @param {string} key @param {boolean} on
  */
 function setNearbyCategoryVisible(key, on) {
-  const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
+  const chip = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (on) {
     nearbyEnabled.add(key);
     showNearbyCategory(key);
@@ -183,10 +392,10 @@ function setNearbyCategoryVisible(key, on) {
 /** Fetch + drop one category's markers around the current centre/radius. @param {string} key */
 async function fetchNearbyKey(key) {
   const cat = nearbyCatByKey(key);
-  const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
+  const chip = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (chip) chip.classList.add('loading');
   try {
-    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat.cats, 50, cat.gtypes, cat.grefine);
+    const places = await fetchNearbyCategory(nearbyCenter.lat, nearbyCenter.lng, nearbyRadiusM, cat, 50);
     dropNearbyMarkers(key, places);
     setNearbyChipCount(key, places.length);
     // `note` is set when Google failed and Geoapify answered instead. Saying so
@@ -195,18 +404,24 @@ async function fetchNearbyKey(key) {
     const via = places.note ? ` — ${places.note}`
       : places.source === 'google' ? ' via Google'
       : places.source ? ' via Geoapify' : '';
-    status(places.length ? `Found ${places.length} ${cat.label.toLowerCase()} within ${fmtRadius(nearbyRadiusM)}${via}.`
-      : `No ${cat.label.toLowerCase()} found within ${fmtRadius(nearbyRadiusM)}${via}.`);
+    // A typed search takes a location *bias*, so Google will happily answer with
+    // places well outside the circle. Those are dropped, but saying how many were
+    // dropped turns "it only found three" into "widen the radius".
+    const more = places.outside ? ` ${places.outside} more further out — widen the radius to include them.` : '';
+    const what = cat.custom ? `matches for "${cat.label}"` : cat.label.toLowerCase();
+    status(places.length ? `Found ${places.length} ${what} within ${fmtRadius(nearbyRadiusM)}${via}.${more}`
+      : `No ${what} within ${fmtRadius(nearbyRadiusM)}${via}.${more}`);
     return true;
   } catch (e) {
-    status(`Couldn't load ${cat.label.toLowerCase()} — check the Geoapify key or this category.`);
+    status(cat.custom ? (e.message || `Couldn't search for "${cat.label}".`)
+      : `Couldn't load ${cat.label.toLowerCase()} — check the Geoapify key or this category.`);
     return false;
   } finally { if (chip) chip.classList.remove('loading'); }
 }
 
 /** Toggle one category on/off. Fetches on first enable for a given centre/radius, then caches. @param {string} key */
 async function toggleNearbyCategory(key) {
-  const chip = $('nearbyGrid').querySelector(`[data-key="${key}"]`);
+  const chip = $('nearbyGrid').querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (nearbyEnabled.has(key)) {
     nearbyEnabled.delete(key);
     hideNearbyCategory(key);
@@ -291,3 +506,18 @@ $('nearbyRadius').addEventListener('change', () => {
   nearbyRadiusTimer = setTimeout(refetchEnabledNearby, 700);
 });
 $('nearbyClearBtn').addEventListener('click', clearAllNearby);
+
+// The free-text search fires on Enter or on the button — never while typing.
+// Text Search is billed per request and there is no prediction to show, so
+// debounced-as-you-type would spend a request per pause for no benefit.
+function submitNearbySearch() {
+  const input = $('nearbySearchInput');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  runCustomNearbySearch(q);
+}
+$('nearbySearchBtn').addEventListener('click', submitNearbySearch);
+$('nearbySearchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); submitNearbySearch(); }
+});

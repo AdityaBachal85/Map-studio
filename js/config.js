@@ -63,6 +63,14 @@ const MAP_PROVIDER_KEYS = {
   // APIs around — the key is visible by necessity, and the restriction is what
   // stops a third party spending against it. Without that restriction this line
   // is an open invoice.
+  //
+  // MOVING TO THE PAID KEY: replace this one string. Nothing else.
+  //
+  // Every Google call in the app resolves its key through basemapKey('google')
+  // → googleKey(), so no service, screen or feature holds a key of its own —
+  // deliberately, so that a key swap is never a code change. There is exactly
+  // one other switch to consider, GOOGLE_BASEMAPS_ENABLED below, and that one
+  // is about which APIs are enabled on the project, not about the key.
   google: 'AIzaSyCguQVakAfL4rwbtf4KwDzDgUBSmQFnhOQ',
   mappls: 'qvbbxilcnllctbsgabklmdpsxnoucoabncre'
 };

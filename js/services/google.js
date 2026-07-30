@@ -376,6 +376,56 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
   return rows;
 }
 
+/**
+ * Anything at all, near a point — "cake shops", "real estate agents", "gyms".
+ *
+ * The category chips can only ever offer what Google has a *type* for, and the
+ * type list does not cover what a property brochure actually wants to point at.
+ * Text Search does, because it reads the query the way the Google Maps search
+ * box does: "cake shops" at Airoli comes back as twenty places all typed
+ * `cake_shop`, and "real estate agents" as twenty agencies.
+ *
+ * The catch, verified live: Text Search takes a location *bias*, not a
+ * restriction — a circle is only a hint. A sparse query leaks badly; "under
+ * construction projects" at Airoli returned results 6 km, 11 km and 18 km out
+ * inside a 3 km circle. So the circle is enforced here instead, and the count
+ * that fell outside is reported so the caller can offer a wider radius rather
+ * than leaving the user wondering where the rest went.
+ *
+ * @param {number} lat @param {number} lng @param {number} radiusM
+ * @param {string} query Free text, exactly as typed.
+ * @param {number} [limit]
+ * @returns {Promise<Array<{lat,lng,name,address,primaryType,distance}>>}
+ */
+async function googleTextNearby(lat, lng, radiusM, query, limit) {
+  const json = await googlePost(GOOGLE_PLACES_HOST + '/places:searchText', {
+    textQuery: query,
+    languageCode: GOOGLE_LANG,
+    regionCode: GOOGLE_REGION,
+    maxResultCount: GOOGLE_NEARBY_CAP,
+    locationBias: {
+      circle: { center: { latitude: lat, longitude: lng }, radius: Math.min(50000, radiusM) },
+    },
+  }, 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType');
+
+  const raw = json.places || [];
+  const all = raw.map(p => ({
+    id: p.id,
+    lat: p.location.latitude,
+    lng: p.location.longitude,
+    name: (p.displayName && p.displayName.text) || 'Unnamed place',
+    address: p.formattedAddress || '',
+    primaryType: p.primaryType || '',
+    distance: haversineKm(lat, lng, p.location.latitude, p.location.longitude) * 1000,
+  })).filter(r => r.lat != null && r.lng != null);
+
+  const inside = all.filter(r => r.distance <= radiusM).sort((a, b) => a.distance - b.distance);
+  const rows = limit ? inside.slice(0, limit) : inside;
+  rows.capped = raw.length >= GOOGLE_NEARBY_CAP;
+  rows.outside = all.length - inside.length;
+  return rows;
+}
+
 /* ---------------------------------------------------------------------------
  * Routing
  * ------------------------------------------------------------------------- */
