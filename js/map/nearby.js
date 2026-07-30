@@ -113,6 +113,18 @@ function declutterNearbyLabels() {
   });
 }
 
+/**
+ * The marker whose popup is currently open, if any.
+ *
+ * Tooltip suppression has to be global, not per marker. A per-marker guard only
+ * stops a marker doubling *its own* popup — hover a neighbour two pixels away
+ * while a popup is open and that neighbour's tooltip opens quite legitimately,
+ * except the tooltip pane sits at z-index 650 and the popup pane at 700, so it
+ * surfaces as a panel peeking out from behind the popup. That is the same
+ * artefact, from a different marker.
+ */
+let nearbyPopupOwner = null;
+
 /** Re-run decluttering once the view has settled. */
 let nearbyDeclutterTimer = null;
 function scheduleNearbyDeclutter() {
@@ -348,6 +360,13 @@ function nearbyPopupNode(cat, p, marker) {
   return box;
 }
 
+/** Shut every nearby tooltip, whichever marker owns it. */
+function closeAllNearbyTooltips() {
+  Object.keys(nearbyMarkers).forEach(k => {
+    (nearbyMarkers[k] || []).forEach(mk => { if (mk.closeTooltip) mk.closeTooltip(); });
+  });
+}
+
 function dropNearbyMarkers(key, places) {
   const cat = nearbyCatByKey(key);
   const arr = [];
@@ -373,24 +392,26 @@ function dropNearbyMarkers(key, places) {
     // puts the same words twice within a few pixels, one poking out from under
     // the other. Restored on close.
     m.on('popupopen', () => {
+      nearbyPopupOwner = m;
       node._resetAdd();
-      m.closeTooltip();
+      closeAllNearbyTooltips();
       const el = m.getElement();
       if (el) el.classList.add('np-open');
       // Re-run the collision pass so neighbouring labels yield to the popup.
       scheduleNearbyDeclutter();
     });
     m.on('popupclose', () => {
+      if (nearbyPopupOwner === m) nearbyPopupOwner = null;
       const el = m.getElement();
       if (el) el.classList.remove('np-open');
       scheduleNearbyDeclutter();
     });
     // Clicking a marker leaves the pointer on it, so the hover tooltip stays up
     // *behind* the popup — two panels showing the same name and address, which
-    // reads as a stray second window. The tooltip is the preview; once the popup
-    // is open it has been superseded, so it is refused for as long as the popup
-    // lives. Moving away and back re-arms it, because the popup closes first.
-    m.on('tooltipopen', () => { if (m.isPopupOpen && m.isPopupOpen()) m.closeTooltip(); });
+    // reads as a stray second window. The tooltip is the preview; once any popup
+    // is open it has been superseded, so tooltips are refused for as long as one
+    // lives. Closing the popup re-arms them.
+    m.on('tooltipopen', () => { if (nearbyPopupOwner) m.closeTooltip(); });
     m.addTo(map);
     // A place already on the map when its category is (re)fetched must not show
     // a second copy of its name.
