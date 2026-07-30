@@ -279,6 +279,15 @@ $('nearbyRadius').addEventListener('input', e => {
   $('nearbyRadiusVal').textContent = fmtRadius(nearbyRadiusM);
   if (nearbyCenter) drawNearbyCircle();
 });
-// Only refetch on release (not on every slider step) so a drag isn't dozens of API calls.
-$('nearbyRadius').addEventListener('change', () => { if (nearbyEnabled.size) refetchEnabledNearby(); });
+// Refetch on release rather than on every slider step, and then only after the
+// slider has been still for a moment. A radius change costs one request per
+// active chip, so four chips and five nudges used to be twenty requests before
+// the user had settled on a number. Growing the radius still costs; shrinking it
+// is served from the wider answer already held (see nearbyNarrowable).
+let nearbyRadiusTimer = null;
+$('nearbyRadius').addEventListener('change', () => {
+  if (!nearbyEnabled.size) return;
+  clearTimeout(nearbyRadiusTimer);
+  nearbyRadiusTimer = setTimeout(refetchEnabledNearby, 700);
+});
 $('nearbyClearBtn').addEventListener('click', clearAllNearby);

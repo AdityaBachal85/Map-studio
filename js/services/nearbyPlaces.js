@@ -100,9 +100,35 @@ const nearbyCatByKey = key => NEARBY_CATEGORIES.find(c => c.key === key);
 const nearbyCache = new Map();
 const NEARBY_CACHE_MAX = 60;
 
-/** @returns {string} cache key for one category at one place. */
+/** @returns {string} identity of a category at a place, radius aside. */
+function nearbyFamilyKey(lat, lng, cats, gtypes) {
+  return [cats, (gtypes || []).join('+'), lat.toFixed(5), lng.toFixed(5)].join('|');
+}
+
+/** @returns {string} cache key for one category at one place and radius. */
 function nearbyCacheKey(lat, lng, radiusM, cats, gtypes) {
-  return [cats, (gtypes || []).join('+'), lat.toFixed(5), lng.toFixed(5), Math.round(radiusM)].join('|');
+  return nearbyFamilyKey(lat, lng, cats, gtypes) + '|' + Math.round(radiusM);
+}
+
+/**
+ * A wider answer already held that can be narrowed to `radiusM` for free.
+ *
+ * Shrinking the radius slider used to cost one request per active chip, which
+ * is how a whole day's quota goes in a few seconds of fiddling. A smaller
+ * circle is a strict subset of a larger one, so the answer is already in hand —
+ * *provided* the wider fetch was not truncated. A capped response is only the
+ * top twenty of the wider circle and may be missing places that fall inside the
+ * smaller one, so those are refetched rather than narrowed.
+ *
+ * @param {string} fam @param {number} radiusM
+ */
+function nearbyNarrowable(fam, radiusM) {
+  for (const [k, rows] of nearbyCache) {
+    if (!k.startsWith(fam + '|')) continue;
+    if (rows.capped || !(rows.radiusM >= radiusM)) continue;
+    return rows;
+  }
+  return null;
 }
 
 /** Drop every cached answer. Called when the Google key changes. */
@@ -128,14 +154,25 @@ function nearbyErrorNote(msg) {
  * @returns {Promise<Array<{lat:number,lng:number,name:string,address:string,distance:number}>>}
  */
 async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefine) {
-  const ck = nearbyCacheKey(lat, lng, radiusM, cats, gtypes);
+  const fam = nearbyFamilyKey(lat, lng, cats, gtypes);
+  const ck = fam + '|' + Math.round(radiusM);
   if (nearbyCache.has(ck)) return nearbyCache.get(ck);
 
   const keep = rows => {
+    rows.radiusM = radiusM;
+    if (rows.capped == null) rows.capped = false;
     if (nearbyCache.size >= NEARBY_CACHE_MAX) nearbyCache.delete(nearbyCache.keys().next().value);
     nearbyCache.set(ck, rows);
     return rows;
   };
+
+  const wider = nearbyNarrowable(fam, radiusM);
+  if (wider) {
+    const inside = wider.filter(r => r.distance <= radiusM);
+    inside.source = wider.source;
+    if (wider.note) inside.note = wider.note;
+    return keep(inside);
+  }
 
   let note = '';
 
@@ -149,8 +186,13 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefi
       // Refine before the limit is applied — the filter drops rows, and taking
       // the top 50 first would hand the refiner an already-truncated list.
       let g = await googleNearby(lat, lng, radiusM, gtypes);
+      // `grefine` and `slice` both return fresh arrays, so carry the flag over
+      // by hand. Losing it would let a truncated list be narrowed to a smaller
+      // radius, silently dropping places that belong in the smaller circle.
+      const capped = g.capped;
       if (grefine) g = grefine(g);
       if (limit) g = g.slice(0, limit);
+      g.capped = capped;
       if (g.length) { g.source = 'google'; return keep(g); }
     } catch (e) {
       note = nearbyErrorNote(e.message || '');
@@ -185,6 +227,7 @@ async function fetchNearbyCategory(lat, lng, radiusM, cats, limit, gtypes, grefi
     };
   }).filter(r => r.lat != null && r.lng != null);
   out.source = 'geoapify';
+  out.capped = out.length >= (limit || 50);
   if (note) out.note = note;
   return keep(out);
 }

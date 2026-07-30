@@ -349,7 +349,8 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
     },
   }, 'places.id,places.displayName,places.formattedAddress,places.location,places.primaryType');
 
-  const out = (json.places || []).map(p => ({
+  const raw = json.places || [];
+  const out = raw.map(p => ({
     id: p.id,
     lat: p.location.latitude,
     lng: p.location.longitude,
@@ -367,7 +368,12 @@ async function googleNearby(lat, lng, radiusM, types, limit) {
     return da - db || a.distance - b.distance;
   });
 
-  return limit ? out.slice(0, limit) : out;
+  const rows = limit ? out.slice(0, limit) : out;
+  // Whether Google hit its ceiling. A full response means places were dropped,
+  // so this list is *not* a complete picture of the circle — which is what lets
+  // the caller decide whether it may be narrowed to a smaller radius for free.
+  rows.capped = raw.length >= GOOGLE_NEARBY_CAP;
+  return rows;
 }
 
 /* ---------------------------------------------------------------------------
