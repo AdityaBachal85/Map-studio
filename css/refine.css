@@ -2047,9 +2047,24 @@ input[type=tel] {
 
 /* A discovered place that is now a real location: the location pin draws the
    name, so the POI keeps only its category dot. Two labels at one coordinate
-   is the duplicate that showed up in QA. */
-.nearby-poi-wrap.np-promoted .np-name {
+   is the duplicate that showed up in QA.
+
+   `.np-open` is the same idea for the moment a popup is open on this marker —
+   the popup's title is already the name, so the label underneath it would be the
+   same words twice, a few pixels apart. */
+.nearby-poi-wrap.np-promoted .np-name,
+.nearby-poi-wrap.np-open .np-name {
   display: none;
+}
+
+/* The address in the popup wraps to several lines for a full Indian address, so
+   the box needs a sane measure and the text needs to breathe. Capped at 250px by
+   the popup's maxWidth; this stops the address from setting solid. */
+.np-pop {
+  max-width: 226px;
+}
+.np-pop-sub {
+  overflow-wrap: anywhere;
 }
 
 /* ===========================================================================

@@ -40,6 +40,12 @@ function nearbyMarkerIcon(cat, name) {
     // down to nothing. Leaving it unset lets the marker size to its content
     // while iconAnchor still centres the dot on the coordinate.
     iconSize: null, iconAnchor: [8, 8],
+    // Without this the popup anchor falls back to [0, 0] — Leaflet 1.x reads it
+    // straight off the icon options and has no way to derive one when iconSize
+    // is null. The popup then opens with its tip on the dot's centre, so the dot
+    // pokes out through the popup's bottom edge. The dot is 16px with its centre
+    // on the coordinate, so -14 clears its top edge with a little air.
+    popupAnchor: [0, -14],
   });
 }
 
@@ -67,6 +73,21 @@ function declutterNearbyLabels() {
   const shown = [];
   const zoomOk = map.getZoom() >= NEARBY_LABEL_MIN_ZOOM;
   const bounds = map.getBounds();
+
+  // An open popup claims its rectangle before any label does. The popup pane sits
+  // above the markers, so a label underneath is not overlapping it — it is being
+  // *half covered* by the glass, with a few characters sticking out past the
+  // edge. That reads as a broken label rather than an omitted one, which is what
+  // "it should not look like this" was pointing at. Seeding the occupied list
+  // makes the existing collision pass hide them, and closing the popup brings
+  // them straight back.
+  ['.leaflet-popup', '.leaflet-tooltip'].forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (!el.offsetWidth) return;
+      const r = el.getBoundingClientRect();
+      if (r.width) shown.push({ l: r.left - 4, t: r.top - 4, r: r.right + 4, b: r.bottom + 4 });
+    });
+  });
 
   Object.keys(nearbyMarkers).forEach(key => {
     (nearbyMarkers[key] || []).forEach(m => {
@@ -344,8 +365,32 @@ function dropNearbyMarkers(key, places) {
     // Click to add. A discovered place is useless until it can become a pin,
     // which is what "I can see ten schools but cannot put one on the map" meant.
     const node = nearbyPopupNode(cat, p, m);
-    m.bindPopup(node, { className: 'nearby-pop', closeButton: true, minWidth: 180, autoPanPadding: [24, 24] });
-    m.on('popupopen', () => node._resetAdd());
+    m.bindPopup(node, {
+      className: 'nearby-pop', closeButton: true,
+      minWidth: 190, maxWidth: 250, autoPanPadding: [28, 28],
+    });
+    // The popup's title *is* the marker's name, so leaving the marker label on
+    // puts the same words twice within a few pixels, one poking out from under
+    // the other. Restored on close.
+    m.on('popupopen', () => {
+      node._resetAdd();
+      m.closeTooltip();
+      const el = m.getElement();
+      if (el) el.classList.add('np-open');
+      // Re-run the collision pass so neighbouring labels yield to the popup.
+      scheduleNearbyDeclutter();
+    });
+    m.on('popupclose', () => {
+      const el = m.getElement();
+      if (el) el.classList.remove('np-open');
+      scheduleNearbyDeclutter();
+    });
+    // Clicking a marker leaves the pointer on it, so the hover tooltip stays up
+    // *behind* the popup — two panels showing the same name and address, which
+    // reads as a stray second window. The tooltip is the preview; once the popup
+    // is open it has been superseded, so it is refused for as long as the popup
+    // lives. Moving away and back re-arms it, because the popup closes first.
+    m.on('tooltipopen', () => { if (m.isPopupOpen && m.isPopupOpen()) m.closeTooltip(); });
     m.addTo(map);
     // A place already on the map when its category is (re)fetched must not show
     // a second copy of its name.
