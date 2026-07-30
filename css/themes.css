@@ -13,7 +13,10 @@
       --orange: #FF7A1A;
       --orange2: #FFA149;
       --danger: #FF6B81;
-      --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      /* Geist Mono, so the coordinate and distance readouts belong to the same
+         family as the rest of the interface instead of reading as a borrowed
+         terminal font. */
+      --mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       --sbw: 396px;
       --r: 13px;
       --chipFont: 11.5px;

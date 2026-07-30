@@ -14,13 +14,68 @@
    and optical sizing so small caps-styled labels stay legible.
    --------------------------------------------------------------------------- */
 
+/* Geist and Geist Mono, self-hosted.
+ *
+ * Until now the stack asked for "Inter" and no font was ever loaded — no
+ * @font-face, no link — so everyone fell through to their OS default and the
+ * app looked different on every machine. These are the first fonts the project
+ * has actually shipped.
+ *
+ * Self-hosted rather than linked from Google: no third-party request on a tool
+ * used for client work, it keeps working offline, and there is no
+ * render-blocking stylesheet from another origin. One variable file per family
+ * carries every weight (SIL OFL 1.1 — see vendor/fonts/OFL.txt).
+ *
+ * `font-display: swap` shows the fallback immediately and swaps when the file
+ * lands; the metric overrides on the fallback below keep that swap from moving
+ * the layout. */
+@font-face {
+  font-family: "Geist";
+  src: url("../vendor/fonts/Geist-Variable.woff2?v=5.0030") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../vendor/fonts/GeistMono-Variable.woff2?v=5.0030") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The swap is where a webfont usually shows itself: the fallback has different
+   metrics, so every line shifts when the real file arrives. Pinning the
+   fallback's metrics to Geist's own makes the two occupy the same space, so the
+   swap is a change of shape rather than a reflow. */
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial");
+  ascent-override: 96%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+  size-adjust: 100%;
+}
+
 body {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: "Geist", "Geist Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Form controls do not inherit font-family — the UA sets its own, which is why
+   every button in this app was still rendering in Arial while the body ran on
+   the new face. Without this line a webfont only reaches the prose. */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
 }
 
 /* Any field or readout carrying a number gets tabular, slashed-zero figures so
@@ -1117,22 +1172,68 @@ body.no-glass .sidebar.frost {
   color: var(--text);
 }
 
-/* Panel transition. `--pane-dir` is +1 moving right through the tabs and -1
-   moving left, so the pane arrives from the side you came from. */
+/* Panel transition.
+ *
+ * The two panes cross over instead of one vanishing and the other arriving.
+ * Before this the outgoing pane went straight to display:none, so there was a
+ * frame of empty container before the new content flew in — which is what read
+ * as a jump rather than a transition. The leaving pane is lifted out of flow and
+ * animated out to the opposite side while the incoming one comes in, so
+ * something is always on screen.
+ *
+ * `--pane-dir` is +1 moving right through the tabs and -1 moving left: the new
+ * pane enters from that side, the old one exits to the other.
+ *
+ * Deliberately no blur here, unlike the tab card in the original component.
+ * Kokonut blurs a fixed 200px card; this pane is a scrolling list that can be
+ * hundreds of pixels tall, and `filter` would rasterise that whole subtree every
+ * switch. Opacity and transform stay on the compositor, which is what actually
+ * makes it smooth.
+ */
 .pane.active {
-  animation: paneSlideIn var(--dur-slow) cubic-bezier(.32, .72, 0, 1);
+  animation: paneSlideIn var(--pane-anim) var(--pane-ease);
+}
+
+.panes {
+  position: relative;
+}
+
+/* Held in place for the length of the animation, out of flow so the incoming
+   pane can take the space immediately. */
+.pane.leaving {
+  display: block;
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 14px;
+  pointer-events: none;
+  animation: paneSlideOut var(--pane-anim) var(--pane-ease) forwards;
+}
+
+:root {
+  --pane-anim: 300ms;
+  --pane-ease: cubic-bezier(.32, .72, 0, 1);
 }
 
 @keyframes paneSlideIn {
   from {
     opacity: 0;
-    transform: translateX(calc(var(--pane-dir, 1) * 26px)) scale(.97);
-    filter: blur(8px);
+    transform: translate3d(calc(var(--pane-dir, 1) * 24px), 0, 0) scale(.985);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: blur(0);
+  }
+}
+
+@keyframes paneSlideOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(calc(var(--pane-dir, 1) * -20px), 0, 0) scale(.985);
   }
 }
 
@@ -1140,13 +1241,18 @@ body.reduce-motion .tabs::after {
   transition: none;
 }
 
-body.reduce-motion .pane.active {
+body.reduce-motion .pane.active,
+body.reduce-motion .pane.leaving {
   animation: none;
+}
+body.reduce-motion .pane.leaving {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tabs::after { transition: none; }
   .pane.active { animation: none; }
+  .pane.leaving { animation: none; display: none; }
 }
 
 /* ---------------------------------------------------------------------------

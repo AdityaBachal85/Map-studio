@@ -31,10 +31,33 @@
        * you can follow. `--pane-dir` carries the sign to the keyframes.
        * @param {number} to index into TABS
        */
+      /** How long a pane takes to cross over. Must match --pane-anim in CSS. */
+      const PANE_ANIM_MS = 300;
+      /** Scroll offset per pane, so returning to a tab returns to where you were. */
+      const paneScroll = {};
+      let paneLeaveTimer = null;
+
       function selectTab(to) {
         const from = tabIndex();
         if (to === from || to < 0 || to >= TABS.length) return;
         const dir = to > from ? 1 : -1;
+        const host = document.querySelector('.panes');
+        const outgoing = from >= 0 ? $(TABS[from][1]) : null;
+        const incoming = $(TABS[to][1]);
+
+        // A fast run of clicks must not leave a stack of panes mid-exit.
+        clearTimeout(paneLeaveTimer);
+        host.querySelectorAll('.pane.leaving').forEach(el => el.classList.remove('leaving'));
+
+        if (outgoing) {
+          paneScroll[outgoing.id] = host.scrollTop;
+          outgoing.style.setProperty('--pane-dir', dir);
+          // Lifted out of flow so the incoming pane takes the space at once,
+          // while this one animates out. Without it the container is briefly
+          // empty, which is the jump this replaces.
+          outgoing.classList.add('leaving');
+        }
+
         TABS.forEach(([b2, p2], i) => {
           const on = i === to;
           const btn = $(b2), pane = $(p2);
@@ -43,9 +66,19 @@
           // Roving tabindex: one stop for the whole bar, then arrow keys inside
           // it. Five separate tab stops is what the plain buttons gave before.
           btn.tabIndex = on ? 0 : -1;
-          pane.style.setProperty('--pane-dir', dir);
+          if (on) pane.style.setProperty('--pane-dir', dir);
           pane.classList.toggle('active', on);
         });
+
+        // Return to where this tab was left rather than to wherever the last one
+        // happened to be scrolled, which is what made a switch feel like a jump
+        // even once the panes were animating.
+        host.scrollTop = paneScroll[incoming.id] || 0;
+
+        paneLeaveTimer = setTimeout(() => {
+          host.querySelectorAll('.pane.leaving').forEach(el => el.classList.remove('leaving'));
+        }, PANE_ANIM_MS);
+
         moveTabIndicator();
       }
 

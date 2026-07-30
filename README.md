@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v5-blue)
+![Version](https://img.shields.io/badge/version-v5.0030-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,80 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v5
+## 🆕 New in v5.0030 (latest)
+
+### Google Maps Platform — search, nearby and routing
+
+Search, nearby discovery and routing now go to Google first, with the previous
+providers untouched behind them as a fallback. Only the modern, CORS-enabled
+APIs are used (`places.googleapis.com/v1/*`, `routes.googleapis.com`), because
+the legacy `maps.googleapis.com/maps/api/*` endpoints send no
+`Access-Control-Allow-Origin` header and cannot be called from a browser at all.
+
+- **Search bar** — Google Autocomplete while you type, Text Search on Enter.
+  Keystrokes share one session token, so a search that ends in a pick bills as
+  a single session rather than per keystroke.
+- **Nearby places** — ranked by prominence rather than raw distance. This is the
+  difference between twenty playgroups within 500 m and the schools people
+  actually ask about; verified at Airoli, where distance ranking never returned
+  EuroSchool, DAV, VIBGYOR High or St Xavier's at all.
+- **Schools vs colleges** — Google has no `college` type, and Indian listings do
+  not respect the ones it has: a junior college is typed `school`, EuroSchool is
+  an `educational_institution`, and a computer shop is typed `university`. Both
+  chips ask for the broad parent type and let the *name* decide which list a
+  place lands on.
+- **Routing** — Google Routes with alternatives, falling back to OSRM. Indian
+  route descriptions come back in English because `languageCode` is set
+  explicitly; without it they arrived in Assamese.
+
+### Nearby: put what you find on the map
+
+- **Click any discovered place** for a popup with its name, address and distance,
+  and one action — **+ Add to locations**. It becomes a real project pin
+  carrying the category colour.
+- **Search for anything** — a text box that is not limited to the twelve
+  category chips. Type `real estate agents`, `cake shops`, `under construction
+  projects` and the query becomes its own chip you can toggle or remove. Results
+  outside the radius are dropped and counted, so the status line can tell you to
+  widen the circle rather than leaving you wondering.
+
+### Bulk import from Excel / CSV
+
+- A **master template** (`Name`, `Lat/Long`, `Type`, `Route to`, `Mode`) with
+  drop-downs, written and read without adding a spreadsheet library — the reader
+  and writer are built on the already-vendored JSZip.
+- Every row is validated before anything touches the map: coordinate format,
+  swapped lat/long, duplicates, and routes pointing at names that do not exist.
+  The review dialog reports problems by spreadsheet row number and asks whether
+  to add to the current map or replace it.
+- **Round-trips** — export the current map in the same format you import.
+
+### Provider keys, in the app
+
+- **Settings → Map providers & keys** — paste an ArcGIS or Google key, verify it
+  live, and see exactly which features it unlocks. Keys are stored per device,
+  never written into project files, and survive `?reset=1`.
+- A key pasted against the wrong provider is detected and refused rather than
+  silently breaking every request.
+
+### Interface
+
+- **Typography** — Geist and Geist Mono, self-hosted under `vendor/fonts/`
+  (SIL OFL 1.1). Until now the stylesheet asked for Inter and no font was ever
+  loaded, so everyone fell through to their OS default and the app looked
+  different on every machine.
+- **Tabs** — a sliding pill in the manner of Kokonut UI's Smooth Tab, on the
+  real `spring(400, 30)` curve sampled into a CSS `linear()` ramp, with
+  `role="tablist"`, arrow-key navigation and a roving tabindex.
+- **Pane transitions** — the outgoing and incoming panes cross over instead of
+  one blanking before the other arrives, and each tab remembers its own scroll
+  position.
+- All of it respects `prefers-reduced-motion` and the in-app **Glass / motion**
+  preferences.
+
+---
+
+## 🆕 Earlier in v5
 
 Recent additions, all fully integrated into the existing app (no redesign — the
 original workflows, shortcuts and exports are unchanged):
@@ -63,10 +136,18 @@ original workflows, shortcuts and exports are unchanged):
   with collapsible sections (Basemap & imagery, 3D & terrain, Overlays, View,
   Export, Project).
 
-> **Search & Nearby use a Geoapify API key** stored in `js/config.js`. Because
-> the app has no backend, that key is visible in the page source — restrict it
-> to your site's domain in the Geoapify dashboard. Leave it empty to disable
-> Geoapify and fall back to Nominatim search (Nearby needs the key).
+> **API keys.** The app has no backend, so any key in `js/config.js` is visible
+> in the page source. That is the normal arrangement for browser keys, and the
+> restriction is what makes it safe: limit each key by HTTP referrer to your own
+> domain, and set a quota cap. Leave a key empty to disable that provider — the
+> app degrades to the next one in the chain rather than breaking.
+>
+> **Quotas are per day, not just per month.** Google's free monthly allowance is
+> generous (on India pricing, 70,000 calls per Essentials SKU and 35,000 per Pro
+> SKU), but a project also carries a *daily* cap set in the Cloud console under
+> **APIs & Services → Places API (New) → Quotas**. Exhausting it looks exactly
+> like the feature breaking, so the app now names the reason in the status line
+> and falls back to Geoapify instead of going quiet.
 
 ---
 
@@ -197,9 +278,12 @@ Works on:
   (drawing/editing), [html2canvas](https://html2canvas.hertzen.com/),
   [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/)
   — vendored directly under `vendor/`, loaded as plain `<script>` tags
-- OpenStreetMap / Esri / CARTO tiles, [Geoapify](https://www.geoapify.com/)
-  geocoding + Places (with Nominatim geocoding fallback), OSRM routing
-  (need internet at runtime)
+- [Geist](https://vercel.com/font) and Geist Mono (SIL OFL 1.1), self-hosted
+  under `vendor/fonts/` — one variable file per family, no third-party request
+- OpenStreetMap / Esri / CARTO tiles; [Google Maps Platform](https://developers.google.com/maps)
+  Places (New) + Routes for search, nearby and routing, with
+  [Geoapify](https://www.geoapify.com/) geocoding + Places, Nominatim and OSRM
+  behind it as fallbacks (all need internet at runtime)
 
 ---
 
@@ -213,7 +297,8 @@ just runs, in a browser or on GitHub Pages alike.
 ```
 Map-studio/
   index.html      — the whole app's markup + the ordered list of <script> tags
-  vendor/          — third-party libraries, vendored as plain files (leaflet.js/.css,
+  vendor/fonts/   — Geist + Geist Mono variable woff2 + OFL licence
+  vendor/         — third-party libraries, vendored as plain files (leaflet.js/.css,
                        leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
   css/
     main.css        — @import order (do not reorder — later rules override earlier ones)
