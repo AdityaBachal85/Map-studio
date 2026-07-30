@@ -42,10 +42,8 @@
     .map-wrap.capturing #clickHint,
     .map-wrap.capturing .leaflet-control-zoom,
     .map-wrap.capturing .pin-ghost,
-    /* Transient UI, not map content: a popup or hover tooltip open at the moment
-       someone hits Export does not belong in the deliverable. They are also
-       glass, and html2canvas does not implement backdrop-filter, so a captured
-       one would come out as a flat pane over the imagery. */
+    /* Transient UI, not map content: a popup or hover tooltip left open at the
+       moment someone hits Export does not belong in the deliverable. */
     .map-wrap.capturing .leaflet-popup,
     .map-wrap.capturing .leaflet-tooltip {
       display: none !important;
