@@ -89,6 +89,54 @@
       --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .13),
         inset 0 -1px 0 rgba(0, 0, 0, .22);
       --glass-solid: #0E1626;
+      /* Flat companion to the tint gradient, for the same reason as --gc-*-flat:
+         a gradient is an image, so a pane declaring only the gradient has a
+         transparent background-color. On the map that matters more than in the
+         sidebar — Leaflet's own #map background is a light grey, so a pane whose
+         gradient failed to paint would put light text on light. */
+      --glass-flat: rgba(16, 25, 44, .82);
+      /* Secondary ink *on glass*. --dim is tuned for the sidebar's near-opaque
+         panes and only reaches 3.5:1 on a glass pane at its lightest — a pane
+         over bright imagery lets 18% of it through, so the surface is not the
+         near-black the sidebar is. Measured 4.8:1 against that worst case. */
+      --dim-on-glass: #A7B4C8;
+
+      /* ------------------------------------------------------------------
+         Component glass — the second tier.
+
+         `backdrop-filter` blurs *what is painted behind the element*. Inside a
+         .frost pane, what is behind a button is the pane's own fill: already
+         blurred, already near-uniform. Blurring it again produces no visible
+         change and still forces the compositor to re-sample the region every
+         frame — and every backdrop-filter element becomes its own containing
+         block, which is how fixed-position descendants and clipping quietly
+         break. So components inside a glass pane get the other two thirds of
+         glass, the translucent fill and the catch-light edge, and skip the blur
+         that would do nothing. They read as glass stacked on glass, at no cost.
+
+         Real blur stays for tier one only: surfaces with the map or the page
+         behind them (.frost, popups, the context menu).
+         ------------------------------------------------------------------ */
+      --gc-fill: linear-gradient(180deg, rgba(255, 255, 255, .085), rgba(255, 255, 255, .032));
+      --gc-hover: linear-gradient(180deg, rgba(255, 255, 255, .145), rgba(255, 255, 255, .06));
+      --gc-active: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .02));
+      /* Inputs read as glass pressed *into* the surface, not floating on it. */
+      --gc-sunken: linear-gradient(180deg, rgba(0, 0, 0, .30), rgba(0, 0, 0, .19));
+      /* Flat companions to the gradients above. A gradient is a background
+         *image*; declaring only that leaves background-color transparent, so the
+         surface behind the text depends entirely on the gradient painting, and
+         any later `background:` shorthand elsewhere in the cascade wipes it out
+         with nothing underneath. Stating both makes the fill deterministic. */
+      --gc-fill-flat: rgba(255, 255, 255, .055);
+      --gc-hover-flat: rgba(255, 255, 255, .10);
+      --gc-sunken-flat: rgba(0, 0, 0, .24);
+      --gc-edge: rgba(255, 255, 255, .13);
+      --gc-edge-hover: rgba(255, 255, 255, .30);
+      --gc-light: inset 0 1px 0 rgba(255, 255, 255, .10);
+      --gc-light-lift: inset 0 1px 0 rgba(255, 255, 255, .17);
+      /* Solid stand-ins for body.no-glass and reduced-transparency. */
+      --gc-solid: #162034;
+      --gc-solid-sunken: #0B1220;
 
       /* Accent glow — used only on the primary action, never decoratively. */
       --accent-glow: 0 0 0 1px rgba(255, 122, 26, .35), 0 6px 22px rgba(255, 122, 26, .28);
@@ -146,7 +194,30 @@
       --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .9),
         inset 0 -1px 0 rgba(16, 32, 60, .06);
       --glass-solid: #F4F7FB;
+      --glass-flat: rgba(255, 255, 255, .86);
+      /* One step darker than --dim. Light glass over dark imagery flattens to
+         about #DBDBDB, where the standard dim reaches only 4.46:1. Measured
+         5.0:1 against that worst case. */
+      --dim-on-glass: #4E5A70;
       --accent-glow: 0 0 0 1px rgba(255, 122, 26, .3), 0 6px 20px rgba(255, 122, 26, .22);
+
+      /* Component glass, light. A white veil over a light pane needs the ink in
+         the *edge* to carry the shape — a white fill on a white surface has no
+         silhouette, which is the usual reason light-mode glassmorphism reads as
+         nothing at all. */
+      --gc-fill: linear-gradient(180deg, rgba(255, 255, 255, .78), rgba(255, 255, 255, .50));
+      --gc-hover: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .78));
+      --gc-active: linear-gradient(180deg, rgba(16, 32, 60, .05), rgba(16, 32, 60, .02));
+      --gc-sunken: linear-gradient(180deg, rgba(16, 32, 60, .06), rgba(16, 32, 60, .025));
+      --gc-fill-flat: rgba(255, 255, 255, .62);
+      --gc-hover-flat: rgba(255, 255, 255, .88);
+      --gc-sunken-flat: rgba(16, 32, 60, .045);
+      --gc-edge: rgba(16, 32, 60, .16);
+      --gc-edge-hover: rgba(16, 32, 60, .30);
+      --gc-light: inset 0 1px 0 rgba(255, 255, 255, .85);
+      --gc-light-lift: inset 0 1px 0 rgba(255, 255, 255, 1);
+      --gc-solid: #FFFFFF;
+      --gc-solid-sunken: #EDF1F7;
     }
 
     /* Surfaces that hardcode white-alpha fills need a dark-alpha equivalent in
@@ -156,20 +227,17 @@
     :root[data-theme="light"] body.no-glass .search-results.frost {
       background: #F4F7FB;
     }
-    :root[data-theme="light"] .btn {
-      background: rgba(16, 32, 60, .05);
-    }
-    :root[data-theme="light"] .btn:hover {
-      border-color: rgba(16, 32, 60, .28);
-    }
+    /* The per-theme *fills* for buttons, inputs and cards used to live here as
+       light-mode overrides. They now come from the --gc-* tokens above, which are
+       already defined per theme, so refine.css section 28 can state one rule for
+       both. Keeping these would have silently won on specificity — three
+       class-equivalents against one — and that is exactly what flattened light
+       mode when the glass layer went in: the Export button lost its orange and
+       every input lost its recess. Colour stays; fill does not. */
     :root[data-theme="light"] input,
     :root[data-theme="light"] select,
     :root[data-theme="light"] textarea {
-      background: rgba(16, 32, 60, .04);
       color: var(--text);
-    }
-    :root[data-theme="light"] .item-card {
-      background: rgba(255, 255, 255, .55);
     }
     :root[data-theme="light"] .acc {
       background: rgba(16, 32, 60, .02);
