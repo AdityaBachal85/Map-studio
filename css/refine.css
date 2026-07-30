@@ -1081,11 +1081,24 @@ body.no-glass .sidebar.frost {
   :root { --tab-spring: cubic-bezier(.32, .72, .28, 1); }
 }
 
-/* The buttons sit above the pill, and the label on the pill takes the dark ink. */
+/* The buttons sit above the pill, and the label on the pill takes the dark ink.
+ *
+ * `flex: 1 1 auto` rather than the base `flex: 1`. Equal thirds is right for
+ * Kokonut's four short, similar labels; here the five run from DRAW to
+ * LOCATIONS, and forcing them to equal width left LOCATIONS with 58.7px of text
+ * in a 60.8px pill — about a pixel of slack a side, which reads as the word
+ * bursting out of the pill even though it technically fits. Sizing to content
+ * and sharing the slack equally gives every label the same optical padding
+ * whatever its length, and the pill is always comfortably larger than its word.
+ */
 .tabs button {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 9px;
   border-radius: var(--r-md);
+  white-space: nowrap;
   transition: color var(--dur-base) var(--ease-out);
 }
 
