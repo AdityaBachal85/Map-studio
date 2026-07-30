@@ -44,6 +44,16 @@ const AUTOSAVE_KEY = 'current';
 const AUTOSAVE_TICK_MS = 5000;
 /** How many previous states to keep. */
 const AUTOSAVE_SNAPSHOTS = 5;
+/**
+ * Ceiling on what the whole snapshot ring may occupy.
+ *
+ * The count alone is not a bound on size. A snapshot is a *full* copy of the
+ * project, and a project embeds the brand logo, any custom marker images and
+ * every location photo as base64 — so five snapshots of a map with a 400 KB logo
+ * is 2 MB of near-identical data, and it grows as you work rather than when you
+ * do anything unusual. Whichever limit bites first wins.
+ */
+const AUTOSAVE_SNAPSHOT_BUDGET = 4 * 1024 * 1024;
 
 let _asDb = null;
 let _asLastHash = '';
@@ -154,11 +164,21 @@ async function autosaveNow(opts) {
   try { proj = serialiseProject(); }
   catch (e) { console.warn('Autosave: could not serialise —', e.message); return false; }
 
-  // An empty map must still be recorded, or clearing everything and reloading
-  // would resurrect the old work.
   const json = JSON.stringify(proj);
   const hash = autosaveHash(json);
   if (!force && hash === _asLastHash) return false;
+
+  // An empty map is only worth writing if there is something to overwrite.
+  //
+  // Deleting every location by hand must persist, or a reload would bring the
+  // deleted work back — so when a record exists, the empty state is written.
+  // But after "Start a fresh map" the record is gone deliberately, and writing
+  // an empty one straight back is what stopped the storage figure ever reaching
+  // zero: the tick recreated it five seconds later.
+  if (!projectHasContent(proj)) {
+    const existing = await autosaveGet(AUTOSAVE_KEY);
+    if (!existing) { _asLastHash = hash; return false; }
+  }
 
   // Roll the previous state into the snapshot ring before overwriting it, so the
   // ring holds the last N *distinct* states rather than N copies of this one.
@@ -189,22 +209,42 @@ async function autosaveNow(opts) {
  * @param {{project:object, at:number}} record
  */
 async function autosavePushSnapshot(record) {
+  const bytes = JSON.stringify(record).length;
+  // One snapshot bigger than the entire budget would evict the whole ring and
+  // still not fit. Skip it rather than trading five useful versions for none.
+  if (bytes > AUTOSAVE_SNAPSHOT_BUDGET) return;
+
   const meta = (await autosaveGet('snapshots')) || { seq: 0, ids: [] };
   const id = 'snap:' + (meta.seq + 1);
   const okWrite = await autosavePut(id, record);
   if (!okWrite) return;
   meta.seq += 1;
-  meta.ids.push({ id, at: record.at,
+  meta.ids.push({ id, at: record.at, bytes,
     counts: {
       locations: (record.project.locations || []).length,
       routes: (record.project.routes || []).length,
       shapes: (record.project.geometries || []).length,
     } });
-  while (meta.ids.length > AUTOSAVE_SNAPSHOTS) {
+
+  const total = () => meta.ids.reduce((n, s) => n + (s.bytes || 0), 0);
+  // Guarded on length as well as the two limits: without it a ring holding one
+  // oversized entry would shift() an empty array and throw.
+  while (meta.ids.length > 1 && (meta.ids.length > AUTOSAVE_SNAPSHOTS || total() > AUTOSAVE_SNAPSHOT_BUDGET)) {
     const drop = meta.ids.shift();
     await autosaveDelete(drop.id);
   }
   await autosavePut('snapshots', meta);
+}
+
+/** @returns {Promise<{current:number, snapshots:number, count:number}>} */
+async function autosaveStoredBytes() {
+  const cur = await autosaveGet(AUTOSAVE_KEY);
+  const meta = (await autosaveGet('snapshots')) || { ids: [] };
+  return {
+    current: cur ? JSON.stringify(cur).length : 0,
+    snapshots: meta.ids.reduce((n, s) => n + (s.bytes || 0), 0),
+    count: meta.ids.length,
+  };
 }
 
 /** @returns {Promise<Array<{id:string,at:number,counts:object}>>} newest first. */
@@ -302,9 +342,18 @@ async function autosaveDiscard() {
 async function startFreshProject() {
   clearProject();
   await autosaveDiscard();
-  // Record the now-empty state so a reload does not bring the old work back.
-  await autosaveNow({ force: true, reason: 'start-fresh' });
-  status('Started a fresh map — the previous session has been discarded.');
+  // Deliberately does NOT write an empty record back. `autosaveDiscard` removed
+  // the session and every snapshot; writing a fresh record here — which this
+  // used to do — meant the store was never actually empty, and the reported
+  // usage never returned to zero. With nothing stored, a reload finds nothing
+  // and opens blank, which is the same outcome for free.
+  //
+  // Autosave also un-suspends: if it had given up because storage was full,
+  // freeing that storage is exactly the moment it should start trying again.
+  _asSuspended = false;
+  autosaveSetIndicator('', 'Autosave on — nothing stored yet. It will save as soon as you add something.');
+  status('Started a fresh map — the previous session and its saved versions have been deleted.');
+  autosaveRefreshStorageLine();
 }
 
 /**
@@ -375,7 +424,15 @@ async function autosaveRefreshStorageLine() {
   let persisted = false;
   try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; }
   catch (e) { /* ignore */ }
+  const mine = await autosaveStoredBytes();
   const bits = [];
+  // Two figures, because they answer different questions: what this app is
+  // holding, and how much room the browser will give it. Reporting only the
+  // origin total made the app's own footprint impossible to see, which is how
+  // "start a fresh map is using more space" became a mystery rather than a
+  // number.
+  bits.push(`This map: ${autosaveBytes(mine.current)}`
+    + (mine.count ? ` · ${mine.count} earlier version${mine.count === 1 ? '' : 's'}: ${autosaveBytes(mine.snapshots)}` : ''));
   if (est && est.quota) bits.push(`${autosaveBytes(est.usage)} of ${autosaveBytes(est.quota)} browser storage used`);
   // Worth stating plainly: without persistence granted the browser is allowed to
   // evict this data, so it is not a substitute for saving a file.
@@ -401,7 +458,8 @@ async function autosaveShowSnapshots() {
     const when = new Date(s.at);
     const c = s.counts || {};
     row.innerHTML = `<span class="as-snap-when">${esc(when.toLocaleTimeString())}</span>`
-      + `<span class="as-snap-meta">${c.locations || 0} loc · ${c.routes || 0} routes · ${c.shapes || 0} shapes</span>`;
+      + `<span class="as-snap-meta">${c.locations || 0} loc · ${c.routes || 0} routes · ${c.shapes || 0} shapes`
+      + (s.bytes ? ` · ${esc(autosaveBytes(s.bytes))}` : '') + `</span>`;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn';
@@ -409,6 +467,7 @@ async function autosaveShowSnapshots() {
     btn.addEventListener('click', async () => {
       await autosaveRestoreSnapshot(s.id);
       autosaveShowSnapshots();
+      autosaveRefreshStorageLine();
     });
     row.appendChild(btn);
     host.appendChild(row);
@@ -418,9 +477,8 @@ async function autosaveShowSnapshots() {
 function initAutosaveUI() {
   const fresh = $('asFreshBtn');
   if (fresh) fresh.addEventListener('click', async () => {
-    if (projectHasContent() && !confirm('Clear this map and discard the saved session?\n\nAnything you have not exported to a file will be gone.')) return;
+    if (projectHasContent() && !confirm('Clear this map and delete its saved data?\n\nThe autosaved session and all earlier versions will be removed from browser storage. Anything you have not exported to a file will be gone.')) return;
     await startFreshProject();
-    autosaveRefreshStorageLine();
     autosaveShowSnapshots();
   });
 

@@ -31,7 +31,7 @@
  * the layout. */
 @font-face {
   font-family: "Geist";
-  src: url("../vendor/fonts/Geist-Variable.woff2?v=5.0031") format("woff2");
+  src: url("../vendor/fonts/Geist-Variable.woff2?v=5.0032") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -39,7 +39,7 @@
 
 @font-face {
   font-family: "Geist Mono";
-  src: url("../vendor/fonts/GeistMono-Variable.woff2?v=5.0031") format("woff2");
+  src: url("../vendor/fonts/GeistMono-Variable.woff2?v=5.0032") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
