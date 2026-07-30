@@ -31,7 +31,7 @@
  * the layout. */
 @font-face {
   font-family: "Geist";
-  src: url("../vendor/fonts/Geist-Variable.woff2?v=5.0030") format("woff2");
+  src: url("../vendor/fonts/Geist-Variable.woff2?v=5.0031") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -39,7 +39,7 @@
 
 @font-face {
   font-family: "Geist Mono";
-  src: url("../vendor/fonts/GeistMono-Variable.woff2?v=5.0030") format("woff2");
+  src: url("../vendor/fonts/GeistMono-Variable.woff2?v=5.0031") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -2294,4 +2294,67 @@ input[type=tel] {
 }
 .np-pop-sub {
   overflow-wrap: anywhere;
+}
+
+/* ===========================================================================
+   29. Settings › This session — the autosave panel
+   ========================================================================= */
+
+.as-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A saved/failed dot rather than a spinner: autosave is nearly always idle, and
+   a thing that spins every five seconds reads as work rather than safety. */
+.as-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  box-shadow: 0 0 0 3px rgba(139, 153, 176, .16);
+  transition: background var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.as-dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+.as-dot.bad {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .18);
+}
+
+.as-snaps {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.as-snap {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .03);
+}
+:root[data-theme="light"] .as-snap {
+  background: rgba(16, 32, 60, .03);
+}
+.as-snap-when {
+  font-weight: 700;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.as-snap-meta {
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.as-snap .btn {
+  padding: 5px 10px;
+  font-size: 11px;
 }
