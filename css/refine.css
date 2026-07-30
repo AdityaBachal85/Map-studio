@@ -995,6 +995,21 @@ body.no-glass .sidebar.frost {
 
 .tabs {
   position: relative;
+  /* rounded-xl border py-1 gap-1 — a segmented control, not a nav with a rule
+     under it. The old bottom border is explicitly cleared: the base rule in
+     sidebar.css sets border-bottom alone, which would survive as a stray line
+     across the new container. */
+  margin: 8px 12px 12px;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--stroke2);
+  border-bottom: 1px solid var(--stroke2);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, .03);
+}
+
+:root[data-theme="light"] .tabs {
+  background: rgba(16, 32, 60, .04);
 }
 
 /* Kokonut UI "Smooth Tab", rebuilt for this codebase.
@@ -1003,8 +1018,13 @@ body.no-glass .sidebar.frost {
    The original is React + Motion + Tailwind and this app is none of those, so
    it is reimplemented rather than dropped in. What is reproduced exactly:
 
-     - a sliding filled pill behind the active tab, inset 4px from the bar,
-       full height minus 8px, rounded, rather than an underline;
+     - the bar itself: a rounded, bordered container that holds the tabs with
+       4px of padding, rather than a full-width nav with a rule under it. This
+       is the biggest part of the look and it is what the reference clip is
+       mostly showing;
+     - a sliding filled pill behind the active tab, inset 4px on every side
+       (Kokonut animates to `width - 8` at `left + 4`), rounded, rather than an
+       underline;
      - its spring. Motion's spring(stiffness 400, damping 30, mass 1) is an
        underdamped curve — damping ratio 0.75, 2.8% overshoot, settling at
        400ms — sampled into a CSS linear() ramp below so the movement is the
@@ -1028,10 +1048,13 @@ body.no-glass .sidebar.frost {
   content: "";
   position: absolute;
   top: 4px;
+  bottom: 4px;
   left: 0;
-  height: calc(100% - 8px);
-  width: var(--tab-w, 0);
-  transform: translateX(var(--tab-x, 0));
+  /* Kokonut animates the pill to `width - 8` at `left + 4`, i.e. inset 4px on
+     each side of the tab it sits under. The JS reports the raw tab box; the
+     inset is applied here so the measurement stays a plain geometry read. */
+  width: calc(var(--tab-w, 0) - 8px);
+  transform: translateX(calc(var(--tab-x, 0) + 4px));
   border-radius: var(--r-md);
   background: var(--accent);
   box-shadow: 0 1px 2px rgba(5, 10, 20, .18), 0 2px 8px rgba(255, 122, 26, .22);
