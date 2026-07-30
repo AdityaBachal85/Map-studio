@@ -1,10 +1,17 @@
 /* main.css — import order mirrors the original single-file <style> block exactly.
-   Do not reorder: later sections (print/mobile) must override earlier ones. */
-@import './themes.css';
-@import './style.css';
-@import './map.css';
-@import './sidebar.css';
-@import './components.css';
-@import './layout.css';
+   Do not reorder: later sections (print/mobile) must override earlier ones.
+
+   THE ?v= ON EACH IMPORT IS LOAD-BEARING. index.html asks for main.css?v=N, so
+   this file busts on every release — but an @import without its own query is a
+   separate request the browser is free to keep serving from cache. That is not
+   theoretical: a whole release's worth of CSS shipped invisibly this way, and it
+   surfaced as a popup button nobody could see, because the sheet that styled it
+   never arrived while the markup and scripts did. Bump these with the version. */
+@import './themes.css?v=5.0023';
+@import './style.css?v=5.0023';
+@import './map.css?v=5.0023';
+@import './sidebar.css?v=5.0023';
+@import './components.css?v=5.0023';
+@import './layout.css?v=5.0023';
 /* Polish layer — must stay last so it can refine the sheets above it. */
-@import './refine.css';
+@import './refine.css?v=5.0023';

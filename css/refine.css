@@ -1973,18 +1973,28 @@ input[type=tel] {
 }
 
 /* The popup on a discovered place. Leaflet's default popup chrome is white and
-   square; this matches the app's surfaces in both themes. */
+   square; this matches the app's surfaces in both themes.
+
+   --surface-solid, not --panel. There is no --panel token in this codebase, and
+   `background: var(--panel)` is invalid at computed-value time, which resolves to
+   *transparent* rather than to anything inherited. The popup therefore drew its
+   text straight onto the map with no surface behind it — the reason the add
+   button "wasn't visible". An opaque surface is also the right call regardless:
+   the popup sits over arbitrary satellite imagery. */
 .nearby-pop .leaflet-popup-content-wrapper {
-  background: var(--panel);
+  background: var(--surface-solid);
   color: var(--text);
-  border: 1px solid var(--stroke2);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+  box-shadow: var(--elev-3, 0 10px 28px rgba(0, 0, 0, .35));
 }
 .nearby-pop .leaflet-popup-tip {
-  background: var(--panel);
-  border-left: 1px solid var(--stroke2);
-  border-bottom: 1px solid var(--stroke2);
+  background: var(--surface-solid);
+  border-left: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+}
+.nearby-pop .leaflet-popup-close-button {
+  color: var(--dim);
 }
 .nearby-pop .leaflet-popup-content {
   margin: 10px 12px;
@@ -2002,15 +2012,32 @@ input[type=tel] {
   margin-bottom: 8px;
   white-space: normal;
 }
-.np-pop-add {
+/* Explicit colours rather than the ones .btn inherits. .btn is built for the
+   app's dark sidebar — `color: var(--text)` over a 5% white wash — and a Leaflet
+   popup is not that surface. When this sheet was being served stale the button
+   fell back to light text on Leaflet's white default and vanished; stating the
+   colours here means it reads on whatever surface it lands on. */
+/* Scoped with .nearby-pop deliberately. themes.css carries
+   `:root[data-theme="light"] .btn { background: … }` at specificity (0,2,0),
+   which outranks a bare `.np-pop-add` and stripped the orange fill in light mode
+   — leaving a pale button on a pale surface. This matches that weight. */
+.leaflet-popup.nearby-pop .np-pop-add {
   font-size: 11px;
-  padding: 6px 10px;
+  padding: 7px 10px;
+  /* Fixed ink, not var(--accent-ink): that token is the orange itself in dark
+     mode, which on an orange fill is orange on orange. #2A1200 on #FF7A1A
+     measures 6.8:1 — past AA, and the same in both themes since --accent is
+     orange in both. White on that orange would be 2.6:1, i.e. a fail. */
+  color: #2A1200;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  font-weight: 800;
 }
-.np-pop-add:hover:not(:disabled) {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 122, 26, .18);
+.leaflet-popup.nearby-pop .np-pop-add:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, .22);
 }
-.np-pop-add.is-added {
+.leaflet-popup.nearby-pop .np-pop-add.is-added {
   color: var(--ok);
   border-color: var(--ok-edge);
   background: var(--ok-soft);
