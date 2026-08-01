@@ -7,21 +7,25 @@
  * single place that logs usage into the ledger — so no agent has to
  * remember to do its own accounting, and the count stays exact.
  *
- * MODEL NAMES AND FALLBACK CHOICE ARE PLACEHOLDERS — verify the current
- * Gemini model lineup, names, and free-tier ceilings before deploying; these
- * change over time and this file is the one place to update them.
+ * Model names were live-verified against the Gemini API on 2026-08-01 (a
+ * direct `models.list()` call plus real `generateContent` probes) —
+ * `gemini-2.5-flash`, the prior placeholder, now 404s with "no longer
+ * available to new users" even though it's still listed. `-latest` aliases
+ * are what Google funnels new callers to and are the more deprecation-
+ * resistant choice for a deploy-and-forget app; re-verify with the same
+ * approach (list + probe, not just checking the docs) if it's been a while.
  */
 const { GoogleGenAI } = require('@google/genai');
 const ledger = require('./ledger');
 
 /** Model tier per task — see the file header on verifying these before deploy. */
 const MODEL_BY_TASK = {
-  research: 'gemini-2.5-flash',  // grounded search, moderate reasoning
-  write: 'gemini-2.5-flash',     // synthesis over already-gathered evidence, no grounding
-  chat: 'gemini-2.5-flash',      // usually cheap lookups against existing evidence
+  research: 'gemini-flash-latest',  // grounded search, moderate reasoning
+  write: 'gemini-flash-latest',     // synthesis over already-gathered evidence, no grounding
+  chat: 'gemini-flash-latest',      // usually cheap lookups against existing evidence
 };
 
-/** Tried once if the primary model for a task reports its quota exhausted. */
+/** Tried once if the primary model for a task reports its quota exhausted. A distinct, explicitly-versioned model (not another `-latest` alias) so it isn't sharing the same quota bucket as the primary. */
 const FALLBACK_MODEL = 'gemini-2.0-flash';
 
 let _client = null;
@@ -34,10 +38,17 @@ function client() {
   return _client;
 }
 
-/** @param {*} e @returns {boolean} best-effort detection of a quota/rate-limit error. */
+/**
+ * @param {*} e @returns {boolean} best-effort detection of an error worth
+ * retrying on the fallback model — quota/rate-limit, or the primary model
+ * having been deprecated out from under a pinned name server-side (a real,
+ * live-observed failure mode: `gemini-2.5-flash` started 404ing with "no
+ * longer available to new users" while still appearing in `models.list()`).
+ */
 function isQuotaError(e) {
   const msg = String((e && e.message) || e || '').toLowerCase();
-  return msg.includes('quota') || msg.includes('rate limit') || msg.includes('resource_exhausted') || msg.includes('429');
+  return msg.includes('quota') || msg.includes('rate limit') || msg.includes('resource_exhausted') || msg.includes('429')
+    || msg.includes('no longer available') || (msg.includes('404') && msg.includes('not found'));
 }
 
 /**
@@ -51,7 +62,7 @@ async function ask({ task, prompt, grounded }) {
     return await callModel(primaryModel, prompt, grounded);
   } catch (e) {
     if (!isQuotaError(e) || primaryModel === FALLBACK_MODEL) throw e;
-    console.warn(`AI Router: ${primaryModel} quota exhausted for task "${task}", retrying on ${FALLBACK_MODEL}`);
+    console.warn(`AI Router: ${primaryModel} unavailable for task "${task}" (${e.message}), retrying on ${FALLBACK_MODEL}`);
     return await callModel(FALLBACK_MODEL, prompt, grounded);
   }
 }
