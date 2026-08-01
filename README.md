@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v5.0030-blue)
+![Version](https://img.shields.io/badge/version-v6.0001-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,41 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v5.0030 (latest)
+## 🆕 New in v6.0001 (latest)
+
+### AI Reports — a research pipeline behind the map, not inside the browser
+
+A new **AI Reports** tab: tag any location as a **Site ★** (the existing
+Location/Site/Hwy-badge selector on every location card), pick it, and
+generate a location-intelligence report — Executive Summary, Connectivity,
+Government & Upcoming Infrastructure, and Recent News & Local Safety — as a
+downloadable PDF and Word document, plus a follow-up chat for questions
+about that report.
+
+This is deliberately not "the app calls an AI API with a key baked into the
+page" — the Gemini key that does the actual research and writing never
+ships to the browser at all. A small backend (`functions/`, deployed
+separately to Firebase Cloud Functions) runs a **multi-agent pipeline**: a
+Research Planner decides what to research, four specialized agents
+(Connectivity, Infrastructure, Government Projects, News) each research one
+topic with Gemini's Google Search grounding, a Report Writer agent that
+never searches — only synthesizes — turns their findings into the final
+document, and an AI Chat Agent answers follow-ups from that evidence first,
+only spending a fresh search when a question genuinely needs one. The
+backend also owns the real, self-counted "credits used today" figure shown
+in the tab (Gemini's API has no live-quota endpoint to ask, so this is
+counted by the only thing spending against the key — see
+`docs/AI-REPORTS-SETUP.md`), the daily/concurrency caps that keep usage
+inside the free tier, and the 48-hour report expiry.
+
+The client side of this ships in every deploy; the backend is a **separate,
+manual setup** (Firebase + Postgres + Redis + a Gemini key) documented end
+to end in `docs/AI-REPORTS-SETUP.md`. Until that's deployed and
+`AI_FUNCTIONS_BASE_URL` is set in `js/config.js`, the tab is present but
+tells you plainly that it isn't configured yet, rather than failing
+mysteriously.
+
+## 🆕 New in v5.0030
 
 ### Google Maps Platform — search, nearby and routing
 

@@ -45,6 +45,7 @@ wireSaveProject();
 initExportCenter();
 initImportDialog();
 initTabs();
+initAiTab();
 wireOpenProject();
 // Autosave last, so the restore happens after every subsystem it touches
 // (basemaps, brand, drawing) is wired and ready to be handed state.

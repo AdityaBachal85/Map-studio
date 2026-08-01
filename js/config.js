@@ -205,3 +205,19 @@ const PLACES_PROVIDERS = Object.freeze({
   }
 
 });
+
+/**
+ * AI report backend (Cloud Functions) base URL — e.g.
+ * 'https://asia-south1-your-project.cloudfunctions.net'.
+ *
+ * Unlike the keys above, this app never holds a Gemini credential of its
+ * own: the AI Reports tab (js/ui/aiTab.js, js/services/aiReports.js) only
+ * ever talks to this one HTTPS base, and the backend behind it owns the
+ * Gemini key, the research pipeline, and every dollar it can spend. Leave
+ * empty to disable the AI Reports tab — it fails with a clear message
+ * ("not configured yet") rather than a raw network error.
+ *
+ * Deploy the backend first (see docs/AI-REPORTS-SETUP.md), then paste its
+ * URL here.
+ */
+const AI_FUNCTIONS_BASE_URL = '';

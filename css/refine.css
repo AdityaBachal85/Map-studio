@@ -2358,3 +2358,28 @@ input[type=tel] {
   padding: 5px 10px;
   font-size: 11px;
 }
+
+/* AI Reports tab — follow-up chat history. Small, scrollable, same frosted
+   panel language as the rest of the sidebar rather than a bespoke chat skin. */
+.ai-chat-history {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.ai-chat-line {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+.ai-chat-line b {
+  font-weight: 700;
+}
+.ai-chat-ai {
+  color: var(--dim);
+}

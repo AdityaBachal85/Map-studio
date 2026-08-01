@@ -2,6 +2,12 @@ node_modules/
 dist/
 *.log
 
+# Firebase Functions secrets — never commit a live Gemini/Neon/Upstash credential.
+# node_modules/ above already covers functions/node_modules/.
+functions/.env
+functions/.env.*
+functions/.runtimeconfig.json
+
 # Python bytecode cache (generated when .claude/skills/*/scripts/*.py run)
 __pycache__/
 *.pyc

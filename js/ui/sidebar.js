@@ -18,7 +18,7 @@
 
       // ---------- tabs ----------
       // ---------- tabs ----------
-      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnMap', 'paneMap']];
+      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnMap', 'paneMap'], ['tabBtnAI', 'paneAI']];
 
       /** Index of the tab currently shown. */
       const tabIndex = () => TABS.findIndex(([b]) => $(b).classList.contains('active'));
