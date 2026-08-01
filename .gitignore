@@ -2,8 +2,13 @@ node_modules/
 dist/
 *.log
 
-# Firebase Functions secrets — never commit a live Gemini/Neon/Upstash credential.
-# node_modules/ above already covers functions/node_modules/.
+# Backend secrets — never commit a live Gemini or database credential.
+# node_modules/ above already covers server/node_modules/.
+# Both paths are kept: `functions/` was this directory's name before the
+# backend moved off Firebase, and an ignore rule for a stale path costs
+# nothing next to the cost of one un-ignored .env.
+server/.env
+server/.env.*
 functions/.env
 functions/.env.*
 functions/.runtimeconfig.json

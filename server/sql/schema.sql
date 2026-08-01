@@ -50,13 +50,17 @@ CREATE TABLE IF NOT EXISTS reports (
   provider_strategy_note TEXT,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-  pdf_path               TEXT,
-  docx_path              TEXT,
-  pdf_url                TEXT,
-  docx_url               TEXT,
-  -- Drives the signed-URL TTL shown to the user. The Storage bucket lifecycle
-  -- rule (see docs/AI-REPORTS-SETUP.md) is a coarser, day-granular backstop —
-  -- this column is the precise 48h promise the UI actually makes.
+  -- The rendered documents themselves. Storing a few hundred KB inline keeps
+  -- the whole backend on one free-tier service instead of requiring a blob
+  -- store (which, on every major cloud, is the thing that forces a billing
+  -- account). At the daily cap in lib/ledger.js and a 48h retention this tops
+  -- out around 20-40 MB — comfortably inside a free Postgres tier. If reports
+  -- ever grow large or retention lengthens, this is the seam to swap for
+  -- object storage: only lib/storage.js reads or writes these columns.
+  pdf_bytes              BYTEA,
+  docx_bytes             BYTEA,
+  -- Set to NULL by the expiry sweep once the files are dropped, so a report
+  -- row survives (for the Evidence Store and reuse) after its downloads don't.
   expires_at             TIMESTAMPTZ,
   error                  TEXT
 );
@@ -79,6 +83,20 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 CREATE INDEX IF NOT EXISTS idx_agent_runs_report ON agent_runs (report_id);
 -- The Project Context Agent's "reuse recent evidence for this site" query.
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_name ON agent_runs (agent_name, started_at DESC);
+
+-- Upgrade path for a database created before reports carried their files
+-- inline (the original design uploaded to Cloud Storage and kept only URLs).
+-- Harmless on a fresh database.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_bytes BYTEA;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS docx_bytes BYTEA;
+ALTER TABLE reports DROP COLUMN IF EXISTS pdf_path;
+ALTER TABLE reports DROP COLUMN IF EXISTS docx_path;
+ALTER TABLE reports DROP COLUMN IF EXISTS pdf_url;
+ALTER TABLE reports DROP COLUMN IF EXISTS docx_url;
+
+-- The expiry sweep's query: find reports whose files are past their TTL but
+-- haven't been cleared yet.
+CREATE INDEX IF NOT EXISTS idx_reports_expiry ON reports (expires_at) WHERE expires_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS usage_ledger (
   date               DATE NOT NULL,
