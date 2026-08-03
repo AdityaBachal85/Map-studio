@@ -156,7 +156,7 @@ const BASEMAP_CATALOGUE = {
     provider: 'esri', credit: ESRI_HYBRID_CREDIT, imagery: true, corsSafe: true,
     thumb: 'linear-gradient(150deg,#2e4a2a,#6a7f4a 45%,#8a9a63)',
     layers: [
-      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true, role: 'imagery' },
+      { url: esri('World_Imagery'), zIndex: 1, maxNative: 20, retina: true, adaptive: true, role: 'imagery' },
       { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true, role: 'reference' },
       { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true, role: 'reference' },
     ],
@@ -167,7 +167,7 @@ const BASEMAP_CATALOGUE = {
     provider: 'esri', credit: ESRI_IMAGERY_CREDIT, imagery: true, corsSafe: true,
     thumb: 'linear-gradient(150deg,#26402a,#4f6b3c 50%,#7d8f5c)',
     layers: [
-      { url: esri('World_Imagery'), zIndex: 1, maxNative: 21, retina: true, adaptive: true, role: 'imagery' },
+      { url: esri('World_Imagery'), zIndex: 1, maxNative: 20, retina: true, adaptive: true, role: 'imagery' },
     ],
   },
 

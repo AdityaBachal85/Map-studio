@@ -386,7 +386,13 @@
             pctx.drawImage(ev.tile, 0, 0, 8, 8);
             flat = looksLikeNoDataTile(cornerSamples());
           } catch (e) {
-            disabled = true;                                        // tainted canvas — stop probing
+            // Tainted canvas — the tile loaded without CORS, so its pixels
+            // cannot be read and this layer can never be probed again.
+            // Logged rather than swallowed: it is indistinguishable from
+            // "working fine" at the map, and it silently disables the only
+            // thing that recovers from a service running out of coverage.
+            disabled = true;
+            console.warn('[basemap] depth probe disabled — tile pixels unreadable (CORS):', e && e.message);
             return;
           }
           if (!flat) { strikes = 0; return; }
@@ -398,7 +404,13 @@
           if (++strikes < 2) return;
           strikes = 0;
           const next = layer.options.maxNativeZoom - 1;
-          if (next < floor) { disabled = true; return; }
+          if (next < floor) {
+            disabled = true;
+            console.warn('[basemap] depth probe hit its floor at z' + floor + ' and still sees no-data tiles');
+            return;
+          }
+          console.log('[basemap] no imagery at z' + (layer.options.maxNativeZoom + (layer.options.zoomOffset || 0))
+            + ' — dropping native depth to z' + next);
           layer.options.maxNativeZoom = next;
           layer.redraw();
         });
