@@ -26,6 +26,58 @@ const COLOR_PRESETS = [
 let presetPopover = null;
 let presetCleanup = null;
 
+/** Pipette glyph for the eyedropper button — stroked so it inherits text colour. */
+const DROPPER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+  + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/>'
+  + '<path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4Z"/>'
+  + '</svg>';
+
+/**
+ * Sample a colour from anywhere on screen with the browser's eyedropper.
+ *
+ * The map is the whole point of this. A pin colour that has to sit against a
+ * particular road, roof, coastline or shade of water is a judgement about
+ * what is already on screen, and matching it through a hex field is guesswork
+ * — you end up nudging RGB values and re-checking, which is exactly the loop
+ * the picker exists to remove.
+ *
+ * The popover hides for the duration: it is drawn over part of the map, and
+ * the eyedropper reads real screen pixels, so anything it covers would
+ * otherwise be unreachable. The hide waits two frames so the browser's live
+ * capture starts from a frame the popover is no longer in — the click's user
+ * activation lasts seconds, so the delay costs nothing.
+ *
+ * @param {HTMLElement} pop the open popover
+ * @returns {Promise<string|null>} `#rrggbb`, or null if cancelled or unavailable
+ */
+function pickFromScreen(pop) {
+  pop._sampling = true;                    // suspend outside-click/Escape dismissal
+  pop.style.visibility = 'hidden';
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(async () => {
+      let hex = null;
+      try {
+        const res = await new window.EyeDropper().open();
+        hex = res && res.sRGBHex;
+      } catch (err) {
+        // Escape, or a click outside the browser window, rejects with
+        // AbortError — that is a cancel, not a failure, and saying anything
+        // about it would be noise. Anything else is worth reporting: the API
+        // also refuses outside a secure context, which is silent otherwise.
+        if (!err || err.name !== 'AbortError') status('Could not open the eyedropper here.');
+      }
+      pop.style.visibility = '';
+      // Cleared a tick late in case the browser lets the selecting click
+      // through to the page — it would otherwise land as an outside click and
+      // close the picker the instant a colour was chosen.
+      setTimeout(() => { pop._sampling = false; }, 0);
+      resolve(hex || null);
+    }));
+  });
+}
+
 /**
  * Turn one `<input type="color">` into a swatch that opens this picker.
  *
@@ -109,12 +161,21 @@ function renderCustomPicker(pop, current, onPick) {
   const rgb = hexToRgb(current) || { r: 255, g: 122, b: 26 };
   let { h, s, v } = rgbToHsv(rgb.r, rgb.g, rgb.b);
 
+  // Chromium-only API. Rendering the button unconditionally would leave
+  // Firefox and Safari users with a control that does nothing, so it is only
+  // built where it works — and the fields grid narrows to match.
+  const canSample = typeof window.EyeDropper === 'function';
+
   pop.classList.add('cp-custom-mode');
   pop.innerHTML =
     '<div class="cp-sv" tabindex="0"><div class="cp-sv-thumb"></div></div>'
     + '<div class="cp-hue"><div class="cp-hue-thumb"></div></div>'
-    + '<div class="cp-fields">'
+    + '<div class="cp-fields' + (canSample ? ' has-dropper' : '') + '">'
     + '<span class="cp-preview"></span>'
+    + (canSample
+      ? '<button type="button" class="cp-dropper" title="Pick a colour off the map"'
+        + ' aria-label="Pick a colour off the map">' + DROPPER_SVG + '</button>'
+      : '')
     + '<input class="cp-hex" type="text" spellcheck="false" maxlength="7" aria-label="Hex colour">'
     + '<input class="cp-n" data-ch="r" type="number" min="0" max="255" aria-label="Red">'
     + '<input class="cp-n" data-ch="g" type="number" min="0" max="255" aria-label="Green">'
@@ -210,6 +271,16 @@ function renderCustomPicker(pop, current, onPick) {
     sync('rgb');
   }));
 
+  const dropper = pop.querySelector('.cp-dropper');
+  if (dropper) dropper.addEventListener('click', async () => {
+    const picked = await pickFromScreen(pop);
+    const c = picked && hexToRgb(picked);
+    if (!c) return;                       // cancelled
+    const hsv = rgbToHsv(c.r, c.g, c.b);
+    h = hsv.h; s = hsv.s; v = hsv.v;
+    sync();
+  });
+
   pop.querySelector('.cp-back').addEventListener('click', () => {
     closeColorPresets();
     openColorPresets(pop._anchor, hsvToHex(h, s, v), onPick);
@@ -279,9 +350,14 @@ function openColorPresets(anchor, current, onPick) {
     place();
   });
 
-  // Dismiss on outside click or Escape.
-  const onDocDown = e => { if (!pop.contains(e.target) && e.target !== anchor) closeColorPresets(); };
-  const onKey = e => { if (e.key === 'Escape') closeColorPresets(); };
+  // Dismiss on outside click or Escape — except while the eyedropper is up,
+  // where a click anywhere on screen is the gesture and Escape cancels it.
+  // Both would otherwise tear the picker down mid-sample.
+  const onDocDown = e => {
+    if (pop._sampling) return;
+    if (!pop.contains(e.target) && e.target !== anchor) closeColorPresets();
+  };
+  const onKey = e => { if (!pop._sampling && e.key === 'Escape') closeColorPresets(); };
 
   // A scroll *follows* the anchor rather than dismissing. Closing on any
   // scroll looked reasonable and was not: focusing the hex field scrolls it

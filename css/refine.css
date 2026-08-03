@@ -2772,8 +2772,15 @@ input[type=tel] {
   align-items: center;
 }
 
+/* The eyedropper takes a column of its own beside the preview, so the swatch
+   you are matching sits right next to the tool that matches it. */
+.cp-fields.has-dropper {
+  grid-template-columns: 26px 26px 1fr 1fr 1fr;
+}
+
 .cp-preview {
   grid-row: 1 / 3;
+  grid-column: 1;
   width: 26px;
   height: 100%;
   min-height: 26px;
@@ -2781,7 +2788,46 @@ input[type=tel] {
   border: 1px solid rgba(128, 138, 155, .5);
 }
 
+.cp-dropper {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  width: 26px;
+  height: 100%;
+  min-height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--stroke2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--dim);
+  cursor: pointer;
+}
+
+:root[data-theme="light"] .cp-dropper {
+  background: rgba(16, 32, 60, .04);
+}
+
+.cp-dropper svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cp-dropper:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+.cp-dropper:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
 .cp-hex {
+  grid-column: 3 / -1;
+}
+
+.cp-fields:not(.has-dropper) .cp-hex {
   grid-column: 2 / -1;
 }
 

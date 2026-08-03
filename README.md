@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0021-blue)
+![Version](https://img.shields.io/badge/version-v6.0022-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0021 (latest)
+## 🆕 New in v6.0022 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -74,6 +74,33 @@ Also in this release: **Nearby search radius now goes up to 20 km** (was
 5 km). Five kilometres is fine for schools and shops, but too tight for the
 things people actually check a site against — the nearest airport, a highway
 junction, an IT park.
+
+### Deleting a location is no longer permanent
+
+Removing a pin silently took every route running to or from it, each of which
+cost a routing request and whatever manual work went into its colour, label
+and via points. There was no confirmation and no way back — one misclick on
+the × could undo an hour.
+
+Now the delete offers **Undo** in the status line, and taking it puts the
+location and all its routes back exactly as they were, geometry included, so
+nothing is re-routed and nothing is re-numbered. Route cards have the same
+undo on their own ×. An undo rather than an "are you sure?" is deliberate: a
+confirmation interrupts every delete, including the ones you meant, and
+people learn to dismiss it without reading.
+
+### Eyedropper: match a colour to what's already on the map
+
+Every colour control in the app opens the in-app picker, and its custom mode
+now has an **eyedropper** — click it, then click anywhere on screen, and the
+colour under the cursor becomes the pin, route, ring or label colour.
+
+Picking a colour for a map is a judgement about what is already on the map:
+this pin has to read against that road, that roof, that water. Matching that
+by nudging RGB fields is guesswork. The picker hides itself while you sample,
+so the part of the map it was covering is reachable too. Chromium-only for
+now (the eyedropper is a browser API); the button simply isn't drawn in
+browsers that don't have it.
 
 ## 🆕 New in v5.0030
 
