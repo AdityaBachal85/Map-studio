@@ -18,7 +18,11 @@
 
       // ---------- tabs ----------
       // ---------- tabs ----------
-      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnMap', 'paneMap'], ['tabBtnAI', 'paneAI']];
+      // AI Reports is deliberately not here: it lives on the map as #aiBtn /
+      // #aiPanel (see ui/aiTab.js). A sixth tab pushed every label to
+      // truncation in this bar, and a report is about one place on the map, so
+      // it reads better as a map control than as a sidebar tab.
+      const TABS = [['tabBtnLoc', 'paneLoc'], ['tabBtnRt', 'paneRt'], ['tabBtnDraw', 'paneDraw'], ['tabBtnNearby', 'paneNearby'], ['tabBtnMap', 'paneMap']];
 
       /** Index of the tab currently shown. */
       const tabIndex = () => TABS.findIndex(([b]) => $(b).classList.contains('active'));

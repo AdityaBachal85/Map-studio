@@ -675,6 +675,7 @@ body.no-glass .sidebar.frost {
 /* Floating map controls read as small panes of the same material. */
 #bmPanel,
 #layerPanel,
+#aiPanel,
 .search-box .inner,
 .search-results {
   box-shadow: var(--glass-highlight), var(--elev-3);

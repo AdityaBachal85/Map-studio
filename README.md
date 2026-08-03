@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0002-blue)
+![Version](https://img.shields.io/badge/version-v6.0003-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,16 +28,22 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0002 (latest)
+## 🆕 New in v6.0003 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
-A new **AI Reports** tab: tag any location as a **Site ★** (the existing
-Location/Site/Hwy-badge selector on every location card), pick it, and
-generate a location-intelligence report — Executive Summary, Connectivity,
-Government & Upcoming Infrastructure, and Recent News & Local Safety — as a
-downloadable PDF and Word document, plus a follow-up chat for questions
-about that report.
+A new **AI Reports** panel, opened from the ✦ button in the map's control
+stack (under Fullscreen and Layers): tag any location as a **Site ★** (the
+existing Location/Site/Hwy-badge selector on every location card), pick it,
+and generate a location-intelligence report — Executive Summary,
+Connectivity, Government & Upcoming Infrastructure, and Recent News & Local
+Safety — as a downloadable PDF and Word document, plus a follow-up chat for
+questions about that report.
+
+It lives on the map rather than in the sidebar tab bar for two reasons: a
+sixth tab pushed every label in that bar to truncation, and a report is about
+one specific place on the map, which makes a map control the more natural
+home for it.
 
 This is deliberately not "the app calls an AI API with a key baked into the
 page" — the Gemini key that does the actual research and writing never
@@ -50,7 +56,7 @@ never searches — only synthesizes — turns their findings into the final
 document, and an AI Chat Agent answers follow-ups from that evidence first,
 only spending a fresh search when a question genuinely needs one. The
 backend also owns the real, self-counted "credits used today" figure shown
-in the tab (Gemini's API has no live-quota endpoint to ask, so this is
+in the panel (Gemini's API has no live-quota endpoint to ask, so this is
 counted by the only thing spending against the key — see
 `docs/AI-REPORTS-SETUP.md`), the daily/concurrency caps that keep usage
 inside the free tier, and the 48-hour report expiry.
@@ -60,9 +66,14 @@ manual setup** — Supabase (Postgres) + Render + a Gemini key, all free tiers
 with no credit card — documented end to end in `docs/AI-REPORTS-SETUP.md`.
 It's a plain Express app with no cloud-specific code, so any Postgres and any
 Node host work equally well. Until it's deployed and
-`AI_FUNCTIONS_BASE_URL` is set in `js/config.js`, the tab is present but
+`AI_FUNCTIONS_BASE_URL` is set in `js/config.js`, the panel is present but
 tells you plainly that it isn't configured yet, rather than failing
 mysteriously.
+
+Also in this release: **Nearby search radius now goes up to 20 km** (was
+5 km). Five kilometres is fine for schools and shops, but too tight for the
+things people actually check a site against — the nearest airport, a highway
+junction, an IT park.
 
 ## 🆕 New in v5.0030
 

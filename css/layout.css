@@ -38,6 +38,8 @@
     .map-wrap.capturing #fsBtn,
     .map-wrap.capturing #layerBtn,
     .map-wrap.capturing #layerPanel,
+    .map-wrap.capturing #aiBtn,
+    .map-wrap.capturing #aiPanel,
     .map-wrap.capturing #basemapSwitcher,
     .map-wrap.capturing #clickHint,
     .map-wrap.capturing .leaflet-control-zoom,
@@ -115,6 +117,8 @@
       #fsBtn,
       #layerBtn,
       #layerPanel,
+      #aiBtn,
+      #aiPanel,
       #basemapSwitcher,
       #clickHint,
       .leaflet-control-zoom {

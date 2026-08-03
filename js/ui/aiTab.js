@@ -1,13 +1,17 @@
 /**
- * ui/aiTab.js — the AI Reports tab: pick a Site, generate a multi-section
- * report from the backend's agent pipeline (see server/), and ask
- * follow-up questions against it once it exists.
+ * ui/aiTab.js — AI Reports: pick a Site, generate a multi-section report from
+ * the backend's agent pipeline (see server/), and ask follow-up questions
+ * against it once it exists.
  *
- * Owns its own tab-button click listener rather than reaching into
- * ui/sidebar.js's internals, matching the pattern the rest of the app uses
- * for feature-specific triggers (wirePptxExport(), wireSaveProject() in
- * app.js) — sidebar.js only needs one new entry in its TABS array to make the
- * pane itself switchable; everything this tab actually does lives here.
+ * Presented as a floating map panel (#aiBtn / #aiPanel) rather than a sidebar
+ * tab. Two reasons: a sixth tab truncated every label in that bar, and a
+ * report is about one specific place on the map, which makes a map control the
+ * more natural home. It follows #layerBtn / #layerPanel exactly — same stack,
+ * same panel chrome, same toggle behaviour.
+ *
+ * Owns its own trigger wiring rather than reaching into ui/sidebar.js,
+ * matching the pattern the rest of the app uses for feature-specific triggers
+ * (wirePptxExport(), wireSaveProject() in app.js).
  *
  * A report's id doubles as its job id — createReportJob() returns the same
  * identifier used to poll status and later to ask chat questions about it,
@@ -192,11 +196,36 @@ async function aiSendChat() {
   }
 }
 
+/**
+ * Open the panel, refreshing what it shows.
+ *
+ * The site list is rebuilt on every open rather than kept in sync as
+ * locations change: the panel is closed most of the time, and a list built at
+ * the moment it opens can't drift from the Locations tab.
+ */
+function openAiPanel() {
+  $('aiPanel').hidden = false;
+  $('aiBtn').classList.add('toggled');
+  aiRenderSitePicker();
+  aiRefreshUsage();
+}
+
+function closeAiPanel() {
+  $('aiPanel').hidden = true;
+  $('aiBtn').classList.remove('toggled');
+}
+
 function initAiTab() {
-  const tabBtn = $('tabBtnAI');
-  if (!tabBtn) return;
-  tabBtn.addEventListener('click', () => { aiRenderSitePicker(); aiRefreshUsage(); });
+  const btn = $('aiBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => { $('aiPanel').hidden ? openAiPanel() : closeAiPanel(); });
+  $('aiClose').addEventListener('click', closeAiPanel);
   $('aiGenerateBtn').addEventListener('click', aiGenerateReport);
   $('aiChatSendBtn').addEventListener('click', aiSendChat);
   $('aiChatInput').addEventListener('keydown', e => { if (e.key === 'Enter') aiSendChat(); });
+  // Esc closes it, matching every other dismissible surface in the app. Left
+  // alone while a job runs, so a stray keypress can't hide a report in flight.
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('aiPanel').hidden && !aiCurrentJobId) closeAiPanel();
+  });
 }

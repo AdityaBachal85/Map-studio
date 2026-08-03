@@ -9,10 +9,10 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0002" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0002">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0002">
-  <link rel="stylesheet" href="./css/main.css?v=6.0002">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0003" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0003">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0003">
+  <link rel="stylesheet" href="./css/main.css?v=6.0003">
 </head>
 
 <body>
@@ -62,6 +62,13 @@
           <polyline points="2 15.5 12 22 22 15.5" />
         </svg>
       </button>
+      <button id="aiBtn" class="frost" title="AI Reports — research a site and generate a report">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.5 13.9 8 19.5 9.9 13.9 11.8 12 17.3 10.1 11.8 4.5 9.9 10.1 8 Z" />
+          <path d="M18.5 15.5 19.3 17.7 21.5 18.5 19.3 19.3 18.5 21.5 17.7 19.3 15.5 18.5 17.7 17.7 Z" />
+        </svg>
+      </button>
       <div id="layerPanel" class="frost" hidden>
         <div class="lp-head">
           <span class="lp-title">Layers</span>
@@ -73,6 +80,45 @@
         <div id="lpBody"></div>
         <div id="lpEmpty" class="lp-empty">Nothing on the map yet — add locations, routes or shapes and they'll appear
           here.</div>
+      </div>
+      <div id="aiPanel" class="frost" hidden>
+        <div class="lp-head">
+          <span class="lp-title">AI Reports</span>
+          <button id="aiClose" title="Close">&times;</button>
+        </div>
+        <div id="aiPanelBody">
+        <div class="field">
+          <div class="lbl">Generate a report</div>
+          <div class="stack">
+            <select id="aiSitePicker" class="grow"></select>
+            <button class="btn btn-primary btn-block" id="aiGenerateBtn">Generate report</button>
+            <div class="sub" id="aiUsageLine" style="white-space:normal;line-height:1.5;"></div>
+            <div class="sub" style="white-space:normal;line-height:1.5;">Researches connectivity, upcoming
+              infrastructure &amp; government projects, and local news around a location tagged
+              <b>Site ★</b> in the Locations tab, then delivers a PDF and Word report.</div>
+          </div>
+        </div>
+        <div class="field" id="aiResults" style="display:none;">
+          <div class="lbl">Report</div>
+          <div class="stack">
+            <div class="act-group act-1">
+              <a class="btn btn-block" id="aiPdfLink" target="_blank" rel="noopener">Download PDF</a>
+              <a class="btn btn-block btn-ghost" id="aiDocxLink" target="_blank" rel="noopener">Download Word (.docx)</a>
+            </div>
+            <div class="sub" id="aiExpiryLine" style="white-space:normal;line-height:1.5;"></div>
+          </div>
+        </div>
+        <div class="field" id="aiChatField" style="display:none;">
+          <div class="lbl">Ask about this report</div>
+          <div class="stack">
+            <div id="aiChatHistory" class="ai-chat-history"></div>
+            <div class="np-search">
+              <input type="text" id="aiChatInput" autocomplete="off" placeholder="e.g. how does this compare with Pune?">
+              <button class="btn" id="aiChatSendBtn" type="button">Ask</button>
+            </div>
+          </div>
+        </div>
+        </div>
       </div>
       <div id="northArrow"><svg viewBox="0 0 36 36" width="36" height="36">
           <circle cx="18" cy="18" r="16.5" fill="rgba(12,19,35,.85)" stroke="rgba(255,255,255,.18)" stroke-width="1" />
@@ -124,7 +170,6 @@
         <button id="tabBtnDraw">Draw</button>
         <button id="tabBtnNearby">Nearby</button>
         <button id="tabBtnMap">Settings</button>
-        <button id="tabBtnAI">AI Reports</button>
       </nav>
       <div class="panes">
 
@@ -231,8 +276,11 @@
               <div class="act-group act-1">
                 <button class="btn btn-block" id="nearbyCenterBtn">📍 Search around map centre</button>
               </div>
+              <!-- Up to 20 km: a 5 km ceiling is fine for schools and shops, but
+                   too tight for the things people actually check a site against —
+                   the nearest airport, a highway junction, an IT park. -->
               <div class="inline-ctl"><span class="sub">Radius</span><input type="range" id="nearbyRadius" min="500"
-                  max="5000" step="250" value="2000"><span class="val" id="nearbyRadiusVal">2.0 km</span></div>
+                  max="20000" step="500" value="2000"><span class="val" id="nearbyRadiusVal">2.0 km</span></div>
               <div class="sub" style="white-space:normal;line-height:1.5;">Pan the map to your area and hit "Search around
                 map centre", then toggle categories to drop nearby places. Each category loads on first tap and can be
                 switched off again.</div>
@@ -342,39 +390,6 @@
 
         </section>
 
-        <section id="paneAI" class="pane">
-          <div class="field">
-            <div class="lbl">Generate a report</div>
-            <div class="stack">
-              <select id="aiSitePicker" class="grow"></select>
-              <button class="btn btn-primary btn-block" id="aiGenerateBtn">Generate report</button>
-              <div class="sub" id="aiUsageLine" style="white-space:normal;line-height:1.5;"></div>
-              <div class="sub" style="white-space:normal;line-height:1.5;">Researches connectivity, upcoming
-                infrastructure &amp; government projects, and local news around a location tagged
-                <b>Site ★</b> in the Locations tab, then delivers a PDF and Word report.</div>
-            </div>
-          </div>
-          <div class="field" id="aiResults" style="display:none;">
-            <div class="lbl">Report</div>
-            <div class="stack">
-              <div class="act-group act-1">
-                <a class="btn btn-block" id="aiPdfLink" target="_blank" rel="noopener">Download PDF</a>
-                <a class="btn btn-block btn-ghost" id="aiDocxLink" target="_blank" rel="noopener">Download Word (.docx)</a>
-              </div>
-              <div class="sub" id="aiExpiryLine" style="white-space:normal;line-height:1.5;"></div>
-            </div>
-          </div>
-          <div class="field" id="aiChatField" style="display:none;">
-            <div class="lbl">Ask about this report</div>
-            <div class="stack">
-              <div id="aiChatHistory" class="ai-chat-history"></div>
-              <div class="np-search">
-                <input type="text" id="aiChatInput" autocomplete="off" placeholder="e.g. how does this compare with Pune?">
-                <button class="btn" id="aiChatSendBtn" type="button">Ask</button>
-              </div>
-            </div>
-          </div>
-        </section>
 
       </div>
       <div id="statusMsg"></div>
@@ -704,80 +719,80 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0002"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0002"></script>
-  <script src="./vendor/html2canvas.js?v=6.0002"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0002"></script>
-  <script src="./vendor/jszip.js?v=6.0002"></script>
-  <script src="./vendor/anime.min.js?v=6.0002"></script>
+  <script src="./vendor/leaflet.js?v=6.0003"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0003"></script>
+  <script src="./vendor/html2canvas.js?v=6.0003"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0003"></script>
+  <script src="./vendor/jszip.js?v=6.0003"></script>
+  <script src="./vendor/anime.min.js?v=6.0003"></script>
 
-  <script src="./js/core/prefs.js?v=6.0002"></script>
-  <script src="./js/constants.js?v=6.0002"></script>
-  <script src="./js/utils/dom.js?v=6.0002"></script>
-  <script src="./js/export/exportPDF.js?v=6.0002"></script>
-  <script src="./js/export/captureMap.js?v=6.0002"></script>
-  <script src="./js/core/state.js?v=6.0002"></script>
-  <script src="./js/map/icons.js?v=6.0002"></script>
-  <script src="./js/config.js?v=6.0002"></script>
-  <script src="./js/ui/notifications.js?v=6.0002"></script>
-  <script src="./js/utils/math.js?v=6.0002"></script>
-  <script src="./js/map/billboard.js?v=6.0002"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0002"></script>
-  <script src="./js/ui/dialogs.js?v=6.0002"></script>
-  <script src="./js/utils/colors.js?v=6.0002"></script>
-  <script src="./js/utils/animate.js?v=6.0002"></script>
-  <script src="./js/map/routes.js?v=6.0002"></script>
-  <script src="./js/map/markers.js?v=6.0002"></script>
-  <script src="./js/map/snapping.js?v=6.0002"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0002"></script>
-  <script src="./js/map/providerKeys.js?v=6.0002"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0002"></script>
-  <script src="./js/map/googleTiles.js?v=6.0002"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0002"></script>
-  <script src="./js/map/mapEngine.js?v=6.0002"></script>
-  <script src="./js/export/hiResRender.js?v=6.0002"></script>
-  <script src="./js/export/exportPNG.js?v=6.0002"></script>
-  <script src="./js/export/pptUtils.js?v=6.0002"></script>
-  <script src="./js/export/pptValidation.js?v=6.0002"></script>
-  <script src="./js/export/pptShapes.js?v=6.0002"></script>
-  <script src="./js/export/pptImages.js?v=6.0002"></script>
-  <script src="./js/export/pptLabels.js?v=6.0002"></script>
-  <script src="./js/export/pptTables.js?v=6.0002"></script>
-  <script src="./js/export/exportPPT.js?v=6.0002"></script>
-  <script src="./js/services/places.js?v=6.0002"></script>
-  <script src="./js/services/google.js?v=6.0002"></script>
-  <script src="./js/services/geoapify.js?v=6.0002"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0002"></script>
-  <script src="./js/services/geocoder.js?v=6.0002"></script>
-  <script src="./js/services/aiReports.js?v=6.0002"></script>
-  <script src="./js/ui/searchBox.js?v=6.0002"></script>
-  <script src="./js/ui/sliders.js?v=6.0002"></script>
-  <script src="./js/ui/tooltips.js?v=6.0002"></script>
-  <script src="./js/ui/toolbar.js?v=6.0002"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0002"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0002"></script>
-  <script src="./js/map/drawing.js?v=6.0002"></script>
-  <script src="./js/map/markerCluster.js?v=6.0002"></script>
-  <script src="./js/map/nearby.js?v=6.0002"></script>
-  <script src="./js/project/geojson.js?v=6.0002"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0002"></script>
-  <script src="./js/project/xlsx.js?v=6.0002"></script>
-  <script src="./js/project/importSheet.js?v=6.0002"></script>
-  <script src="./js/project/kml.js?v=6.0002"></script>
+  <script src="./js/core/prefs.js?v=6.0003"></script>
+  <script src="./js/constants.js?v=6.0003"></script>
+  <script src="./js/utils/dom.js?v=6.0003"></script>
+  <script src="./js/export/exportPDF.js?v=6.0003"></script>
+  <script src="./js/export/captureMap.js?v=6.0003"></script>
+  <script src="./js/core/state.js?v=6.0003"></script>
+  <script src="./js/map/icons.js?v=6.0003"></script>
+  <script src="./js/config.js?v=6.0003"></script>
+  <script src="./js/ui/notifications.js?v=6.0003"></script>
+  <script src="./js/utils/math.js?v=6.0003"></script>
+  <script src="./js/map/billboard.js?v=6.0003"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0003"></script>
+  <script src="./js/ui/dialogs.js?v=6.0003"></script>
+  <script src="./js/utils/colors.js?v=6.0003"></script>
+  <script src="./js/utils/animate.js?v=6.0003"></script>
+  <script src="./js/map/routes.js?v=6.0003"></script>
+  <script src="./js/map/markers.js?v=6.0003"></script>
+  <script src="./js/map/snapping.js?v=6.0003"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0003"></script>
+  <script src="./js/map/providerKeys.js?v=6.0003"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0003"></script>
+  <script src="./js/map/googleTiles.js?v=6.0003"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0003"></script>
+  <script src="./js/map/mapEngine.js?v=6.0003"></script>
+  <script src="./js/export/hiResRender.js?v=6.0003"></script>
+  <script src="./js/export/exportPNG.js?v=6.0003"></script>
+  <script src="./js/export/pptUtils.js?v=6.0003"></script>
+  <script src="./js/export/pptValidation.js?v=6.0003"></script>
+  <script src="./js/export/pptShapes.js?v=6.0003"></script>
+  <script src="./js/export/pptImages.js?v=6.0003"></script>
+  <script src="./js/export/pptLabels.js?v=6.0003"></script>
+  <script src="./js/export/pptTables.js?v=6.0003"></script>
+  <script src="./js/export/exportPPT.js?v=6.0003"></script>
+  <script src="./js/services/places.js?v=6.0003"></script>
+  <script src="./js/services/google.js?v=6.0003"></script>
+  <script src="./js/services/geoapify.js?v=6.0003"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0003"></script>
+  <script src="./js/services/geocoder.js?v=6.0003"></script>
+  <script src="./js/services/aiReports.js?v=6.0003"></script>
+  <script src="./js/ui/searchBox.js?v=6.0003"></script>
+  <script src="./js/ui/sliders.js?v=6.0003"></script>
+  <script src="./js/ui/tooltips.js?v=6.0003"></script>
+  <script src="./js/ui/toolbar.js?v=6.0003"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0003"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0003"></script>
+  <script src="./js/map/drawing.js?v=6.0003"></script>
+  <script src="./js/map/markerCluster.js?v=6.0003"></script>
+  <script src="./js/map/nearby.js?v=6.0003"></script>
+  <script src="./js/project/geojson.js?v=6.0003"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0003"></script>
+  <script src="./js/project/xlsx.js?v=6.0003"></script>
+  <script src="./js/project/importSheet.js?v=6.0003"></script>
+  <script src="./js/project/kml.js?v=6.0003"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0002"></script>
-  <script src="./js/project/autosave.js?v=6.0002"></script>
-  <script src="./js/project/openProject.js?v=6.0002"></script>
-  <script src="./js/project/saveProject.js?v=6.0002"></script>
-  <script src="./js/ui/sidebar.js?v=6.0002"></script>
-  <script src="./js/ui/aiTab.js?v=6.0002"></script>
-  <script src="./js/ui/layerManager.js?v=6.0002"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0002"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0002"></script>
-  <script src="./js/ui/importDialog.js?v=6.0002"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0002"></script>
-  <script src="./js/app.js?v=6.0002"></script>
+  <script src="./js/project/projectState.js?v=6.0003"></script>
+  <script src="./js/project/autosave.js?v=6.0003"></script>
+  <script src="./js/project/openProject.js?v=6.0003"></script>
+  <script src="./js/project/saveProject.js?v=6.0003"></script>
+  <script src="./js/ui/sidebar.js?v=6.0003"></script>
+  <script src="./js/ui/aiTab.js?v=6.0003"></script>
+  <script src="./js/ui/layerManager.js?v=6.0003"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0003"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0003"></script>
+  <script src="./js/ui/importDialog.js?v=6.0003"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0003"></script>
+  <script src="./js/app.js?v=6.0003"></script>
 </body>
 
 </html>
