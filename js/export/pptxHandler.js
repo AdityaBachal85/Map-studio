@@ -105,7 +105,7 @@
         // into the background picture.
         const paths = mapPathsForExport(map);
 
-        let canvas, renderScale = 1;
+        let canvas, renderScale = 1, tilesComplete = true;
         try {
           // Target ~300 DPI across the 13.333in slide (≈4000px) so the picture
           // is still sharp after PowerPoint scales it to the slide and again
@@ -121,6 +121,7 @@
           });
           canvas = res.canvas;
           renderScale = res.scale;
+          tilesComplete = res.complete !== false;
         } catch (e) {
           status('Could not render the map image for PPTX on this browser — try the PNG export or Chrome/Edge.');
           return;
@@ -169,8 +170,15 @@
           };
           const { log } = await window.DBOTExport.exportDeck(spec, { measurePx, output: 'download' });
           const skipped = (log && log.skipped) ? ' (' + log.skipped + ' invalid object(s) skipped)' : '';
-          status('PPTX downloaded at ' + canvas.width + ' × ' + canvas.height + ' px (' + renderScale.toFixed(1) +
-            '×) — routes, shapes, labels, badges, leader lines, title, table and logo are all native editable objects.' + skipped);
+          if (tilesComplete) {
+            status('PPTX downloaded at ' + canvas.width + ' × ' + canvas.height + ' px (' + renderScale.toFixed(1) +
+              '×) — routes, shapes, labels, badges, leader lines, title, table and logo are all native editable objects.' + skipped);
+          } else {
+            // The slide's map is one flat image, so unloaded tiles are baked in
+            // and cannot be repaired in PowerPoint. Say so, and make it stick.
+            status('PPTX downloaded at ' + canvas.width + ' × ' + canvas.height + ' px, but the imagery did not finish '
+              + 'loading — parts of the map image are dark. Check your connection and export again.' + skipped, true);
+          }
         } catch (e) {
           status('PPTX build failed: ' + (e && e.message ? e.message : 'unknown error') + ' — the PNG export still works.');
         }

@@ -53,8 +53,16 @@ async function runPngExport(scale) {
       a.click();
       URL.revokeObjectURL(a.href);
       const size = canvas.width + ' × ' + canvas.height + ' px';
-      const partial = res.complete ? '' : ' Some tiles were still loading — re-export for full detail.';
-      status('PNG downloaded at ' + size + (tiltDeg > 0 ? ' with the 3D perspective applied.' : '.') + partial);
+      if (res.complete) {
+        status('PNG downloaded at ' + size + (tiltDeg > 0 ? ' with the 3D perspective applied.' : '.'));
+      } else {
+        // Sticky, and phrased as what the file actually looks like. This used
+        // to be a tail on the success message that scrolled past in seconds —
+        // so a half-loaded, mostly-dark export read as "the export is broken"
+        // rather than "the imagery did not arrive in time".
+        status('PNG downloaded at ' + size + ' — but the imagery did not finish loading, so parts of the map are dark. '
+          + 'Check your connection and export again.', true);
+      }
     }, 'image/png');
   } catch (e) {
     status('PNG export failed: ' + ((e && e.message) || 'unknown error') + ' — try Print / Save as PDF instead.');

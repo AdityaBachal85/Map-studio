@@ -194,28 +194,60 @@ function mapPathsForExport(m) {
  * Pass A — the offscreen high-resolution ground
  * ------------------------------------------------------------------------- */
 
+/** How often to check whether tiles have stopped arriving, and for how many consecutive checks. */
+const SETTLE_POLL_MS = 250;
+const SETTLE_POLLS = 4;   // ~1s of quiet before calling it done
+
 /**
- * Resolve once every tile layer on a map has finished loading, or when the
- * budget runs out. Leaflet fires `load` per tile layer when its visible tiles
- * are in; layers that had nothing to fetch never fire, hence the timeout.
+ * Resolve once every tile layer has actually painted its tiles, or when the
+ * budget runs out.
+ *
+ * This polls each layer's tile registry rather than listening for Leaflet's
+ * `load` event, because that event was firing early and shipping a
+ * half-painted map. Two ways it went wrong:
+ *
+ *  - `load` fires when the tiles requested *so far* are done. A freshly built
+ *    export map requests a coarse batch first and the deep-zoom batch after,
+ *    so the first `load` arrives with most of the image still missing.
+ *  - The old code also treated `_loading === false` as "settled", which is
+ *    true of a layer that has not begun loading at all — resolving instantly
+ *    on a map that had rendered nothing.
+ *
+ * Either one exported the dark `#0d1522` backdrop where tiles should have
+ * been, which is the "map is dark in the export" report.
+ *
  * @param {L.TileLayer[]} layers
  * @param {number} budgetMs
- * @returns {Promise<boolean>} false when the timeout won the race.
+ * @returns {Promise<boolean>} false when the budget ran out first.
  */
 function whenTilesSettled(layers, budgetMs) {
   if (!layers.length) return Promise.resolve(true);
-  const all = Promise.all(layers.map(l => new Promise(res => {
-    let done = false;
-    const finish = () => { if (!done) { done = true; res(); } };
-    l.once('load', finish);
-    // A layer whose tiles were all cache hits may have completed before we
-    // subscribed; `_loading === false` is Leaflet's own settled flag.
-    if (l._loading === false) finish();
-  })));
-  return Promise.race([
-    all.then(() => true),
-    new Promise(res => setTimeout(() => res(false), budgetMs)),
-  ]);
+
+  /** @returns {number} tiles requested but not yet painted, across all layers. */
+  const pending = () => layers.reduce((n, l) => {
+    const tiles = l._tiles || {};
+    let waiting = 0;
+    for (const k in tiles) if (!tiles[k].loaded) waiting++;
+    // A layer that has not been asked for anything yet is not "settled" — it
+    // has simply not started. Counting it as one outstanding tile stops the
+    // poll declaring victory before the first request goes out.
+    if (!Object.keys(tiles).length && l._loading !== false) waiting++;
+    return n + waiting;
+  }, 0);
+
+  return new Promise(resolve => {
+    const started = Date.now();
+    let quietFor = 0;
+    const tick = setInterval(() => {
+      const outstanding = pending();
+      // Require the count to stay at zero across consecutive polls. A single
+      // zero reading is not enough: Leaflet requests tiles in waves as the
+      // view settles, and the gap between two waves reads as "done".
+      quietFor = outstanding === 0 ? quietFor + 1 : 0;
+      if (quietFor >= SETTLE_POLLS) { clearInterval(tick); resolve(true); return; }
+      if (Date.now() - started > budgetMs) { clearInterval(tick); resolve(false); }
+    }, SETTLE_POLL_MS);
+  });
 }
 
 /**
@@ -270,8 +302,15 @@ async function renderGroundPass(o) {
       tileLayers.push(hs);
     }
 
-    const complete = await whenTilesSettled(tileLayers, 30000);
+    // A 2x export covers four times the tiles of the screen, a 4x export
+    // sixteen. Thirty seconds was a screen-sized budget applied to an
+    // export-sized job, so a large or slow render ran out of time and shipped
+    // whatever had arrived. Scale the allowance with the work.
+    const complete = await whenTilesSettled(tileLayers, 30000 + scale * scale * 15000);
     exportMap.invalidateSize({ animate: false });
+    // invalidateSize can pull in a further ring of tiles at the edges; without
+    // a second wait those arrive after the capture and are simply missing.
+    await whenTilesSettled(tileLayers, 8000);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const shot = extra => html2canvas(host, Object.assign({
