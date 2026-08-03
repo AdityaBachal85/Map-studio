@@ -12,12 +12,6 @@
 
 
       // ---------- locations ----------
-      function locLabelIconHtml(loc) {
-        // Small icon shown inside the label badge itself
-        if (loc.iconImage) return `<img src="${loc.iconImage}">`;
-        if (loc.iconUseProjectLogo && brand.projectLogo) return `<img src="${brand.projectLogo}">`;
-        return svgForKey(loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'), '#FFFFFF');
-      }
       function renderLocPin(loc) {
         loc.anchor = L.latLng(loc.lat, loc.lng);
         if (loc._hidden) {                       // hidden via Layer Manager
@@ -68,8 +62,11 @@
           const el = makeLabelEl(loc, 'loc', {
             klass: isSite ? 'site' : '',
             bg: bg, color: textOn(bg), accent: loc.color,
-            iconHtml: loc.labelShowIcon === false ? null : locLabelIconHtml(loc),
-            iconPlain: !!loc.iconImage || (loc.iconUseProjectLogo && brand.projectLogo),
+            // Labels are the name, full stop. The pin sitting next to the
+            // label already carries the icon, so drawing it again inside the
+            // badge said the same thing twice and made every label wider than
+            // the name it exists to show.
+            iconHtml: null,
             text: loc.name
           }, wasFirst);
           loc._labelEl = el;
@@ -110,12 +107,12 @@
           labelOffset: opts.labelOffset || { x: 22, y: -40 },
           labelPinned: !!opts.labelPinned,
           labelBg: opts.labelBg || (opts.type === 'site' ? '#0A1E3C' : '#FFFFFF'),
-          // Labels carry the name only. The pin beside the label is already
-          // showing the icon, so repeating it inside the badge said nothing
-          // twice and made every label wider than the name it exists to show.
-          // Still switchable per location — this is only the default.
-          labelShowIcon: opts.labelShowIcon === true,
+          // No labelShowIcon: labels carry the name only, and nothing reads
+          // the field any more. Keeping it would mean a project saved before
+          // this change still arrived with icons in its labels — the exact
+          // thing this removes — because opts comes straight from the file.
           // Icon customization
+
           iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'pin'),
           iconImage: opts.iconImage || null,
           iconUseProjectLogo: !!opts.iconUseProjectLogo,

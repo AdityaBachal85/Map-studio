@@ -48,7 +48,10 @@ function serialiseProject() {
       id: l.id, name: l.name, lat: l.lat, lng: l.lng, color: l.color, type: l.type,
       badgeText: l.badgeText,
       showLabel: l.showLabel, labelOffset: l.labelOffset, labelPinned: l.labelPinned,
-      labelBg: l.labelBg, labelShowIcon: l.labelShowIcon,
+      // labelShowIcon is deliberately not saved: labels carry the name only
+      // (see map/markers.js). Writing it back would keep resurrecting the
+      // setting in files long after nothing reads it.
+      labelBg: l.labelBg,
       iconKey: l.iconKey, iconImage: l.iconImage, iconUseProjectLogo: l.iconUseProjectLogo,
       iconSize: l.iconSize, iconFrame: l.iconFrame, iconBg: l.iconBg,
       iconBorder: l.iconBorder, iconBorderColor: l.iconBorderColor,

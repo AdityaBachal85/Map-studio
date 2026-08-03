@@ -345,17 +345,15 @@
             box.style.border = 'none';
             box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
             box.style.boxShadow = 'none';
-            // Two shadows, not one. A drop-shadow alone leaves a dark pin
-            // unreadable against dark satellite imagery, which is the basemap
-            // this app opens on. The tight white pass outlines the silhouette
-            // so it separates from anything underneath; the soft dark pass
-            // beneath it keeps the marker sitting above the map rather than
-            // looking pasted flat onto it.
+            // Separation from the basemap comes from a white keyline stroked
+            // onto the path itself (see svgForKey's `outline`), not from a
+            // white drop-shadow. A white shadow spreads into a halo and reads
+            // as the marker glowing; a stroke gives the hard edge a Google
+            // Maps pin has. The only filter left is the soft dark shadow that
+            // lifts the marker off the map.
             const depth = loc.iconShadow || 6;
             box.style.filter =
-              'drop-shadow(0 0 1px rgba(255,255,255,.95)) '
-              + 'drop-shadow(0 0 2px rgba(255,255,255,.85)) '
-              + `drop-shadow(0 ${1 + depth * 0.4}px ${2 + depth * 0.6}px rgba(0,0,0,${.3 + depth * 0.03}))`;
+              `drop-shadow(0 ${1 + depth * 0.35}px ${1.5 + depth * 0.4}px rgba(0,0,0,${.25 + depth * 0.025}))`;
           } else {
             box.style.background = loc.iconBg || '#FFFFFF';
             box.style.border = (loc.iconBorder || 2) + 'px solid ' + (loc.iconBorderColor || '#FFFFFF');
@@ -376,7 +374,14 @@
             img.style.cssText = `width:${contentPct};height:${contentPct};object-fit:contain;`;
             box.appendChild(img);
           } else {
-            box.innerHTML = svgForKey(loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'), loc.color);
+            // A frameless pin is the marker itself, so it carries the white
+            // keyline. A framed one already sits on its own background and
+            // border, where a keyline would just muddy the glyph.
+            box.innerHTML = svgForKey(
+              loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
+              loc.color,
+              frameless ? (loc.iconBorderColor || '#FFFFFF') : null
+            );
             const svg = box.querySelector('svg');
             if (svg) svg.style.cssText = `width:${svgPct};height:${svgPct};`;
           }

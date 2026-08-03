@@ -108,21 +108,32 @@ const ICON_LIBRARY = {
 
 const ICON_KEYS = Object.keys(ICON_LIBRARY);
 
-/** @param {string} key @returns {string} the raw path markup for one icon, untinted. */
-function iconPaths(key, color) {
+/**
+ * @param {string} key @param {string} [color] fill
+ * @param {string} [outline] draw a keyline in this colour around the glyph
+ * @returns {string} the raw path markup for one icon.
+ */
+function iconPaths(key, color, outline) {
   const icon = ICON_LIBRARY[key] || ICON_LIBRARY.pin;
   const fill = esc(color || '#0A1E3C');
+  // paint-order="stroke" puts the stroke *behind* the fill, so the keyline
+  // grows outward instead of eating half its width into the shape. Without it
+  // a 2px stroke visibly thins every glyph it is applied to.
+  const stroke = outline
+    ? ` stroke="${esc(outline)}" stroke-width="1.4" stroke-linejoin="round" paint-order="stroke"`
+    : '';
   return (Array.isArray(icon.d) ? icon.d : [icon.d])
-    .map(d => `<path fill="${fill}" d="${d}"/>`)
+    .map(d => `<path fill="${fill}"${stroke} d="${d}"/>`)
     .join('');
 }
 
 /**
  * A complete tinted `<svg>` for one icon key — what the map markers use.
- * @param {string} key @param {string} [color]
+ * @param {string} key @param {string} [color] @param {string} [outline]
  */
-function svgForKey(key, color) {
-  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${iconPaths(key, color)}</svg>`;
+function svgForKey(key, color, outline) {
+  const stroked = outline ? ' overflow="visible"' : '';
+  return `<svg viewBox="0 0 24 24"${stroked} xmlns="http://www.w3.org/2000/svg">${iconPaths(key, color, outline)}</svg>`;
 }
 
 /**
