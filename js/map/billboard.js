@@ -340,12 +340,22 @@
           box.style.height = s + 'px';
           const frameless = loc.iconFrame === 'none';
           if (frameless) {
-            // Bare icon: transparent, no border, only a soft drop-shadow for readability
+            // Bare icon: no box at all, so the pin silhouette is the marker.
             box.style.background = 'transparent';
             box.style.border = 'none';
             box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
             box.style.boxShadow = 'none';
-            box.style.filter = `drop-shadow(0 ${1 + (loc.iconShadow || 6) * 0.4}px ${2 + (loc.iconShadow || 6) * 0.6}px rgba(0,0,0,${.25 + (loc.iconShadow || 6) * 0.03}))`;
+            // Two shadows, not one. A drop-shadow alone leaves a dark pin
+            // unreadable against dark satellite imagery, which is the basemap
+            // this app opens on. The tight white pass outlines the silhouette
+            // so it separates from anything underneath; the soft dark pass
+            // beneath it keeps the marker sitting above the map rather than
+            // looking pasted flat onto it.
+            const depth = loc.iconShadow || 6;
+            box.style.filter =
+              'drop-shadow(0 0 1px rgba(255,255,255,.95)) '
+              + 'drop-shadow(0 0 2px rgba(255,255,255,.85)) '
+              + `drop-shadow(0 ${1 + depth * 0.4}px ${2 + depth * 0.6}px rgba(0,0,0,${.3 + depth * 0.03}))`;
           } else {
             box.style.background = loc.iconBg || '#FFFFFF';
             box.style.border = (loc.iconBorder || 2) + 'px solid ' + (loc.iconBorderColor || '#FFFFFF');

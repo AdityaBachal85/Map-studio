@@ -2592,3 +2592,49 @@ input[type=tel] {
 .cp-custom:hover {
   text-decoration: underline;
 }
+
+/* ---------- Icon panel (location card) ---------- */
+/* The panel is a stack of label + control rows; a shared label width is what
+   makes the controls line up into a column instead of stair-stepping. */
+.iconPanel .r {
+  gap: 8px;
+  align-items: center;
+}
+
+.iconPanel .r > .sub:first-child {
+  flex: none;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Colour inputs here were browser-default sized and inconsistent between the
+   rows. One rule gives every swatch in the panel the same footprint. */
+.iconPanel input[type="color"] {
+  width: 30px;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--stroke2);
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.iconPanel input[type="range"] {
+  min-width: 0;
+}
+
+/* Two checkboxes that used to be pushed apart by a spacer, which left them
+   ragged at narrow widths. A grid keeps them aligned at any width. */
+.icon-toggles {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+
+.icon-toggles .chk {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

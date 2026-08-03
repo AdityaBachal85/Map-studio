@@ -11,6 +11,82 @@
  * alternates resolved, radius rings as circles, and drawn geometry.
  */
 
+/**
+ * Icon hrefs for Google Earth, keyed by our own icon keys.
+ *
+ * These are Google's hosted KML icons rather than anything from this repo, and
+ * that is the point: a .kml is a file people email around, and Earth fetches
+ * `<IconStyle><href>` over the network when it opens one. An href pointing at
+ * a GitHub Pages path would break the moment the site moved, was made private,
+ * or was opened by someone offline from a copy on their desktop. Google's set
+ * has been at these URLs for the better part of two decades.
+ *
+ * The `-blank`/white variants are chosen deliberately: `<IconStyle><color>`
+ * multiplies, so tinting only preserves hue against a white base.
+ *
+ * Keys not listed fall back to KML_ICON_DEFAULT — the map only has to be
+ * roughly right, and a paddle in the correct colour beats an exact glyph.
+ */
+const KML_ICON_BASE = 'https://maps.google.com/mapfiles/kml/';
+const KML_ICON_DEFAULT = KML_ICON_BASE + 'paddle/wht-blank.png';
+const KML_ICON_FOR_KEY = {
+  star: KML_ICON_BASE + 'paddle/wht-stars.png',
+  home: KML_ICON_BASE + 'shapes/homegardenbusiness.png',
+  villa: KML_ICON_BASE + 'shapes/homegardenbusiness.png',
+  apartment: KML_ICON_BASE + 'shapes/homegardenbusiness.png',
+  building: KML_ICON_BASE + 'shapes/square.png',
+  school: KML_ICON_BASE + 'shapes/schools.png',
+  college: KML_ICON_BASE + 'shapes/schools.png',
+  hospital: KML_ICON_BASE + 'shapes/hospitals.png',
+  pharmacy: KML_ICON_BASE + 'shapes/hospitals.png',
+  airport: KML_ICON_BASE + 'shapes/airports.png',
+  railway: KML_ICON_BASE + 'shapes/rail.png',
+  metro: KML_ICON_BASE + 'shapes/rail.png',
+  bus: KML_ICON_BASE + 'shapes/bus.png',
+  car: KML_ICON_BASE + 'shapes/car.png',
+  taxi: KML_ICON_BASE + 'shapes/cabs.png',
+  parking: KML_ICON_BASE + 'shapes/parking_lot.png',
+  fuel: KML_ICON_BASE + 'shapes/gas_stations.png',
+  bank: KML_ICON_BASE + 'shapes/euro.png',
+  mall: KML_ICON_BASE + 'shapes/shopping.png',
+  shop: KML_ICON_BASE + 'shapes/shopping.png',
+  market: KML_ICON_BASE + 'shapes/convenience.png',
+  restaurant: KML_ICON_BASE + 'shapes/dining.png',
+  cafe: KML_ICON_BASE + 'shapes/coffee.png',
+  hotel: KML_ICON_BASE + 'shapes/lodging.png',
+  gym: KML_ICON_BASE + 'shapes/sportvenue.png',
+  stadium: KML_ICON_BASE + 'shapes/stadium.png',
+  golf: KML_ICON_BASE + 'shapes/golf.png',
+  pool: KML_ICON_BASE + 'shapes/swimming.png',
+  tree: KML_ICON_BASE + 'shapes/parks.png',
+  garden: KML_ICON_BASE + 'shapes/parks.png',
+  playground: KML_ICON_BASE + 'shapes/play.png',
+  camp: KML_ICON_BASE + 'shapes/campground.png',
+  beach: KML_ICON_BASE + 'shapes/beach.png',
+  mountain: KML_ICON_BASE + 'shapes/mountains.png',
+  water: KML_ICON_BASE + 'shapes/water.png',
+  police: KML_ICON_BASE + 'shapes/police.png',
+  fire: KML_ICON_BASE + 'shapes/firedept.png',
+  post: KML_ICON_BASE + 'shapes/post_office.png',
+  library: KML_ICON_BASE + 'shapes/library_maps.png',
+  museum: KML_ICON_BASE + 'shapes/museum.png',
+  cinema: KML_ICON_BASE + 'shapes/movies.png',
+  temple: KML_ICON_BASE + 'shapes/placeofworship.png',
+  church: KML_ICON_BASE + 'shapes/placeofworship.png',
+  mosque: KML_ICON_BASE + 'shapes/placeofworship.png',
+  industry: KML_ICON_BASE + 'shapes/mechanic.png',
+  factory: KML_ICON_BASE + 'shapes/mechanic.png',
+  warehouse: KML_ICON_BASE + 'shapes/mechanic.png',
+  construction: KML_ICON_BASE + 'shapes/construction.png',
+  crane: KML_ICON_BASE + 'shapes/construction.png',
+  port: KML_ICON_BASE + 'shapes/marina.png',
+  bike: KML_ICON_BASE + 'shapes/cycling.png',
+  walk: KML_ICON_BASE + 'shapes/hiker.png',
+  flag: KML_ICON_BASE + 'shapes/flag.png',
+  info: KML_ICON_BASE + 'shapes/info-i_maps.png',
+  alert: KML_ICON_BASE + 'shapes/caution.png',
+};
+
 /** KML wants aabbggrr, not #rrggbb. @param {string} hex @param {number} [alpha] 0–1 */
 function kmlColor(hex, alpha) {
   const h = String(hex || '#FF7A1A').replace('#', '');
@@ -79,6 +155,39 @@ function buildKML() {
     return id;
   };
 
+  /**
+   * Register an icon style for one location and return its id.
+   *
+   * KML cannot carry an inline SVG — `<IconStyle>` takes an `<href>`, and
+   * Google Earth fetches it over the network. A relative path or a data: URI
+   * would leave every placemark as the default yellow pushpin on someone
+   * else's machine, which is what this export used to do by having no
+   * IconStyle at all.
+   *
+   * So the href points at Google's own icon set, which is already online,
+   * already whitelisted by Earth, and needs nothing hosted by us — this file
+   * has to work when a .kml is emailed to someone who has never heard of Map
+   * Studio. `<color>` tints the white base icon with the location's own
+   * colour, so a map's palette survives the trip.
+   */
+  const iconStyle = l => {
+    const id = 'ic' + (++styleN);
+    const href = KML_ICON_FOR_KEY[l.iconKey] || KML_ICON_DEFAULT;
+    styles.push(
+      `<Style id="${id}">` +
+      '<IconStyle>' +
+      // Multiplied against a white base icon, so this reads as a tint.
+      `<color>${kmlColor(l.color || '#FF7A1A')}</color>` +
+      `<scale>${(Math.max(22, l.iconSize || 36) / 36).toFixed(2)}</scale>` +
+      `<Icon><href>${href}</href></Icon>` +
+      // Paddle icons point at their bottom tip, not their centre.
+      '<hotSpot x="0.5" y="0" xunits="fraction" yunits="fraction"/>' +
+      '</IconStyle>' +
+      `<LabelStyle><color>${kmlColor(l.color || '#FFFFFF')}</color><scale>0.9</scale></LabelStyle>` +
+      '</Style>');
+    return id;
+  };
+
   // ---- locations (+ their radius rings) ----
   const locFolder = [];
   (typeof locations !== 'undefined' ? locations : []).forEach(l => {
@@ -86,6 +195,7 @@ function buildKML() {
       '<Placemark>' +
       `<name>${kmlEsc(l.name)}</name>` +
       (l.note ? `<description>${kmlEsc(l.note)}</description>` : '') +
+      `<styleUrl>#${iconStyle(l)}</styleUrl>` +
       `<Point><coordinates>${(+l.lng).toFixed(7)},${(+l.lat).toFixed(7)},0</coordinates></Point>` +
       '</Placemark>');
     (l.rings || []).forEach(r => {

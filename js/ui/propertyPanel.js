@@ -90,18 +90,21 @@ function locCardMarkup(loc) {
         <input type="range" class="sz" min="22" max="72" step="1" value="${loc.iconSize}">
         <span class="pct sz-v" style="width:32px;">${loc.iconSize}</span>
       </div>
-      <div class="r"><span class="sub" style="width:52px;">Border</span>
+      <!-- Border and BG only style the frame, so they are hidden entirely when
+           there isn't one. Leaving dead controls on screen invited people to
+           drag a slider and conclude the app was broken when nothing moved. -->
+      <div class="r frame-only"><span class="sub" style="width:52px;">Border</span>
         <input type="range" class="bw" min="0" max="6" step="1" value="${loc.iconBorder}" style="flex:1;">
-        <input type="color" class="bc" value="${esc(loc.iconBorderColor)}" title="Border color">
+        <input type="color" class="bc" value="${esc(loc.iconBorderColor)}" title="Border colour">
       </div>
-      <div class="r"><span class="sub" style="width:52px;">BG</span>
+      <div class="r frame-only"><span class="sub" style="width:52px;">Fill</span>
         <input type="color" class="ibg" value="${esc(loc.iconBg)}" title="Icon background">
-        <span class="sub">Shadow</span>
+      </div>
+      <div class="r"><span class="sub" style="width:52px;">Shadow</span>
         <input type="range" class="ish" min="0" max="16" step="1" value="${loc.iconShadow}" style="flex:1;">
       </div>
-      <div class="r">
+      <div class="r icon-toggles">
         <label class="chk"><input type="checkbox" class="gl" ${loc.iconGlow ? 'checked' : ''}> Glow ring</label>
-        <span class="grow"></span>
         <label class="chk"><input type="checkbox" class="uspl" ${loc.iconUseProjectLogo ? 'checked' : ''}> Use project logo</label>
       </div>
     </div>
@@ -191,7 +194,17 @@ function wireLocCard(card, loc) {
             locChanged(loc);
           });
         });
-        card.querySelector('.fr').addEventListener('change', e => { loc.iconFrame = e.target.value; locChanged(loc); });
+        /** Border/fill style the frame, so they only apply when there is one. */
+        const syncFrameControls = () => {
+          const framed = (loc.iconFrame || 'none') !== 'none';
+          card.querySelectorAll('.frame-only').forEach(r => { r.style.display = framed ? '' : 'none'; });
+        };
+        syncFrameControls();
+        card.querySelector('.fr').addEventListener('change', e => {
+          loc.iconFrame = e.target.value;
+          syncFrameControls();
+          locChanged(loc);
+        });
         card.querySelector('.sz').addEventListener('input', e => { loc.iconSize = +e.target.value; card.querySelector('.sz-v').textContent = loc.iconSize; renderLocPin(loc); });
         card.querySelector('.bw').addEventListener('input', e => { loc.iconBorder = +e.target.value; renderLocPin(loc); });
         card.querySelector('.bc').addEventListener('input', e => { loc.iconBorderColor = e.target.value; renderLocPin(loc); });

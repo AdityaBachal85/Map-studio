@@ -110,13 +110,20 @@
           labelOffset: opts.labelOffset || { x: 22, y: -40 },
           labelPinned: !!opts.labelPinned,
           labelBg: opts.labelBg || (opts.type === 'site' ? '#0A1E3C' : '#FFFFFF'),
-          labelShowIcon: opts.labelShowIcon !== false,
+          // Labels carry the name only. The pin beside the label is already
+          // showing the icon, so repeating it inside the badge said nothing
+          // twice and made every label wider than the name it exists to show.
+          // Still switchable per location — this is only the default.
+          labelShowIcon: opts.labelShowIcon === true,
           // Icon customization
           iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'pin'),
           iconImage: opts.iconImage || null,
           iconUseProjectLogo: !!opts.iconUseProjectLogo,
           iconSize: opts.iconSize || (opts.type === 'site' ? 44 : 36),
-          iconFrame: opts.iconFrame || 'circle',
+          // Frameless by default: the library's pins are already pin-shaped, so
+          // wrapping one in a circle drew a badge around a badge and shrank the
+          // glyph to 66% to fit. The bare icon reads as a map marker.
+          iconFrame: opts.iconFrame || 'none',
           iconBg: opts.iconBg || '#FFFFFF',
           iconBorder: opts.iconBorder !== undefined ? opts.iconBorder : 2,
           iconBorderColor: opts.iconBorderColor || (opts.color || (opts.type === 'site' ? '#FF7A1A' : '#FFFFFF')),
