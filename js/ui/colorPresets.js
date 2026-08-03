@@ -27,6 +27,74 @@ let presetPopover = null;
 let presetCleanup = null;
 
 /**
+ * Turn one `<input type="color">` into a swatch that opens this picker.
+ *
+ * The input stays in the DOM as the value holder, and a pick writes to it and
+ * fires `input`/`change` exactly as the OS dialog would. That is the whole
+ * trick: every existing listener in the app keeps working untouched, so the
+ * picker can be applied to a colour control without knowing or caring what
+ * that control does.
+ *
+ * @param {HTMLInputElement} input
+ */
+function enhanceColorInput(input) {
+  if (!input || input._cpEnhanced) return;
+  input._cpEnhanced = true;
+
+  const wrap = document.createElement('span');
+  wrap.className = 'clrWrap';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'clrBtn';
+  btn.title = input.title || 'Choose a colour';
+  if (input.title) input.removeAttribute('title');   // or both tooltips fire
+  wrap.appendChild(btn);
+
+  const sync = () => btn.style.setProperty('--sw', input.value);
+  sync();
+  // Keep the face right when something *else* sets the value — switching a
+  // location to Site rewrites several colours at once, for instance.
+  input.addEventListener('input', sync);
+  input.addEventListener('change', sync);
+
+  btn.addEventListener('click', () => {
+    openColorPresets(btn, input.value, hex => {
+      input.value = hex;
+      sync();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+}
+
+/**
+ * Enhance every colour input inside a freshly-built card or panel.
+ * Idempotent, so calling it on a container twice is harmless.
+ * @param {ParentNode} [root]
+ */
+function enhanceColorInputs(root) {
+  (root || document).querySelectorAll('input[type="color"]').forEach(enhanceColorInput);
+}
+
+/**
+ * Repaint a swatch after its input's value was set in code.
+ *
+ * Assigning to `.value` fires no event, so the enhancer's own listeners never
+ * hear about it — switching a location to Site rewrites three colours at once
+ * and every swatch would otherwise keep showing the old one.
+ * @param {HTMLInputElement} input
+ */
+function syncColorSwatch(input) {
+  const wrap = input && input.parentNode;
+  if (!wrap || !wrap.classList || !wrap.classList.contains('clrWrap')) return;
+  const btn = wrap.querySelector('.clrBtn');
+  if (btn) btn.style.setProperty('--sw', input.value);
+}
+
+/**
  * Swap the popover into full-picker mode: saturation/value square, hue slider,
  * and hex/RGB fields, all in the app's own styling.
  *

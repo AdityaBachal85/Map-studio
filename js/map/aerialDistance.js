@@ -136,6 +136,7 @@ function buildMeasureCard(m) {
   card.querySelector('.mzoom').addEventListener('click', () => zoomToMeasurement(m));
   card.querySelector('.x-btn').addEventListener('click', () => { removeAerialMeasurement(m); status('Measurement removed.'); });
   m.card = card;
+  enhanceColorInputs(card);
   $('measureList').appendChild(card);
 }
 

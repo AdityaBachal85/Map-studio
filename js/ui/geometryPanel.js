@@ -56,6 +56,7 @@ function geomCardMarkup(g) {
       <button class="mini-btn gzoom" title="Zoom to shape">⌖</button>
     </div>`;
   if (isLine) { const op = card.querySelector('.gop'); if (op) op.closest('.r').style.opacity = g.shape === 'Line' ? '.5' : '1'; }
+  enhanceColorInputs(card);
   return card;
 }
 

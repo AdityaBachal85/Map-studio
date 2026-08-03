@@ -32,6 +32,7 @@
             updateRings(loc);
           });
           row.querySelector('.x-btn').addEventListener('click', () => { loc.rings.splice(idx, 1); renderRingRows(loc); updateRings(loc); });
+          enhanceColorInputs(row);
           box.appendChild(row);
         });
       }
@@ -46,14 +47,9 @@ function locCardMarkup(loc) {
         card.className = 'item-card';
         card.innerHTML = `
     <div class="r">
-      <!-- The native input is transparent and stacked *under* the swatch
-           rather than hidden. A hidden input has no layout box, so the browser
-           anchors its colour dialog at the top-left of the window instead of
-           at the control — which is where it was opening, half off-screen. -->
-      <span class="clrWrap">
-        <input type="color" class="clr" value="${esc(loc.color)}" tabindex="-1" aria-hidden="true">
-        <button type="button" class="clrBtn" title="Pin / accent colour" style="--sw:${esc(loc.color)}"></button>
-      </span>
+      <!-- Plain input: enhanceColorInputs() wraps it in the swatch + picker,
+           the same treatment every other colour control in the app gets. -->
+      <input type="color" class="clr" value="${esc(loc.color)}" title="Pin / accent colour">
       <input type="text" class="nm grow" value="${esc(loc.name)}" placeholder="Name">
       <button class="x-btn" title="Delete">&times;</button>
     </div>
@@ -126,6 +122,8 @@ function locCardMarkup(loc) {
     </div>`;
         card.querySelector('.tp').value = loc.type;
         card.querySelector('.bt-row').style.display = loc.type === 'badge' ? '' : 'none';
+        // Every colour control in this card gets the swatch + picker.
+        enhanceColorInputs(card);
         return card;
       }
 
@@ -140,19 +138,13 @@ function wireLocCard(card, loc) {
           iconPanel.style.display = iconPanel.style.display === 'none' ? 'block' : 'none';
         });
 
-        /** Apply a colour from either the preset grid or the OS colour dialog. */
-        const applyLocColor = value => {
+        card.querySelector('.clr').addEventListener('input', e => {
+          const value = e.target.value;
           if (!loc.iconBorderColor || loc.iconBorderColor === loc.color) loc.iconBorderColor = value;
           loc.color = value;
-          card.querySelector('.clr').value = value;
-          card.querySelector('.clrBtn').style.setProperty('--sw', value);
           // The icon button previews the pin in this colour, so it has to follow.
           refreshIconButton(card, loc);
           locChanged(loc);
-        };
-        card.querySelector('.clr').addEventListener('input', e => applyLocColor(e.target.value));
-        card.querySelector('.clrBtn').addEventListener('click', e => {
-          openColorPresets(e.currentTarget, loc.color, applyLocColor);
         });
         card.querySelector('.nm').addEventListener('change', e => { loc.name = e.target.value || 'Location'; locChanged(loc); });
         card.querySelector('.tp').addEventListener('change', e => {
@@ -161,14 +153,15 @@ function wireLocCard(card, loc) {
           if (loc.type === 'badge') {
             loc.color = '#F7C948';
             card.querySelector('.clr').value = '#F7C948';
-            card.querySelector('.clrBtn').style.setProperty('--sw', '#F7C948');
           }
           if (loc.type === 'site') {
             loc.color = '#0A1E3C'; loc.labelBg = '#0A1E3C'; loc.iconBorderColor = '#FF7A1A';
             card.querySelector('.clr').value = '#0A1E3C'; card.querySelector('.lbg').value = '#0A1E3C'; card.querySelector('.bc').value = '#FF7A1A';
-            card.querySelector('.clrBtn').style.setProperty('--sw', '#0A1E3C');
             if (!loc.iconImage) loc.iconKey = 'star';
           }
+          // Values were assigned in code above, which fires no event — repaint
+          // the swatches so they don't keep showing the previous colours.
+          card.querySelectorAll('input[type="color"]').forEach(syncColorSwatch);
           refreshIconButton(card, loc);
           if (loc.type === 'site') {
             if (brand.siteUsesProjLogo) loc.iconUseProjectLogo = true;
@@ -386,6 +379,7 @@ function wireLocCard(card, loc) {
         });
         card.querySelector('.x-btn').addEventListener('click', () => deleteRoute(rt));
         rt.card = card;
+        enhanceColorInputs(card);
         $('rtList').appendChild(card);
       }
       function updateRtCardStats(rt) {
