@@ -188,7 +188,6 @@
       background: rgba(16, 32, 60, .04);
     }
     :root[data-theme="light"] .brandbar h1,
-    :root[data-theme="light"] .brandbar .tagline,
     :root[data-theme="light"] .lp-title,
     :root[data-theme="light"] .prefs-title {
       color: var(--text);
