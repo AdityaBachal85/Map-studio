@@ -444,11 +444,14 @@ function initExportCenter() {
   $('exportCenterBtn').addEventListener('click', () => { syncExportCenter(); exportCenter.open(); });
   // Format buttons close the dialog on their way out; their own handlers
   // (wired elsewhere) still run because those listeners were attached first.
-  ['pptxBtn', 'printBtn', 'saveBtn', 'geoExportBtn', 'kmlExportBtn', 'xlsxExportBtn'].forEach(id => {
+  ['pptxBtn', 'printBtn', 'saveBtn', 'xcGeoExportBtn', 'kmlExportBtn', 'xlsxExportBtn'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => exportCenter.close());
   });
   $('kmlExportBtn').addEventListener('click', exportKML);
+  // The Draw tab's button of the same purpose lives in project/geojson.js;
+  // this row is the Export dialog's copy and needs its own wiring.
+  $('xcGeoExportBtn').addEventListener('click', exportGeoJSON);
   wireBasemapManager();
   // Settings, not the basemap picker: provider keys and tile-server URLs are
   // configuration you set once, not part of choosing which basemap to look at.

@@ -68,7 +68,16 @@ function importGeoJSONFeature(feat) {
   return true;
 }
 
-$('geoExportBtn').addEventListener('click', () => {
+/**
+ * Download every drawn shape as a GeoJSON FeatureCollection.
+ *
+ * Reachable from two places — the Draw tab and the Export dialog — so it's a
+ * named function wired to both rather than an inline listener. It used to be
+ * inline on `geoExportBtn`, and because both buttons carried that same id,
+ * getElementById only ever found the Draw tab's one: the Export dialog's
+ * GeoJSON row had no handler at all and did nothing when clicked.
+ */
+function exportGeoJSON() {
   if (!geometries.length) { status('No shapes to export yet — draw something on the Draw tab first.'); return; }
   const fc = { type: 'FeatureCollection', features: geometries.map(geomToGeoJSONFeature) };
   const a = document.createElement('a');
@@ -77,7 +86,9 @@ $('geoExportBtn').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
   status(`Exported ${geometries.length} shape${geometries.length > 1 ? 's' : ''} as GeoJSON.`);
-});
+}
+
+$('geoExportBtn').addEventListener('click', exportGeoJSON);
 
 $('geoImportBtn').addEventListener('click', () => $('geoImportInput').click());
 $('geoImportInput').addEventListener('change', e => {

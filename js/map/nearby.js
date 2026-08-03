@@ -8,6 +8,8 @@
 
 const nearbyMarkers = {};   // catKey -> [L.marker]   (kept as a cache; hidden when toggled off)
 let nearbyCenter = null;    // L.LatLng or null
+/** True once the user has chosen a centre themselves — see renderNearbyCenterPicker. */
+let nearbyCenterUserPicked = false;
 let nearbyRadiusM = 2000;
 let nearbyCircle = null;
 const nearbyEnabled = new Set();
@@ -524,13 +526,77 @@ async function refetchEnabledNearby() {
   for (const key of [...nearbyEnabled]) await fetchNearbyKey(key);
 }
 
-/** Point the nearby search at the current map view. */
+/**
+ * Fill the centre picker with the project's locations.
+ *
+ * Sites are listed first and marked, because a Site is what a nearby search is
+ * usually about. Rebuilt whenever the Nearby tab is opened rather than kept in
+ * sync as locations change — the list can't drift from the Locations tab that
+ * way, and the tab is closed most of the time.
+ */
+function renderNearbyCenterPicker() {
+  const sel = $('nearbyCenterPicker');
+  if (!sel) return;
+  const previous = sel.value;
+
+  const sites = locations.filter(l => l.type === 'site');
+  const others = locations.filter(l => l.type !== 'site');
+  const opt = (value, label) => `<option value="${esc(value)}">${esc(label)}</option>`;
+
+  sel.innerHTML = opt('__view__', '📍 Map centre (current view)')
+    + sites.map(l => opt(String(l.id), `★ ${l.name || 'Untitled site'}`)).join('')
+    + others.map(l => opt(String(l.id), l.name || 'Untitled location')).join('');
+
+  // A pick the user actually made is preserved; otherwise default to the first
+  // Site, which is what someone opening this tab almost always means.
+  //
+  // The flag is the whole point: '__view__' is the only option before any
+  // location exists, so it is always the selected value on the first rebuild.
+  // Treating that as a deliberate choice would pin the picker to the map
+  // centre forever and the Site default would never once apply.
+  if (nearbyCenterUserPicked && previous && sel.querySelector(`option[value="${CSS.escape(previous)}"]`)) {
+    sel.value = previous;
+  } else if (sites.length) {
+    sel.value = String(sites[0].id);
+  }
+
+  updateNearbyCenterBtnLabel();
+}
+
+/** Reflect the picked centre in the button, so the action names its own target. */
+function updateNearbyCenterBtnLabel() {
+  const sel = $('nearbyCenterPicker');
+  const btn = $('nearbyCenterBtn');
+  if (!sel || !btn) return;
+  const chosen = sel.value === '__view__' || !sel.value
+    ? 'map centre'
+    : (sel.options[sel.selectedIndex] || {}).text || 'the selected location';
+  btn.textContent = `📍 Search around ${chosen.replace(/^★ /, '')}`;
+}
+
+/** @returns {{latlng:L.LatLng, label:string}} whatever the picker currently points at. */
+function nearbyChosenCentre() {
+  const sel = $('nearbyCenterPicker');
+  const id = sel ? sel.value : '__view__';
+  if (id && id !== '__view__') {
+    const loc = locations.find(l => String(l.id) === id);
+    // A location can be deleted while it's still the picker's selection.
+    if (loc) return { latlng: L.latLng(loc.lat, loc.lng), label: loc.name || 'the selected location' };
+  }
+  return { latlng: map.getCenter(), label: 'the map view' };
+}
+
+/** Point the nearby search at whatever the centre picker selects. */
 function setNearbyCenterToView() {
-  nearbyCenter = map.getCenter();
+  const { latlng, label } = nearbyChosenCentre();
+  nearbyCenter = latlng;
   drawNearbyCircle();
   updateNearbyClearBtn();
+  // Bring the chosen point into view — searching around a location you can't
+  // see would drop markers off-screen with no sign anything happened.
+  map.setView(latlng, map.getZoom());
   if (nearbyEnabled.size) refetchEnabledNearby();
-  else status(`Nearby search centred on the map view (${fmtRadius(nearbyRadiusM)} radius) — toggle categories below.`);
+  else status(`Nearby search centred on ${label} (${fmtRadius(nearbyRadiusM)} radius) — toggle categories below.`);
 }
 
 function updateNearbyClearBtn() {
@@ -555,6 +621,16 @@ buildNearbyChips();
 // during a pan would thrash layout for no visible benefit.
 map.on('moveend zoomend', updateNearbyClusters);
 $('nearbyCenterBtn').addEventListener('click', setNearbyCenterToView);
+$('nearbyCenterPicker').addEventListener('change', () => {
+  nearbyCenterUserPicked = true;
+  updateNearbyCenterBtnLabel();
+  // Only re-run automatically if a search is already showing; otherwise
+  // changing the dropdown would fire requests the user hasn't asked for yet.
+  if (nearbyCenter && nearbyEnabled.size) setNearbyCenterToView();
+});
+// Rebuilt on tab open so the list reflects locations added since last time.
+$('tabBtnNearby').addEventListener('click', renderNearbyCenterPicker);
+renderNearbyCenterPicker();
 $('nearbyRadius').addEventListener('input', e => {
   nearbyRadiusM = +e.target.value;
   $('nearbyRadiusVal').textContent = fmtRadius(nearbyRadiusM);

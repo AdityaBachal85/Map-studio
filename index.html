@@ -9,10 +9,10 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0003" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0003">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0003">
-  <link rel="stylesheet" href="./css/main.css?v=6.0003">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0004" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0004">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0004">
+  <link rel="stylesheet" href="./css/main.css?v=6.0004">
 </head>
 
 <body>
@@ -274,6 +274,12 @@
             <div class="lbl">Find places near</div>
             <div class="stack">
               <div class="act-group act-1">
+                <!-- Centre the search on a real location rather than wherever
+                     the map happens to be panned. What you want to know is
+                     what's near *the site*, not what's near the middle of the
+                     screen. Falls back to the map centre when there are no
+                     locations yet. -->
+                <select id="nearbyCenterPicker" class="grow"></select>
                 <button class="btn btn-block" id="nearbyCenterBtn">📍 Search around map centre</button>
               </div>
               <!-- Up to 20 km: a 5 km ceiling is fine for schools and shops, but
@@ -281,9 +287,9 @@
                    the nearest airport, a highway junction, an IT park. -->
               <div class="inline-ctl"><span class="sub">Radius</span><input type="range" id="nearbyRadius" min="500"
                   max="20000" step="500" value="2000"><span class="val" id="nearbyRadiusVal">2.0 km</span></div>
-              <div class="sub" style="white-space:normal;line-height:1.5;">Pan the map to your area and hit "Search around
-                map centre", then toggle categories to drop nearby places. Each category loads on first tap and can be
-                switched off again.</div>
+              <div class="sub" style="white-space:normal;line-height:1.5;">Pick a location to search around — or leave it
+                on the map centre and pan to your area — then toggle categories to drop nearby places. Each category
+                loads on first tap and can be switched off again.</div>
             </div>
           </div>
           <div class="field">
@@ -551,7 +557,10 @@
               <span class="xc-txt"><b>Project file</b><i>Everything, reopenable in Map Studio</i></span>
               <span class="xc-meta">.json</span>
             </button>
-            <button class="xc-row" id="geoExportBtn">
+            <!-- Distinct from the Draw tab's #geoExportBtn: two elements sharing
+                 one id meant getElementById only ever found that one, leaving
+                 this row wired to nothing. -->
+            <button class="xc-row" id="xcGeoExportBtn">
               <span class="xc-ico" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round">
@@ -719,80 +728,80 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0003"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0003"></script>
-  <script src="./vendor/html2canvas.js?v=6.0003"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0003"></script>
-  <script src="./vendor/jszip.js?v=6.0003"></script>
-  <script src="./vendor/anime.min.js?v=6.0003"></script>
+  <script src="./vendor/leaflet.js?v=6.0004"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0004"></script>
+  <script src="./vendor/html2canvas.js?v=6.0004"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0004"></script>
+  <script src="./vendor/jszip.js?v=6.0004"></script>
+  <script src="./vendor/anime.min.js?v=6.0004"></script>
 
-  <script src="./js/core/prefs.js?v=6.0003"></script>
-  <script src="./js/constants.js?v=6.0003"></script>
-  <script src="./js/utils/dom.js?v=6.0003"></script>
-  <script src="./js/export/exportPDF.js?v=6.0003"></script>
-  <script src="./js/export/captureMap.js?v=6.0003"></script>
-  <script src="./js/core/state.js?v=6.0003"></script>
-  <script src="./js/map/icons.js?v=6.0003"></script>
-  <script src="./js/config.js?v=6.0003"></script>
-  <script src="./js/ui/notifications.js?v=6.0003"></script>
-  <script src="./js/utils/math.js?v=6.0003"></script>
-  <script src="./js/map/billboard.js?v=6.0003"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0003"></script>
-  <script src="./js/ui/dialogs.js?v=6.0003"></script>
-  <script src="./js/utils/colors.js?v=6.0003"></script>
-  <script src="./js/utils/animate.js?v=6.0003"></script>
-  <script src="./js/map/routes.js?v=6.0003"></script>
-  <script src="./js/map/markers.js?v=6.0003"></script>
-  <script src="./js/map/snapping.js?v=6.0003"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0003"></script>
-  <script src="./js/map/providerKeys.js?v=6.0003"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0003"></script>
-  <script src="./js/map/googleTiles.js?v=6.0003"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0003"></script>
-  <script src="./js/map/mapEngine.js?v=6.0003"></script>
-  <script src="./js/export/hiResRender.js?v=6.0003"></script>
-  <script src="./js/export/exportPNG.js?v=6.0003"></script>
-  <script src="./js/export/pptUtils.js?v=6.0003"></script>
-  <script src="./js/export/pptValidation.js?v=6.0003"></script>
-  <script src="./js/export/pptShapes.js?v=6.0003"></script>
-  <script src="./js/export/pptImages.js?v=6.0003"></script>
-  <script src="./js/export/pptLabels.js?v=6.0003"></script>
-  <script src="./js/export/pptTables.js?v=6.0003"></script>
-  <script src="./js/export/exportPPT.js?v=6.0003"></script>
-  <script src="./js/services/places.js?v=6.0003"></script>
-  <script src="./js/services/google.js?v=6.0003"></script>
-  <script src="./js/services/geoapify.js?v=6.0003"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0003"></script>
-  <script src="./js/services/geocoder.js?v=6.0003"></script>
-  <script src="./js/services/aiReports.js?v=6.0003"></script>
-  <script src="./js/ui/searchBox.js?v=6.0003"></script>
-  <script src="./js/ui/sliders.js?v=6.0003"></script>
-  <script src="./js/ui/tooltips.js?v=6.0003"></script>
-  <script src="./js/ui/toolbar.js?v=6.0003"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0003"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0003"></script>
-  <script src="./js/map/drawing.js?v=6.0003"></script>
-  <script src="./js/map/markerCluster.js?v=6.0003"></script>
-  <script src="./js/map/nearby.js?v=6.0003"></script>
-  <script src="./js/project/geojson.js?v=6.0003"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0003"></script>
-  <script src="./js/project/xlsx.js?v=6.0003"></script>
-  <script src="./js/project/importSheet.js?v=6.0003"></script>
-  <script src="./js/project/kml.js?v=6.0003"></script>
+  <script src="./js/core/prefs.js?v=6.0004"></script>
+  <script src="./js/constants.js?v=6.0004"></script>
+  <script src="./js/utils/dom.js?v=6.0004"></script>
+  <script src="./js/export/exportPDF.js?v=6.0004"></script>
+  <script src="./js/export/captureMap.js?v=6.0004"></script>
+  <script src="./js/core/state.js?v=6.0004"></script>
+  <script src="./js/map/icons.js?v=6.0004"></script>
+  <script src="./js/config.js?v=6.0004"></script>
+  <script src="./js/ui/notifications.js?v=6.0004"></script>
+  <script src="./js/utils/math.js?v=6.0004"></script>
+  <script src="./js/map/billboard.js?v=6.0004"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0004"></script>
+  <script src="./js/ui/dialogs.js?v=6.0004"></script>
+  <script src="./js/utils/colors.js?v=6.0004"></script>
+  <script src="./js/utils/animate.js?v=6.0004"></script>
+  <script src="./js/map/routes.js?v=6.0004"></script>
+  <script src="./js/map/markers.js?v=6.0004"></script>
+  <script src="./js/map/snapping.js?v=6.0004"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0004"></script>
+  <script src="./js/map/providerKeys.js?v=6.0004"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0004"></script>
+  <script src="./js/map/googleTiles.js?v=6.0004"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0004"></script>
+  <script src="./js/map/mapEngine.js?v=6.0004"></script>
+  <script src="./js/export/hiResRender.js?v=6.0004"></script>
+  <script src="./js/export/exportPNG.js?v=6.0004"></script>
+  <script src="./js/export/pptUtils.js?v=6.0004"></script>
+  <script src="./js/export/pptValidation.js?v=6.0004"></script>
+  <script src="./js/export/pptShapes.js?v=6.0004"></script>
+  <script src="./js/export/pptImages.js?v=6.0004"></script>
+  <script src="./js/export/pptLabels.js?v=6.0004"></script>
+  <script src="./js/export/pptTables.js?v=6.0004"></script>
+  <script src="./js/export/exportPPT.js?v=6.0004"></script>
+  <script src="./js/services/places.js?v=6.0004"></script>
+  <script src="./js/services/google.js?v=6.0004"></script>
+  <script src="./js/services/geoapify.js?v=6.0004"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0004"></script>
+  <script src="./js/services/geocoder.js?v=6.0004"></script>
+  <script src="./js/services/aiReports.js?v=6.0004"></script>
+  <script src="./js/ui/searchBox.js?v=6.0004"></script>
+  <script src="./js/ui/sliders.js?v=6.0004"></script>
+  <script src="./js/ui/tooltips.js?v=6.0004"></script>
+  <script src="./js/ui/toolbar.js?v=6.0004"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0004"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0004"></script>
+  <script src="./js/map/drawing.js?v=6.0004"></script>
+  <script src="./js/map/markerCluster.js?v=6.0004"></script>
+  <script src="./js/map/nearby.js?v=6.0004"></script>
+  <script src="./js/project/geojson.js?v=6.0004"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0004"></script>
+  <script src="./js/project/xlsx.js?v=6.0004"></script>
+  <script src="./js/project/importSheet.js?v=6.0004"></script>
+  <script src="./js/project/kml.js?v=6.0004"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0003"></script>
-  <script src="./js/project/autosave.js?v=6.0003"></script>
-  <script src="./js/project/openProject.js?v=6.0003"></script>
-  <script src="./js/project/saveProject.js?v=6.0003"></script>
-  <script src="./js/ui/sidebar.js?v=6.0003"></script>
-  <script src="./js/ui/aiTab.js?v=6.0003"></script>
-  <script src="./js/ui/layerManager.js?v=6.0003"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0003"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0003"></script>
-  <script src="./js/ui/importDialog.js?v=6.0003"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0003"></script>
-  <script src="./js/app.js?v=6.0003"></script>
+  <script src="./js/project/projectState.js?v=6.0004"></script>
+  <script src="./js/project/autosave.js?v=6.0004"></script>
+  <script src="./js/project/openProject.js?v=6.0004"></script>
+  <script src="./js/project/saveProject.js?v=6.0004"></script>
+  <script src="./js/ui/sidebar.js?v=6.0004"></script>
+  <script src="./js/ui/aiTab.js?v=6.0004"></script>
+  <script src="./js/ui/layerManager.js?v=6.0004"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0004"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0004"></script>
+  <script src="./js/ui/importDialog.js?v=6.0004"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0004"></script>
+  <script src="./js/app.js?v=6.0004"></script>
 </body>
 
 </html>
