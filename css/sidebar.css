@@ -68,7 +68,7 @@
       display: inline-flex;
       align-items: center;
       box-shadow: 0 3px 12px rgba(0, 0, 0, .35);
-      margin-bottom: 8px;
+      margin-bottom: 7px;
     }
 
     .logoPill img {
@@ -76,42 +76,26 @@
       display: block;
     }
 
-    .brandbar .tag {
-      color: var(--orange);
+    /* Sits under the logo as the product half of the lockup. Wide tracking and
+       a small size are what make it read as a wordmark rather than as a line
+       of copy — at heading weight it would compete with the logo above it. */
+    .brandWordmark {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
       font-weight: 800;
-      letter-spacing: .14em;
-      font-size: 9.5px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--text);
+      /* Optically align the tracked text with the logo's left edge: letter
+         spacing adds a trailing gap after the last glyph, which reads as the
+         whole line sitting a shade right of the mark above it. */
+      margin-left: 1px;
     }
 
-    .brandbar .tagline {
-      color: #FFFFFF;
-      font-weight: 1000;
-      letter-spacing: .07em;
-      font-size: 16px;
-    }
-
-
-    .brandbar h1 {
-      font-size: 17px;
-      margin: 3px 0 2px;
-      font-weight: 800;
-      letter-spacing: -.01em;
-      color: #fff;
-    }
-
-    .brandbar h1 em {
-      font-style: normal;
-      background: linear-gradient(90deg, var(--orange), var(--orange2));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-
-    .brandbar p {
-      margin: 0;
-      font-size: 10.5px;
-      color: var(--dim);
-      font-family: var(--mono);
+    :root[data-theme="light"] .brandWordmark {
+      color: var(--ink, #16233a);
     }
 
     .tabs {
