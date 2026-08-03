@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0022-blue)
+![Version](https://img.shields.io/badge/version-v6.0023-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0022 (latest)
+## 🆕 New in v6.0023 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -101,6 +101,22 @@ by nudging RGB fields is guesswork. The picker hides itself while you sample,
 so the part of the map it was covering is reachable too. Chromium-only for
 now (the eyedropper is a browser API); the button simply isn't drawn in
 browsers that don't have it.
+
+**And it really is every colour now.** The rule that hid the browser's own
+colour control behind the app's swatch only matched the pin and route
+colours, so the label background, ring, icon border, icon fill, geometry and
+measurement swatches were still live native controls sitting under the
+styled button — covered by nothing but the two boxes lining up exactly, and
+any layout that shifted one by a pixel put the operating system's colour
+dialog back in front of you. All of them are now inert.
+
+### Checkboxes match the app
+
+`accent-color` only colours a checkbox once it is ticked; an unticked one was
+still drawn by the operating system — a white box with a grey hairline —
+which on the dark frosted sidebar read as a chip of system UI dropped into
+the middle of the app. Every other control here is drawn by the app, so these
+are too, in both light and dark.
 
 ## 🆕 New in v5.0030
 
