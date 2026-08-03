@@ -33,10 +33,20 @@
        */
       function buildTileLayer(lyr, spec, hd) {
         const retina = !!lyr.retina && hd;
+        // Leaflet's detectRetina fetches one zoom level DEEPER than the grid
+        // zoom and paints it at half size (zoomOffset +1). maxNative describes
+        // how deep the *service* goes, so without this bias the URL asks for
+        // maxNative + 1 and Esri answers with its "Map data not yet available"
+        // placeholder — grey squares one zoom before they were due. Only on an
+        // actual retina display, since that is the only case Leaflet applies
+        // the offset at all, which is why this reproduced on some screens and
+        // not others.
+        const detectRetina = retina && !lyr.retinaSuffix;
+        const retinaBias = (detectRetina && L.Browser.retina) ? 1 : 0;
         const opts = {
           maxZoom: MAX_MAP_ZOOM,
           crossOrigin: crossOriginFor(spec),
-          maxNativeZoom: hd ? lyr.maxNative : Math.max(1, lyr.maxNative - 2),
+          maxNativeZoom: Math.max(1, (hd ? lyr.maxNative : lyr.maxNative - 2) - retinaBias),
           zIndex: lyr.zIndex,
           // Reference overlays must not paint an opaque background over the imagery.
           updateWhenIdle: false,
@@ -53,7 +63,7 @@
         // toned separately, and the export pipeline captures the two apart.
         if (lyr.role) opts.className = 'basemap-' + lyr.role;
         if (lyr.retinaSuffix) opts.r = (retina && L.Browser.retina) ? lyr.retinaSuffix : '';
-        else if (retina) opts.detectRetina = true;
+        else if (detectRetina) opts.detectRetina = true;
         const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
         // Back-reference so a failure handler can find which LayerSpec it came
         // from, and therefore which alternative templates it may try.
@@ -365,7 +375,12 @@
             return;
           }
           if (!flat) { strikes = 0; return; }
-          if (++strikes < 3) return;                                // one blank tile is just water/desert
+          // Two rather than three. Esri's coverage can be two levels shallower
+          // than advertised, which needs two step-backs, and at three strikes
+          // each the user watches a screen of grey squares while it converges.
+          // A real tile resets the count, and the note on looksLikeNoDataTile()
+          // is explicit that a false positive costs one upscaled zoom level.
+          if (++strikes < 2) return;
           strikes = 0;
           const next = layer.options.maxNativeZoom - 1;
           if (next < floor) { disabled = true; return; }
