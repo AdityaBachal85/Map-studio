@@ -377,10 +377,16 @@
             // A frameless pin is the marker itself, so it carries the white
             // keyline. A framed one already sits on its own background and
             // border, where a keyline would just muddy the glyph.
+            //
+            // Hardcoded white, deliberately not iconBorderColor: that field
+            // defaults to the location's own colour, which made the keyline
+            // the same colour as the fill and therefore invisible. It also
+            // styles the *frame's* border, and the frame's controls are hidden
+            // in frameless mode — so it is the wrong field twice over.
             box.innerHTML = svgForKey(
               loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
               loc.color,
-              frameless ? (loc.iconBorderColor || '#FFFFFF') : null
+              frameless ? '#FFFFFF' : null
             );
             const svg = box.querySelector('svg');
             if (svg) svg.style.cssText = `width:${svgPct};height:${svgPct};`;
