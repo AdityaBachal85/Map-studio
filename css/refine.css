@@ -2559,6 +2559,15 @@ input[type=tel] {
   border-color: var(--orange);
 }
 
+/* A swatch's entire content is a colour, so a focus ring drawn *inside* it
+   would read as part of that colour. Offset puts it clear of the fill. */
+.clrBtn:focus-visible,
+.cp-sw:focus-visible,
+.cp-custom:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
 .cp-pop {
   position: fixed;
   z-index: 4000;
@@ -2770,6 +2779,11 @@ input[type=tel] {
   border: 1px solid var(--stroke2);
   background: linear-gradient(to right,
       #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+}
+
+.cp-hue:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
 }
 
 .cp-hue-thumb {
@@ -2997,4 +3011,77 @@ input[type=checkbox]:focus-visible {
 input[type=checkbox]:disabled {
   opacity: .45;
   cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------------
+   Colour picker on touch
+   The swatch grid is sized for a mouse: eight ~27px cells, a 26px eyedropper,
+   a 13px hue bar. All of those are well under the 44px a finger needs, and
+   they sit 6px apart, so on a tablet the wrong colour is one imprecise tap
+   away. Rather than expand hit areas into the neighbours, the popover itself
+   gets wider and shallower on a coarse pointer — six columns of ~44px.
+   --------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+
+  .cp-pop {
+    width: min(340px, calc(100vw - 24px));
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
+
+  .cp-pop.cp-custom-mode {
+    width: min(340px, calc(100vw - 24px));
+  }
+
+  .cp-sv {
+    height: 168px;
+  }
+
+  /* A 13px bar is a hairline to drag with a fingertip. */
+  .cp-hue {
+    height: 22px;
+    border-radius: 11px;
+  }
+
+  .cp-hue-thumb {
+    width: 18px;
+    height: 18px;
+  }
+
+  .cp-dropper,
+  .cp-preview {
+    min-height: 40px;
+  }
+
+  .cp-fields {
+    grid-template-columns: 40px 1fr 1fr 1fr;
+  }
+
+  .cp-fields.has-dropper {
+    grid-template-columns: 40px 40px 1fr 1fr 1fr;
+  }
+
+  .cp-dropper,
+  .cp-preview {
+    width: 40px;
+  }
+
+  .cp-hex,
+  .cp-n {
+    padding: 9px 5px;
+    font-size: 13px;
+  }
+
+  .cp-back {
+    padding: 11px;
+  }
+
+  /* The card swatches keep their footprint — widening them would push the
+     sliders they share a row with — but gain a hit area that overhangs the
+     gap on the two sides where nothing else is. */
+  .clrBtn::before {
+    content: "";
+    position: absolute;
+    inset: -7px -3px;
+  }
 }

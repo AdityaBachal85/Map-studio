@@ -14,14 +14,36 @@
  * project can hold a consistent visual weight across many pins.
  */
 
+/**
+ * Named so the swatches have something to announce. A screen reader reading
+ * "#E03131" says "number E zero three one three one", which tells nobody
+ * anything; "Red" and "Light red" are the same information a sighted user
+ * gets from looking at the square.
+ */
 const COLOR_PRESETS = [
   // Strong — the default weight for pins and routes.
-  '#E03131', '#7048E8', '#3B5BDB', '#1C7ED6', '#0CA678', '#37B24D', '#F0A800', '#F76707',
+  { hex: '#E03131', name: 'Red' }, { hex: '#7048E8', name: 'Violet' },
+  { hex: '#3B5BDB', name: 'Indigo' }, { hex: '#1C7ED6', name: 'Blue' },
+  { hex: '#0CA678', name: 'Teal' }, { hex: '#37B24D', name: 'Green' },
+  { hex: '#F0A800', name: 'Amber' }, { hex: '#F76707', name: 'Orange' },
   // Light — secondary pins that should sit behind the strong ones.
-  '#FF6B6B', '#B197FC', '#748FFC', '#4DABF7', '#38D9A9', '#69DB7C', '#FFD43B', '#FFA94D',
+  { hex: '#FF6B6B', name: 'Light red' }, { hex: '#B197FC', name: 'Light violet' },
+  { hex: '#748FFC', name: 'Light indigo' }, { hex: '#4DABF7', name: 'Light blue' },
+  { hex: '#38D9A9', name: 'Light teal' }, { hex: '#69DB7C', name: 'Light green' },
+  { hex: '#FFD43B', name: 'Light amber' }, { hex: '#FFA94D', name: 'Light orange' },
   // Neutrals — greys for context, plus the two DBOT house colours at the end.
-  '#FFFFFF', '#E9ECEF', '#CED4DA', '#868E96', '#495057', '#000000', '#4B342A', '#8D6E63',
+  { hex: '#FFFFFF', name: 'White' }, { hex: '#E9ECEF', name: 'Off white' },
+  { hex: '#CED4DA', name: 'Light grey' }, { hex: '#868E96', name: 'Grey' },
+  { hex: '#495057', name: 'Dark grey' }, { hex: '#000000', name: 'Black' },
+  { hex: '#4B342A', name: 'Dark brown' }, { hex: '#8D6E63', name: 'Brown' },
 ];
+
+/** Human name for a hex, when it is one of the presets. @param {string} hex */
+function colorName(hex) {
+  const h = String(hex || '').toLowerCase();
+  const hit = COLOR_PRESETS.find(p => p.hex.toLowerCase() === h);
+  return hit ? hit.name : hex;
+}
 
 let presetPopover = null;
 let presetCleanup = null;
@@ -98,14 +120,23 @@ function enhanceColorInput(input) {
   input.parentNode.insertBefore(wrap, input);
   wrap.appendChild(input);
 
+  const label = input.title || 'Choose a colour';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'clrBtn';
-  btn.title = input.title || 'Choose a colour';
+  btn.title = label;
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.setAttribute('aria-expanded', 'false');
   if (input.title) input.removeAttribute('title');   // or both tooltips fire
   wrap.appendChild(btn);
 
-  const sync = () => btn.style.setProperty('--sw', input.value);
+  const sync = () => {
+    btn.style.setProperty('--sw', input.value);
+    // The swatch's only content is a colour, so without this a screen reader
+    // announces nine identical "Label background colour" buttons on a card and
+    // no way to tell which is set to what.
+    btn.setAttribute('aria-label', label + ': ' + colorName(input.value));
+  };
   sync();
   // Keep the face right when something *else* sets the value — switching a
   // location to Site rewrites several colours at once, for instance.
@@ -143,7 +174,9 @@ function syncColorSwatch(input) {
   const wrap = input && input.parentNode;
   if (!wrap || !wrap.classList || !wrap.classList.contains('clrWrap')) return;
   const btn = wrap.querySelector('.clrBtn');
-  if (btn) btn.style.setProperty('--sw', input.value);
+  if (!btn) return;
+  btn.style.setProperty('--sw', input.value);
+  btn.setAttribute('aria-label', (btn.title || 'Colour') + ': ' + colorName(input.value));
 }
 
 /**
@@ -168,8 +201,11 @@ function renderCustomPicker(pop, current, onPick) {
 
   pop.classList.add('cp-custom-mode');
   pop.innerHTML =
-    '<div class="cp-sv" tabindex="0"><div class="cp-sv-thumb"></div></div>'
-    + '<div class="cp-hue"><div class="cp-hue-thumb"></div></div>'
+    '<div class="cp-sv" tabindex="0" role="group"'
+    + ' aria-label="Saturation and brightness — arrow keys adjust, Shift for larger steps">'
+    + '<div class="cp-sv-thumb"></div></div>'
+    + '<div class="cp-hue" tabindex="0" role="slider" aria-label="Hue"'
+    + ' aria-valuemin="0" aria-valuemax="359" aria-valuenow="0"><div class="cp-hue-thumb"></div></div>'
     + '<div class="cp-fields' + (canSample ? ' has-dropper' : '') + '">'
     + '<span class="cp-preview"></span>'
     + (canSample
@@ -201,6 +237,8 @@ function renderCustomPicker(pop, current, onPick) {
     // under it, so it never disappears into a corner of the square.
     svThumb.style.borderColor = isLightColor(hex) ? '#000' : '#fff';
     hueThumb.style.left = (h / 360 * 100) + '%';
+    hue.setAttribute('aria-valuenow', Math.round(h));
+    hue.setAttribute('aria-valuetext', Math.round(h) + ' degrees');
     preview.style.background = hex;
     if (fromField !== 'hex') hexIn.value = hex;
     if (fromField !== 'rgb') {
@@ -255,6 +293,20 @@ function renderCustomPicker(pop, current, onPick) {
     sync();
   });
 
+  // The hue bar was pointer-only, which made the whole picker unusable from
+  // the keyboard: the square can reach every shade of one hue, and nothing
+  // could change which hue that was. Home/End jump to the ends of the wheel.
+  hue.addEventListener('keydown', e => {
+    const step = e.shiftKey ? 20 : 4;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') h = (h + step) % 360;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') h = (h - step + 360) % 360;
+    else if (e.key === 'Home') h = 0;
+    else if (e.key === 'End') h = 359;
+    else return;
+    e.preventDefault();
+    sync();
+  });
+
   hexIn.addEventListener('input', () => {
     const c = hexToRgb(hexIn.value);
     if (!c) return;                       // mid-typing, not yet a colour
@@ -274,6 +326,9 @@ function renderCustomPicker(pop, current, onPick) {
   const dropper = pop.querySelector('.cp-dropper');
   if (dropper) dropper.addEventListener('click', async () => {
     const picked = await pickFromScreen(pop);
+    // visibility:hidden makes an element unfocusable, so the browser blurred
+    // the button on the way in and focus is sitting on <body>. Put it back.
+    dropper.focus();
     const c = picked && hexToRgb(picked);
     if (!c) return;                       // cancelled
     const hsv = rgbToHsv(c.r, c.g, c.b);
@@ -287,12 +342,32 @@ function renderCustomPicker(pop, current, onPick) {
   });
 
   sync();
+  // Swapping the popover's contents destroys whatever had focus, which for a
+  // keyboard user is the "Custom colour…" button they just pressed — focus
+  // would fall to <body> and the next Tab would start from the top of the
+  // document. The square is where the work happens, so it takes over.
+  pop.setAttribute('aria-label', 'Custom colour');
+  sv.focus();
 }
 
-/** Tear down the open popover, if any. */
+/**
+ * Tear down the open popover, if any.
+ *
+ * Focus goes back to the swatch that opened it, but only when it is still
+ * inside the popover — returning it unconditionally would yank focus away
+ * from wherever the user had since moved it.
+ */
 function closeColorPresets() {
   if (presetCleanup) { presetCleanup(); presetCleanup = null; }
-  if (presetPopover) { presetPopover.remove(); presetPopover = null; }
+  if (!presetPopover) return;
+  const anchor = presetPopover._anchor;
+  const inside = presetPopover.contains(document.activeElement);
+  presetPopover.remove();
+  presetPopover = null;
+  if (anchor) {
+    anchor.setAttribute('aria-expanded', 'false');
+    if (inside && document.body.contains(anchor)) anchor.focus();
+  }
 }
 
 /**
@@ -311,13 +386,21 @@ function openColorPresets(anchor, current, onPick) {
   const pop = document.createElement('div');
   pop._anchor = anchor;
   pop.className = 'cp-pop frost';
-  pop.innerHTML = COLOR_PRESETS.map(hex =>
-    `<button type="button" class="cp-sw${hex.toLowerCase() === String(current).toLowerCase() ? ' sel' : ''}"
-       style="--sw:${esc(hex)}" data-hex="${esc(hex)}" title="${esc(hex)}" aria-label="${esc(hex)}"></button>`
-  ).join('') + '<button type="button" class="cp-custom">Custom colour…</button>';
+  // A dialog, like every other overlay in this app. Without a role it is an
+  // anonymous div at the end of <body>, which is also where Tab would land
+  // after the swatch — nowhere near it on screen.
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', 'Colour presets');
+  pop.innerHTML = COLOR_PRESETS.map(p => {
+    const sel = p.hex.toLowerCase() === String(current).toLowerCase();
+    return `<button type="button" class="cp-sw${sel ? ' sel' : ''}" aria-pressed="${sel}"
+       style="--sw:${esc(p.hex)}" data-hex="${esc(p.hex)}" title="${esc(p.name)} ${esc(p.hex)}"
+       aria-label="${esc(p.name)}"></button>`;
+  }).join('') + '<button type="button" class="cp-custom">Custom colour…</button>';
 
   document.body.appendChild(pop);
   presetPopover = pop;
+  anchor.setAttribute('aria-expanded', 'true');
 
   // Positioned against the viewport (position:fixed) so it escapes the
   // sidebar's own scroll container instead of being clipped by it, and
@@ -337,6 +420,12 @@ function openColorPresets(anchor, current, onPick) {
   pop.querySelectorAll('.cp-sw').forEach(sw => {
     sw.addEventListener('click', () => { onPick(sw.getAttribute('data-hex')); closeColorPresets(); });
   });
+
+  // Focus starts on the colour that is already set, so a keyboard user opens
+  // the picker already standing where they are, and arrow/Tab moves relative
+  // to that rather than from an arbitrary corner of the grid.
+  const start = pop.querySelector('.cp-sw.sel') || pop.querySelector('.cp-sw');
+  if (start) start.focus();
 
   // Swap the popover's contents in place rather than opening the OS colour
   // dialog. The native dialog is drawn by the browser and cannot be styled at

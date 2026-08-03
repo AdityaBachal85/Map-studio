@@ -31,6 +31,9 @@ function status(msg, sticky, action) {
       el.textContent = '';
       action.onClick();
     });
+    // A space, so a screen reader reads "deleted Site A. Undo" rather than
+    // running the sentence straight into the button's label.
+    el.appendChild(document.createTextNode(' '));
     el.appendChild(btn);
     // An action needs longer than a plain message: the user has to notice the
     // thing they did was wrong before they can reach for the way back.

@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0023-blue)
+![Version](https://img.shields.io/badge/version-v6.0024-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0023 (latest)
+## 🆕 New in v6.0024 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -117,6 +117,33 @@ still drawn by the operating system — a white box with a grey hairline —
 which on the dark frosted sidebar read as a chip of system UI dropped into
 the middle of the app. Every other control here is drawn by the app, so these
 are too, in both light and dark.
+
+### The colour picker is now usable without a mouse — and with a finger
+
+A design pass over the picker turned up things that looked finished and
+weren't:
+
+- **The hue bar was pointer-only.** The square could reach every shade of one
+  hue and nothing could change which hue that was, so the whole picker was
+  unusable from the keyboard. Arrow keys now move it, Shift for bigger steps,
+  Home/End for the ends of the wheel.
+- **Focus went nowhere sensible.** The popover is appended to the end of the
+  page, so opening it with the keyboard left focus on the swatch and the next
+  Tab jumped past the entire document. It now opens focused on the preset you
+  already have selected, moves to the square when you enter custom mode, and
+  hands focus back to the swatch when you close it.
+- **Nothing had a focus ring.** Swatches, presets and the hue bar all draw one
+  now, offset so it isn't mistaken for part of the colour.
+- **Presets announced as "hash E zero three one three one".** They're named —
+  Red, Light blue, Dark grey — and the swatch on a card says what it's set to
+  rather than being one of nine identical "colour" buttons.
+- **The status line wasn't a live region**, so a screen reader never mentioned
+  that a location had been deleted, let alone that Undo was sitting there for
+  twelve seconds. It is one now.
+- **Everything in the picker was mouse-sized on touch.** 27px preset cells 6px
+  apart and a 13px hue bar are a coin-toss with a fingertip. On a touch device
+  the popover widens to six ~44px columns, the hue bar doubles in height, and
+  the fields grow to match — the desktop layout is untouched.
 
 ## 🆕 New in v5.0030
 
