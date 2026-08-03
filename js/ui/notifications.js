@@ -1,5 +1,5 @@
 /**
- * ui/notifications.js — the status toast line at the bottom of the map.
+ * ui/notifications.js — the status line in the sidebar's footer.
  */
 
 let statusTimer = null;
