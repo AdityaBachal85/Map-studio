@@ -44,10 +44,10 @@
 function locCardMarkup(loc) {
         const card = document.createElement('div');
         card.className = 'item-card';
-        const iconOpts = ICON_KEYS.map(k => `<option value="${k}" ${loc.iconKey === k ? 'selected' : ''}>${esc(ICON_LIBRARY[k].label)}</option>`).join('');
         card.innerHTML = `
     <div class="r">
-      <input type="color" class="clr" value="${esc(loc.color)}" title="Pin / accent color">
+      <button type="button" class="clrBtn" title="Pin / accent colour" style="--sw:${esc(loc.color)}"></button>
+      <input type="color" class="clr" value="${esc(loc.color)}" hidden>
       <input type="text" class="nm grow" value="${esc(loc.name)}" placeholder="Name">
       <button class="x-btn" title="Delete">&times;</button>
     </div>
@@ -69,7 +69,7 @@ function locCardMarkup(loc) {
 
     <div class="iconPanel" style="display:none;border-top:1px solid var(--stroke);padding-top:8px;margin-top:2px;">
       <div class="r"><span class="sub" style="width:52px;">Icon</span>
-        <select class="ico grow">${iconOpts}</select>
+        <button type="button" class="icoBtn grow" title="Browse icons"></button>
         <button class="mini-btn upIcon" title="Upload custom PNG/SVG">📁</button>
         <button class="mini-btn clearIcon" title="Reset icon">✕</button>
         <input type="file" class="icoFile" accept="image/png,image/svg+xml,image/jpeg,image/webp" style="display:none;">
@@ -131,17 +131,37 @@ function wireLocCard(card, loc) {
           iconPanel.style.display = iconPanel.style.display === 'none' ? 'block' : 'none';
         });
 
-        card.querySelector('.clr').addEventListener('input', e => { loc.color = e.target.value; if (!loc.iconBorderColor || loc.iconBorderColor === loc.color) loc.iconBorderColor = e.target.value; locChanged(loc); });
+        /** Apply a colour from either the preset grid or the OS colour dialog. */
+        const applyLocColor = value => {
+          if (!loc.iconBorderColor || loc.iconBorderColor === loc.color) loc.iconBorderColor = value;
+          loc.color = value;
+          card.querySelector('.clr').value = value;
+          card.querySelector('.clrBtn').style.setProperty('--sw', value);
+          // The icon button previews the pin in this colour, so it has to follow.
+          refreshIconButton(card, loc);
+          locChanged(loc);
+        };
+        card.querySelector('.clr').addEventListener('input', e => applyLocColor(e.target.value));
+        card.querySelector('.clrBtn').addEventListener('click', e => {
+          openColorPresets(e.currentTarget, loc.color, applyLocColor);
+        });
         card.querySelector('.nm').addEventListener('change', e => { loc.name = e.target.value || 'Location'; locChanged(loc); });
         card.querySelector('.tp').addEventListener('change', e => {
           loc.type = e.target.value;
           card.querySelector('.bt-row').style.display = loc.type === 'badge' ? '' : 'none';
-          if (loc.type === 'badge') { loc.color = '#F7C948'; card.querySelector('.clr').value = '#F7C948'; }
+          if (loc.type === 'badge') {
+            loc.color = '#F7C948';
+            card.querySelector('.clr').value = '#F7C948';
+            card.querySelector('.clrBtn').style.setProperty('--sw', '#F7C948');
+          }
           if (loc.type === 'site') {
             loc.color = '#0A1E3C'; loc.labelBg = '#0A1E3C'; loc.iconBorderColor = '#FF7A1A';
             card.querySelector('.clr').value = '#0A1E3C'; card.querySelector('.lbg').value = '#0A1E3C'; card.querySelector('.bc').value = '#FF7A1A';
+            card.querySelector('.clrBtn').style.setProperty('--sw', '#0A1E3C');
             if (!loc.iconImage) loc.iconKey = 'star';
-            card.querySelector('.ico').value = loc.iconKey;
+          }
+          refreshIconButton(card, loc);
+          if (loc.type === 'site') {
             if (brand.siteUsesProjLogo) loc.iconUseProjectLogo = true;
             card.querySelector('.uspl').checked = loc.iconUseProjectLogo;
           }
@@ -158,7 +178,19 @@ function wireLocCard(card, loc) {
           if (!c) { status('Coordinates must be "lat, lng" — e.g. 15.28500, 73.95800'); e.target.value = fmtCoord(loc.lat, loc.lng); return; }
           loc.lat = c[0]; loc.lng = c[1]; locChanged(loc); recomputeRoutesTouching(loc.id);
         });
-        card.querySelector('.ico').addEventListener('change', e => { loc.iconKey = e.target.value; loc.iconImage = null; card.querySelector('.customPreview').style.display = 'none'; locChanged(loc); });
+        refreshIconButton(card, loc);
+        card.querySelector('.icoBtn').addEventListener('click', () => {
+          openIconPicker(loc, key => {
+            loc.iconKey = key;
+            // A built-in icon and an uploaded one are the same slot on the map,
+            // so choosing from the library clears any upload rather than
+            // leaving an invisible override in place.
+            loc.iconImage = null;
+            card.querySelector('.customPreview').style.display = 'none';
+            refreshIconButton(card, loc);
+            locChanged(loc);
+          });
+        });
         card.querySelector('.fr').addEventListener('change', e => { loc.iconFrame = e.target.value; locChanged(loc); });
         card.querySelector('.sz').addEventListener('input', e => { loc.iconSize = +e.target.value; card.querySelector('.sz-v').textContent = loc.iconSize; renderLocPin(loc); });
         card.querySelector('.bw').addEventListener('input', e => { loc.iconBorder = +e.target.value; renderLocPin(loc); });
