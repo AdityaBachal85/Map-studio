@@ -46,8 +46,14 @@ function locCardMarkup(loc) {
         card.className = 'item-card';
         card.innerHTML = `
     <div class="r">
-      <button type="button" class="clrBtn" title="Pin / accent colour" style="--sw:${esc(loc.color)}"></button>
-      <input type="color" class="clr" value="${esc(loc.color)}" hidden>
+      <!-- The native input is transparent and stacked *under* the swatch
+           rather than hidden. A hidden input has no layout box, so the browser
+           anchors its colour dialog at the top-left of the window instead of
+           at the control — which is where it was opening, half off-screen. -->
+      <span class="clrWrap">
+        <input type="color" class="clr" value="${esc(loc.color)}" tabindex="-1" aria-hidden="true">
+        <button type="button" class="clrBtn" title="Pin / accent colour" style="--sw:${esc(loc.color)}"></button>
+      </span>
       <input type="text" class="nm grow" value="${esc(loc.name)}" placeholder="Name">
       <button class="x-btn" title="Delete">&times;</button>
     </div>
