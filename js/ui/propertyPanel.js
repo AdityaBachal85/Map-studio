@@ -377,7 +377,24 @@ function wireLocCard(card, loc) {
           });
           status('Route duplicated (shifted sideways so both stay visible).');
         });
-        card.querySelector('.x-btn').addEventListener('click', () => deleteRoute(rt));
+        // Undo lives on the button, not inside deleteRoute() — that is also
+        // called for every route attached to a location being deleted, and
+        // one toast per cascaded route would bury the one that matters (the
+        // location's own, which already restores these).
+        card.querySelector('.x-btn').addEventListener('click', () => {
+          const snapshot = serialiseRoute(rt);
+          const label = rt.labelText || routeLabelText(rt) || 'route';
+          deleteRoute(rt);
+          status(`Deleted ${label}.`, false, {
+            label: 'Undo',
+            onClick: () => {
+              addRoute(snapshot);
+              rebuildLegend(); syncEmpties(); scheduleRepaint();
+              if (typeof refreshLayers === 'function') refreshLayers();
+              status(`Restored ${label}.`);
+            },
+          });
+        });
         rt.card = card;
         enhanceColorInputs(card);
         $('rtList').appendChild(card);

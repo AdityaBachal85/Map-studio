@@ -140,8 +140,30 @@
         if (typeof refreshLayers === 'function') refreshLayers();
         return loc;
       }
+      /**
+       * Delete a location, and every route that runs to or from it.
+       *
+       * The cascade is why this offers an undo. Removing one pin can silently
+       * take several routes with it — each of which cost a routing request and
+       * whatever manual tuning went into its label, colour and via points —
+       * and there was previously no confirmation and no way back. One misclick
+       * on the × could undo an hour.
+       *
+       * The snapshot is taken with the project serialisers, so a restored
+       * location and its routes carry exactly what a saved one would. Routes
+       * are restored with their computed geometry, so undo re-draws them
+       * without re-spending a routing request.
+       *
+       * @param {object} loc
+       */
       function deleteLocation(loc) {
-        routes.filter(r => r.fromId === loc.id || r.toId === loc.id).forEach(deleteRoute);
+        const doomedRoutes = routes.filter(r => r.fromId === loc.id || r.toId === loc.id);
+        const snapshot = {
+          loc: serialiseLocation(loc),
+          routes: doomedRoutes.map(serialiseRoute),
+        };
+
+        doomedRoutes.forEach(deleteRoute);
         if (loc._pinEl) removeBB(loc._pinEl);
         if (loc._labelEl) removeBB(loc._labelEl);
         (loc._ringLabelEls || []).forEach(removeBB);
@@ -151,4 +173,30 @@
         refreshRouteSelects(); rebuildLegend(); syncEmpties();
         scheduleRepaint();
         if (typeof refreshLayers === 'function') refreshLayers();
+
+        const n = snapshot.routes.length;
+        status(
+          `Deleted "${snapshot.loc.name}"` + (n ? ` and ${n} route${n > 1 ? 's' : ''}` : '') + '.',
+          false,
+          { label: 'Undo', onClick: () => restoreDeletedLocation(snapshot) }
+        );
+      }
+
+      /**
+       * Put back a location and its routes from a deleteLocation() snapshot.
+       *
+       * Ids are restored, not regenerated — the routes reference the location
+       * by id, so a fresh id would leave them pointing at nothing. addLocation
+       * and addRoute both honour an incoming id for exactly this reason.
+       *
+       * @param {{loc:object, routes:object[]}} snapshot
+       */
+      function restoreDeletedLocation(snapshot) {
+        addLocation(snapshot.loc);
+        snapshot.routes.forEach(r => addRoute(r));
+        refreshRouteSelects(); rebuildLegend(); syncEmpties();
+        scheduleRepaint();
+        if (typeof refreshLayers === 'function') refreshLayers();
+        const n = snapshot.routes.length;
+        status(`Restored "${snapshot.loc.name}"` + (n ? ` and ${n} route${n > 1 ? 's' : ''}` : '') + '.');
       }

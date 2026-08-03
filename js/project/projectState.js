@@ -17,6 +17,56 @@
  */
 
 /**
+ * One location as plain data.
+ *
+ * Named rather than inlined in serialiseProject() because undo-delete
+ * (map/markers.js) snapshots a single location with it. Sharing the one
+ * function is what guarantees a restored location carries everything a saved
+ * one does — a second, hand-written field list would drift the first time
+ * somebody adds a property.
+ *
+ * @param {object} l @returns {object}
+ */
+function serialiseLocation(l) {
+  return {
+    id: l.id, name: l.name, lat: l.lat, lng: l.lng, color: l.color, type: l.type,
+    badgeText: l.badgeText,
+    showLabel: l.showLabel, labelOffset: l.labelOffset, labelPinned: l.labelPinned,
+    // labelShowIcon is deliberately not saved: labels carry the name only
+    // (see map/markers.js). Writing it back would keep resurrecting the
+    // setting in files long after nothing reads it.
+    labelBg: l.labelBg,
+    iconKey: l.iconKey, iconImage: l.iconImage, iconUseProjectLogo: l.iconUseProjectLogo,
+    iconSize: l.iconSize, iconFrame: l.iconFrame, iconBg: l.iconBg,
+    iconBorder: l.iconBorder, iconBorderColor: l.iconBorderColor,
+    iconShadow: l.iconShadow, iconGlow: l.iconGlow,
+    hideMarker: l.hideMarker,
+    rings: l.rings,
+    // `photo` was missing from the original serialiser, so a location's photo
+    // survived only until the tab closed — it was dropped by Save and never
+    // came back from Open. Autosave would have inherited exactly that hole.
+    photo: l.photo || null,
+  };
+}
+
+/**
+ * One route as plain data, including its computed geometry.
+ * @param {object} r @returns {object}
+ */
+function serialiseRoute(r) {
+  const alt = r.alts && r.alts[r.altIndex];
+  return {
+    id: r.id, fromId: r.fromId, toId: r.toId, mode: r.mode, color: r.color,
+    weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
+    showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
+    viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
+    // The computed geometry travels with the route so reopening a project
+    // does not re-spend a routing request per route.
+    saved: alt ? { d: alt.d, t: alt.t, coords: alt.coords, approx: r.approx } : null,
+  };
+}
+
+/**
  * Snapshot the whole editable state as a plain object.
  *
  * Plain data only: no DOM nodes, no Leaflet layers, no functions. That is what
@@ -44,37 +94,8 @@ function serialiseProject() {
     north: $('northTgl').checked,
     projectLogo: brand.projectLogo,
     siteUsesProjLogo: brand.siteUsesProjLogo,
-    locations: locations.map(l => ({
-      id: l.id, name: l.name, lat: l.lat, lng: l.lng, color: l.color, type: l.type,
-      badgeText: l.badgeText,
-      showLabel: l.showLabel, labelOffset: l.labelOffset, labelPinned: l.labelPinned,
-      // labelShowIcon is deliberately not saved: labels carry the name only
-      // (see map/markers.js). Writing it back would keep resurrecting the
-      // setting in files long after nothing reads it.
-      labelBg: l.labelBg,
-      iconKey: l.iconKey, iconImage: l.iconImage, iconUseProjectLogo: l.iconUseProjectLogo,
-      iconSize: l.iconSize, iconFrame: l.iconFrame, iconBg: l.iconBg,
-      iconBorder: l.iconBorder, iconBorderColor: l.iconBorderColor,
-      iconShadow: l.iconShadow, iconGlow: l.iconGlow,
-      hideMarker: l.hideMarker,
-      rings: l.rings,
-      // `photo` was missing from the original serialiser, so a location's photo
-      // survived only until the tab closed — it was dropped by Save and never
-      // came back from Open. Autosave would have inherited exactly that hole.
-      photo: l.photo || null,
-    })),
-    routes: routes.map(r => {
-      const alt = r.alts && r.alts[r.altIndex];
-      return {
-        id: r.id, fromId: r.fromId, toId: r.toId, mode: r.mode, color: r.color,
-        weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
-        showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
-        viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
-        // The computed geometry travels with the route so reopening a project
-        // does not re-spend a routing request per route.
-        saved: alt ? { d: alt.d, t: alt.t, coords: alt.coords, approx: r.approx } : null,
-      };
-    }),
+    locations: locations.map(serialiseLocation),
+    routes: routes.map(serialiseRoute),
     geometries: geometries.map(geomToGeoJSONFeature),
   };
 }
