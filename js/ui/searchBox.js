@@ -21,11 +21,11 @@ function collapseSearch() {
 // The leading magnifier is the collapse/expand handle and doubles as a submit:
 //   collapsed        -> expand + focus
 //   expanded, empty  -> collapse (frees the map)
-//   expanded, typed  -> run the search (like pressing Enter)
+//   expanded, typed  -> submit (exactly what Enter does, predictions included)
 $('searchIconBtn').addEventListener('click', () => {
   const box = $('searchBox');
   if (box.classList.contains('collapsed')) { expandSearch(); return; }
-  if ($('searchInput').value.trim()) doSearch(false);
+  if ($('searchInput').value.trim()) submitSearch();
   else collapseSearch();
 });
 

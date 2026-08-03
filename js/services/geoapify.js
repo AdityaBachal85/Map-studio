@@ -11,7 +11,15 @@ const GEOAPIFY_CACHE_MAX = 50;
 const geoapifyCache = new Map(); // "query|bbox" -> results[], simple bounded LRU
 
 function cacheGet(key) {
-  if (!geoapifyCache.has(key)) return null;
+  if (!geoapifyCache.has(key)) {
+    // Second chance from the cache that survives a reload
+    // (services/placeCache.js). Searching for the same estate twice in a week
+    // is the norm on a project, and a refresh used to re-buy every one of them.
+    const disk = typeof placeCacheGet === 'function' ? placeCacheGet('search', key) : null;
+    if (!disk) return null;
+    geoapifyCache.set(key, disk);
+    return disk;
+  }
   const v = geoapifyCache.get(key);
   geoapifyCache.delete(key); geoapifyCache.set(key, v); // move to most-recently-used
   return v;
@@ -20,6 +28,12 @@ function cacheSet(key, val) {
   geoapifyCache.delete(key);
   geoapifyCache.set(key, val);
   if (geoapifyCache.size > GEOAPIFY_CACHE_MAX) geoapifyCache.delete(geoapifyCache.keys().next().value);
+  // Predictions are deliberately NOT persisted. An autocomplete row carries a
+  // placeId and no coordinate, and a Place ID is the one piece of Places data
+  // Google lets you keep indefinitely — but the prediction text around it is a
+  // half-second-old guess at what someone was typing, worth nothing tomorrow.
+  // Only settled search results are worth the storage.
+  if (typeof placeCacheSet === 'function' && key.charAt(0) === 's') placeCacheSet('search', key, val);
 }
 
 /**
@@ -30,7 +44,10 @@ function cacheSet(key, val) {
  * from cache afterwards, and the key looked like it had done nothing. Called
  * whenever a provider key changes.
  */
-function clearSearchCache() { geoapifyCache.clear(); }
+function clearSearchCache() {
+  geoapifyCache.clear();
+  if (typeof placeCacheClear === 'function') placeCacheClear('search');
+}
 
 /**
  * Map a Geoapify result category (e.g. "education.school") to an emoji,

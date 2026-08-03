@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0024-blue)
+![Version](https://img.shields.io/badge/version-v6.0025-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0024 (latest)
+## 🆕 New in v6.0025 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -144,6 +144,30 @@ weren't:
   apart and a 13px hue bar are a coin-toss with a fingertip. On a touch device
   the popover widens to six ~44px columns, the hue bar doubles in height, and
   the fields grow to match — the desktop layout is untouched.
+
+### Google requests: fewer of them, for the same result
+
+Two places where one action was buying two answers from Google.
+
+**Answers now survive a reload.** The caches that make a chip toggle or a
+radius drag free only lived in the tab. Refreshing the page, or reopening a
+project tomorrow, re-bought every category at full price — and the answers
+had not changed, because the schools around a plot are the same schools they
+were this morning. They are now mirrored to `localStorage` with a 7-day life
+(inside Google's 30-day caching terms) and read back on boot. Measured: four
+categories cost **4 requests cold, then 0 after a full reload**, and
+narrowing the radius across that reload stays free too.
+
+**The search buttons ignored predictions you had already paid for.** Pressing
+Enter on a suggestion resolved it properly, but the arrow button and the
+magnifier both threw the suggestions away and ran a fresh Text Search for the
+same string — a second, separately billed request for a question already
+answered. All three submit paths now behave the same way.
+
+What was *already* efficient and stayed that way: typing is debounced to one
+prediction request per pause, toggling a category off and back on costs
+nothing, and shrinking the radius is served by narrowing the wider answer
+already held rather than asking again.
 
 ## 🆕 New in v5.0030
 

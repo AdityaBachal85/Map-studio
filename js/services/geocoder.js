@@ -150,14 +150,29 @@ const recents = [];
         $('searchInput').value = ''; $('sClear').hidden = true;
         resultsData = []; renderResults(); $('searchInput').focus();
       });
+      /**
+       * Act on a submit — Enter, the arrow button, or the magnifier.
+       *
+       * If predictions are already on screen for what is typed, the answer has
+       * been bought: take the highlighted one and resolve it with a Place
+       * Details call, which is the same billing session the autocomplete
+       * opened. Running a fresh Text Search instead is a second, separately
+       * charged request for a question already answered — which is exactly
+       * what the two buttons used to do, while Enter did the right thing.
+       */
+      function submitSearch() {
+        const open = $('searchResults').style.display === 'block' && resultsData.length;
+        if (open && selIdx >= 0) pickResult(resultsData[selIdx]);
+        else doSearch(false);
+      }
       $('searchInput').addEventListener('keydown', e => {
         const open = $('searchResults').style.display === 'block' && resultsData.length;
         if (e.key === 'ArrowDown' && open) { e.preventDefault(); selIdx = (selIdx + 1) % resultsData.length; renderResults(); }
         else if (e.key === 'ArrowUp' && open) { e.preventDefault(); selIdx = (selIdx - 1 + resultsData.length) % resultsData.length; renderResults(); }
-        else if (e.key === 'Enter') { if (open && selIdx >= 0) pickResult(resultsData[selIdx]); else doSearch(false); }
+        else if (e.key === 'Enter') submitSearch();
         else if (e.key === 'Escape') { resultsData = []; renderResults(); }
       });
-      $('searchBtn').addEventListener('click', () => doSearch(false));
+      $('searchBtn').addEventListener('click', submitSearch);
       document.addEventListener('click', e => {
         if (!e.target.closest('.search-box')) $('searchResults').style.display = 'none';
       });

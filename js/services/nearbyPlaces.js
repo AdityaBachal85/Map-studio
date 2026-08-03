@@ -128,7 +128,31 @@ function nearbyNarrowable(fam, radiusM) {
 }
 
 /** Drop every cached answer. Called when the Google key changes. */
-function clearNearbyCache() { nearbyCache.clear(); }
+function clearNearbyCache() {
+  nearbyCache.clear();
+  if (typeof placeCacheClear === 'function') placeCacheClear('nearby');
+}
+
+let _nearbyHydrated = false;
+/**
+ * Fill the in-memory cache from the one that survives a reload
+ * (services/placeCache.js), once per boot.
+ *
+ * Everything is pulled in rather than read key-by-key because
+ * nearbyNarrowable() *scans* the Map looking for a wider answer it can shrink.
+ * A read-through on the exact key would leave that scan blind to anything on
+ * disk, so re-opening a project and dragging the radius down would refetch
+ * every category — the one case the narrowing logic exists to prevent.
+ */
+function nearbyHydrate() {
+  if (_nearbyHydrated || typeof placeCacheKeys !== 'function') { _nearbyHydrated = true; return; }
+  _nearbyHydrated = true;
+  placeCacheKeys('nearby').forEach(k => {
+    if (nearbyCache.has(k) || nearbyCache.size >= NEARBY_CACHE_MAX) return;
+    const rows = placeCacheGet('nearby', k);
+    if (rows) nearbyCache.set(k, rows);
+  });
+}
 
 /**
  * Turn a provider error into something a person can act on. A spent daily quota
@@ -158,6 +182,7 @@ function nearbyErrorNote(msg) {
  */
 async function fetchNearbyCategory(lat, lng, radiusM, cat, limit) {
   const { cats, gtypes, gquery, grefine } = cat || {};
+  nearbyHydrate();
   const fam = nearbyFamilyKey(lat, lng, cat || {});
   const ck = fam + '|' + Math.round(radiusM);
   if (nearbyCache.has(ck)) return nearbyCache.get(ck);
@@ -167,6 +192,9 @@ async function fetchNearbyCategory(lat, lng, radiusM, cat, limit) {
     if (rows.capped == null) rows.capped = false;
     if (nearbyCache.size >= NEARBY_CACHE_MAX) nearbyCache.delete(nearbyCache.keys().next().value);
     nearbyCache.set(ck, rows);
+    // Also to disk, so this answer outlives the tab. Narrowed subsets are
+    // written too: they cost nothing to store and save the narrowing scan.
+    if (typeof placeCacheSet === 'function') placeCacheSet('nearby', ck, rows);
     return rows;
   };
 
