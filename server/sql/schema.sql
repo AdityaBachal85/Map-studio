@@ -1,4 +1,5 @@
--- DBOT Map Studio v6 — AI report backend schema (Postgres, e.g. Neon).
+-- DBOT Map Studio v6 — AI report backend schema (any Postgres; Supabase is
+-- what docs/AI-REPORTS-SETUP.md walks through).
 --
 -- This data is genuinely relational — a report belongs to a site, a site
 -- belongs to a project, an agent run belongs to a report — which is why this
@@ -6,11 +7,18 @@
 -- Evidence Store the Report Writer and Chat Agent both read from; normal
 -- foreign keys give "every prior report for this site" for free.
 --
--- IDs are app-generated (nanoid, see functions/src/lib/db.js), stored as TEXT
+-- IDs are app-generated (nanoid, see server/src/lib/db.js), stored as TEXT
 -- — matches the plain-string job/report ids the client already works with,
 -- and avoids depending on pgcrypto/gen_random_uuid() being available.
 --
 -- Apply once against a fresh database: `psql "$DATABASE_URL" -f sql/schema.sql`
+-- (or paste the whole file into Supabase's SQL editor). Safe to run twice.
+--
+-- Every statement below is IF NOT EXISTS / idempotent, so a re-run is a no-op
+-- that would otherwise print a screenful of "already exists, skipping"
+-- NOTICEs. Those say nothing went wrong, so they're silenced; real warnings
+-- and errors still surface.
+SET client_min_messages TO WARNING;
 
 CREATE TABLE IF NOT EXISTS projects (
   id          TEXT PRIMARY KEY,
@@ -86,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_name ON agent_runs (agent_name, 
 
 -- Upgrade path for a database created before reports carried their files
 -- inline (the original design uploaded to Cloud Storage and kept only URLs).
--- Harmless on a fresh database.
+-- Every statement is a no-op on a fresh database.
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_bytes BYTEA;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS docx_bytes BYTEA;
 ALTER TABLE reports DROP COLUMN IF EXISTS pdf_path;
@@ -100,7 +108,9 @@ CREATE INDEX IF NOT EXISTS idx_reports_expiry ON reports (expires_at) WHERE expi
 
 CREATE TABLE IF NOT EXISTS usage_ledger (
   date               DATE NOT NULL,
-  model              TEXT NOT NULL, -- Gemini model tier, e.g. 'gemini-2.5-flash'
+  -- Whichever model lib/aiRouter.js actually called, plus the reserved
+  -- '_reports' row that counts reports rather than tokens.
+  model              TEXT NOT NULL,
   prompt_tokens      BIGINT NOT NULL DEFAULT 0,
   completion_tokens  BIGINT NOT NULL DEFAULT 0,
   total_tokens       BIGINT NOT NULL DEFAULT 0,
@@ -109,3 +119,5 @@ CREATE TABLE IF NOT EXISTS usage_ledger (
   reports_failed     BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (date, model)
 );
+
+RESET client_min_messages;

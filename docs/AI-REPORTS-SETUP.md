@@ -1,185 +1,202 @@
 # AI Reports — backend setup
 
 The AI Reports tab (`js/ui/aiTab.js`) is a thin client for a separate backend
-in `functions/` — a Firebase Cloud Functions app that owns the Gemini key,
-runs the research pipeline (`functions/src/agents/`), renders the PDF/DOCX,
-and stores them for 48 hours. None of this is part of the static site's
-GitHub Pages deploy; it's a second, manual deploy path you set up once.
+in `server/` — a plain Node/Express app that owns the Gemini key, runs the
+research pipeline (`server/src/agents/`), renders the PDF/DOCX, and stores
+them for 48 hours.
 
-Everything below is a one-time setup. After it's done, redeploying the
-backend after a code change is just `firebase deploy --only functions`.
+None of this is part of the static site's GitHub Pages deploy. It's a second,
+manual deploy you do once.
+
+**Everything below is free and needs no credit card.**
 
 ## What you need
 
-Four accounts, all with usable free tiers for this workload:
-
-| Service | For | Where |
+| Service | For | Free tier |
 |---|---|---|
-| Firebase project (**Blaze plan**) | Cloud Functions, Cloud Tasks, Cloud Storage | [console.firebase.google.com](https://console.firebase.google.com) |
-| Gemini API key | The actual research/writing calls | [aistudio.google.com](https://aistudio.google.com) |
-| Neon (or any Postgres) | Reports, sites, the Evidence Store, the usage ledger | [neon.tech](https://neon.tech) |
-| Upstash (or any Redis) | Job-status polling cache, per-IP rate limiting | [upstash.com](https://upstash.com) |
+| [Supabase](https://supabase.com) | Postgres — reports, Evidence Store, usage ledger | 500 MB database, no card |
+| [Render](https://render.com) | Runs the Node server | 750 hrs/month, no card |
+| [Google AI Studio](https://aistudio.google.com) | Gemini API key | Free tier, no card |
 
-**Blaze plan note:** the async job pattern (`tasks/reportWorker.js`) needs
-Cloud Functions 2nd-gen + Cloud Tasks, which requires a billing account on
-the Firebase project — even though actual spend should stay near $0 given
-the daily caps below. This is a Google requirement, not something this app
-chose; a card on file is unavoidable, being charged for it in practice
-shouldn't happen if the caps are respected.
+Two things worth knowing before you start:
 
-## 1. Firebase project
+- **Render's free tier sleeps** after 15 minutes with no traffic. The next
+  request wakes it, which takes ~50 seconds. See "Keeping it awake" below.
+- **Supabase pauses a free project** after 7 days with no activity; you
+  restore it with one click in their dashboard. Regular use avoids this.
+
+Neither is a blocker, but both are better known up front than discovered
+later.
+
+## 1. Supabase — the database
+
+You've already created the project. Now:
+
+**Get the connection string.** Project Settings → Database → Connection
+string → **URI**, and pick the **Session pooler** (not "Direct connection").
+
+This matters: Supabase's direct connection is IPv6-only unless you pay for
+the IPv4 add-on, and Render's free tier doesn't reach IPv6 — so a direct
+connection string will fail with a confusing network error. The session
+pooler is IPv4 and works.
+
+It looks like:
+
+```
+postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
+```
+
+Replace `[YOUR-PASSWORD]` with your database password. If you don't have it,
+reset it on that same settings page.
+
+**If you get a certificate error on first connect**, append `?sslmode=no-verify`
+to the string. `server/src/lib/db.js` reads that flag and relaxes certificate
+verification while keeping the connection encrypted. Try without it first.
+
+**Apply the schema.** Easiest path is Supabase's own SQL editor — open
+**SQL Editor** in the sidebar, paste the entire contents of
+`server/sql/schema.sql`, and run it. You should see five tables under
+**Table Editor** afterwards: `projects`, `sites`, `reports`, `agent_runs`,
+`usage_ledger`.
+
+Or from a terminal, if you have `psql`:
 
 ```sh
-npm install -g firebase-tools
-firebase login
-firebase projects:create your-project-id   # or use an existing one
+psql "YOUR_CONNECTION_STRING" -f server/sql/schema.sql
 ```
 
-Enable Blaze billing for the project in the [Firebase console](https://console.firebase.google.com)
-(Settings → Usage and billing).
+The script is idempotent — running it twice is safe.
 
-Edit `.firebaserc` at the repo root and replace the placeholder with your
-real project id:
+## 2. Gemini API key
 
-```json
-{ "projects": { "default": "your-project-id" } }
-```
+Create one at [aistudio.google.com](https://aistudio.google.com/apikey).
 
-## 2. Postgres (Neon)
+Two things to check, because both have bitten this project already:
 
-Create a project at [neon.tech](https://neon.tech), then apply the schema:
+- **Confirm the key has quota.** In AI Studio, the key's Google Cloud project
+  must have Gemini API quota available. A key whose project shows a daily
+  limit of `0` authenticates fine and then fails every single call with a 429
+  — which looks like a code bug and isn't one.
+- **Never paste this key into a chat, a commit, or `js/config.js`.** It goes
+  in Render's environment variables (step 3) and nowhere else. The browser
+  never sees it; there is no code path in this app that would send it there.
+
+## 3. Render — the server
+
+1. Push this repo to GitHub (it already is).
+2. In Render: **New → Web Service**, connect the repo.
+3. Render reads `render.yaml` at the repo root and fills in the settings.
+   Confirm they look right:
+   - Root directory: `server`
+   - Build: `npm install`
+   - Start: `npm start`
+   - Plan: **Free**
+4. Add the environment variables (Render dashboard → Environment):
+
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | your Supabase session-pooler string from step 1 |
+| `GEMINI_API_KEY` | your key from step 2 |
+| `ALLOWED_ORIGIN` | the exact origin of your live site, e.g. `https://adityabachal85.github.io` — no trailing slash, no path |
+
+`ALLOWED_ORIGIN` is what stops other websites' JavaScript from calling your
+backend and spending your Gemini quota. Get it exactly right: protocol +
+host, nothing else.
+
+5. Deploy. Render prints a URL like
+   `https://map-studio-ai-reports.onrender.com`.
+
+**Verify before going further:**
 
 ```sh
-psql "$YOUR_NEON_CONNECTION_STRING" -f functions/sql/schema.sql
+curl https://YOUR-SERVICE.onrender.com/health
+# {"ok":true,"activeJobs":0}
+
+curl https://YOUR-SERVICE.onrender.com/getUsage
+# {"reportsGenerated":0,"reportsCap":20,...}
 ```
 
-Keep the connection string — it's `DATABASE_URL` below. Neon's pooled
-connection string (the one with `-pooler` in the hostname) is the one to use
-here; Cloud Functions instances are short-lived and don't benefit from a
-direct, unpooled connection the way a long-running server would.
+`/health` proves the process is up. `/getUsage` proves it reached Postgres —
+if that one 500s, `DATABASE_URL` is wrong or the schema wasn't applied.
 
-## 3. Redis (Upstash)
-
-Create a database at [upstash.com](https://upstash.com) (the free tier is
-plenty for this). From its dashboard, copy the **REST URL** and **REST
-token** — not the Redis protocol connection string, the REST ones
-(`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` below). The REST API
-is what `@upstash/redis` uses, and it's what avoids Cloud Functions having to
-hold a persistent TCP connection open between invocations.
-
-## 4. Gemini API key
-
-Create a key at [aistudio.google.com](https://aistudio.google.com). This key
-lives **only** in the backend (a Cloud Functions secret, step 5) — it never
-ships to the browser, and the app has no code path that would put it there.
-
-## 5. Configure secrets
-
-From the `functions/` directory:
-
-```sh
-cd functions
-firebase functions:secrets:set GEMINI_API_KEY
-firebase functions:secrets:set DATABASE_URL
-firebase functions:secrets:set UPSTASH_REDIS_REST_URL
-firebase functions:secrets:set UPSTASH_REDIS_REST_TOKEN
-```
-
-```sh
-firebase functions:secrets:set ALLOWED_ORIGIN
-```
-
-Each prompts for the value and stores it in Secret Manager — nothing is
-written to a file that could accidentally get committed. `ALLOWED_ORIGIN` is
-the exact origin your GitHub Pages site is served from (e.g.
-`https://your-org.github.io`, no trailing slash) — it isn't sensitive, but
-it's kept in Secret Manager alongside the real secrets for one consistent
-config mechanism rather than mixing two.
-
-Firebase Functions v2 only populates `process.env.SECRET_NAME` for a
-function that explicitly lists that secret in its own options — every
-function in `functions/src/http/` and `functions/src/tasks/` already
-declares exactly what it needs via `secrets: secrets.DB` /
-`secrets.DB_CACHE` / `secrets.ALL` (see `functions/src/lib/secrets.js`), so
-this is handled for you; it only matters if you add a new function later.
-
-For **local emulator testing**, create `functions/.env` (already gitignored)
-instead:
-
-```
-GEMINI_API_KEY=...
-DATABASE_URL=...
-UPSTASH_REDIS_REST_URL=...
-UPSTASH_REDIS_REST_TOKEN=...
-ALLOWED_ORIGIN=http://localhost:8080
-```
-
-## 6. Storage bucket lifecycle (the 48-hour report expiry)
-
-This isn't part of `firebase deploy` — it's a one-time bucket setting:
-
-```sh
-cat > /tmp/lifecycle.json <<'EOF'
-{ "rule": [ { "action": {"type": "Delete"}, "condition": {"age": 2} } ] }
-EOF
-gcloud storage buckets update gs://your-project-id.appspot.com --lifecycle-file=/tmp/lifecycle.json
-```
-
-Note this deletes objects somewhere between ~48-72 hours after creation (the
-rule is day-granular, swept once a day) — the *precise* "expires in 48
-hours" the UI promises is actually enforced by the signed URL's own
-expiry (`functions/src/lib/storage.js`), which is exact. The lifecycle rule
-is the backstop that guarantees the bucket doesn't accumulate files forever
-even if a signed URL is never followed.
-
-## 7. Install, verify locally, deploy
-
-```sh
-cd functions
-npm install
-firebase emulators:start --only functions   # needs functions/.env from step 5
-# in another terminal:
-curl http://127.0.0.1:5001/your-project-id/asia-south1/getUsage
-```
-
-That should return a zeroed usage ledger for today. If it does, the whole
-chain (Postgres, Redis, CORS, deploy config) is wired correctly and it's
-safe to deploy for real:
-
-```sh
-firebase deploy --only functions
-```
-
-Note the deployed base URL Firebase prints (something like
-`https://asia-south1-your-project-id.cloudfunctions.net`).
-
-## 8. Point the client at it
+## 4. Point the site at it
 
 Edit `js/config.js`:
 
 ```js
-const AI_FUNCTIONS_BASE_URL = 'https://asia-south1-your-project-id.cloudfunctions.net';
+const AI_FUNCTIONS_BASE_URL = 'https://YOUR-SERVICE.onrender.com';
 ```
 
-That's the only client-side change. Redeploy the static site (GitHub Pages,
-as normal) and the AI Reports tab is live.
+Commit and push. GitHub Pages redeploys as normal, and the AI Reports tab is
+live. This is the only client-side change in the whole setup.
+
+## Keeping it awake
+
+On the free plan Render sleeps the service after 15 minutes idle, so the
+first report after a quiet spell waits ~50 seconds on the cold start. The tab
+shows its normal progress status throughout, so it looks slow rather than
+broken — but if you'd rather avoid it, point any free uptime pinger
+(UptimeRobot, cron-job.org) at `/health` every 10 minutes. That endpoint
+touches neither Postgres nor Gemini, so pinging it is genuinely free.
+
+Note this also keeps your Supabase project active, sidestepping the 7-day
+pause.
 
 ## Tuning the daily caps
 
-`functions/src/lib/ledger.js`'s `DEFAULT_CAPS` (`maxReportsPerDay`,
-`maxTotalTokensPerDay`) ship with conservative placeholders. Check the
-current Gemini free-tier limits for whichever model
-`functions/src/lib/aiRouter.js` is configured to use before raising them —
-those limits change over time and this repo can't know the current numbers
-for you.
+`server/src/lib/ledger.js` → `DEFAULT_CAPS` (`maxReportsPerDay: 20`,
+`maxTotalTokensPerDay: 1_500_000`) are deliberately conservative placeholders.
+Check the current Gemini free-tier limits for the model in
+`server/src/lib/aiRouter.js` before raising them — those limits change over
+time and this repo can't know today's numbers for you.
+
+## How it works, briefly
+
+Worth knowing when something goes wrong:
+
+- `POST /createReportJob` runs the abuse gates, writes a `reports` row, starts
+  the pipeline **in the background**, and returns a `jobId` in under a second.
+- The pipeline (`server/src/pipeline/runReport.js`) runs four research agents
+  in parallel, each doing its own grounded Google search via Gemini, then a
+  writer agent that only synthesizes, then renders PDF + DOCX.
+- The client polls `GET /getReportStatus` every ~4s.
+- Documents are stored **in Postgres** and served by `GET /downloadReport`.
+  There's no object storage to configure, and expiry is enforced at download
+  time rather than baked into a URL that can't be revoked.
+
+Because it's one long-lived process rather than serverless functions, there's
+no job queue to provision — the server just runs the job. That's the whole
+reason this setup is free.
 
 ## Troubleshooting
 
-- **`getUsage` 500s locally**: almost always a missing/wrong `DATABASE_URL`
-  or the schema not having been applied yet (step 2).
-- **`createReportJob` succeeds but the report never leaves `queued`**: check
-  `firebase functions:log` for `reportWorker` — a Cloud Tasks misconfiguration
-  (wrong region, queue not provisioned yet on first deploy) is the usual
-  cause. Redeploying once queues exist typically resolves it.
-- **CORS errors in the browser console**: `ALLOWED_ORIGIN` doesn't match the
-  page's actual origin exactly (protocol + host, no trailing slash).
+- **`/getUsage` returns 500** — `DATABASE_URL` is wrong, or the schema hasn't
+  been applied. Check Render's logs for the actual Postgres error.
+- **Postgres connection times out** — you used the direct connection string
+  instead of the session pooler (see step 1). Render can't reach IPv6.
+- **Certificate / SSL errors** — append `?sslmode=no-verify` to `DATABASE_URL`.
+- **CORS errors in the browser console** — `ALLOWED_ORIGIN` doesn't exactly
+  match your site's origin. Compare it character by character against what the
+  browser address bar shows.
+- **Every report fails at "Researching your site…"** — almost always the
+  Gemini key: either wrong, or its project has no quota. Render's logs show
+  the real error from Google, which usually says which.
+- **A report is stuck mid-status forever** — it shouldn't be. The server fails
+  orphaned jobs on boot and sweeps hung ones every 15 minutes. If you see one
+  persist, check the logs for a crash loop.
+- **First request of the day takes ~50s** — that's the free-tier cold start,
+  not a bug. See "Keeping it awake".
+
+## Moving off the free tier later
+
+Nothing here locks you in:
+
+- **Any Postgres works** — `DATABASE_URL` is the only knob. Neon, RDS, a VM.
+- **Any Node host works** — no Render-specific code exists.
+- **Redis is optional and already supported.** `server/src/lib/cache.js` uses
+  in-process memory by default, which is correct for one instance. Set
+  `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` and it switches over
+  automatically — do this **before** running more than one instance, since
+  in-memory rate-limit counters aren't shared between processes.
+- **Object storage**, if reports outgrow Postgres: `server/src/lib/storage.js`
+  is the only file that touches the document columns.

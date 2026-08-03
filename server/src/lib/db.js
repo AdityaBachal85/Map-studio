@@ -12,6 +12,28 @@ const { nanoid } = require('nanoid');
 
 let _pool = null;
 
+/**
+ * SSL settings, driven by `sslmode` in DATABASE_URL (standard libpq
+ * semantics) so this is fixable by editing the connection string rather than
+ * this file.
+ *
+ * Hosted Postgres providers differ on certificates: some present a publicly
+ * trusted chain that verifies out of the box, others (Supabase's direct
+ * connection among them) present one that won't validate without downloading
+ * their CA. `sslmode=no-verify` is the escape hatch for that case — it still
+ * encrypts, it just stops checking who's on the other end, so prefer a
+ * provider/endpoint that verifies cleanly when you have the choice.
+ *
+ * @param {string} connectionString
+ * @returns {object|false}
+ */
+function sslConfig(connectionString) {
+  const mode = (connectionString.match(/[?&]sslmode=([^&]+)/) || [])[1];
+  if (mode === 'disable') return false;
+  if (mode === 'no-verify' || mode === 'allow' || mode === 'prefer') return { rejectUnauthorized: false };
+  return { rejectUnauthorized: true };
+}
+
 /** @returns {import('pg').Pool} */
 function pool() {
   if (_pool) return _pool;
@@ -20,8 +42,16 @@ function pool() {
   _pool = new Pool({
     connectionString,
     max: 3,
-    ssl: { rejectUnauthorized: true },
+    ssl: sslConfig(connectionString),
+    // A hosted database behind a pooler can take a moment on a cold start
+    // (both Supabase and Neon suspend idle projects); the default 0 means
+    // "wait forever", which would hang a request rather than fail it.
+    connectionTimeoutMillis: 15000,
   });
+  // A pooled client can be dropped by the provider between queries. Without a
+  // listener, pg emits this as an unhandled 'error' event, which is fatal to
+  // the process — the pool itself recovers by opening a new connection.
+  _pool.on('error', (e) => console.warn('postgres idle client error (pool will recover):', e.message));
   return _pool;
 }
 

@@ -3,17 +3,15 @@
  * enough to answer synchronously most of the time (see agents/chat.js) —
  * no Cloud Task needed, unlike report generation.
  */
-const { onRequest } = require('firebase-functions/v2/https');
 const { withCors, clientIp } = require('../lib/cors');
 const db = require('../lib/db');
 const cache = require('../lib/cache');
 const chatAgent = require('../agents/chat');
-const secrets = require('../lib/secrets');
 
 const RATE_LIMIT_PER_IP = 30;
 const RATE_LIMIT_WINDOW_S = 600;
 
-const chat = onRequest({ region: 'asia-south1', cors: false, timeoutSeconds: 60, secrets: secrets.ALL }, withCors(async (req, res) => {
+const chat = withCors(async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
 
   const ip = clientIp(req);
@@ -31,6 +29,6 @@ const chat = onRequest({ region: 'asia-south1', cors: false, timeoutSeconds: 60,
 
   const { reply, researched } = await chatAgent.answer({ reportId, message: message.trim() });
   res.status(200).json({ reply, researched });
-}));
+});
 
 module.exports = { chat };

@@ -1,6 +1,6 @@
 /**
  * ui/aiTab.js — the AI Reports tab: pick a Site, generate a multi-section
- * report from the backend's agent pipeline (see functions/), and ask
+ * report from the backend's agent pipeline (see server/), and ask
  * follow-up questions against it once it exists.
  *
  * Owns its own tab-button click listener rather than reaching into
@@ -34,7 +34,7 @@ const AI_STATUS_TEXT = {
   researching: 'Researching your site…',
   writing: 'Writing the report…',
   rendering: 'Building the PDF and Word document…',
-  uploading: 'Uploading…',
+  storing: 'Saving your documents…',
 };
 
 /** Populate the site picker from locations tagged as a Site (loc.type === 'site'). */

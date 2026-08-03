@@ -40,4 +40,21 @@ function clientIp(req) {
   return req.ip || 'unknown';
 }
 
-module.exports = { withCors, clientIp };
+/**
+ * This backend's own public origin, e.g. `https://map-studio-ai.onrender.com`.
+ *
+ * Derived from the request (Express resolves `req.protocol` from
+ * X-Forwarded-Proto once `trust proxy` is set, which src/server.js does) so
+ * that deploying to a new host needs no configuration. PUBLIC_BASE_URL
+ * overrides it for the case where that inference is wrong — behind a CDN or a
+ * custom domain that rewrites Host.
+ *
+ * @param {import('express').Request} req @returns {string} origin, no trailing slash
+ */
+function publicOrigin(req) {
+  const configured = (process.env.PUBLIC_BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+  return req.protocol + '://' + req.get('host');
+}
+
+module.exports = { withCors, clientIp, publicOrigin };

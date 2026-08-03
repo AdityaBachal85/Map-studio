@@ -1,0 +1,27 @@
+# Render blueprint for the AI reports backend (server/).
+#
+# This deploys ONLY the backend. The Map Studio site itself stays on GitHub
+# Pages exactly as before — nothing about the static site's deploy changes.
+#
+# Render is not special here: server/ is a plain Node/Express app and runs on
+# anything with a $PORT (Koyeb, Fly, Railway, a VM). This file just makes the
+# Render path one click. See docs/AI-REPORTS-SETUP.md.
+services:
+  - type: web
+    name: map-studio-ai-reports
+    runtime: node
+    plan: free
+    region: singapore # closest Render region to India; Supabase should match
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # Every one of these is set in the Render dashboard, not here — a value
+      # committed to this file would be a value published to GitHub.
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false

@@ -1,21 +1,21 @@
 /**
- * tasks/reportWorker.js — the Research Controller.
+ * pipeline/runReport.js — the Research Controller.
  *
- * Runs as a Cloud Task (via createReportJob's enqueue), not inline on the
- * client's request — the full pipeline (plan -> research -> write -> render
- * -> upload) can legitimately take well past what a browser fetch() should
- * be held open for. Receives {reportId, site, nearby} as the task payload
- * (not re-read from Postgres) — the site/nearby the client actually sent is
- * what gets researched, with `reportId` used to resolve the site's row for
- * Evidence Store lookups.
+ * Runs in the background on this process, started by http/createReportJob.js
+ * via lib/jobs.js and never awaited by the request that triggered it — the
+ * full pipeline (plan -> research -> write -> render -> store) can
+ * legitimately take minutes, well past what a browser fetch() should be held
+ * open for. The client polls http/getReportStatus.js instead.
  *
- * Any failure anywhere in the pipeline is caught here, written to the report
- * as a sanitized error, and NOT rethrown — a caught failure marks the task
- * done rather than triggering a Cloud Tasks retry, since retrying a
- * partially-completed AI pipeline risks double-spending Gemini calls rather
- * than fixing whatever actually went wrong.
+ * Receives {reportId, site, nearby} directly rather than re-reading it from
+ * Postgres — the site/nearby the client actually sent is what gets
+ * researched, with `reportId` used to resolve the site's row for Evidence
+ * Store lookups.
+ *
+ * Failures are recorded, never rethrown to the caller: there is no caller
+ * left. `failReport` is what lib/jobs.js invokes if this throws, and it's
+ * exported so that path is the same one used everywhere else.
  */
-const { onTaskDispatched } = require('firebase-functions/v2/tasks');
 const db = require('../lib/db');
 const ledger = require('../lib/ledger');
 const cache = require('../lib/cache');
@@ -28,8 +28,7 @@ const government = require('../agents/government');
 const news = require('../agents/news');
 const { renderPdf } = require('../report/renderPdf');
 const { renderDocx } = require('../report/renderDocx');
-const { uploadReportFile } = require('../lib/storage');
-const secrets = require('../lib/secrets');
+const { saveReportFiles } = require('../lib/storage');
 
 const AGENT_MODULES = { connectivity, infrastructure, government, news };
 
@@ -94,41 +93,30 @@ async function runReportPipeline({ reportId, site, nearby }) {
   await setStatus(reportId, 'rendering');
   const [pdfBuffer, docxBuffer] = await Promise.all([renderPdf(document), renderDocx(document)]);
 
-  await setStatus(reportId, 'uploading');
-  const [pdfResult, docxResult] = await Promise.all([
-    uploadReportFile(reportId, 'pdf', pdfBuffer),
-    uploadReportFile(reportId, 'docx', docxBuffer),
-  ]);
+  await setStatus(reportId, 'storing');
+  const { expiresAt } = await saveReportFiles(reportId, { pdf: pdfBuffer, docx: docxBuffer });
 
-  await setStatus(reportId, 'done', {
-    pdf_path: pdfResult.path, docx_path: docxResult.path,
-    pdf_url: pdfResult.url, docx_url: docxResult.url,
-    expires_at: pdfResult.expiresAt,
-  });
+  // The download URLs aren't stored — http/getReportStatus.js builds them per
+  // request from its own origin, so they survive a change of host.
+  await setStatus(reportId, 'done', { expires_at: expiresAt });
   await ledger.recordReportOutcome(true);
 }
 
-const reportWorker = onTaskDispatched({
-  region: 'asia-south1',
-  retryConfig: { maxAttempts: 1 }, // see file header — failures are handled inline, not via Cloud Tasks retry
-  rateLimits: { maxConcurrentDispatches: 5 },
-  memory: '1GiB',
-  timeoutSeconds: 480,
-  secrets: secrets.ALL,
-}, async (req) => {
-  const { reportId, site, nearby } = req.data || {};
-  if (!reportId || !site) { console.error('reportWorker: missing reportId/site in task payload', req.data); return; }
-  try {
-    await runReportPipeline({ reportId, site, nearby: nearby || {} });
-  } catch (e) {
-    console.error(`reportWorker: report ${reportId} failed:`, e);
-    try {
-      await setStatus(reportId, 'error', { error: 'Something went wrong generating this report — please try again.' });
-      await ledger.recordReportOutcome(false);
-    } catch (inner) {
-      console.error('reportWorker: failed to record the failure itself:', inner);
-    }
-  }
-});
+/**
+ * Record a pipeline failure against the report, so the client's poll gets a
+ * real answer instead of a status that never advances. Passed to
+ * lib/jobs.js as the error handler for every report job.
+ *
+ * The user-facing message is deliberately generic — the real error is logged
+ * server-side, where it can name an internal service or a prompt, neither of
+ * which should reach a browser.
+ *
+ * @param {string} reportId @param {Error} error
+ */
+async function failReport(reportId, error) {
+  console.error(`report ${reportId} failed:`, error);
+  await setStatus(reportId, 'error', { error: 'Something went wrong generating this report — please try again.' });
+  await ledger.recordReportOutcome(false);
+}
 
-module.exports = { reportWorker, runReportPipeline };
+module.exports = { runReportPipeline, failReport };

@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0001-blue)
+![Version](https://img.shields.io/badge/version-v6.0002-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0001 (latest)
+## 🆕 New in v6.0002 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -41,8 +41,8 @@ about that report.
 
 This is deliberately not "the app calls an AI API with a key baked into the
 page" — the Gemini key that does the actual research and writing never
-ships to the browser at all. A small backend (`functions/`, deployed
-separately to Firebase Cloud Functions) runs a **multi-agent pipeline**: a
+ships to the browser at all. A small backend (`server/`, a plain Node/Express
+app deployed separately) runs a **multi-agent pipeline**: a
 Research Planner decides what to research, four specialized agents
 (Connectivity, Infrastructure, Government Projects, News) each research one
 topic with Gemini's Google Search grounding, a Report Writer agent that
@@ -56,8 +56,10 @@ counted by the only thing spending against the key — see
 inside the free tier, and the 48-hour report expiry.
 
 The client side of this ships in every deploy; the backend is a **separate,
-manual setup** (Firebase + Postgres + Redis + a Gemini key) documented end
-to end in `docs/AI-REPORTS-SETUP.md`. Until that's deployed and
+manual setup** — Supabase (Postgres) + Render + a Gemini key, all free tiers
+with no credit card — documented end to end in `docs/AI-REPORTS-SETUP.md`.
+It's a plain Express app with no cloud-specific code, so any Postgres and any
+Node host work equally well. Until it's deployed and
 `AI_FUNCTIONS_BASE_URL` is set in `js/config.js`, the tab is present but
 tells you plainly that it isn't configured yet, rather than failing
 mysteriously.

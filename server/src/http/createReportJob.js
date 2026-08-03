@@ -2,16 +2,16 @@
  * http/createReportJob.js — the Research Controller's front door.
  *
  * Fast (<2s): validates the request, runs every abuse/cap gate, writes the
- * report row, enqueues the actual work as a Cloud Task, and returns
- * immediately. All the slow work happens in tasks/reportWorker.js.
+ * report row, starts the pipeline in the background, and returns immediately
+ * with a job id the client polls. All the slow work happens in
+ * pipeline/runReport.js, on this same process (see lib/jobs.js).
  */
-const { onRequest } = require('firebase-functions/v2/https');
-const { getFunctions } = require('firebase-admin/functions');
 const { withCors, clientIp } = require('../lib/cors');
 const db = require('../lib/db');
 const ledger = require('../lib/ledger');
 const cache = require('../lib/cache');
-const secrets = require('../lib/secrets');
+const jobs = require('../lib/jobs');
+const { runReportPipeline, failReport } = require('../pipeline/runReport');
 
 /** How many reports may be in-flight across the whole deployment at once — the real defense against per-minute quota bursts, independent of the daily budget. */
 const MAX_CONCURRENT_REPORTS = 3;
@@ -29,7 +29,7 @@ function validate(body) {
   return null;
 }
 
-const createReportJob = onRequest({ region: 'asia-south1', cors: false, secrets: secrets.DB_CACHE }, withCors(async (req, res) => {
+const createReportJob = withCors(async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
 
   const ip = clientIp(req);
@@ -65,10 +65,23 @@ const createReportJob = onRequest({ region: 'asia-south1', cors: false, secrets:
   const siteId = await db.findOrCreateSite(site);
   const reportId = await db.createReportRow(siteId);
 
-  const queue = getFunctions().taskQueue('reportWorker');
-  await queue.enqueue({ reportId, site, nearby });
+  // Not awaited — the pipeline runs for minutes and the client polls for it.
+  // jobs.start() returns false if this process is already at its ceiling,
+  // which the DB-backed gate above should have caught; this is the last word
+  // on it, and failing here means marking the row rather than leaving a
+  // report queued that nothing will ever pick up.
+  const started = jobs.start(
+    reportId,
+    () => runReportPipeline({ reportId, site, nearby }),
+    failReport
+  );
+  if (!started) {
+    await db.updateReportStatus(reportId, 'error', { error: 'The server is busy — please try again shortly.' });
+    res.status(429).json({ code: 'concurrency_limit', error: 'Several reports are already being generated — please try again shortly.' });
+    return;
+  }
 
   res.status(200).json({ jobId: reportId });
-}));
+});
 
 module.exports = { createReportJob, MAX_CONCURRENT_REPORTS, RATE_LIMIT_PER_IP, RATE_LIMIT_WINDOW_S };

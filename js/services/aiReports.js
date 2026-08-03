@@ -1,10 +1,10 @@
 /**
- * services/aiReports.js — client for the AI report backend (Cloud Functions).
+ * services/aiReports.js — client for the AI report backend (see server/).
  *
  * The backend owns the Gemini key and every provider call; this module only
  * talks to our own HTTPS endpoints via plain fetch(), matching every other
- * service in this app. No Firebase SDK, no realtime listeners — a report is a
- * job you create and then poll, same shape as everything else here.
+ * service in this app. No SDK, no realtime listeners — a report is a job you
+ * create and then poll, same shape as everything else here.
  *
  * AI_FUNCTIONS_BASE_URL (js/config.js) is empty until the backend is deployed
  * (see docs/AI-REPORTS-SETUP.md); every function here throws a clear error in

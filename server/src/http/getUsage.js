@@ -4,19 +4,21 @@
  * it exists first (before any agent logic) to validate the whole chain: DB
  * connectivity, CORS, and the deploy pipeline.
  */
-const { onRequest } = require('firebase-functions/v2/https');
 const { withCors } = require('../lib/cors');
 const ledger = require('../lib/ledger');
-const secrets = require('../lib/secrets');
 
-const getUsage = onRequest({ region: 'asia-south1', cors: false, secrets: secrets.DB }, withCors(async (req, res) => {
+const getUsage = withCors(async (req, res) => {
   const summary = await ledger.getTodaySummary();
   res.status(200).json({
     reportsGenerated: summary.reportsGenerated,
     reportsCap: summary.reportsCap,
     resetsAt: summary.resetsAt,
-    gemini: summary.byModel['gemini-2.5-flash'] || { totalTokens: summary.totalTokens },
+    // Report the total across whichever models actually ran, rather than
+    // naming one: lib/aiRouter.js picks the model per task and falls back to
+    // another when quota runs out, so hardcoding a single key here would
+    // silently report zero the moment the router routed somewhere else.
+    gemini: { totalTokens: summary.totalTokens, byModel: summary.byModel },
   });
-}));
+});
 
 module.exports = { getUsage };
