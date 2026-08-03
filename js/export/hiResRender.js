@@ -333,13 +333,19 @@ async function renderGroundPass(o) {
     const tiles = await shot({ backgroundColor: '#0d1522' });
     host.classList.remove('hires-imagery-only');
 
+    // The host's dark fill backs the imagery pass, where it fills the gaps
+    // between tiles. Every later pass is composited *over* that imagery, so
+    // the fill must not paint into them — an opaque backdrop drawn at the
+    // road layer's 0.78 alpha is a 78% dark wash over the entire map, which
+    // is the "exported map is dark" report. The imagery is all there; it was
+    // being covered.
     let reference = null;
     const roadOpacity = (typeof roadExportStyle === 'function') ? roadExportStyle().opacity : 1;
     if (roadOpacity > 0 && host.querySelector('.basemap-reference')) {
-      host.classList.add('hires-reference-only');
+      host.classList.add('hires-reference-only', 'hires-transparent-bg');
       await new Promise(r => requestAnimationFrame(r));
       reference = await shot({ backgroundColor: null });
-      host.classList.remove('hires-reference-only');
+      host.classList.remove('hires-reference-only', 'hires-transparent-bg');
     }
 
     let vectors = null;
@@ -350,10 +356,13 @@ async function renderGroundPass(o) {
         if (clone) { clone.addTo(exportMap); clones.push(clone); }
       });
       if (clones.length) {
-        host.classList.add('hires-vectors-only');   // hides the tile pane
+        // Same reason as the reference pass — and worse here, since vectors
+        // are composited at full alpha: an opaque backdrop would not wash the
+        // map, it would replace it.
+        host.classList.add('hires-vectors-only', 'hires-transparent-bg');
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         vectors = await shot({ backgroundColor: null });
-        host.classList.remove('hires-vectors-only');
+        host.classList.remove('hires-vectors-only', 'hires-transparent-bg');
       }
     }
     return { canvas: tiles, reference, vectors, complete };

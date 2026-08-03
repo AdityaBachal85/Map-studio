@@ -70,6 +70,19 @@
       display: none !important;
     }
 
+    /* Every pass after the imagery one is composited *over* the imagery, so it
+       must rasterise onto nothing. The offscreen host carries an inline dark
+       fill to back the imagery pass (it shows through gaps between tiles);
+       left in place for the later passes it became an opaque sheet drawn over
+       the map — at the road layer's 0.78 alpha, a 78% dark wash across the
+       whole export. `!important` because that fill is an inline style, and
+       Leaflet's own #ddd on .leaflet-container has to go with it. */
+    .hires-transparent-bg,
+    .hires-transparent-bg .leaflet-container,
+    .hires-transparent-bg .leaflet-pane {
+      background: transparent !important;
+    }
+
     /* Captured unfiltered and at full opacity — the treatment is applied when
        the pass is composited, not while it is being rasterised. */
     .hires-reference-only .basemap-reference {
