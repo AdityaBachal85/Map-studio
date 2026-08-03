@@ -620,7 +620,7 @@ function exportSubstituteNote(msg) {
  * @returns {boolean} true when the sample looks like the placeholder tile.
  */
 function looksLikeNoDataTile(px) {
-  if (!px || px.length < 20) return false;
+  if (!px || px.length < 16) return false;
   const rgb = [];
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] < 250) return false;                        // translucent → not it
@@ -628,12 +628,22 @@ function looksLikeNoDataTile(px) {
   }
   let lo = 255, hi = 0;
   for (const [r, g, b] of rgb) {
-    if (Math.max(r, g, b) - Math.min(r, g, b) > 4) return false;   // any colour → real imagery
+    // Desaturation is the strongest signal: aerial photography is never
+    // neutral grey across a whole tile — vegetation, water, rooftops and
+    // tarmac all carry a colour cast.
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 10) return false;
     const v = (r + g + b) / 3;
-    if (v < 224 || v > 249) return false;                          // too dark, or cloud-white
+    // Was 224–249, which missed the placeholder outright: Esri's is around
+    // 215–225, and averaging its white caption into a downsample drags the
+    // reading further about. The band is now wide enough to cover the tile as
+    // actually served while still excluding dark ground and white cloud.
+    if (v < 185 || v > 252) return false;
     lo = Math.min(lo, v); hi = Math.max(hi, v);
   }
-  return hi - lo <= 3;                                             // flat, featureless grey
+  // Was ≤3, which no sample containing any of the caption could satisfy.
+  // Callers sample the corners for that reason, but a little slack costs
+  // nothing and this has to survive JPEG noise too.
+  return hi - lo <= 10;
 }
 
 /* Node/test interop — harmless in the browser. */

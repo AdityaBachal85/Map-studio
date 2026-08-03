@@ -359,8 +359,23 @@
        */
       function attachAdaptiveDepth(layer, lyr) {
         const probe = document.createElement('canvas');
-        probe.width = probe.height = 4;
+        probe.width = probe.height = 8;
         const pctx = probe.getContext('2d', { willReadFrequently: true });
+        /**
+         * The four corners of the downsampled tile.
+         *
+         * Corners specifically, because the placeholder's "Map data not yet
+         * available" caption sits across the middle: sampling the whole grid
+         * averages white text into grey background and the reading no longer
+         * looks like either. The corners are clean background on a placeholder,
+         * and on real imagery they are as good a sample as anywhere.
+         * @returns {number[]} RGBA quads
+         */
+        const cornerSamples = () => {
+          const d = pctx.getImageData(0, 0, 8, 8).data;
+          const at = (x, y) => { const i = (y * 8 + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+          return [].concat(at(0, 0), at(7, 0), at(0, 7), at(7, 7));
+        };
         const floor = Math.max(17, lyr.maxNative - 4);   // never degrade below usable detail
         let strikes = 0, disabled = false;
         layer.on('tileload', ev => {
@@ -368,8 +383,8 @@
           if (ev.coords.z < layer.options.maxNativeZoom) return;   // only judge the deepest level
           let flat;
           try {
-            pctx.drawImage(ev.tile, 0, 0, 4, 4);
-            flat = looksLikeNoDataTile(Array.from(pctx.getImageData(0, 0, 4, 4).data));
+            pctx.drawImage(ev.tile, 0, 0, 8, 8);
+            flat = looksLikeNoDataTile(cornerSamples());
           } catch (e) {
             disabled = true;                                        // tainted canvas — stop probing
             return;
