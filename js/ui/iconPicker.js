@@ -31,8 +31,9 @@ const PIN_OUTLINE = 'M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.3
  * @param {string} key @param {string} color
  * @returns {string} svg markup
  */
-function iconPinSwatch(key, color) {
-  return `<svg viewBox="0 0 24 32" width="26" height="34" aria-hidden="true">
+function iconPinSwatch(key, color, w) {
+  const width = w || 26;
+  return `<svg viewBox="0 0 24 32" width="${width}" height="${Math.round(width * 32 / 24)}" aria-hidden="true">
     <path fill="${esc(color)}" d="${PIN_OUTLINE}"/>
     <g transform="translate(5.5 5.5) scale(0.5417)">${iconPaths(key, '#FFFFFF')}</g>
   </svg>`;
@@ -94,13 +95,25 @@ function openIconPicker(loc, onPick) {
   if (search) setTimeout(() => search.focus(), 50);
 }
 
-/** Refresh a card's icon button face after the icon or colour changes. */
+/**
+ * Refresh a card's icon button face after the icon or colour changes.
+ *
+ * The pin sits in its own recessed tile rather than floating on the button:
+ * at full height it touched both edges and read as a stray graphic instead of
+ * a preview. The chevron matches the Frame select directly beneath it, so the
+ * two controls look like the same kind of thing — which they are.
+ */
 function refreshIconButton(card, loc) {
   const btn = card.querySelector('.icoBtn');
   if (!btn) return;
   const key = loc.iconKey || (loc.type === 'site' ? 'star' : 'pin');
-  btn.innerHTML = iconPinSwatch(key, loc.color || '#0A1E3C')
-    + `<span class="icoBtn-lbl">${esc((ICON_LIBRARY[key] || ICON_LIBRARY.pin).label)}</span>`;
+  btn.innerHTML =
+    `<span class="icoBtn-sw">${iconPinSwatch(key, loc.color || '#0A1E3C', 17)}</span>`
+    + `<span class="icoBtn-lbl">${esc((ICON_LIBRARY[key] || ICON_LIBRARY.pin).label)}</span>`
+    + '<span class="icoBtn-chev" aria-hidden="true">'
+    + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"'
+    + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    + '</span>';
 }
 
 function initIconPicker() {

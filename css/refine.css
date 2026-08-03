@@ -2470,20 +2470,23 @@ input[type=tel] {
   font-size: 12.5px;
 }
 
-/* The location card's icon button — shows the pin as it will actually look. */
+/* The location card's icon button — shows the pin as it will actually look.
+   Sized and chevroned to match the Frame <select> directly beneath it, so the
+   two read as the same class of control rather than a button and a dropdown. */
 .icoBtn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 6px;
+  gap: 9px;
+  padding: 0 9px 0 6px;
   border: 1px solid var(--stroke2);
   border-radius: 10px;
   background: rgba(255, 255, 255, .05);
   color: var(--text);
   cursor: pointer;
-  font-size: 12px;
-  min-height: 34px;
+  font-size: 12.5px;
+  height: 36px;
   text-align: left;
+  transition: border-color .13s, background .13s;
 }
 
 :root[data-theme="light"] .icoBtn {
@@ -2492,16 +2495,49 @@ input[type=tel] {
 
 .icoBtn:hover {
   border-color: var(--orange);
+  background: rgba(255, 122, 26, .09);
 }
 
-.icoBtn svg {
+/* A recessed well for the preview. Without it the pin floated against the
+   button at full height, touching both edges, and read as a stray graphic
+   rather than a swatch of the thing being chosen. */
+.icoBtn-sw {
   flex: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+}
+
+:root[data-theme="light"] .icoBtn-sw {
+  background: rgba(16, 32, 60, .06);
+  box-shadow: inset 0 0 0 1px rgba(16, 32, 60, .07);
+}
+
+.icoBtn-sw svg {
+  display: block;
 }
 
 .icoBtn-lbl {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.icoBtn-chev {
+  flex: none;
+  display: flex;
+  color: var(--dim);
+}
+
+.icoBtn:hover .icoBtn-chev {
+  color: var(--orange);
 }
 
 /* ---------- Colour presets (ui/colorPresets.js) ---------- */
