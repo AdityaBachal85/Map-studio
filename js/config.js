@@ -220,4 +220,4 @@ const PLACES_PROVIDERS = Object.freeze({
  * Deploy the backend first (see docs/AI-REPORTS-SETUP.md), then paste its
  * URL here.
  */
-const AI_FUNCTIONS_BASE_URL = '';
+const AI_FUNCTIONS_BASE_URL = 'https://map-studio-ai-reports.onrender.com';
