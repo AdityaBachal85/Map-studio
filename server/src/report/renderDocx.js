@@ -7,6 +7,7 @@
  * consume that structure as-is.
  */
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ExternalHyperlink } = require('docx');
+const { blocks } = require('./markdownLite');
 
 /**
  * @param {{title:string, generatedAt:string, executiveSummary:string,
@@ -23,7 +24,7 @@ async function renderDocx(doc) {
 
   for (const section of doc.sections) {
     children.push(new Paragraph({ text: section.heading, heading: HeadingLevel.HEADING_1, spacing: { before: 300 } }));
-    children.push(...bodyParagraphs(section.body));
+    children.push(...bodyParagraphs(section.body, !!section.unavailable));
   }
 
   if (doc.allSources && doc.allSources.length) {
@@ -45,11 +46,36 @@ async function renderDocx(doc) {
 /**
  * Split prose on blank lines into separate paragraphs, so a multi-paragraph
  * agent response doesn't render as one wall of text.
- * @param {string} text @returns {Paragraph[]}
+ *
+ * `unavailable` sets the text apart in grey italics for the same reason the
+ * PDF does: in the body face, "this section could not be sourced" reads as a
+ * finding about the area rather than a note about the report.
+ * @param {string} text @param {boolean} [unavailable] @returns {Paragraph[]}
  */
-function bodyParagraphs(text) {
-  const parts = (text || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  return (parts.length ? parts : ['(no content)']).map(p => new Paragraph({ text: p, spacing: { after: 150 } }));
+function bodyParagraphs(text, unavailable) {
+  const parsed = blocks(text);
+  if (!parsed.length) return [new Paragraph({ text: '(no content)', spacing: { after: 150 } })];
+
+  return parsed.map(b => {
+    if (unavailable) {
+      return new Paragraph({
+        children: b.runs.map(r => new TextRun({ text: r.text, italics: true, color: '8A8A99' })),
+        spacing: { after: 150 },
+      });
+    }
+    if (b.type === 'heading') {
+      return new Paragraph({
+        children: b.runs.map(r => new TextRun({ text: r.text, bold: true })),
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 200, after: 100 },
+      });
+    }
+    return new Paragraph({
+      children: b.runs.map(r => new TextRun({ text: r.text, bold: r.bold })),
+      bullet: b.type === 'bullet' ? { level: 0 } : undefined,
+      spacing: { after: 150 },
+    });
+  });
 }
 
 module.exports = { renderDocx };

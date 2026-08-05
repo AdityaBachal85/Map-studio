@@ -14,7 +14,7 @@
  */
 const router = require('../lib/aiRouter');
 const db = require('../lib/db');
-const { siteLine } = require('./_shared');
+const { siteLine, areaName, NEWS_DOMAINS, GOV_DOMAINS } = require('./_shared');
 
 const NEED_RESEARCH_SENTINEL = 'NEED_RESEARCH';
 
@@ -43,18 +43,33 @@ Question: ${message}
 
 Answer the question using only the research above. If — and only if — that research genuinely does not contain enough information to answer, respond with exactly "${NEED_RESEARCH_SENTINEL}" followed by a colon and a one-line reason, and nothing else. Otherwise answer directly and concisely.`;
 
-  const first = await router.ask({ task: 'chat', prompt: evidencePrompt, grounded: false });
+  const first = await router.ask({ task: 'chat', prompt: evidencePrompt, evidence: false });
 
   if (!first.text.trim().startsWith(NEED_RESEARCH_SENTINEL)) {
     return { reply: first.text.trim(), researched: false };
   }
 
-  const researchPrompt = `${siteLine(site)}
-
-Question: ${message}
-
-Answer this directly using current web information — the site's existing research on file did not cover it. Be concise.`;
-  const second = await router.ask({ task: 'chat', prompt: researchPrompt, grounded: true });
+  // The escalation is a real web search, not an ungrounded model asked to
+  // remember. Both domain lists are offered because a follow-up could be
+  // about either a civic project or something in the news.
+  const second = await router.ask({
+    task: 'chat',
+    prompt: siteLine(site),
+    evidence: 'web',
+    web: {
+      question: `${siteLine(site)}\n\nQuestion: ${message}\n\nAnswer concisely using current information. If the sources do not answer it, say so.`,
+      query: `${areaName(null, site)} ${message}`,
+      domains: [...GOV_DOMAINS.slice(0, 5), ...NEWS_DOMAINS.slice(0, 5)],
+      recency: 'year',
+    },
+  });
+  if (second.unsourced) {
+    return {
+      reply: 'That is not covered by the research on file, and live search is unavailable right now'
+        + ' (' + second.unsourced + ').',
+      researched: false,
+    };
+  }
   return { reply: second.text.trim(), researched: true };
 }
 

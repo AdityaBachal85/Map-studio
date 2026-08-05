@@ -14,6 +14,7 @@ const db = require('./lib/db');
 const jobs = require('./lib/jobs');
 const storage = require('./lib/storage');
 const { getUsage } = require('./http/getUsage');
+const { getProviders } = require('./http/getProviders');
 const { createReportJob } = require('./http/createReportJob');
 const { getReportStatus } = require('./http/getReportStatus');
 const { downloadReport } = require('./http/downloadReport');
@@ -37,6 +38,10 @@ app.use(express.json({ limit: '1mb' }));
 // instance awake without touching Postgres or Gemini.
 app.get('/health', (req, res) => res.status(200).json({ ok: true, activeJobs: jobs.activeCount() }));
 
+// Which external services actually answer with this deployment's keys, and
+// therefore which report sections can be sourced. First thing to hit after a
+// deploy or a key change.
+app.get('/health/providers', getProviders);
 app.get('/getUsage', getUsage);
 app.post('/createReportJob', createReportJob);
 app.get('/getReportStatus', getReportStatus);

@@ -29,6 +29,7 @@ const news = require('../agents/news');
 const { renderPdf } = require('../report/renderPdf');
 const { renderDocx } = require('../report/renderDocx');
 const { saveReportFiles } = require('../lib/storage');
+const { resolvePlace } = require('../lib/placeContext');
 
 const AGENT_MODULES = { connectivity, infrastructure, government, news };
 
@@ -74,9 +75,19 @@ async function runReportPipeline({ reportId, site, nearby }) {
   const agentNames = planner.planAgents();
   const reusable = await context.findReusableEvidence(siteId, agentNames);
 
+  // Resolve the coordinates into administrative names once, before any agent
+  // runs, because all four need the same answer and it decides the quality of
+  // every web query they make: "Airoli, Navi Mumbai" is indexed everywhere,
+  // "19.1547, 72.9986" is indexed nowhere. Never fatal — an unresolved site
+  // still gets a report, just with weaker search terms.
+  const place = await resolvePlace(site);
+  if (!place.resolved) {
+    console.warn(`report ${reportId}: could not resolve a place name for ${site.lat},${site.lng} — ${place.reason}`);
+  }
+
   await setStatus(reportId, 'researching');
   await Promise.all(agentNames.map(agentName =>
-    runOrReuseAgent(reportId, agentName, reusable[agentName], { site, nearby })
+    runOrReuseAgent(reportId, agentName, reusable[agentName], { site, nearby, place })
   ));
 
   const agentRuns = await db.getAgentRuns(reportId);
@@ -88,7 +99,7 @@ async function runReportPipeline({ reportId, site, nearby }) {
   }
 
   await setStatus(reportId, 'writing');
-  const document = await writer.run({ site, agentRuns });
+  const document = await writer.run({ site, agentRuns, place });
 
   await setStatus(reportId, 'rendering');
   const [pdfBuffer, docxBuffer] = await Promise.all([renderPdf(document), renderDocx(document)]);

@@ -11,6 +11,7 @@
  */
 const React = require('react');
 const { Document, Page, Text, View, Link, StyleSheet, renderToBuffer } = require('@react-pdf/renderer');
+const { blocks } = require('./markdownLite');
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 11, fontFamily: 'Helvetica', color: '#1a1a2e' },
@@ -20,14 +21,37 @@ const styles = StyleSheet.create({
   para: { marginBottom: 8, lineHeight: 1.4 },
   sourceLine: { fontSize: 9, marginBottom: 3 },
   sourceLink: { color: '#2563eb' },
+  // An unsourced section is set apart on purpose. Left in the body face it
+  // reads as a finding about the area; grey and italic, it reads as a note
+  // about the report, which is what it is.
+  unavailable: { marginBottom: 8, lineHeight: 1.4, color: '#8a8a99', fontFamily: 'Helvetica-Oblique' },
+  subheading: { fontSize: 11.5, fontFamily: 'Helvetica-Bold', marginTop: 10, marginBottom: 4 },
+  bullet: { marginBottom: 4, marginLeft: 12, lineHeight: 1.4 },
+  bold: { fontFamily: 'Helvetica-Bold' },
 });
 
 const el = React.createElement;
 
-/** @param {string} text @returns {import('react').ReactElement[]} */
-function paragraphs(text) {
-  const parts = (text || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  return (parts.length ? parts : ['(no content)']).map((p, i) => el(Text, { key: i, style: styles.para }, p));
+/**
+ * Agent prose -> PDF nodes, with the Markdown the models emit rendered
+ * rather than printed. Before this, a section opened with the literal text
+ * "**Railway Access:**".
+ * @param {string} text @param {object} [override] style for every block
+ * @returns {import('react').ReactElement[]}
+ */
+function paragraphs(text, override) {
+  const parsed = blocks(text);
+  if (!parsed.length) return [el(Text, { key: 'empty', style: override || styles.para }, '(no content)')];
+
+  return parsed.map((b, i) => {
+    const base = override || (b.type === 'heading' ? styles.subheading
+      : b.type === 'bullet' ? styles.bullet : styles.para);
+    const runs = b.runs.map((r, j) => (r.bold && !override
+      ? el(Text, { key: j, style: styles.bold }, r.text)
+      : r.text));
+    const content = b.type === 'bullet' ? ['\u2022  ', ...runs] : runs;
+    return el(Text, { key: i, style: base }, ...content);
+  });
 }
 
 /**
@@ -45,7 +69,7 @@ async function renderPdf(doc) {
 
   for (const section of doc.sections) {
     children.push(el(Text, { style: styles.heading }, section.heading));
-    children.push(...paragraphs(section.body));
+    children.push(...paragraphs(section.body, section.unavailable ? styles.unavailable : null));
   }
 
   if (doc.allSources && doc.allSources.length) {
