@@ -64,8 +64,21 @@ const MODEL_BY_TASK = {
 /** A different model in a different quota bucket, also probed live. */
 const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 
-/** Free-tier model used when falling back to OpenRouter for plain synthesis. */
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324:free';
+/**
+ * Model used when falling back to OpenRouter for plain synthesis.
+ *
+ * OpenRouter's free roster moves. The previous default,
+ * `deepseek/deepseek-chat-v3-0324:free`, went paid and started answering
+ * 404 "This model is unavailable for free" — caught by /health/providers on
+ * the first real deployment, which is exactly the drift that put research on
+ * a grounding-less tier earlier in this project.
+ *
+ * So set OPENROUTER_MODEL explicitly to whatever OpenRouter currently lists
+ * as free. This default is a starting point, not a promise, and
+ * /health/providers reports the slug back when it fails so the fix is a
+ * copy-paste rather than a hunt.
+ */
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
 
 /**
  * Worth retrying on the other model.

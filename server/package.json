@@ -3,7 +3,7 @@
   "description": "DBOT Map Studio v6 \u2014 AI location intelligence reports backend (plain Node/Express, host-agnostic).",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "main": "src/server.js",
   "scripts": {
