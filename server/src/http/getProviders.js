@@ -28,6 +28,42 @@ const { lastMigration } = require('../lib/migrate');
 const PROBE_SITE = { lat: 19.1547, lng: 72.9986 };
 
 /**
+ * Turn a Postgres connection error into the specific next action, because the
+ * driver's message names the symptom and never the setting that caused it.
+ *
+ * @param {string} error @param {object} connection from db.connectionInfo()
+ * @returns {string|undefined} what to change, or nothing if it isn't a known shape
+ */
+function databaseFix(error, connection) {
+  if (/self-signed|certificate/i.test(error)) {
+    // Only reachable now by explicitly opting into verification, since the
+    // default no longer verifies.
+    return connection.caCertProvided
+      ? 'DATABASE_CA_CERT is set but does not match the certificate the server presents. '
+        + 'Re-download the root CA from your database provider, or remove the variable to connect '
+        + 'encrypted without verifying.'
+      : `DATABASE_URL asks for sslmode=${connection.sslmode}, which requires a certificate this `
+        + 'server cannot verify. Either put the provider\'s root CA (PEM) in DATABASE_CA_CERT, or '
+        + 'drop the sslmode parameter to connect encrypted without verification.';
+  }
+  if (/password authentication failed|SASL|no pg_hba/i.test(error)) {
+    return 'The host answered but rejected the credentials. Reset the database password in your '
+      + 'provider\'s dashboard and paste the whole new connection string into DATABASE_URL — a '
+      + 'password containing @ : / or # must be percent-encoded, which is why copying only the '
+      + 'password into an existing string often fails.';
+  }
+  if (/ENOTFOUND|EAI_AGAIN/i.test(error)) {
+    return `The hostname ${connection.host} does not resolve. Copy the connection string again from `
+      + 'your provider — the Session pooler string, not the direct one.';
+  }
+  if (/ETIMEDOUT|ECONNREFUSED|timeout/i.test(error)) {
+    return 'Nothing answered at that address. Supabase\'s direct connection is IPv6-only and will '
+      + 'time out from most hosts; use the Session pooler string (host ends .pooler.supabase.com).';
+  }
+  return undefined;
+}
+
+/**
  * Run one probe, turning any failure into a reported row rather than a 500.
  * @param {string} name @param {function(): Promise<object>} fn
  */
@@ -43,10 +79,7 @@ async function probe(name, fn) {
     // thing in question.
     if (name === 'database') {
       row.connection = db.connectionInfo();
-      if (/self-signed|certificate/i.test(row.error) && row.connection.verifyCertificate) {
-        row.fix = 'Append ?sslmode=no-verify to DATABASE_URL. The connection stays encrypted; '
-          + 'only certificate verification is relaxed, which managed poolers commonly require.';
-      }
+      row.fix = databaseFix(row.error, row.connection);
     }
     return row;
   }

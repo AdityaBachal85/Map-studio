@@ -14,15 +14,31 @@ let _pool = null;
 
 /**
  * SSL settings, driven by `sslmode` in DATABASE_URL (standard libpq
- * semantics) so this is fixable by editing the connection string rather than
- * this file.
+ * semantics) so this is adjustable by editing the connection string rather
+ * than this file.
  *
- * Hosted Postgres providers differ on certificates: some present a publicly
- * trusted chain that verifies out of the box, others (Supabase's direct
- * connection among them) present one that won't validate without downloading
- * their CA. `sslmode=no-verify` is the escape hatch for that case — it still
- * encrypts, it just stops checking who's on the other end, so prefer a
- * provider/endpoint that verifies cleanly when you have the choice.
+ * WHY THE DEFAULT DOES NOT VERIFY THE CERTIFICATE. Hosted Postgres providers
+ * differ on what they present: some serve a publicly trusted chain that
+ * validates against Node's built-in roots, others (Supabase's pooler among
+ * them) serve one rooted in their own CA, which Node correctly rejects as
+ * "self-signed certificate in certificate chain". Verifying by default meant
+ * every such deployment failed on first boot, and the fix — append
+ * ?sslmode=no-verify to a connection string pasted into a dashboard field —
+ * is an out-of-band manual step, which is precisely the kind that gets
+ * skipped, mistyped, or saved without redeploying. It was.
+ *
+ * So the default is encrypted-but-unverified, and verification is opt-in.
+ * Be clear about what that trades away: TLS still encrypts the connection, so
+ * the credential and every row are not readable on the wire, but the server's
+ * identity is unproven — an attacker positioned to redirect the connection
+ * could impersonate the database. That is a real weakening, and it is the
+ * same posture nearly every hosted-Postgres deployment runs in; the reason it
+ * is tolerable here is that the alternative in practice was not "verified"
+ * but "not connected at all".
+ *
+ * To verify properly, set sslmode=verify-full and supply the provider's root
+ * CA in DATABASE_CA_CERT (PEM). That path is honoured whenever the cert is
+ * present, so a deployment can tighten this without a code change.
  *
  * @param {string} connectionString
  * @returns {object|false}
@@ -30,8 +46,15 @@ let _pool = null;
 function sslConfig(connectionString) {
   const mode = sslModeOf(connectionString);
   if (mode === 'disable') return false;
-  if (mode === 'no-verify' || mode === 'allow' || mode === 'prefer') return { rejectUnauthorized: false };
-  return { rejectUnauthorized: true };
+
+  const ca = process.env.DATABASE_CA_CERT;
+  if (ca && mode !== 'no-verify') return { ca, rejectUnauthorized: true };
+
+  // Only an explicit request to verify gets verification, because without a
+  // CA to verify *against* this is the setting that fails on most providers.
+  if (mode === 'verify-full' || mode === 'verify-ca') return { rejectUnauthorized: true };
+
+  return { rejectUnauthorized: false };
 }
 
 /** @param {string} [connectionString] @returns {string|null} the sslmode in the URL, if any. */
@@ -42,13 +65,16 @@ function sslModeOf(connectionString) {
 /**
  * What the connection is actually configured to do, for /health/providers.
  *
- * Reported because "self-signed certificate in certificate chain" and "you
- * did not add ?sslmode=no-verify" look identical from outside the process,
- * and telling them apart otherwise means another round of asking someone to
- * re-check a dashboard field they believe they already set.
+ * Reported because a connection that fails to open never gets to say how it
+ * was configured — which is exactly the case where the configuration is the
+ * thing in question. Without this, "the setting is wrong" and "the setting
+ * never reached the process" look identical from outside, and telling them
+ * apart means asking someone to re-check a dashboard field they believe they
+ * already set.
  *
  * Never returns any part of the credential — host and port only.
- * @returns {{host:string|null, sslmode:string|null, verifyCertificate:boolean|null}}
+ * @returns {{host:string|null, sslmode:string|null, encrypted:boolean|null,
+ *            verifyCertificate:boolean|null, caCertProvided:boolean}}
  */
 function connectionInfo() {
   const cs = process.env.DATABASE_URL || '';
@@ -58,7 +84,11 @@ function connectionInfo() {
   return {
     host,
     sslmode: sslModeOf(cs),
+    // Stated separately from verification so the distinction that matters —
+    // the wire is encrypted either way — is visible rather than inferred.
+    encrypted: ssl === null ? null : ssl !== false,
     verifyCertificate: ssl === null ? null : (ssl === false ? false : !!ssl.rejectUnauthorized),
+    caCertProvided: !!process.env.DATABASE_CA_CERT,
   };
 }
 

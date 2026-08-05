@@ -49,15 +49,25 @@ postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-ap-south-1.pooler.supabase.
 Replace `[YOUR-PASSWORD]` with your database password. If you don't have it,
 reset it on that same settings page.
 
-**If you get a certificate error on first connect**, append `?sslmode=no-verify`
-to the string. `server/src/lib/db.js` reads that flag and relaxes certificate
-verification while keeping the connection encrypted. Try without it first.
+Paste it exactly as given — no extra parameters are needed.
 
-**Apply the schema.** Easiest path is Supabase's own SQL editor — open
-**SQL Editor** in the sidebar, paste the entire contents of
-`server/sql/schema.sql`, and run it. You should see five tables under
-**Table Editor** afterwards: `projects`, `sites`, `reports`, `agent_runs`,
-`usage_ledger`.
+**On certificates.** Supabase's pooler presents a certificate signed by its
+own CA, which Node does not trust out of the box. Rather than make you work
+around that, `server/src/lib/db.js` connects encrypted without verifying the
+certificate by default. The wire is still TLS — your password and your rows
+are not readable in transit — but the server's identity is unproven. If you
+want it verified, download Supabase's root CA, put the PEM in a
+`DATABASE_CA_CERT` environment variable, and add `?sslmode=verify-full` to
+the connection string; `db.js` picks both up with no code change.
+
+**The schema applies itself.** On every boot the server runs
+`server/sql/schema.sql` against `DATABASE_URL` (see `server/src/lib/migrate.js`).
+Every statement is `IF NOT EXISTS`, so it is safe to re-run, and adding a
+column later is a code change rather than a manual step in a SQL console.
+You do not need to open Supabase's SQL editor at all. After the first
+successful deploy you should see five tables under **Table Editor**:
+`projects`, `sites`, `reports`, `agent_runs`, `usage_ledger` — and
+`/health/providers` reports the same list under `database.migration`.
 
 Or from a terminal, if you have `psql`:
 
@@ -225,11 +235,22 @@ reason this setup is free.
 
 ## Troubleshooting
 
-- **`/getUsage` returns 500** — `DATABASE_URL` is wrong, or the schema hasn't
-  been applied. Check Render's logs for the actual Postgres error.
+**Start at `/health/providers`.** It probes every external service this
+pipeline needs — database, Gemini, Maps grounding, Places, Perplexity — using
+the credentials the deployment actually holds, and says which report sections
+those results allow. Almost everything below is diagnosable from that one URL
+without opening a log viewer. The `database` check reports the host, whether
+the connection is encrypted, and a `fix` string naming the setting to change.
+
+- **`/getUsage` returns 500** — the database is unreachable. `/health/providers`
+  gives the actual Postgres error and what to do about it, rather than the
+  generic message the client sees.
 - **Postgres connection times out** — you used the direct connection string
   instead of the session pooler (see step 1). Render can't reach IPv6.
-- **Certificate / SSL errors** — append `?sslmode=no-verify` to `DATABASE_URL`.
+- **`self-signed certificate in certificate chain`** — you have explicitly
+  asked for verification with `sslmode=verify-full` or `verify-ca` but no
+  `DATABASE_CA_CERT` is set. Either supply the CA or drop the parameter; the
+  default connects encrypted without it.
 - **CORS errors in the browser console** — `ALLOWED_ORIGIN` doesn't exactly
   match your site's origin. Compare it character by character against what the
   browser address bar shows.
