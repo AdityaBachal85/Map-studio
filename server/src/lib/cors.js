@@ -24,6 +24,24 @@ function withCors(handler) {
 
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
 
+    // Refuse a mismatched Origin rather than only declining to advertise it.
+    //
+    // Setting the header alone leaves enforcement entirely to the browser, so
+    // a request carrying someone else's Origin was being served in full and
+    // billed to this key — verified by curl, which created a real job with
+    // `Origin: https://evil.example.com`.
+    //
+    // Absent Origin is deliberately allowed: curl, uptime checks and
+    // server-to-server callers send none, and refusing them would break
+    // monitoring to stop nothing. This is defence in depth, not a boundary —
+    // Origin is trivially omitted — and the real limits are still the per-IP
+    // rate limiter and the daily caps in createReportJob.
+    const origin = req.get('origin');
+    if (allowedOrigin && origin && origin !== allowedOrigin) {
+      res.status(403).json({ error: 'This origin is not allowed to use this backend.' });
+      return;
+    }
+
     try {
       await handler(req, res);
     } catch (e) {

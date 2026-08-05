@@ -19,9 +19,35 @@ services:
     envVars:
       # Every one of these is set in the Render dashboard, not here — a value
       # committed to this file would be a value published to GitHub.
+      # `sync: false` is what makes Render prompt for it instead of storing it.
+      #
+      # Required.
       - key: DATABASE_URL
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Resolves the site's coordinates into place names before any research
+      # runs. Not optional in practice: web searches built from "19.1547,
+      # 72.9986" find nothing, because no search engine indexes coordinates.
+      # Also drives the travel-time matrix. Same key the site already uses.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       - key: ALLOWED_ORIGIN
+        sync: false
+      #
+      # Needed for the Government Projects and News sections. Without at least
+      # one of these, those two sections report that they could not be sourced
+      # rather than being filled with unverified prose. Gemini's own web-search
+      # grounding is not an alternative — its free-tier limit is zero.
+      - key: PERPLEXITY_API_KEY
+        sync: false
+      - key: GOOGLE_SEARCH_API_KEY
+        sync: false
+      - key: GOOGLE_SEARCH_CX
+        sync: false
+      #
+      # Optional. Inference fallback for writing prose when both Gemini models
+      # fail — never used for research, since a model that cannot search will
+      # invent its sources.
+      - key: OPENROUTER_API_KEY
         sync: false
