@@ -25,4 +25,18 @@ function planAgents(opts) {
   return ['connectivity', 'infrastructure', 'government', 'news'];
 }
 
-module.exports = { planAgents, STANDARD_REPORT };
+/**
+ * The interpretation agents, which run *after* research rather than beside
+ * it — they add no facts, they read what the research found. Ordered as the
+ * report presents them.
+ *
+ * Separate from planAgents() because the two rosters fail differently: a
+ * research agent failing costs a section of evidence, an interpretation agent
+ * failing costs a reading of evidence that is still there.
+ * @returns {string[]}
+ */
+function planSynthesisAgents() {
+  return ['swot', 'risk', 'investment', 'timeline', 'insights'];
+}
+
+module.exports = { planAgents, planSynthesisAgents, STANDARD_REPORT };

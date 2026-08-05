@@ -105,6 +105,73 @@ const SOURCE_STEER =
   'statements that would be true of any Indian suburb. If something is not covered by ' +
   'the results, say so plainly. Write clear prose, not bullet fragments.';
 
+/**
+ * The evidence a synthesis agent is allowed to reason over, plus an explicit
+ * list of what is missing.
+ *
+ * Naming the gaps is the whole point. A model handed three sections and asked
+ * for a risk assessment will infer from their absence — "no government
+ * projects were found, suggesting limited development activity" — which is a
+ * conclusion drawn from a tool failure and reads in the report as a finding
+ * about the area. Told plainly that the section could not be sourced, it says
+ * so instead.
+ *
+ * @param {object[]} agentRuns rows from db.getAgentRuns()
+ * @param {string[]} [only] restrict to these agent names
+ * @returns {{text:string, sourced:string[], missing:string[]}}
+ */
+function evidenceDigest(agentRuns, only) {
+  const rows = (agentRuns || []).filter(r => !only || only.includes(r.agent_name));
+  const sourced = [];
+  const missing = [];
+  const blocks = [];
+  for (const r of rows) {
+    const body = ((r.evidence && r.evidence.summary) || '').trim();
+    if (body) {
+      sourced.push(r.agent_name);
+      blocks.push(`## ${r.agent_name}\n${body}`);
+    } else {
+      missing.push(r.agent_name);
+    }
+  }
+  const gaps = missing.length
+    ? `\n\nNOT AVAILABLE — these topics could not be researched, so nothing is known about them either way. Do not treat their absence as evidence of anything, and do not mention them as findings: ${missing.join(', ')}.`
+    : '';
+  return {
+    text: (blocks.join('\n\n') || '(no research available)') + gaps,
+    sourced,
+    missing,
+  };
+}
+
+/**
+ * Render a computed scorecard for a prompt.
+ *
+ * Only the measured metrics go in. Handing a model "Market Demand: —" invites
+ * it to fill the blank, which is precisely what the scorecard refuses to do.
+ * @param {{metrics:Array, overall:object}} scorecard
+ * @returns {string}
+ */
+function formatScorecard(scorecard) {
+  if (!scorecard || !scorecard.metrics) return '(no scorecard)';
+  const rows = scorecard.metrics
+    .filter(m => m.score != null)
+    .map(m => `- ${m.label}: ${m.score}/100 (${m.basis})`);
+  if (!rows.length) return '(nothing could be measured for this site)';
+  if (scorecard.overall && scorecard.overall.score != null) {
+    rows.push(`- Overall: ${scorecard.overall.score}/100 — ${scorecard.overall.basis}`);
+  }
+  return rows.join('\n');
+}
+
+/** Every synthesis agent ends with this. @type {string} */
+const INTERPRETATION_RULES =
+  'Base every statement on the research above. Do not introduce facts, names, figures or '
+  + 'projects that do not appear in it. Where the evidence does not support a point, leave the '
+  + 'point out rather than softening it into a guess. Write plainly and specifically — a sentence '
+  + 'that would be true of any Indian suburb is not worth including.';
+
 module.exports = {
   formatNearby, siteLine, areaName, SOURCE_STEER, GOV_DOMAINS, NEWS_DOMAINS,
+  evidenceDigest, formatScorecard, INTERPRETATION_RULES,
 };

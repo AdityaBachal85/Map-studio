@@ -19,7 +19,15 @@
  */
 
 /** Nearby categories gathered as seed context for the Connectivity/Infrastructure agents. */
-const AI_REPORT_NEARBY_KEYS = ['school', 'hospital', 'transit', 'airport', 'college', 'mall'];
+// Every category the Nearby service knows. Six of them fed the old prompts;
+// the report now also *counts* them for the scorecard's infrastructure
+// metric, and a metric computed from a partial list is a wrong number rather
+// than a missing one. All twelve are cached and de-duplicated by
+// services/placeCache.js, so a repeat report costs nothing.
+const AI_REPORT_NEARBY_KEYS = [
+  'school', 'college', 'hospital', 'pharmacy', 'transit', 'airport',
+  'mall', 'fuel', 'hotel', 'restaurant', 'bank', 'park',
+];
 const AI_REPORT_RADIUS_M = 5000;
 /** How often to poll a running job. */
 const AI_POLL_MS = 4000;
@@ -36,6 +44,7 @@ const AI_STATUS_TEXT = {
   queued: 'Queued…',
   planning: 'Planning the report…',
   researching: 'Researching your site…',
+  analysing: 'Analysing the findings…',
   writing: 'Writing the report…',
   rendering: 'Building the PDF and Word document…',
   storing: 'Saving your documents…',
@@ -82,7 +91,11 @@ async function aiGatherNearbyContext(lat, lng) {
   const results = await Promise.allSettled(AI_REPORT_NEARBY_KEYS.map(async key => {
     const cat = nearbyCatByKey(key);
     if (!cat) return;
-    const rows = await fetchNearbyCategory(lat, lng, AI_REPORT_RADIUS_M, cat, 5);
+    // 20, not 5: the agents still only quote the closest few, but the
+    // scorecard counts what is here, and a list truncated at five makes
+    // "5 schools" indistinguishable from "fifty". 20 is Google's own ceiling
+    // on one Nearby response.
+    const rows = await fetchNearbyCategory(lat, lng, AI_REPORT_RADIUS_M, cat, 20);
     out[key] = (rows || []).map(r => ({ name: r.name, lat: r.lat, lng: r.lng, distance: r.distance }));
   }));
   results.forEach((r, i) => {

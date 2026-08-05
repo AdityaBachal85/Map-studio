@@ -26,12 +26,19 @@ const connectivity = require('../agents/connectivity');
 const infrastructure = require('../agents/infrastructure');
 const government = require('../agents/government');
 const news = require('../agents/news');
+const swot = require('../agents/swot');
+const risk = require('../agents/risk');
+const investment = require('../agents/investment');
+const timeline = require('../agents/timeline');
+const insights = require('../agents/insights');
+const { buildTravelMatrix } = require('../lib/travelMatrix');
+const { buildScorecard } = require('../lib/scorecard');
 const { renderPdf } = require('../report/renderPdf');
 const { renderDocx } = require('../report/renderDocx');
 const { saveReportFiles } = require('../lib/storage');
 const { resolvePlace } = require('../lib/placeContext');
 
-const AGENT_MODULES = { connectivity, infrastructure, government, news };
+const AGENT_MODULES = { connectivity, infrastructure, government, news, swot, risk, investment, timeline, insights };
 
 /** @param {string} reportId @param {string} status @param {object} [fields] */
 async function setStatus(reportId, status, fields) {
@@ -86,20 +93,40 @@ async function runReportPipeline({ reportId, site, nearby }) {
   }
 
   await setStatus(reportId, 'researching');
-  await Promise.all(agentNames.map(agentName =>
-    runOrReuseAgent(reportId, agentName, reusable[agentName], { site, nearby, place })
-  ));
+  // The travel matrix runs alongside the research agents rather than after
+  // them: it is pure measurement (Routes + Places), shares no dependency with
+  // any agent, and the scorecard needs it before interpretation starts.
+  const [, matrix] = await Promise.all([
+    Promise.all(agentNames.map(agentName =>
+      runOrReuseAgent(reportId, agentName, reusable[agentName], { site, nearby, place })
+    )),
+    buildTravelMatrix(site).catch(e => {
+      console.warn(`report ${reportId}: travel matrix failed — ${e.message}`);
+      return { ok: false, rows: [], reason: e.message, departureNote: '' };
+    }),
+  ]);
 
-  const agentRuns = await db.getAgentRuns(reportId);
-  const allFailed = agentRuns.length > 0 && agentRuns.every(r => r.status === 'error');
+  const researchRuns = await db.getAgentRuns(reportId);
+  const allFailed = researchRuns.length > 0 && researchRuns.every(r => r.status === 'error');
   if (allFailed) {
     await setStatus(reportId, 'error', { error: 'Every research step failed — please try again in a moment.' });
     await ledger.recordReportOutcome(false);
     return;
   }
 
+  // Scores are arithmetic over what was measured, so they are ready the
+  // moment research is — and the interpretation agents are shown them.
+  const scorecard = buildScorecard({ matrix, nearby, agentRuns: researchRuns });
+
+  await setStatus(reportId, 'analysing');
+  const synthesisCtx = { site, place, nearby, agentRuns: researchRuns, scorecard, matrix };
+  await Promise.all(planner.planSynthesisAgents().map(agentName =>
+    runOrReuseAgent(reportId, agentName, null, synthesisCtx)
+  ));
+
   await setStatus(reportId, 'writing');
-  const document = await writer.run({ site, agentRuns, place });
+  const agentRuns = await db.getAgentRuns(reportId);
+  const document = await writer.run({ site, agentRuns, place, scorecard, matrix });
 
   await setStatus(reportId, 'rendering');
   const [pdfBuffer, docxBuffer] = await Promise.all([renderPdf(document), renderDocx(document)]);

@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0025-blue)
+![Version](https://img.shields.io/badge/version-v6.0026-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0025 (latest)
+## 🆕 New in v6.0026 (latest)
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -144,6 +144,44 @@ weren't:
   apart and a 13px hue bar are a coin-toss with a fingertip. On a touch device
   the popover widens to six ~44px columns, the hue bar doubles in height, and
   the fields grow to match — the desktop layout is untouched.
+
+### The report is now a real document
+
+The AI report went from four prose sections to a structured deliverable:
+a **cover page**, a computed **Scorecard**, an Executive Summary broken into
+overview / key findings / opportunities / risks, four researched sections, five
+interpretation sections (SWOT, Risk, Investment, Timeline, Key Insights), a
+**Travel Time Matrix**, sources, and an appendix carrying the measured inputs
+so every figure above can be checked.
+
+**The Scorecard is computed, never asked for.** Ask a model to "score
+connectivity out of 100" and it returns a confident number with no basis — and
+a number is the worst thing to invent, because numbers get quoted long after
+the prose around them is forgotten. Every score here is arithmetic over
+measured inputs and prints the working beside it:
+
+| Metric | Score | Basis |
+|---|---|---|
+| Connectivity | 70 | airport 45 min off-peak / 66 at 9am · station 0.6 km · moderate peak congestion (+47%) |
+| Infrastructure | 94 | within 5 km: 20 restaurants, 12 schools, 11 pharmacies, 9 stations |
+| Market Demand | — | no free data source publishes Indian locality-level demand |
+| Safety | — | no crime statistics exist per locality |
+
+Metrics with no data source show an em dash and the reason. There is no
+estimate mode.
+
+**The Travel Time Matrix** is the other measured piece. Places finds the real
+nearest airport, station and business district for *this* site, then Routes
+measures the drive — with and without traffic, so the table reads "45 min
+off-peak, 66 at 9am" rather than the free-flow figure a brochure would quote.
+Getting the destinations right mattered: ranking by distance returned "unicare
+car tarasport" as the major hospital, so prominence ranking is used everywhere
+the nearest one isn't the one you'd actually use.
+
+Interpretation sections are **labelled as such** in both PDF and Word.
+"Here is what the sources say" and "here is what we make of it" are different
+claims, and a reader deciding on a property shouldn't have to infer which is
+which.
 
 ### Google requests: fewer of them, for the same result
 
