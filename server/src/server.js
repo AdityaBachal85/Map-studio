@@ -13,6 +13,7 @@ const express = require('express');
 const db = require('./lib/db');
 const jobs = require('./lib/jobs');
 const storage = require('./lib/storage');
+const { migrateOnBoot } = require('./lib/migrate');
 const { getUsage } = require('./http/getUsage');
 const { getProviders } = require('./http/getProviders');
 const { createReportJob } = require('./http/createReportJob');
@@ -90,8 +91,19 @@ async function sweep(onlyStale) {
   }
 }
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`AI reports backend listening on :${PORT}`);
+
+  // Apply the schema before anything reads or writes. This used to be a
+  // manual step in a browser SQL console, which fails silently: the service
+  // starts, /health says ok, and everything touching Postgres 500s with a
+  // generic message that points at the server rather than at the step that
+  // never happened. Idempotent, so it runs every boot.
+  //
+  // Deliberately not awaited before listen() — /health has to answer even
+  // when the database is unreachable, because that is exactly when you need
+  // it to tell you so.
+  await migrateOnBoot();
 
   // On boot, anything still mid-flight belongs to a process that no longer
   // exists — nothing is going to finish it, so fail it now rather than leave
