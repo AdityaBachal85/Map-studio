@@ -21,6 +21,8 @@
 const router = require('../lib/aiRouter');
 const webSearch = require('../lib/webSearch');
 const { resolvePlace } = require('../lib/placeContext');
+const db = require('../lib/db');
+const { lastMigration } = require('../lib/migrate');
 
 /** A point with dense, stable data, so "no result" means the service is off. */
 const PROBE_SITE = { lat: 19.1547, lng: 72.9986 };
@@ -44,6 +46,23 @@ async function probe(name, fn) {
  */
 async function getProviders(req, res) {
   const checks = await Promise.all([
+    // First, because nothing else matters if this is broken: a report writes
+    // to Postgres at every step, so a missing schema fails everything while
+    // /health still cheerfully reports ok.
+    probe('database', async () => {
+      const r = await db.query(
+        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`);
+      const tables = r.rows.map(x => x.tablename);
+      const need = ['agent_runs', 'projects', 'reports', 'sites', 'usage_ledger'];
+      const missing = need.filter(n => !tables.includes(n));
+      return {
+        ok: missing.length === 0,
+        tables: tables.length,
+        missing: missing.length ? missing : undefined,
+        migration: lastMigration(),
+      };
+    }),
+
     probe('gemini.text', async () => {
       const r = await router.callGemini(router.MODEL_BY_TASK.write, 'Reply with exactly: OK', null);
       return { model: r.model, reply: r.text.slice(0, 20), tokens: r.usage.totalTokens };
@@ -116,14 +135,16 @@ async function getProviders(req, res) {
   // operator is really asking, and one they should not have to derive from
   // five rows of provider status.
   const by = Object.fromEntries(checks.map(c => [c.name, c]));
-  const maps = by['gemini.mapsGrounding'].ok;
+  // A section cannot be "sourced" if the result has nowhere to be stored.
+  const database = by.database.ok;
+  const maps = database && by['gemini.mapsGrounding'].ok;
   const web = by.perplexity.ok || by.customSearch.ok;
   const sections = {
     connectivity: maps ? 'sourced' : 'unavailable',
     infrastructure: maps ? 'sourced' : 'unavailable',
-    government: web ? 'sourced' : 'unavailable',
-    news: web ? 'sourced' : 'unavailable',
-    executiveSummary: by['gemini.text'].ok ? 'sourced' : 'unavailable',
+    government: database && web ? 'sourced' : 'unavailable',
+    news: database && web ? 'sourced' : 'unavailable',
+    executiveSummary: database && by['gemini.text'].ok ? 'sourced' : 'unavailable',
   };
 
   const degraded = Object.values(sections).some(v => v === 'unavailable');
@@ -131,9 +152,11 @@ async function getProviders(req, res) {
     ok: !degraded,
     // A report still generates with some sections unavailable, so this is not
     // a 500 — it is a working service with less to say.
-    summary: degraded
-      ? 'Reports will generate, but some sections will report that they could not be sourced.'
-      : 'Every section can be sourced.',
+    summary: !database
+      ? 'The database is not ready — no report can be generated. See the "database" check below.'
+      : degraded
+        ? 'Reports will generate, but some sections will report that they could not be sourced.'
+        : 'Every section can be sourced.',
     sections,
     checks,
   });

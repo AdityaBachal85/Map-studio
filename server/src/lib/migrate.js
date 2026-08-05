@@ -29,6 +29,20 @@ const db = require('./db');
 const SCHEMA_PATH = path.join(__dirname, '..', '..', 'sql', 'schema.sql');
 
 /**
+ * What happened last time the schema was applied.
+ *
+ * Kept so /health/providers can report it. Otherwise the only record is a
+ * line in the host's log viewer, and "open the dashboard, find Logs, search
+ * for a word, screenshot it" is a far worse errand than "open a URL" — which
+ * matters most in exactly the situation this is for, when someone is stuck
+ * and the database is the thing they cannot see.
+ */
+let _lastResult = { ok: false, error: 'migration has not run yet' };
+
+/** @returns {object} the last applySchema() result. */
+function lastMigration() { return _lastResult; }
+
+/**
  * @returns {Promise<{ok:boolean, tables?:string[], created?:boolean, error?:string}>}
  */
 async function applySchema() {
@@ -74,6 +88,7 @@ async function applySchema() {
  */
 async function migrateOnBoot() {
   const result = await applySchema();
+  _lastResult = result;
   if (!result.ok) {
     console.error('SCHEMA NOT APPLIED — every request that touches Postgres will fail.');
     console.error('  ' + result.error);
@@ -87,4 +102,4 @@ async function migrateOnBoot() {
   return result;
 }
 
-module.exports = { applySchema, migrateOnBoot, SCHEMA_PATH };
+module.exports = { applySchema, migrateOnBoot, lastMigration, SCHEMA_PATH };
