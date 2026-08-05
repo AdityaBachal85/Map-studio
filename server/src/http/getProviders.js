@@ -37,7 +37,18 @@ async function probe(name, fn) {
     const detail = await fn();
     return { name, ok: detail.ok !== false, ms: Date.now() - startedAt, ...detail };
   } catch (e) {
-    return { name, ok: false, ms: Date.now() - startedAt, error: String(e.message || e).slice(0, 240) };
+    const row = { name, ok: false, ms: Date.now() - startedAt, error: String(e.message || e).slice(0, 240) };
+    // A connection that never opens throws before it can report how it was
+    // configured — which is exactly the case where that configuration is the
+    // thing in question.
+    if (name === 'database') {
+      row.connection = db.connectionInfo();
+      if (/self-signed|certificate/i.test(row.error) && row.connection.verifyCertificate) {
+        row.fix = 'Append ?sslmode=no-verify to DATABASE_URL. The connection stays encrypted; '
+          + 'only certificate verification is relaxed, which managed poolers commonly require.';
+      }
+    }
+    return row;
   }
 }
 
@@ -59,6 +70,7 @@ async function getProviders(req, res) {
         ok: missing.length === 0,
         tables: tables.length,
         missing: missing.length ? missing : undefined,
+        connection: db.connectionInfo(),
         migration: lastMigration(),
       };
     }),

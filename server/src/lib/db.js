@@ -28,10 +28,38 @@ let _pool = null;
  * @returns {object|false}
  */
 function sslConfig(connectionString) {
-  const mode = (connectionString.match(/[?&]sslmode=([^&]+)/) || [])[1];
+  const mode = sslModeOf(connectionString);
   if (mode === 'disable') return false;
   if (mode === 'no-verify' || mode === 'allow' || mode === 'prefer') return { rejectUnauthorized: false };
   return { rejectUnauthorized: true };
+}
+
+/** @param {string} [connectionString] @returns {string|null} the sslmode in the URL, if any. */
+function sslModeOf(connectionString) {
+  return (String(connectionString || '').match(/[?&]sslmode=([^&]+)/) || [])[1] || null;
+}
+
+/**
+ * What the connection is actually configured to do, for /health/providers.
+ *
+ * Reported because "self-signed certificate in certificate chain" and "you
+ * did not add ?sslmode=no-verify" look identical from outside the process,
+ * and telling them apart otherwise means another round of asking someone to
+ * re-check a dashboard field they believe they already set.
+ *
+ * Never returns any part of the credential — host and port only.
+ * @returns {{host:string|null, sslmode:string|null, verifyCertificate:boolean|null}}
+ */
+function connectionInfo() {
+  const cs = process.env.DATABASE_URL || '';
+  let host = null;
+  try { const u = new URL(cs); host = u.hostname + ':' + (u.port || '5432'); } catch (e) { /* unparseable */ }
+  const ssl = cs ? sslConfig(cs) : null;
+  return {
+    host,
+    sslmode: sslModeOf(cs),
+    verifyCertificate: ssl === null ? null : (ssl === false ? false : !!ssl.rejectUnauthorized),
+  };
 }
 
 /** @returns {import('pg').Pool} */
@@ -207,7 +235,7 @@ async function countActiveReports() {
 }
 
 module.exports = {
-  pool, query, newId,
+  pool, query, newId, connectionInfo, sslModeOf,
   findOrCreateSite, createReportRow, updateReportStatus, getReport,
   startAgentRun, completeAgentRun, getAgentRuns, mostRecentAgentRun,
   countActiveReports,
