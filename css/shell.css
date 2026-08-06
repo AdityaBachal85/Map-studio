@@ -597,3 +597,25 @@
 /* The account column is a positioning context so the menu hangs off it
    rather than off the page. */
 .pj-account { position: relative; }
+
+/* Sign in ⇄ create account. A link-weight control, not a second button —
+   there is one primary action on this page and it is the one in the form. */
+.auth-switch {
+  margin-top: var(--sp-4);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.auth-switch button {
+  padding: 0 0 0 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.auth-switch button:hover { text-decoration: underline; }
+.auth-switch button:focus-visible { outline: none; text-decoration: underline; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px; }

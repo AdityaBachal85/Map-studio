@@ -104,11 +104,63 @@ async function aiGatherNearbyContext(lat, lng) {
   return out;
 }
 
+/**
+ * Fetch a finished report and hand it to the browser as a file.
+ *
+ * WHY NOT JUST FOLLOW THE LINK. A plain navigation to an attachment works, but
+ * when it doesn't it fails invisibly: a blocked popup, an expired report, a
+ * cold backend still waking up — all of them look identical from the user's
+ * chair, which is "I clicked Download and nothing happened".
+ *
+ * So this fetches first, which turns each of those into a sentence. If the
+ * fetch itself cannot run — the backend has no ALLOWED_ORIGIN set, so no CORS
+ * header comes back — it falls through to the navigation, which needs no CORS
+ * at all. Worse errors, but it downloads, and downloading is the point.
+ *
+ * @param {string} url @param {string} label
+ */
+async function aiDownload(url, label) {
+  if (!url || url === '#') { status('That download link is missing — try generating the report again.'); return; }
+  status('Preparing your ' + label + '…', true);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      // The endpoint distinguishes 410 (existed, expired) from 404, and both
+      // carry a written reason. Passing that through beats "failed".
+      let msg = 'The report could not be downloaded (HTTP ' + res.status + ').';
+      try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) { /* not JSON */ }
+      status(msg, true);
+      return;
+    }
+    const blob = await res.blob();
+    const name = (res.headers.get('content-disposition') || '').match(/filename="?([^"]+)"?/);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name ? name[1] : ('map-studio-report.' + (label === 'PDF' ? 'pdf' : 'docx'));
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    status('Downloaded ' + a.download + '.');
+  } catch (e) {
+    // Almost always CORS, because the backend is on another origin and
+    // ALLOWED_ORIGIN is unset. Navigation is not subject to CORS, so it works.
+    console.warn('AI report: fetch download failed, falling back to navigation —', e && e.message);
+    status('Downloading your ' + label + '…');
+    location.href = url;
+  }
+}
+
 /** Show the finished report's download links + the (non-recoverable-after) expiry notice. */
 function aiShowResults(job) {
   $('aiResults').style.display = '';
   $('aiPdfLink').href = job.pdfUrl || '#';
   $('aiDocxLink').href = job.docxUrl || '#';
+  // Logged so a download that misbehaves can be reproduced by opening the URL
+  // directly, which separates "the link is wrong" from "the browser refused".
+  console.log('AI report ready:', { pdf: job.pdfUrl, docx: job.docxUrl });
+  $('aiPdfLink').onclick = e => { e.preventDefault(); aiDownload(job.pdfUrl, 'PDF'); };
+  $('aiDocxLink').onclick = e => { e.preventDefault(); aiDownload(job.docxUrl, 'Word document'); };
   const when = job.expiresAt ? new Date(job.expiresAt).toLocaleString() : null;
   $('aiExpiryLine').textContent = (when ? `These links expire ${when}` : 'These links expire in 48 hours')
     + " — download now, they can't be recovered after that.";

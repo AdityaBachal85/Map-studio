@@ -5,12 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0030" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0031" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0030">
-  <link rel="stylesheet" href="./css/style.css?v=6.0030">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0030">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0031">
+  <link rel="stylesheet" href="./css/style.css?v=6.0031">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0031">
 </head>
 
 <body class="shell-body">
@@ -87,9 +87,18 @@
             Continue with Microsoft
           </button>
 
-          <div class="auth-or"><span>or use a password</span></div>
+          <div class="auth-or"><span id="authOrLabel">or use a password</span></div>
 
           <form id="authForm" novalidate>
+            <!-- Only for creating an account. Kept out of the sign-in flow
+                 because the name is already on the account by then, and asking
+                 for it again is a field with nothing to do. -->
+            <div class="auth-field" id="authNameField" hidden>
+              <label for="authFullName">Your name</label>
+              <input id="authFullName" name="fullName" type="text" autocomplete="name"
+                placeholder="Aditya Bachal">
+            </div>
+
             <div class="auth-field">
               <label for="authEmail">Work email</label>
               <input id="authEmail" name="email" type="email" autocomplete="username"
@@ -99,11 +108,16 @@
             <div class="auth-field">
               <label for="authPassword">Password</label>
               <input id="authPassword" name="password" type="password" autocomplete="current-password" required>
-              <div class="hint"><a href="#" id="authForgot">Forgotten your password?</a></div>
+              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgotten your password?</a></div>
             </div>
 
             <button class="auth-submit" type="submit" id="authSubmit">Sign in</button>
           </form>
+
+          <div class="auth-switch">
+            <span id="authSwitchText">Don't have an account?</span>
+            <button type="button" id="authSwitchBtn">Create one</button>
+          </div>
         </div>
 
         <!-- No accounts configured yet: name yourself, and be told plainly
@@ -140,11 +154,11 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0030"></script>
-  <script src="./js/core/prefs.js?v=6.0030"></script>
-  <script src="./js/constants.js?v=6.0030"></script>
-  <script src="./js/config.js?v=6.0030"></script>
-  <script src="./js/auth/session.js?v=6.0030"></script>
+  <script src="./vendor/supabase.js?v=6.0031"></script>
+  <script src="./js/core/prefs.js?v=6.0031"></script>
+  <script src="./js/constants.js?v=6.0031"></script>
+  <script src="./js/config.js?v=6.0031"></script>
+  <script src="./js/auth/session.js?v=6.0031"></script>
   <script>
     applyTheme();
     document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
@@ -189,18 +203,62 @@
           } catch (ex) { fail(ex.message); }
         });
 
+        // One form, two jobs. A second page for sign-up would double the
+        // markup to change three labels and one field.
+        let mode = 'signin';
+
+        function setMode(next) {
+          mode = next;
+          const up = mode === 'signup';
+          $('authNameField').hidden = !up;
+          $('authSubmit').textContent = up ? 'Create account' : 'Sign in';
+          $('authOrLabel').textContent = up ? 'or use an email and password' : 'or use a password';
+          $('authPwHint').hidden = up;
+          $('authPassword').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+          $('authSwitchText').textContent = up ? 'Already have an account?' : "Don't have an account?";
+          $('authSwitchBtn').textContent = up ? 'Sign in' : 'Create one';
+          $('authLede').textContent = up
+            ? 'Accounts are limited to DBOT work addresses.'
+            : 'Use your DBOT work account.';
+          errEl.hidden = true;
+          okEl.hidden = true;
+          (up ? $('authFullName') : $('authEmail')).focus();
+        }
+
+        $('authSwitchBtn').addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
+
         $('authForm').addEventListener('submit', async e => {
           e.preventDefault();
           const btn = $('authSubmit');
+          const original = btn.textContent;
           btn.disabled = true;
-          btn.textContent = 'Signing in…';
+          btn.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
           try {
+            if (mode === 'signup') {
+              const r = await signUpWithPassword({
+                name: $('authFullName').value,
+                email: $('authEmail').value,
+                password: $('authPassword').value,
+              });
+              if (r.needsConfirmation) {
+                // Not signed in yet, and saying "welcome" here would be a lie
+                // that ends with them staring at a sign-in page.
+                tell('Account created. Check ' + $('authEmail').value.trim()
+                  + ' for a confirmation link, then come back and sign in.');
+                setMode('signin');
+                btn.disabled = false;
+                btn.textContent = 'Sign in';
+                return;
+              }
+              location.href = safeNext();
+              return;
+            }
             await signInWithPassword({ email: $('authEmail').value, password: $('authPassword').value });
             location.href = safeNext();
           } catch (ex) {
             fail(ex.message);
             btn.disabled = false;
-            btn.textContent = 'Sign in';
+            btn.textContent = original;
             $('authPassword').select();
           }
         });
