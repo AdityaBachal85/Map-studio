@@ -231,10 +231,20 @@ const PLACES_PROVIDERS = Object.freeze({
 const SUPABASE_URL = 'https://sacyafztfticssuzkrze.supabase.co';
 
 /**
- * Supabase → Project Settings → API Keys → `anon` / `public`. A long `eyJ…`
- * string. Paste it here; nothing else needs to change.
+ * Supabase → Project Settings → API Keys. Either format works, verified
+ * against the vendored client (2.112.1) by watching what it puts on the wire:
+ * both are sent as the `apikey` header and as `Authorization: Bearer`.
+ *
+ *   - `sb_publishable_…` — the current format, and the one used here. It can
+ *     be revoked on its own if it ever needs replacing.
+ *   - `eyJ…` — the older anon JWT. Still accepted, but it is derived from the
+ *     project's JWT secret, so rotating it disturbs more than just this.
+ *
+ * NEVER the `sb_secret_…` / `service_role` key. That one bypasses every Row
+ * Level Security policy by design; in a browser it would hand every visitor
+ * full read and write access to the whole database.
  */
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_ANON_KEY = 'sb_publishable_TvDdOBCIhz2RI1Xv7pb4ow_YCt3nEtW';
 
 /**
  * Restrict sign-in to one email domain, or '' to allow any.
