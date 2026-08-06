@@ -90,7 +90,15 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ---------------------------------------------------------------------------
--- 3. Projects
+-- 3. Map projects
+--
+-- NAMED map_projects, NOT projects. `public.projects` is already taken by the
+-- AI reports schema (server/sql/schema.sql) — a different table, with a TEXT
+-- primary key and a foreign key from `sites` pointing at it. Creating this one
+-- as `projects` silently did nothing, because CREATE TABLE IF NOT EXISTS found
+-- the existing table and skipped it, and the next statement then failed with
+-- `column "owner_id" does not exist`. Both tables share one database; they do
+-- not share a name.
 --
 -- `data` holds the serialised map exactly as js/project/projectState.js
 -- produces it. JSONB rather than text so it can be queried later (counting
@@ -102,7 +110,7 @@ create trigger on_auth_user_created
 -- show four names.
 -- ---------------------------------------------------------------------------
 
-create table if not exists public.projects (
+create table if not exists public.map_projects (
   id          uuid primary key default gen_random_uuid(),
   owner_id    uuid not null references auth.users (id) on delete cascade,
   name        text not null default 'Untitled map project',
@@ -117,34 +125,34 @@ create table if not exists public.projects (
 );
 
 -- The list's only query: this owner's rows, newest change first.
-create index if not exists projects_owner_updated_idx
-  on public.projects (owner_id, updated_at desc);
+create index if not exists map_projects_owner_updated_idx
+  on public.map_projects (owner_id, updated_at desc);
 
-alter table public.projects enable row level security;
+alter table public.map_projects enable row level security;
 
 -- Four separate policies rather than one FOR ALL, because the checks differ:
 -- reading and deleting test the row that exists, while inserting tests the row
 -- being created. Rolled into one, an INSERT could name someone else as owner.
 
-drop policy if exists "projects: read own" on public.projects;
-create policy "projects: read own"
-  on public.projects for select
+drop policy if exists "map_projects: read own" on public.map_projects;
+create policy "map_projects: read own"
+  on public.map_projects for select
   using (auth.uid() = owner_id);
 
-drop policy if exists "projects: insert own" on public.projects;
-create policy "projects: insert own"
-  on public.projects for insert
+drop policy if exists "map_projects: insert own" on public.map_projects;
+create policy "map_projects: insert own"
+  on public.map_projects for insert
   with check (auth.uid() = owner_id);
 
-drop policy if exists "projects: update own" on public.projects;
-create policy "projects: update own"
-  on public.projects for update
+drop policy if exists "map_projects: update own" on public.map_projects;
+create policy "map_projects: update own"
+  on public.map_projects for update
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
 
-drop policy if exists "projects: delete own" on public.projects;
-create policy "projects: delete own"
-  on public.projects for delete
+drop policy if exists "map_projects: delete own" on public.map_projects;
+create policy "map_projects: delete own"
+  on public.map_projects for delete
   using (auth.uid() = owner_id);
 
 -- ---------------------------------------------------------------------------
@@ -164,9 +172,9 @@ begin
 end;
 $$;
 
-drop trigger if exists projects_touch_updated on public.projects;
-create trigger projects_touch_updated
-  before update on public.projects
+drop trigger if exists map_projects_touch_updated on public.map_projects;
+create trigger map_projects_touch_updated
+  before update on public.map_projects
   for each row execute function public.touch_updated_at();
 
 drop trigger if exists profiles_touch_updated on public.profiles;
@@ -218,4 +226,4 @@ create trigger on_auth_user_domain_check
 --        (select count(*) from pg_policies p
 --          where p.schemaname = 'public' and p.tablename = t.tablename) as policies
 --   from pg_tables t
---  where schemaname = 'public' and tablename in ('profiles', 'projects');
+--  where schemaname = 'public' and tablename in ('profiles', 'map_projects');

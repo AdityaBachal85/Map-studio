@@ -58,7 +58,7 @@ function cloudRowToMeta(r, user) {
 function cloudError(error) {
   const code = error && error.code;
   if (code === '42P01') {
-    return new Error('The projects table does not exist yet — run sql/supabase-auth.sql '
+    return new Error('The map_projects table does not exist yet — run sql/supabase-auth.sql '
       + 'in the Supabase SQL editor.');
   }
   if (code === '42501') {
@@ -77,7 +77,7 @@ async function cloudProjectsList(ownerId) {
   const sb = sessionClient();
   if (!sb) return [];
   const { data, error } = await sb
-    .from('projects')
+    .from('map_projects')
     .select(CLOUD_META_COLS)
     .order('updated_at', { ascending: false });
   if (error) throw cloudError(error);
@@ -89,7 +89,7 @@ async function cloudProjectsList(ownerId) {
 async function cloudProjectsMeta(id) {
   const sb = sessionClient();
   if (!sb) return null;
-  const { data, error } = await sb.from('projects').select(CLOUD_META_COLS).eq('id', id).maybeSingle();
+  const { data, error } = await sb.from('map_projects').select(CLOUD_META_COLS).eq('id', id).maybeSingle();
   if (error) throw cloudError(error);
   return data ? cloudRowToMeta(data, currentUser()) : null;
 }
@@ -98,7 +98,7 @@ async function cloudProjectsMeta(id) {
 async function cloudProjectsLoad(id) {
   const sb = sessionClient();
   if (!sb) return null;
-  const { data, error } = await sb.from('projects').select('data').eq('id', id).maybeSingle();
+  const { data, error } = await sb.from('map_projects').select('data').eq('id', id).maybeSingle();
   if (error) throw cloudError(error);
   return data ? data.data : null;
 }
@@ -132,7 +132,7 @@ async function cloudProjectsSave(rec) {
 
   // upsert rather than insert-or-update: one round trip, and no window where a
   // concurrent write could turn the update into a duplicate insert.
-  const { data, error } = await sb.from('projects').upsert(row).select(CLOUD_META_COLS).single();
+  const { data, error } = await sb.from('map_projects').upsert(row).select(CLOUD_META_COLS).single();
   if (error) throw cloudError(error);
   return cloudRowToMeta(data, user);
 }
@@ -143,7 +143,7 @@ async function cloudProjectsRename(id, name) {
   if (!sb) return false;
   const clean = String(name || '').trim();
   if (!clean) return false;
-  const { error } = await sb.from('projects').update({ name: clean }).eq('id', id);
+  const { error } = await sb.from('map_projects').update({ name: clean }).eq('id', id);
   if (error) throw cloudError(error);
   return true;
 }
@@ -152,7 +152,7 @@ async function cloudProjectsRename(id, name) {
 async function cloudProjectsDelete(id) {
   const sb = sessionClient();
   if (!sb) return false;
-  const { error } = await sb.from('projects').delete().eq('id', id);
+  const { error } = await sb.from('map_projects').delete().eq('id', id);
   if (error) throw cloudError(error);
   return true;
 }

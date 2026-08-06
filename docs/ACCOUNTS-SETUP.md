@@ -67,10 +67,10 @@ select tablename,
        (select count(*) from pg_policies p
          where p.schemaname = 'public' and p.tablename = t.tablename) as policies
   from pg_tables t
- where schemaname = 'public' and tablename in ('profiles', 'projects');
+ where schemaname = 'public' and tablename in ('profiles', 'map_projects');
 ```
 
-Expect two rows, both `rls_enabled = true`, with `projects` showing 4 policies
+Expect two rows, both `rls_enabled = true`, with `map_projects` showing 4 policies
 and `profiles` showing 2. Anything else means the script did not finish — read
 the error rather than moving on.
 
@@ -158,7 +158,7 @@ add them.
 4. Create a project, then open the same URL in a different browser and sign in
    again. The project should be there. That round trip is the real proof —
    anything less could be served from local storage.
-5. Supabase → **Table Editor → projects**: one row, `owner_id` matching your
+5. Supabase → **Table Editor → map_projects**: one row, `owner_id` matching your
    user in **Authentication → Users**.
 
 Projects already on the machine are copied into the account the first time you
@@ -176,7 +176,7 @@ untouched.
 | "Could not reach the sign-in service" | `SUPABASE_URL` wrong, project paused, or a network blocking it. Open the URL in a tab — a paused project says so |
 | `AADSTS50011: redirect URI mismatch` | Azure's redirect URI must be Supabase's `/auth/v1/callback`, not your site |
 | Returns to the app but still signed out | The return URL is not in Supabase's **Redirect URLs** list |
-| "The projects table does not exist yet" | Step 2 was not run |
+| "The map_projects table does not exist yet" | Step 2 was not run |
 | "The database refused that write" | Tables exist, policies do not. Re-run `sql/supabase-auth.sql` |
 | "Sign-up is limited to dbotrealty.com" | The domain trigger. Change the domain in the SQL, or drop the trigger |
 | Worked for weeks, then stopped | The Azure client secret expired. Issue a new one and update it in Supabase |
