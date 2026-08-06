@@ -608,11 +608,24 @@ select:disabled,
   background: rgba(16, 32, 60, .02);
 }
 
-.empty b {
+/* The leading <b> is the heading — the line carrying the fact. Scoped to the
+   first child rather than every <b>, because the body text below it bolds
+   things inline too ("use <b>Click map to add</b>, or add manually"), and
+   promoting those to blocks broke the sentence across three lines and left a
+   fragment opening with a comma. */
+.empty > b:first-child,
+.lp-empty > b:first-child {
   display: block;
   margin-bottom: var(--sp-1);
   color: var(--text);
   font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+/* Inline emphasis inside the body copy: readable, but it stays in the flow. */
+.empty b,
+.lp-empty b {
+  color: var(--text);
   font-weight: 650;
 }
 

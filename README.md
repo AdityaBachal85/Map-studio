@@ -480,8 +480,13 @@ Map-studio/
   vendor/         — third-party libraries, vendored as plain files (leaflet.js/.css,
                        leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
   css/
-    main.css        — @import order (do not reorder — later rules override earlier ones)
-    themes.css, style.css, map.css, sidebar.css, components.css, layout.css
+    themes.css, style.css, map.css, sidebar.css, components.css, layout.css,
+      refine.css    — linked individually from index.html, in that order. Do not
+                        reorder: later sheets override earlier ones and refine
+                        must stay last. Linked directly rather than via an
+                        @import list so the release's ?v= bump reaches every
+                        sheet — an @import needs its own, and a stale one serves
+                        cached CSS while the markup updates around it.
   js/
     app.js          — runs last: wires everything together, prints the boot message
     constants.js, config.js   (config.js holds ROUTERS + the Geoapify API key)
