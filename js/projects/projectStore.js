@@ -111,7 +111,7 @@ function projectsCounts(project) {
  * Every project belonging to one person, newest change first.
  * @param {string} ownerId @returns {Promise<object[]>} meta records only
  */
-async function projectsList(ownerId) {
+async function localProjectsList(ownerId) {
   const db = await projectsDb();
   if (!db) return [];
   const tx = db.transaction(PROJECTS_META, 'readonly');
@@ -122,7 +122,7 @@ async function projectsList(ownerId) {
 }
 
 /** @param {string} id @returns {Promise<object|null>} the meta record */
-async function projectsMeta(id) {
+async function localProjectsMeta(id) {
   const db = await projectsDb();
   if (!db) return null;
   const tx = db.transaction(PROJECTS_META, 'readonly');
@@ -130,7 +130,7 @@ async function projectsMeta(id) {
 }
 
 /** @param {string} id @returns {Promise<object|null>} the serialised project */
-async function projectsLoad(id) {
+async function localProjectsLoad(id) {
   const db = await projectsDb();
   if (!db) return null;
   const tx = db.transaction(PROJECTS_PAYLOAD, 'readonly');
@@ -144,11 +144,11 @@ async function projectsLoad(id) {
  * @param {{id?:string, name:string, ownerId:string, ownerName?:string, project:object}} rec
  * @returns {Promise<object|null>} the stored meta record, or null if it failed
  */
-async function projectsSave(rec) {
+async function localProjectsSave(rec) {
   const id = rec.id || projectsNewId();
   const project = rec.project || {};
   const now = Date.now();
-  const prev = rec.id ? await projectsMeta(rec.id) : null;
+  const prev = rec.id ? await localProjectsMeta(rec.id) : null;
 
   const meta = {
     id,
@@ -171,8 +171,8 @@ async function projectsSave(rec) {
 }
 
 /** @param {string} id @param {string} name @returns {Promise<boolean>} */
-async function projectsRename(id, name) {
-  const meta = await projectsMeta(id);
+async function localProjectsRename(id, name) {
+  const meta = await localProjectsMeta(id);
   if (!meta) return false;
   meta.name = String(name || '').trim() || meta.name;
   meta.modified = Date.now();
@@ -180,7 +180,7 @@ async function projectsRename(id, name) {
 }
 
 /** @param {string} id @returns {Promise<boolean>} */
-async function projectsDelete(id) {
+async function localProjectsDelete(id) {
   return await projectsTx([PROJECTS_META, PROJECTS_PAYLOAD], 'readwrite', tx => {
     tx.objectStore(PROJECTS_META).delete(id);
     tx.objectStore(PROJECTS_PAYLOAD).delete(id);
@@ -191,11 +191,11 @@ async function projectsDelete(id) {
  * @param {string} id @param {string} ownerId
  * @returns {Promise<object|null>} the new project's meta
  */
-async function projectsDuplicate(id, ownerId) {
-  const meta = await projectsMeta(id);
-  const payload = await projectsLoad(id);
+async function localProjectsDuplicate(id, ownerId) {
+  const meta = await localProjectsMeta(id);
+  const payload = await localProjectsLoad(id);
   if (!meta || !payload) return null;
-  return await projectsSave({
+  return await localProjectsSave({
     name: meta.name + ' (copy)',
     ownerId: ownerId || meta.ownerId,
     ownerName: meta.ownerName,
@@ -207,8 +207,8 @@ async function projectsDuplicate(id, ownerId) {
  * Total bytes held, for the storage meter.
  * @param {string} ownerId @returns {Promise<{bytes:number, count:number, quota:number|null}>}
  */
-async function projectsStorage(ownerId) {
-  const list = await projectsList(ownerId);
+async function localProjectsStorage(ownerId) {
+  const list = await localProjectsList(ownerId);
   const bytes = list.reduce((n, p) => n + (p.bytes || 0), 0);
   let quota = null;
   // The browser's own figure, when it will give one — a fixed "1 GB" would be
@@ -232,3 +232,71 @@ async function projectsRequestPersistence() {
   } catch (e) { /* fall through */ }
   return false;
 }
+
+/* ---------------------------------------------------------------------------
+ * The dispatcher
+ *
+ * One set of names for the page to call, routed to whichever store is in play.
+ * Everything above this line is the IndexedDB implementation; the Supabase one
+ * lives in cloudProjects.js. Neither knows about the other.
+ *
+ * WHEN CLOUD MODE APPLIES: only when Supabase is configured *and* somebody is
+ * actually signed in. A configured-but-signed-out page falls back to local
+ * rather than issuing queries that RLS will correctly refuse — that way the
+ * app still works while the account side is being set up, which is exactly the
+ * state it is in today.
+ *
+ * FAILURES ARE NOT SWALLOWED HERE. A cloud read that fails throws, and the
+ * page shows why. Silently serving local data in its place would look like
+ * success and quietly fork someone's work across two stores.
+ * ------------------------------------------------------------------------ */
+
+/** @returns {boolean} whether reads and writes should go to Supabase. */
+function projectsCloudMode() {
+  return typeof authMode === 'function' && authMode() === 'supabase'
+    && typeof currentUser === 'function' && !!currentUser()
+    && typeof cloudProjectsList === 'function';
+}
+
+/** @param {string} ownerId @returns {Promise<object[]>} */
+async function projectsList(ownerId) {
+  return projectsCloudMode() ? await cloudProjectsList(ownerId) : await localProjectsList(ownerId);
+}
+
+/** @param {string} id @returns {Promise<object|null>} */
+async function projectsMeta(id) {
+  return projectsCloudMode() ? await cloudProjectsMeta(id) : await localProjectsMeta(id);
+}
+
+/** @param {string} id @returns {Promise<object|null>} */
+async function projectsLoad(id) {
+  return projectsCloudMode() ? await cloudProjectsLoad(id) : await localProjectsLoad(id);
+}
+
+/** @param {object} rec @returns {Promise<object|null>} */
+async function projectsSave(rec) {
+  return projectsCloudMode() ? await cloudProjectsSave(rec) : await localProjectsSave(rec);
+}
+
+/** @param {string} id @param {string} name @returns {Promise<boolean>} */
+async function projectsRename(id, name) {
+  return projectsCloudMode() ? await cloudProjectsRename(id, name) : await localProjectsRename(id, name);
+}
+
+/** @param {string} id @returns {Promise<boolean>} */
+async function projectsDelete(id) {
+  return projectsCloudMode() ? await cloudProjectsDelete(id) : await localProjectsDelete(id);
+}
+
+/** @param {string} id @param {string} ownerId @returns {Promise<object|null>} */
+async function projectsDuplicate(id, ownerId) {
+  return projectsCloudMode() ? await cloudProjectsDuplicate(id) : await localProjectsDuplicate(id, ownerId);
+}
+
+/** @param {string} ownerId @returns {Promise<{bytes:number,count:number,quota:number|null}>} */
+async function projectsStorage(ownerId) {
+  return projectsCloudMode() ? await cloudProjectsStorage() : await localProjectsStorage(ownerId);
+}
+
+/** @returns {'cloud'|'device'} for the page's source indicator. */
+function projectsSource() { return projectsCloudMode() ? 'cloud' : 'device'; }

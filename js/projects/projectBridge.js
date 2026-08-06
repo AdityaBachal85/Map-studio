@@ -54,6 +54,13 @@ async function projectBridgeBoot() {
   const id = projectBridgeActiveId();
   if (!id || typeof projectsLoad !== 'function') return false;
 
+  // Resolve the account first: which store holds this project depends on
+  // whether anyone is signed in, and asking before that settles would read the
+  // local store for a project that lives in the cloud.
+  if (typeof sessionInit === 'function') {
+    try { await sessionInit(); } catch (e) { /* falls back to the local store */ }
+  }
+
   let payload = null, meta = null;
   try {
     payload = await projectsLoad(id);

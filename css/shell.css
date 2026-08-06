@@ -513,3 +513,70 @@
   .pj-account .who { display: none; }
   .pj-table .col-owner, .pj-table .col-size { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   5. Sign-in — provider button, divider, success note
+   --------------------------------------------------------------------------- */
+
+/* Microsoft's brand guidance is specific: their mark on a neutral surface, not
+   recoloured into ours. So this is a bordered button rather than an accent
+   one — which also puts it in the right visual order, since the accent is
+   reserved for the single primary action on a screen. */
+.auth-ms {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: var(--bg1);
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.auth-ms:hover { background: color-mix(in srgb, var(--text) 7%, transparent); border-color: var(--text-2); }
+.auth-ms:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.auth-or::before,
+.auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.auth-ok {
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--ok, #12B886) 45%, transparent);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--ok, #12B886) 12%, transparent);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+.auth-field .hint a { color: var(--accent); text-decoration: none; }
+.auth-field .hint a:hover { text-decoration: underline; }
+
+.auth-note code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-family: var(--mono);
+  font-size: .95em;
+}
+
+.auth-submit:disabled { opacity: .6; cursor: default; }
+
+/* The list's source, stated rather than assumed — "This device" and "Cloud"
+   must reflect where the rows actually came from. */
+.pj-seg button[aria-pressed="false"]:not(:disabled) { opacity: .75; }

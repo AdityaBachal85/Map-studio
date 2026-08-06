@@ -70,55 +70,91 @@
         </div>
 
         <h1>Sign in</h1>
-        <p class="lede">Your projects are kept in this browser and listed under the name you use here.</p>
+        <p class="lede" id="authLede">Use your DBOT work account.</p>
 
         <div class="auth-error" id="authError" hidden></div>
+        <div class="auth-ok" id="authOk" hidden></div>
 
-        <form id="authForm" novalidate>
-          <div class="auth-field">
-            <label for="authName">Your name</label>
-            <input id="authName" name="name" type="text" autocomplete="name" placeholder="Aditya Bachal" required>
+        <!-- Real accounts. Shown only when Supabase is configured. -->
+        <div id="authReal" hidden>
+          <button class="auth-ms" id="authMsBtn" type="button">
+            <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+            </svg>
+            Continue with Microsoft
+          </button>
+
+          <div class="auth-or"><span>or use a password</span></div>
+
+          <form id="authForm" novalidate>
+            <div class="auth-field">
+              <label for="authEmail">Work email</label>
+              <input id="authEmail" name="email" type="email" autocomplete="username"
+                placeholder="you@dbotrealty.com" required>
+            </div>
+
+            <div class="auth-field">
+              <label for="authPassword">Password</label>
+              <input id="authPassword" name="password" type="password" autocomplete="current-password" required>
+              <div class="hint"><a href="#" id="authForgot">Forgotten your password?</a></div>
+            </div>
+
+            <button class="auth-submit" type="submit" id="authSubmit">Sign in</button>
+          </form>
+        </div>
+
+        <!-- No accounts configured yet: name yourself, and be told plainly
+             that is all this does. -->
+        <div id="authLocal" hidden>
+          <form id="authLocalForm" novalidate>
+            <div class="auth-field">
+              <label for="authName">Your name</label>
+              <input id="authName" name="name" type="text" autocomplete="name" placeholder="Aditya Bachal" required>
+            </div>
+
+            <div class="auth-field">
+              <label for="authLocalEmail">Email <span
+                  style="text-transform:none;letter-spacing:0;font-weight:600">(optional)</span></label>
+              <input id="authLocalEmail" name="email" type="email" autocomplete="email"
+                placeholder="you@dbotrealty.com">
+              <div class="hint">Used only to recognise you again on this machine, so you return to the same
+                projects. It is not sent anywhere.</div>
+            </div>
+
+            <button class="auth-submit" type="submit">Continue</button>
+          </form>
+
+          <div class="auth-note">
+            <b>Accounts are not switched on yet.</b> This names you and keeps separate people's projects apart on
+            a shared machine — it does not lock anything, because a site with no server cannot. Anyone with access
+            to this computer can open the app directly. Treat a project here as a file on this disk, because that
+            is what it is. Once <code>SUPABASE_ANON_KEY</code> is set in <code>js/config.js</code>, this page
+            becomes a real sign-in and your projects move into your account.
           </div>
-
-          <div class="auth-field">
-            <label for="authEmail">Email <span style="text-transform:none;letter-spacing:0;font-weight:600">(optional)</span></label>
-            <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="you@dbotrealty.com">
-            <div class="hint">Used only to recognise you again on this machine, so you return to the same
-              projects. It is not sent anywhere.</div>
-          </div>
-
-          <button class="auth-submit" type="submit">Continue</button>
-        </form>
-
-        <div class="auth-note">
-          <b>What this sign-in is and isn't.</b> Map Studio runs entirely in your browser, so this names you and
-          keeps separate people's projects apart on a shared machine — it does not lock anything. Anyone with
-          access to this computer can open the app directly. Treat a project here as a file on this disk, because
-          that is what it is.
         </div>
       </div>
     </main>
 
   </div>
 
+  <script src="./vendor/supabase.js?v=6.0028"></script>
   <script src="./js/core/prefs.js?v=6.0028"></script>
   <script src="./js/constants.js?v=6.0028"></script>
+  <script src="./js/config.js?v=6.0028"></script>
   <script src="./js/auth/session.js?v=6.0028"></script>
   <script>
     applyTheme();
     document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
 
-    const form = document.getElementById('authForm');
-    const nameEl = document.getElementById('authName');
-    const emailEl = document.getElementById('authEmail');
-    const errEl = document.getElementById('authError');
+    const $ = id => document.getElementById(id);
+    const errEl = $('authError');
+    const okEl = $('authOk');
 
-    // Coming back to a machine you have used before should not mean retyping
-    // your own name, so the last session pre-fills the form.
-    const prior = currentUser();
-    if (prior) { nameEl.value = prior.name; emailEl.value = prior.email || ''; }
-    nameEl.focus();
-    nameEl.select();
+    function fail(msg) { errEl.textContent = msg; errEl.hidden = false; okEl.hidden = true; }
+    function tell(msg) { okEl.textContent = msg; okEl.hidden = false; errEl.hidden = true; }
 
     /** Only same-page targets — an open redirect is trivially avoidable here. */
     function safeNext() {
@@ -127,18 +163,75 @@
       return /^[\w.-]+\.html(\?[^#]*)?$/.test(decoded) ? decoded : 'projects.html';
     }
 
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      errEl.hidden = true;
-      try {
-        signIn({ name: nameEl.value, email: emailEl.value });
-        location.href = safeNext();
-      } catch (ex) {
-        errEl.textContent = ex.message || 'Could not sign in.';
-        errEl.hidden = false;
-        nameEl.focus();
+    (async function start() {
+      // Also completes the Microsoft round trip: arriving back here with tokens
+      // in the URL, this is what turns them into a session.
+      await sessionInit();
+
+      // Already signed in — including the moment after Microsoft returns.
+      if (currentUser()) { location.replace(safeNext()); return; }
+
+      const real = authMode() === 'supabase';
+      $('authReal').hidden = !real;
+      $('authLocal').hidden = real;
+      $('authLede').textContent = real
+        ? 'Use your DBOT work account.'
+        : 'Your projects are kept in this browser and listed under the name you use here.';
+
+      if (real) {
+        $('authEmail').focus();
+
+        $('authMsBtn').addEventListener('click', async () => {
+          errEl.hidden = true;
+          try {
+            tell('Taking you to Microsoft…');
+            await signInWithMicrosoft(location.origin + location.pathname.replace(/[^/]*$/, '') + safeNext());
+          } catch (ex) { fail(ex.message); }
+        });
+
+        $('authForm').addEventListener('submit', async e => {
+          e.preventDefault();
+          const btn = $('authSubmit');
+          btn.disabled = true;
+          btn.textContent = 'Signing in…';
+          try {
+            await signInWithPassword({ email: $('authEmail').value, password: $('authPassword').value });
+            location.href = safeNext();
+          } catch (ex) {
+            fail(ex.message);
+            btn.disabled = false;
+            btn.textContent = 'Sign in';
+            $('authPassword').select();
+          }
+        });
+
+        $('authForgot').addEventListener('click', async e => {
+          e.preventDefault();
+          const email = $('authEmail').value.trim();
+          if (!email) { fail('Type your work email above first, then click this again.'); return; }
+          try {
+            await sendPasswordReset(email);
+            tell('If that address has an account, a reset link is on its way to it.');
+          } catch (ex) { fail(ex.message); }
+        });
+        return;
       }
-    });
+
+      // Local mode. Pre-fill from the last session so returning does not mean
+      // retyping your own name.
+      const prior = currentUser();
+      if (prior) { $('authName').value = prior.name; $('authLocalEmail').value = prior.email || ''; }
+      $('authName').focus();
+      $('authName').select();
+
+      $('authLocalForm').addEventListener('submit', e => {
+        e.preventDefault();
+        try {
+          signInLocally({ name: $('authName').value, email: $('authLocalEmail').value });
+          location.href = safeNext();
+        } catch (ex) { fail(ex.message || 'Could not continue.'); }
+      });
+    })();
   </script>
 </body>
 

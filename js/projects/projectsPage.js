@@ -11,11 +11,16 @@
  * real account server replace the local ones later without touching the page.
  */
 
-(function () {
+(async function () {
   'use strict';
 
   applyTheme();
   document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
+
+  // Must settle before the guard: Supabase may need a network round trip to
+  // refresh an expired token, and asking too early would bounce a signed-in
+  // person back to the sign-in page.
+  await sessionInit();
 
   const user = requireSession('login.html');
   if (!user) return;   // a redirect is already in flight
@@ -168,9 +173,35 @@
   }
 
   async function refresh() {
-    rows = await projectsList(user.id);
+    try {
+      rows = await projectsList(user.id);
+    } catch (e) {
+      // A cloud failure is reported, never papered over with local rows —
+      // showing a different store's contents under the same heading is how
+      // someone concludes their work has vanished.
+      listWrap.innerHTML = `<div class="pj-empty"><b>Your projects could not be loaded.</b>${esc(e.message)}</div>`;
+      $('pjCount').textContent = '';
+      return;
+    }
     render();
     meter();
+    markSource();
+  }
+
+  /** Say where these rows came from, rather than leaving the toggle decorative. */
+  function markSource() {
+    const cloud = typeof projectsSource === 'function' && projectsSource() === 'cloud';
+    const local = $('pjSrcLocal'), remote = $('pjSrcCloud');
+    local.setAttribute('aria-pressed', String(!cloud));
+    remote.setAttribute('aria-pressed', String(cloud));
+    remote.disabled = !cloud;
+    local.disabled = cloud;
+    remote.title = cloud
+      ? 'Your projects are stored in your account and follow you between devices.'
+      : 'Cloud projects need an account. Not signed in to one yet.';
+    local.title = cloud
+      ? 'Signed in to an account, so projects live there rather than on this device.'
+      : 'Projects are stored in this browser only.';
   }
 
   async function meter() {
@@ -375,7 +406,25 @@
   // Best effort — Chrome grants it silently on engaged sites, others decline.
   projectsRequestPersistence();
 
-  refresh().catch(() => {
+  // First sign-in on a machine with existing local work: offer it up to the
+  // account rather than stranding it. Copies, never moves — see the note on
+  // cloudMigrateLocalProjects().
+  (async function migrateThenLoad() {
+    if (typeof projectsSource === 'function' && projectsSource() === 'cloud'
+        && typeof cloudMigrateLocalProjects === 'function') {
+      try {
+        const r = await cloudMigrateLocalProjects();
+        if (r.migrated) {
+          alert(`${r.migrated} project${r.migrated === 1 ? '' : 's'} from this device `
+            + `${r.migrated === 1 ? 'has' : 'have'} been copied into your account.`
+            + (r.failed ? `\n\n${r.failed} could not be copied and are still on this device.` : ''));
+        }
+      } catch (e) {
+        console.warn('Projects: migration failed —', e && e.message);
+      }
+    }
+    await refresh();
+  })().catch(() => {
     listWrap.innerHTML = '<div class="pj-empty"><b>Storage is unavailable.</b>'
       + 'This browser refused access to IndexedDB, which is where projects are kept. '
       + 'Private or incognito windows usually block it — try a normal window.</div>';

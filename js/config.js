@@ -206,6 +206,47 @@ const PLACES_PROVIDERS = Object.freeze({
 
 });
 
+/* ---------------------------------------------------------------------------
+ * Supabase — accounts and cloud projects
+ * -------------------------------------------------------------------------
+ *
+ * These two values are the whole client-side configuration for sign-in and
+ * cloud project storage. The browser talks to Supabase directly; the Render
+ * backend above is not involved in authentication at all.
+ *
+ * THE ANON KEY IS MEANT TO BE PUBLIC. It identifies the project, not a person,
+ * and it grants nothing on its own — every table is protected by Row Level
+ * Security policies evaluated inside Postgres against the signed-in user's
+ * token. That is what makes it safe to commit here, the same way the Google
+ * browser key above is. See sql/supabase-auth.sql for the policies that do the
+ * actual enforcing; without them this key WOULD be an open door, so do not
+ * create tables without policies.
+ *
+ * NEVER put the `service_role` key here. That one bypasses RLS entirely and
+ * belongs only in server environment variables.
+ *
+ * Leave either value empty to run fully offline: sign-in falls back to the
+ * local profile and projects stay in this browser (see js/auth/session.js).
+ */
+const SUPABASE_URL = 'https://sacyafztfticssuzkrze.supabase.co';
+
+/**
+ * Supabase → Project Settings → API Keys → `anon` / `public`. A long `eyJ…`
+ * string. Paste it here; nothing else needs to change.
+ */
+const SUPABASE_ANON_KEY = '';
+
+/**
+ * Restrict sign-in to one email domain, or '' to allow any.
+ *
+ * Belt and braces only — this is a client-side check and a determined person
+ * can skip it. The binding restriction is configured in Supabase (and, for
+ * Microsoft sign-in, in the Entra tenant), which is where it cannot be
+ * bypassed. This exists so someone with a personal address gets a clear
+ * "use your work account" instead of a confusing permissions error later.
+ */
+const AUTH_ALLOWED_EMAIL_DOMAIN = 'dbotrealty.com';
+
 /**
  * AI report backend (Cloud Functions) base URL — e.g.
  * 'https://asia-south1-your-project.cloudfunctions.net'.
