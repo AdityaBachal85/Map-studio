@@ -67,18 +67,26 @@ const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 /**
  * Model used when falling back to OpenRouter for plain synthesis.
  *
- * OpenRouter's free roster moves. The previous default,
- * `deepseek/deepseek-chat-v3-0324:free`, went paid and started answering
- * 404 "This model is unavailable for free" — caught by /health/providers on
- * the first real deployment, which is exactly the drift that put research on
- * a grounding-less tier earlier in this project.
+ * NO DEFAULT, ON PURPOSE. OpenRouter's free roster moves, and this file has
+ * now shipped two slugs that stopped being free under it:
+ * `deepseek/deepseek-chat-v3-0324:free` first, then
+ * `meta-llama/llama-3.3-70b-instruct:free`. Both went paid and began
+ * answering 404 "This model is unavailable for free". Each time, a working
+ * deployment grew a red check in /health/providers without anything in it
+ * having changed — the same silent drift that put research on a
+ * grounding-less Gemini tier earlier in this project.
  *
- * So set OPENROUTER_MODEL explicitly to whatever OpenRouter currently lists
- * as free. This default is a starting point, not a promise, and
- * /health/providers reports the slug back when it fails so the fix is a
- * copy-paste rather than a hunt.
+ * Picking a third slug would only schedule the next occurrence. So the
+ * fallback is now opt-in: set OPENROUTER_MODEL to whatever OpenRouter
+ * currently lists as free and it engages; leave it unset and OpenRouter is
+ * simply not used, which /health/providers reports as a deliberate state
+ * rather than a failure.
+ *
+ * Nothing is lost by leaving it unset. This path exists only for the case
+ * where BOTH Gemini models are quota-exhausted, and it cannot do grounded
+ * research at all — see callModelWithFallback().
  */
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || '';
 
 /**
  * Worth retrying on the other model.
@@ -179,6 +187,10 @@ async function callGemini(model, prompt, tool) {
 async function callOpenRouter(prompt) {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('OPENROUTER_API_KEY is not set');
+  if (!OPENROUTER_MODEL) {
+    throw new Error('OPENROUTER_MODEL is not set. OpenRouter\'s free roster changes, so no '
+      + 'default is shipped — set it to a slug OpenRouter currently lists as free.');
+  }
 
   const res = await fetchWithTimeout(OPENROUTER_URL, {
     method: 'POST',
@@ -222,7 +234,7 @@ async function callModelWithFallback(task, prompt, tool) {
       // Maps grounding is the point of a 'maps' call; OpenRouter cannot do it,
       // so answering from a model with no places data would be a different
       // question answered confidently. Fail instead.
-      if (tool || !process.env.OPENROUTER_API_KEY) throw e2;
+      if (tool || !process.env.OPENROUTER_API_KEY || !OPENROUTER_MODEL) throw e2;
       console.warn(`AI Router: ${FALLBACK_MODEL} also failed (${e2.message}) — trying OpenRouter`);
       return await callOpenRouter(prompt);
     }

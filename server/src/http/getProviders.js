@@ -167,9 +167,23 @@ async function getProviders(req, res) {
       return r.ok ? { configured: true, results: r.results.length } : { ok: false, configured: true, reason: r.reason };
     }),
 
+    // Optional throughout: this is the fallback for both Gemini models being
+    // quota-exhausted at once, and it cannot do grounded research either way.
+    // Reported as a state, not a failure — a red row for something deliberately
+    // switched off trains people to ignore red rows.
     probe('openrouter', async () => {
       if (!process.env.OPENROUTER_API_KEY) {
-        return { ok: false, configured: false, reason: 'OPENROUTER_API_KEY is not set (optional — inference fallback only)' };
+        return { ok: true, configured: false, note: 'Not configured (optional — inference fallback only).' };
+      }
+      if (!router.OPENROUTER_MODEL) {
+        return {
+          ok: true,
+          configured: false,
+          note: 'A key is set but OPENROUTER_MODEL is not, so OpenRouter is unused. No default is '
+            + 'shipped because OpenRouter\'s free roster changes and every pinned slug has eventually '
+            + 'gone paid. Set it to a currently-free slug to enable the fallback, or remove '
+            + 'OPENROUTER_API_KEY to make the intent explicit.',
+        };
       }
       const r = await router.callOpenRouter('Reply with exactly: OK');
       return { configured: true, model: r.model, reply: r.text.slice(0, 20) };
