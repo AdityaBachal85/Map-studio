@@ -25,157 +25,362 @@
 
 /* ---------------------------------------------------------------------------
    2. Sign-in
-   Two columns on a wide screen: the form, and a panel that says what this is.
-   The panel is the first thing to go when the viewport narrows — it is
-   reassurance, and the form is the task.
+   A scene on the left, a floating card on the right.
+
+   THE CARD IS ITS OWN LIGHT ISLAND. It re-declares the colour tokens inside
+   itself rather than inheriting the page's, which is what lets a white card
+   sit on a dark page without every label, input and border inside it needing
+   a second rule. Change the theme and the page around it changes; the card
+   stays a card.
    --------------------------------------------------------------------------- */
+
+.auth-body { background: #060D18; }
 
 .auth-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   min-height: 100vh;
 }
 
-.auth-panel {
+/* ---- Left: the scene ---- */
+
+.auth-stage { position: relative; overflow: hidden; }
+
+.auth-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* A left-to-right scrim so the copy reads over the busiest part of the map
+   without dimming the whole illustration. */
+.auth-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(96deg, rgba(6, 13, 24, .97) 0%, rgba(6, 13, 24, .93) 26%,
+    rgba(6, 13, 24, .62) 44%, rgba(6, 13, 24, .12) 66%, rgba(6, 13, 24, .3) 100%);
+}
+
+.auth-stage-inner {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: var(--sp-4);
-  padding: var(--sp-6);
-  background:
-    radial-gradient(1200px 600px at 20% 10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
-    var(--bg1);
-  border-right: 1px solid var(--border);
+  height: 100%;
+  padding: clamp(28px, 4vw, 52px);
+  color: #EAF0F9;
 }
 
-.auth-panel h2 {
-  margin: 0;
-  font-size: clamp(24px, 3vw, 34px);
+.auth-brand,
+.auth-card-brand { display: flex; align-items: center; gap: 12px; }
+
+.auth-brand img { height: 34px; width: auto; }
+.auth-card-brand img { height: 30px; width: auto; }
+
+.auth-brand .kicker,
+.auth-card-brand .kicker {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+
+.auth-brand .wordmark,
+.auth-card-brand .wordmark { font-weight: 700; letter-spacing: -.01em; }
+
+.auth-copy { margin-top: auto; margin-bottom: auto; max-width: 30rem; padding-top: clamp(24px, 5vh, 60px); }
+
+.auth-copy h2 {
+  margin: 0 0 var(--sp-4);
+  font-size: clamp(30px, 3.6vw, 46px);
   font-weight: 700;
-  line-height: var(--lh-tight);
-  letter-spacing: -.02em;
+  line-height: 1.12;
+  letter-spacing: -.025em;
 }
 
-.auth-panel p { margin: 0; max-width: 46ch; color: var(--text-2); }
+.auth-copy h2 em { font-style: normal; color: var(--orange); }
 
-.auth-points { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-2); }
+.auth-sub { margin: 0 0 clamp(24px, 4vh, 40px); color: #A9BACE; font-size: var(--fs-small); line-height: 1.6; }
 
-.auth-point { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.auth-points { display: flex; flex-direction: column; gap: var(--sp-4); }
 
-.auth-point svg { flex: none; margin-top: 2px; color: var(--accent); }
+.auth-point { display: flex; gap: 14px; align-items: flex-start; }
 
-.auth-point b { display: block; font-weight: 650; }
+/* Tinted tiles rather than bare glyphs: at this size a lone 19px stroke icon
+   reads as debris beside 15px type. */
+.auth-point .ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 122, 26, .28);
+  border-radius: 11px;
+  background: rgba(255, 122, 26, .13);
+  color: var(--orange);
+}
 
-.auth-point span { color: var(--text-2); font-size: var(--fs-small); }
+.auth-point .ic-b {
+  border-color: rgba(46, 155, 255, .28);
+  background: rgba(46, 155, 255, .13);
+  color: #2E9BFF;
+}
+
+.auth-point .ic-c {
+  border-color: rgba(18, 184, 134, .28);
+  background: rgba(18, 184, 134, .13);
+  color: #12B886;
+}
+
+.auth-point b { display: block; margin-bottom: 2px; font-size: var(--fs-small); font-weight: 650; }
+.auth-point span { color: #93A6BC; font-size: var(--fs-micro); line-height: 1.55; }
+
+/* ---- Right: the card ---- */
 
 .auth-main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-6) var(--sp-5);
+  padding: clamp(24px, 4vw, 56px) clamp(20px, 3vw, 48px);
 }
 
-.auth-card { width: 100%; max-width: 380px; }
+.auth-card {
+  /* The island's own palette — see the section note. */
+  --text: #16233A;
+  --text-2: #64748B;
+  --border: #E4E9F0;
+  --border-strong: #D5DDE8;
+  --bg0: #FFFFFF;
+  --bg1: #F6F8FB;
 
-.auth-brand { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-5); }
-
-.auth-brand img { height: 34px; width: auto; }
-
-.auth-brand .kicker {
-  font-size: var(--fs-micro);
-  font-weight: 800;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--accent);
+  width: 100%;
+  max-width: 420px;
+  padding: clamp(26px, 3vw, 40px);
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 22px;
+  background: #FFFFFF;
+  color: var(--text);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .2);
 }
+
+.auth-card-brand { margin-bottom: clamp(22px, 3vh, 34px); }
 
 .auth-card h1 {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-xl);
+  margin: 0 0 6px;
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: -.015em;
+  letter-spacing: -.02em;
+  color: var(--text);
 }
 
 .auth-card .lede { margin: 0 0 var(--sp-5); color: var(--text-2); font-size: var(--fs-small); }
+
+/* Provider button. Microsoft's mark stays on a neutral surface, per their
+   brand guidance — and it puts the accent where it belongs, on the one
+   primary action further down. */
+.auth-ms {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.auth-ms:hover { background: var(--bg1); border-color: #B9C5D4; }
+.auth-ms:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); }
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: var(--sp-4) 0;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.auth-or::before,
+.auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
 .auth-field { margin-bottom: var(--sp-4); }
 
 .auth-field label {
   display: block;
-  margin-bottom: var(--sp-2);
-  font-size: var(--fs-micro);
+  margin-bottom: 7px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: .12em;
+  letter-spacing: .13em;
   text-transform: uppercase;
   color: var(--text-2);
 }
 
-.auth-field input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 11px 13px;
+.auth-field label .opt { text-transform: none; letter-spacing: 0; font-weight: 600; }
+
+/* The icon and the reveal button sit inside the field's border, so the whole
+   thing is one control rather than an input with decorations beside it. */
+.auth-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-md, 10px);
-  background: var(--bg0);
+  border-radius: 11px;
+  background: var(--bg1);
+  color: var(--text-2);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.auth-input:focus-within {
+  border-color: var(--orange);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, .16);
+}
+
+.auth-input svg { flex: none; }
+
+.auth-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 0;
+  border: 0;
+  background: none;
   color: var(--text);
   font: inherit;
-  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.auth-field input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+.auth-input input:focus { outline: none; }
+.auth-input input::placeholder { color: #9AA7B8; }
+
+/* Chrome paints its own background on autofilled fields, which would show as
+   a pale block with the wrong corners inside the rounded wrapper. */
+.auth-input input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  transition: background-color 100000s;
 }
 
-.auth-field .hint { margin-top: var(--sp-2); font-size: var(--fs-micro); color: var(--text-2); }
+.auth-eye {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.auth-eye:hover { background: rgba(22, 35, 58, .06); color: var(--text); }
+.auth-eye.on { color: var(--orange); }
+.auth-eye:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(255, 122, 26, .4); }
+
+.auth-field .hint { margin-top: 7px; font-size: var(--fs-micro); color: var(--text-2); }
+.auth-field .hint a { color: var(--orange); text-decoration: none; font-weight: 600; }
+.auth-field .hint a:hover { text-decoration: underline; }
 
 .auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   width: 100%;
-  padding: 12px 16px;
+  margin-top: var(--sp-2);
+  padding: 13px 18px;
   border: 0;
-  border-radius: var(--r-md, 10px);
-  /* Matches .btn-primary in sidebar.css: the orange fill is identical in both
-     themes, so its ink is a fixed near-black rather than a themed token.
-     --accent-ink is *accent-coloured* text for dark surfaces — using it here
-     put orange on orange and the label vanished in dark mode. */
+  border-radius: 11px;
+  /* Matches .btn-primary: the orange fill is identical in both themes, so its
+     ink is a fixed near-black rather than a themed token. */
   background: linear-gradient(135deg, var(--orange), var(--orange2));
   color: #160B02;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  box-shadow: 0 6px 18px rgba(255, 122, 26, .3);
+  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.auth-submit:hover { filter: brightness(1.06); }
+.auth-submit:hover { filter: brightness(1.05); box-shadow: 0 8px 24px rgba(255, 122, 26, .38); }
 .auth-submit:active { transform: translateY(1px); }
-.auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 122, 26, .45); }
+.auth-submit:disabled { opacity: .65; cursor: default; box-shadow: none; }
+.auth-submit svg { transition: transform var(--dur-fast) var(--ease-out); }
+.auth-submit:hover svg { transform: translateX(2px); }
 
-/* The honesty notice. Deliberately not styled as a warning — it is a fact
-   about how the product works, not an error the person just caused. */
+/* Sign in ⇄ create account. Link weight, not a second button: there is one
+   primary action on this card and it is above. */
+.auth-switch {
+  margin-top: var(--sp-4);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.auth-switch button {
+  padding: 0 0 0 4px;
+  border: 0;
+  background: none;
+  color: var(--orange);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.auth-switch button:hover { text-decoration: underline; }
+.auth-switch button:focus-visible { outline: none; text-decoration: underline; box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); border-radius: 4px; }
+
+.auth-error,
+.auth-ok {
+  margin-bottom: var(--sp-4);
+  padding: 11px 14px;
+  border-radius: 11px;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.auth-error { border: 1px solid #F3C2BC; background: #FDF1EF; color: #8E2A19; }
+.auth-ok { border: 1px solid #B7E4CE; background: #EFFAF4; color: #14683F; }
+
+/* A fact about how the product works, not an error anyone just caused — so
+   it is not styled as a warning. */
 .auth-note {
   margin-top: var(--sp-5);
-  padding: var(--sp-3) var(--sp-4);
+  padding: 12px 14px;
   border: 1px dashed var(--border-strong);
-  border-radius: var(--r-md, 10px);
+  border-radius: 11px;
   color: var(--text-2);
   font-size: var(--fs-micro);
   line-height: 1.6;
 }
 
-.auth-error {
-  margin-bottom: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
-  border-radius: var(--r-md, 10px);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--text);
-  font-size: var(--fs-small);
+.auth-note code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(22, 35, 58, .07);
+  font-family: var(--mono);
+  font-size: .95em;
 }
 
-@media (max-width: 900px) {
+/* Narrow: the scene goes first — it is reassurance, and the form is the task.
+   The card stops floating and simply becomes the page. */
+@media (max-width: 1000px) {
   .auth-wrap { grid-template-columns: minmax(0, 1fr); }
-  .auth-panel { display: none; }
+  .auth-stage { display: none; }
+  .auth-main { padding: clamp(20px, 6vw, 40px) 18px; }
+  .auth-card { box-shadow: 0 20px 50px rgba(0, 0, 0, .5); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -514,69 +719,6 @@
   .pj-table .col-owner, .pj-table .col-size { display: none; }
 }
 
-/* ---------------------------------------------------------------------------
-   5. Sign-in — provider button, divider, success note
-   --------------------------------------------------------------------------- */
-
-/* Microsoft's brand guidance is specific: their mark on a neutral surface, not
-   recoloured into ours. So this is a bordered button rather than an accent
-   one — which also puts it in the right visual order, since the accent is
-   reserved for the single primary action on a screen. */
-.auth-ms {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md, 10px);
-  background: var(--bg1);
-  color: var(--text);
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-
-.auth-ms:hover { background: color-mix(in srgb, var(--text) 7%, transparent); border-color: var(--text-2); }
-.auth-ms:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-
-.auth-or {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin: var(--sp-5) 0;
-  color: var(--text-2);
-  font-size: var(--fs-micro);
-}
-
-.auth-or::before,
-.auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-.auth-ok {
-  margin-bottom: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid color-mix(in srgb, var(--ok, #12B886) 45%, transparent);
-  border-radius: var(--r-md, 10px);
-  background: color-mix(in srgb, var(--ok, #12B886) 12%, transparent);
-  color: var(--text);
-  font-size: var(--fs-small);
-}
-
-.auth-field .hint a { color: var(--accent); text-decoration: none; }
-.auth-field .hint a:hover { text-decoration: underline; }
-
-.auth-note code {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  font-family: var(--mono);
-  font-size: .95em;
-}
-
-.auth-submit:disabled { opacity: .6; cursor: default; }
-
 /* The list's source, stated rather than assumed — "This device" and "Cloud"
    must reflect where the rows actually came from. */
 .pj-seg button[aria-pressed="false"]:not(:disabled) { opacity: .75; }
@@ -597,28 +739,6 @@
 /* The account column is a positioning context so the menu hangs off it
    rather than off the page. */
 .pj-account { position: relative; }
-
-/* Sign in ⇄ create account. A link-weight control, not a second button —
-   there is one primary action on this page and it is the one in the form. */
-.auth-switch {
-  margin-top: var(--sp-4);
-  text-align: center;
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-
-.auth-switch button {
-  padding: 0 0 0 4px;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.auth-switch button:hover { text-decoration: underline; }
-.auth-switch button:focus-visible { outline: none; text-decoration: underline; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px; }
 
 /* Build markers. Quiet enough to ignore, present enough to answer "is this
    page stale?" without opening devtools. */

@@ -5,72 +5,202 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0033" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0034" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0033">
-  <link rel="stylesheet" href="./css/style.css?v=6.0033">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0033">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0034">
+  <link rel="stylesheet" href="./css/style.css?v=6.0034">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0034">
 </head>
 
-<body class="shell-body">
+<body class="shell-body auth-body">
   <div class="auth-wrap">
 
-    <!-- Left: what this is. Hidden below 900px — see shell.css. -->
-    <aside class="auth-panel">
-      <h2>Property maps that carry their evidence.</h2>
-      <p>Real coordinates, real roads, real routing — and every distance on the page measured rather than
-        estimated.</p>
+    <!-- ===== Left: the product, shown rather than described ================
+         The scene is inline SVG, not a photograph. A photo would mean shipping
+         a megabyte of someone else's aerial imagery, licensing it, and having
+         it look wrong at every viewport that isn't the one it was cropped for.
+         This draws the thing the product actually makes — a measured route
+         between real places — at any size, in a few kilobytes, with no
+         external request. It also cannot go stale or 404.
+         Hidden below 1000px: it is reassurance, and the form is the task. -->
+    <aside class="auth-stage" aria-hidden="true">
+      <svg class="auth-scene" viewBox="0 0 1000 900" preserveAspectRatio="xMidYMid slice"
+        xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0%" stop-color="#0B1A2E" />
+            <stop offset="45%" stop-color="#0A2438" />
+            <stop offset="100%" stop-color="#061421" />
+          </linearGradient>
+          <linearGradient id="water" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#123A52" />
+            <stop offset="100%" stop-color="#0C2437" />
+          </linearGradient>
+          <linearGradient id="routeGrad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stop-color="#FFA149" />
+            <stop offset="100%" stop-color="#FF7A1A" />
+          </linearGradient>
+          <filter id="routeGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="9" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <radialGradient id="vignette" cx="0.45" cy="0.4" r="0.85">
+            <stop offset="55%" stop-color="#000" stop-opacity="0" />
+            <stop offset="100%" stop-color="#000" stop-opacity="0.62" />
+          </radialGradient>
+          <!-- City blocks, as a tile rather than a few hundred rectangles. -->
+          <pattern id="blocks" width="86" height="74" patternUnits="userSpaceOnUse"
+            patternTransform="rotate(-14)">
+            <rect x="4" y="4" width="30" height="22" rx="2" fill="#7FA6C4" opacity=".075" />
+            <rect x="42" y="6" width="36" height="16" rx="2" fill="#7FA6C4" opacity=".055" />
+            <rect x="6" y="34" width="22" height="30" rx="2" fill="#7FA6C4" opacity=".065" />
+            <rect x="36" y="32" width="42" height="34" rx="2" fill="#7FA6C4" opacity=".045" />
+          </pattern>
+        </defs>
 
-      <div class="auth-points">
-        <div class="auth-point">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
-            <polyline points="2 15.5 12 22 22 15.5" />
-          </svg>
+        <rect width="1000" height="900" fill="url(#sky)" />
+        <rect width="1000" height="900" fill="url(#blocks)" />
+
+        <!-- Water, cutting across the lower right. -->
+        <path d="M1000 470 C 880 500, 830 590, 760 640 C 690 690, 610 700, 540 760
+                 C 490 800, 470 860, 460 900 L1000 900 Z" fill="url(#water)" />
+        <path d="M1000 470 C 880 500, 830 590, 760 640 C 690 690, 610 700, 540 760
+                 C 490 800, 470 860, 460 900" fill="none" stroke="#2E6E92" stroke-width="2"
+          opacity=".5" />
+
+        <!-- Arterial roads. Thin, low contrast: context, not subject. -->
+        <g fill="none" stroke="#9FC2DC" stroke-linecap="round">
+          <path d="M-40 250 C 200 210, 420 300, 700 240 S 980 170, 1060 190" stroke-width="7" opacity=".13" />
+          <path d="M-40 560 C 180 540, 340 470, 560 470 S 860 420, 1060 360" stroke-width="6" opacity=".11" />
+          <path d="M150 -40 C 190 220, 250 430, 300 700 S 340 860, 350 940" stroke-width="6" opacity=".1" />
+          <path d="M620 -40 C 640 180, 700 340, 780 520" stroke-width="5" opacity=".09" />
+          <path d="M-40 400 C 220 380, 460 360, 1060 300" stroke-width="3" opacity=".07" />
+          <path d="M-40 700 C 260 690, 420 640, 640 600" stroke-width="3" opacity=".07" />
+        </g>
+
+        <!-- The measured route, and its stops.
+             Kept to the right of x=430: the headline occupies the left third,
+             and a glowing line crossing a 46px display face makes both
+             illegible. The scrim above does the rest. -->
+        <g filter="url(#routeGlow)">
+          <path d="M446 838 C 520 754, 542 700, 574 640 C 612 566, 618 520, 664 452
+                   C 712 380, 758 322, 812 246"
+            fill="none" stroke="url(#routeGrad)" stroke-width="7"
+            stroke-linecap="round" stroke-linejoin="round" />
+        </g>
+
+        <g class="scene-pin" font-family="Geist, system-ui, sans-serif" font-size="19" font-weight="600">
+          <!-- Project Site -->
+          <line x1="812" y1="246" x2="812" y2="200" stroke="#FF7A1A" stroke-width="2" opacity=".85" />
+          <rect x="700" y="160" width="224" height="40" rx="9" fill="#0A1524" opacity=".94" />
+          <rect x="700" y="160" width="224" height="40" rx="9" fill="none" stroke="#FF7A1A" opacity=".55" />
+          <text x="812" y="186" fill="#FFF" text-anchor="middle">Project Site</text>
+          <circle cx="812" cy="246" r="13" fill="#FF7A1A" />
+          <circle cx="812" cy="246" r="5" fill="#0A1524" />
+
+          <!-- MG Road -->
+          <line x1="664" y1="452" x2="716" y2="430" stroke="#EAF0F9" stroke-width="1.6" opacity=".5" />
+          <rect x="716" y="408" width="150" height="36" rx="9" fill="#0A1524" opacity=".9" />
+          <text x="791" y="432" fill="#EAF0F9" text-anchor="middle">MG Road</text>
+          <circle cx="664" cy="452" r="8" fill="#EAF0F9" opacity=".92" />
+
+          <!-- Railway Station -->
+          <line x1="574" y1="640" x2="632" y2="622" stroke="#2E9BFF" stroke-width="1.6" opacity=".6" />
+          <rect x="632" y="600" width="232" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="657" cy="619" r="7" fill="#2E9BFF" />
+          <text x="676" y="626" fill="#EAF0F9">Railway Station</text>
+          <circle cx="574" cy="640" r="8" fill="#2E9BFF" />
+
+          <!-- Airport -->
+          <line x1="446" y1="838" x2="512" y2="826" stroke="#12B886" stroke-width="1.6" opacity=".6" />
+          <rect x="512" y="806" width="146" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="537" cy="825" r="7" fill="#12B886" />
+          <text x="556" y="832" fill="#EAF0F9">Airport</text>
+          <circle cx="446" cy="838" r="8" fill="#12B886" />
+        </g>
+
+        <rect width="1000" height="900" fill="url(#vignette)" />
+      </svg>
+
+      <div class="auth-stage-inner">
+        <div class="auth-brand">
+          <img class="dbotLogo" alt="DBOT">
           <div>
-            <b>Many projects, one place</b>
-            <span>Every map you have made on this machine, listed by what you touched last.</span>
+            <div class="kicker">Market Research</div>
+            <div class="wordmark">Map Studio</div>
           </div>
         </div>
-        <div class="auth-point">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 1 1-6.2-8.6" />
-            <polyline points="21 3 21 9 15 9" />
-          </svg>
-          <div>
-            <b>Nothing is lost</b>
-            <span>Work saves as you go and keeps recent versions you can step back to.</span>
-          </div>
-        </div>
-        <div class="auth-point">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3v18M3 12h18" />
-          </svg>
-          <div>
-            <b>Export what you present</b>
-            <span>PDF, PowerPoint, Word, Excel, KML and GeoJSON from the same map.</span>
+
+        <div class="auth-copy">
+          <h2>Property maps<br>that carry their <em>evidence.</em></h2>
+          <p class="auth-sub">Map with precision. Measure with confidence.<br>
+            Make decisions backed by real-world evidence.</p>
+
+          <div class="auth-points">
+            <div class="auth-point">
+              <span class="ic">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6" />
+                  <path d="M8 3v15M16 6v15" />
+                </svg>
+              </span>
+              <div>
+                <b>All your projects, one place</b>
+                <span>Create, organise and reopen every property map from one workspace.</span>
+              </div>
+            </div>
+
+            <div class="auth-point">
+              <span class="ic ic-b">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </span>
+              <div>
+                <b>Measure. Analyse. Decide.</b>
+                <span>Real coordinates, real roads and real routing behind every number.</span>
+              </div>
+            </div>
+
+            <div class="auth-point">
+              <span class="ic ic-c">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </span>
+              <div>
+                <b>Export what you need</b>
+                <span>PDF, PowerPoint, Word, Excel, KML and GeoJSON from the same map.</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </aside>
 
-    <!-- Right: the task. -->
+    <!-- ===== Right: the task ============================================== -->
     <main class="auth-main">
       <div class="auth-card">
-        <div class="auth-brand">
+        <div class="auth-card-brand">
           <img class="dbotLogo" alt="DBOT">
           <div>
             <div class="kicker">Market Research</div>
-            <div style="font-weight:700">Map Studio</div>
+            <div class="wordmark">Map Studio</div>
           </div>
         </div>
 
-        <h1>Sign in</h1>
-        <p class="lede" id="authLede">Use your DBOT work account.</p>
+        <h1 id="authTitle">Welcome back</h1>
+        <p class="lede" id="authLede">Sign in to continue to DBOT Map Studio</p>
 
         <div class="auth-error" id="authError" hidden></div>
         <div class="auth-ok" id="authOk" hidden></div>
@@ -78,7 +208,7 @@
         <!-- Real accounts. Shown only when Supabase is configured. -->
         <div id="authReal" hidden>
           <button class="auth-ms" id="authMsBtn" type="button">
-            <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true">
+            <svg viewBox="0 0 21 21" width="17" height="17" aria-hidden="true">
               <rect x="1" y="1" width="9" height="9" fill="#F25022" />
               <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
               <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
@@ -87,31 +217,70 @@
             Continue with Microsoft
           </button>
 
-          <div class="auth-or"><span id="authOrLabel">or use a password</span></div>
+          <div class="auth-or"><span id="authOrLabel">or</span></div>
 
           <form id="authForm" novalidate>
-            <!-- Only for creating an account. Kept out of the sign-in flow
-                 because the name is already on the account by then, and asking
-                 for it again is a field with nothing to do. -->
+            <!-- Only for creating an account: the name is already on the
+                 account by the time anyone signs in. -->
             <div class="auth-field" id="authNameField" hidden>
               <label for="authFullName">Your name</label>
-              <input id="authFullName" name="fullName" type="text" autocomplete="name"
-                placeholder="Aditya Bachal">
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authFullName" name="fullName" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal">
+              </div>
             </div>
 
             <div class="auth-field">
               <label for="authEmail">Work email</label>
-              <input id="authEmail" name="email" type="email" autocomplete="username"
-                placeholder="you@dbotrealty.com" required>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authEmail" name="email" type="email" autocomplete="username"
+                  placeholder="you@dbotrealty.com" required>
+              </div>
             </div>
 
             <div class="auth-field">
               <label for="authPassword">Password</label>
-              <input id="authPassword" name="password" type="password" autocomplete="current-password" required>
-              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgotten your password?</a></div>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                <input id="authPassword" name="password" type="password"
+                  autocomplete="current-password" placeholder="Enter your password" required>
+                <!-- Typing a password you cannot see, into a field that may
+                     reject it, is the most common way to get locked out of
+                     an account you know the password to. -->
+                <button class="auth-eye" id="authEye" type="button" aria-label="Show password"
+                  aria-pressed="false">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgot your password?</a></div>
             </div>
 
-            <button class="auth-submit" type="submit" id="authSubmit">Sign in</button>
+            <button class="auth-submit" type="submit" id="authSubmit">
+              <span id="authSubmitLabel">Sign in</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
           </form>
 
           <div class="auth-switch">
@@ -120,53 +289,70 @@
           </div>
         </div>
 
-        <!-- The studio has carried a version chip for exactly this reason;
-             these pages did not, and a missing feature was indistinguishable
-             from a page the browser was still serving from cache. GitHub Pages
-             sets its own Cache-Control on HTML, and the ?v= on the assets
-             cannot bust the document that references them. -->
-        <div class="auth-ver">DBOT Map Studio <span id="authVer"></span></div>
-
         <!-- No accounts configured yet: name yourself, and be told plainly
              that is all this does. -->
         <div id="authLocal" hidden>
           <form id="authLocalForm" novalidate>
             <div class="auth-field">
               <label for="authName">Your name</label>
-              <input id="authName" name="name" type="text" autocomplete="name" placeholder="Aditya Bachal" required>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authName" name="name" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal" required>
+              </div>
             </div>
 
             <div class="auth-field">
-              <label for="authLocalEmail">Email <span
-                  style="text-transform:none;letter-spacing:0;font-weight:600">(optional)</span></label>
-              <input id="authLocalEmail" name="email" type="email" autocomplete="email"
-                placeholder="you@dbotrealty.com">
-              <div class="hint">Used only to recognise you again on this machine, so you return to the same
-                projects. It is not sent anywhere.</div>
+              <label for="authLocalEmail">Email <span class="opt">(optional)</span></label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authLocalEmail" name="email" type="email" autocomplete="email"
+                  placeholder="you@dbotrealty.com">
+              </div>
+              <div class="hint">Used only to recognise you again on this machine. It is not sent anywhere.</div>
             </div>
 
-            <button class="auth-submit" type="submit">Continue</button>
+            <button class="auth-submit" type="submit">
+              <span>Continue</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
           </form>
 
           <div class="auth-note">
             <b>Accounts are not switched on yet.</b> This names you and keeps separate people's projects apart on
             a shared machine — it does not lock anything, because a site with no server cannot. Anyone with access
             to this computer can open the app directly. Treat a project here as a file on this disk, because that
-            is what it is. Once <code>SUPABASE_ANON_KEY</code> is set in <code>js/config.js</code>, this page
-            becomes a real sign-in and your projects move into your account.
+            is what it is.
           </div>
         </div>
+
+        <!-- Which build this is. Without it, a feature that has not arrived
+             yet is indistinguishable from one that is broken — see
+             js/core/freshness.js. -->
+        <div class="auth-ver">DBOT Map Studio <span id="authVer"></span></div>
       </div>
     </main>
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0033"></script>
-  <script src="./js/core/prefs.js?v=6.0033"></script>
-  <script src="./js/constants.js?v=6.0033"></script>
-  <script src="./js/core/freshness.js?v=6.0033"></script>
-  <script src="./js/config.js?v=6.0033"></script>
-  <script src="./js/auth/session.js?v=6.0033"></script>
+  <script src="./vendor/supabase.js?v=6.0034"></script>
+  <script src="./js/core/prefs.js?v=6.0034"></script>
+  <script src="./js/constants.js?v=6.0034"></script>
+  <script src="./js/core/freshness.js?v=6.0034"></script>
+  <script src="./js/config.js?v=6.0034"></script>
+  <script src="./js/auth/session.js?v=6.0034"></script>
   <script>
     applyTheme();
     initFreshness();
@@ -187,6 +373,19 @@
       return /^[\w.-]+\.html(\?[^#]*)?$/.test(decoded) ? decoded : 'projects.html';
     }
 
+    // Reveal the password. aria-pressed rather than swapping the icon for a
+    // crossed-out eye, because both icons are read as "eye" and the state is
+    // what matters to anyone not looking at it.
+    $('authEye').addEventListener('click', () => {
+      const input = $('authPassword');
+      const shown = input.type === 'text';
+      input.type = shown ? 'password' : 'text';
+      $('authEye').setAttribute('aria-pressed', String(!shown));
+      $('authEye').setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+      $('authEye').classList.toggle('on', !shown);
+      input.focus();
+    });
+
     (async function start() {
       // Also completes the Microsoft round trip: arriving back here with tokens
       // in the URL, this is what turns them into a session.
@@ -198,9 +397,10 @@
       const real = authMode() === 'supabase';
       $('authReal').hidden = !real;
       $('authLocal').hidden = real;
+      $('authTitle').textContent = real ? 'Welcome back' : 'Welcome';
       $('authLede').textContent = real
-        ? 'Use your DBOT work account.'
-        : 'Your projects are kept in this browser and listed under the name you use here.';
+        ? 'Sign in to continue to DBOT Map Studio'
+        : 'Your projects are kept in this browser, under the name you use here.';
 
       if (real) {
         $('authEmail').focus();
@@ -221,15 +421,17 @@
           mode = next;
           const up = mode === 'signup';
           $('authNameField').hidden = !up;
-          $('authSubmit').textContent = up ? 'Create account' : 'Sign in';
-          $('authOrLabel').textContent = up ? 'or use an email and password' : 'or use a password';
+          $('authSubmitLabel').textContent = up ? 'Create account' : 'Sign in';
+          $('authTitle').textContent = up ? 'Create your account' : 'Welcome back';
+          $('authOrLabel').textContent = 'or';
           $('authPwHint').hidden = up;
           $('authPassword').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+          $('authPassword').setAttribute('placeholder', up ? 'At least 8 characters' : 'Enter your password');
           $('authSwitchText').textContent = up ? 'Already have an account?' : "Don't have an account?";
           $('authSwitchBtn').textContent = up ? 'Sign in' : 'Create one';
           $('authLede').textContent = up
             ? 'Accounts are limited to DBOT work addresses.'
-            : 'Use your DBOT work account.';
+            : 'Sign in to continue to DBOT Map Studio';
           errEl.hidden = true;
           okEl.hidden = true;
           (up ? $('authFullName') : $('authEmail')).focus();
@@ -240,9 +442,10 @@
         $('authForm').addEventListener('submit', async e => {
           e.preventDefault();
           const btn = $('authSubmit');
-          const original = btn.textContent;
+          const label = $('authSubmitLabel');
+          const original = label.textContent;
           btn.disabled = true;
-          btn.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
+          label.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
           try {
             if (mode === 'signup') {
               const r = await signUpWithPassword({
@@ -257,7 +460,7 @@
                   + ' for a confirmation link, then come back and sign in.');
                 setMode('signin');
                 btn.disabled = false;
-                btn.textContent = 'Sign in';
+                label.textContent = 'Sign in';
                 return;
               }
               location.href = safeNext();
@@ -268,7 +471,7 @@
           } catch (ex) {
             fail(ex.message);
             btn.disabled = false;
-            btn.textContent = original;
+            label.textContent = original;
             $('authPassword').select();
           }
         });
