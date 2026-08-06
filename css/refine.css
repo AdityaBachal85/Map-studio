@@ -3145,3 +3145,66 @@ input[type=checkbox]:disabled {
   font-size: var(--fs-small);
   font-weight: 650;
 }
+
+/* The studio's account control, beside the project name in the sidebar
+   header. Same job as the one on the projects page: say whose session this
+   is, and offer the way out. */
+
+.pb-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pb-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+.pb-bar { position: relative; }
+
+.pb-acct-menu {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 60;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: var(--glass-solid, var(--bg1));
+  box-shadow: var(--elev-3, var(--elev-2));
+}
+
+.pb-acct-head {
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pb-acct-head .nm { font-weight: 650; font-size: var(--fs-small); }
+.pb-acct-head .em { margin-top: 1px; color: var(--text-2); font-size: var(--fs-micro); word-break: break-all; }
+
+.pb-acct-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pb-acct-menu button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.pb-acct-menu button.danger { color: var(--danger); }
+.pb-acct-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent); }

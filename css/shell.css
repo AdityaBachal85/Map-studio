@@ -580,3 +580,20 @@
 /* The list's source, stated rather than assumed — "This device" and "Cloud"
    must reflect where the rows actually came from. */
 .pj-seg button[aria-pressed="false"]:not(:disabled) { opacity: .75; }
+
+/* Account menu — anchored to the avatar in the top bar. */
+.pj-acct-menu { right: 0; top: 46px; min-width: 220px; }
+
+.pj-acct-head {
+  padding: 10px 12px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pj-acct-head .nm { font-weight: 650; }
+.pj-acct-head .em { margin-top: 1px; color: var(--text-2); font-size: var(--fs-micro); word-break: break-all; }
+.pj-acct-head .src { margin-top: 6px; color: var(--text-2); font-size: var(--fs-micro); }
+
+/* The account column is a positioning context so the menu hangs off it
+   rather than off the page. */
+.pj-account { position: relative; }

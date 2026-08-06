@@ -51,14 +51,21 @@ function projectBridgeActiveId() {
  * @returns {Promise<boolean>} whether a project was applied
  */
 async function projectBridgeBoot() {
-  const id = projectBridgeActiveId();
-  if (!id || typeof projectsLoad !== 'function') return false;
-
-  // Resolve the account first: which store holds this project depends on
-  // whether anyone is signed in, and asking before that settles would read the
-  // local store for a project that lives in the cloud.
+  // Resolve the account first — before deciding anything. Which store holds a
+  // project depends on whether anyone is signed in, and asking earlier would
+  // read the local store for a project that lives in the cloud.
   if (typeof sessionInit === 'function') {
     try { await sessionInit(); } catch (e) { /* falls back to the local store */ }
+  }
+
+  if (projectBridgeGuard()) return false;   // redirecting to sign in
+
+  const id = projectBridgeActiveId();
+  if (!id || typeof projectsLoad !== 'function') {
+    // No project, but possibly a signed-in person — who still needs to see
+    // whose account this is and how to leave it.
+    projectBridgeMarkUi();
+    return false;
   }
 
   let payload = null, meta = null;
@@ -99,6 +106,37 @@ async function projectBridgeBoot() {
 }
 
 /**
+ * Send anyone without an account to the sign-in page.
+ *
+ * WHAT THIS DOES AND DOES NOT ACHIEVE, because the difference matters and is
+ * easy to get wrong. It stops the studio opening for someone who is not signed
+ * in — typing the URL directly, or following a link. It does NOT make the page
+ * secret: this is a static site, so index.html, every script and the styles are
+ * public files that anyone can fetch, and someone determined can read them or
+ * turn off JavaScript and see an empty map.
+ *
+ * That distinction is fine, because the map is not the asset — the projects
+ * are. Those live in Postgres behind Row Level Security, and no amount of
+ * disabling JavaScript produces a token that lets someone read them. Skipping
+ * this guard gets you a blank studio with an empty project list, not anyone's
+ * work.
+ *
+ * Only applies when accounts are actually configured. With SUPABASE_ANON_KEY
+ * empty the app is a local tool with no accounts to check, and redirecting
+ * would lock people out of their own browser.
+ *
+ * @returns {boolean} whether a redirect was issued
+ */
+function projectBridgeGuard() {
+  if (typeof authMode !== 'function' || authMode() !== 'supabase') return false;
+  if (typeof currentUser === 'function' && currentUser()) return false;
+
+  const here = location.pathname.split('/').pop() || 'index.html';
+  location.replace('login.html?next=' + encodeURIComponent(here + location.search));
+  return true;
+}
+
+/**
  * Whether this session is editing a named project, so autosave.js knows to
  * skip its own restore. Answers false until projectBridgeBoot() has actually
  * applied one — a project that failed to load must fall back to the normal
@@ -114,9 +152,12 @@ function projectBridgeClaimed() { return !!_pbActiveId; }
  * the wrong one.
  */
 function projectBridgeMarkUi() {
-  if (!_pbActiveId) return;
   const host = document.querySelector('.brand-line, .sidebar .brand, .sidebar');
   if (!host || document.getElementById('pbBar')) return;
+
+  const user = typeof currentUser === 'function' ? currentUser() : null;
+  // Nothing to say on either count: no project open and nobody signed in.
+  if (!_pbActiveId && !user) return;
 
   const bar = document.createElement('div');
   bar.id = 'pbBar';
@@ -127,11 +168,71 @@ function projectBridgeMarkUi() {
         stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       Projects
     </a>
-    <span class="pb-name" id="pbName"></span>`;
-  // textContent, not markup — a project name is user input and goes in the
-  // page every boot.
-  bar.querySelector('#pbName').textContent = _pbName;
+    <span class="pb-name" id="pbName"></span>
+    <button class="pb-avatar" id="pbAvatar" type="button" aria-haspopup="menu"></button>`;
+
+  // textContent, not markup — both a project name and a display name from an
+  // identity provider are outside text going into the page on every boot.
+  bar.querySelector('#pbName').textContent = _pbName || '';
+
+  const av = bar.querySelector('#pbAvatar');
+  if (user) {
+    av.textContent = user.initials;
+    av.style.background = user.color;
+    av.title = user.name + ' — account';
+    av.setAttribute('aria-label', 'Account menu for ' + user.name);
+    av.addEventListener('click', e => { e.stopPropagation(); projectBridgeAccountMenu(av, user); });
+  } else {
+    av.remove();
+  }
+
   host.insertBefore(bar, host.firstChild);
+}
+
+/**
+ * The studio's account menu. Same contents as the projects page's, because
+ * being signed in somewhere with no way to see who you are or to leave is the
+ * complaint that produced both.
+ *
+ * @param {HTMLElement} anchor @param {object} user
+ */
+function projectBridgeAccountMenu(anchor, user) {
+  const existing = document.getElementById('pbAcctMenu');
+  if (existing) { existing.remove(); return; }
+
+  const menu = document.createElement('div');
+  menu.id = 'pbAcctMenu';
+  menu.className = 'pb-acct-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = `
+    <div class="pb-acct-head"><div class="nm"></div><div class="em"></div></div>
+    <button type="button" role="menuitem" data-act="projects">All projects</button>
+    <button type="button" role="menuitem" data-act="signout" class="danger">Sign out</button>`;
+  menu.querySelector('.nm').textContent = user.name;
+  menu.querySelector('.em').textContent = user.email || '';
+
+  anchor.parentElement.appendChild(menu);
+  menu.querySelector('button').focus();
+
+  menu.addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    e.stopPropagation();
+    menu.remove();
+    if (b.dataset.act === 'projects') { location.href = './projects.html'; return; }
+    if (b.dataset.act === 'signout') {
+      // Get whatever is on screen into the project before leaving, or the last
+      // few seconds of work go with the session.
+      try { if (typeof autosaveNow === 'function') await autosaveNow({ force: true, reason: 'sign-out' }); }
+      catch (err) { /* saving is best effort; signing out must still happen */ }
+      if (typeof signOut === 'function') await signOut();
+      location.replace('login.html');
+    }
+  });
+
+  const close = () => { const m = document.getElementById('pbAcctMenu'); if (m) m.remove(); };
+  document.addEventListener('click', close, { once: true });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); }, { once: true });
 }
 
 /**

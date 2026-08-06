@@ -205,18 +205,35 @@
   }
 
   async function meter() {
-    const s = await projectsStorage(user.id);
+    let s;
+    try { s = await projectsStorage(user.id); }
+    catch (e) { $('pjStorageCap').textContent = 'Unavailable'; return; }
+
     const cap = $('pjStorageCap');
+    const cloud = typeof projectsSource === 'function' && projectsSource() === 'cloud';
+
+    if (!s.count) {
+      // bytes() renders 0 as an em dash — right in a table cell, where a dash
+      // reads as "nothing to report", and wrong here, where "— used" reads as
+      // a value that failed to load.
+      $('pjStorageFill').style.width = '0%';
+      cap.textContent = cloud ? 'Nothing stored yet' : 'Nothing stored on this device';
+      return;
+    }
+
     if (s.quota) {
       const pct = Math.min(100, (s.bytes / s.quota) * 100);
       // A real project rounds to 0% against a multi-gigabyte quota; show the
       // sliver anyway so the bar reads as "working" rather than "broken".
-      $('pjStorageFill').style.width = (s.bytes > 0 ? Math.max(pct, 1.5) : 0) + '%';
+      $('pjStorageFill').style.width = Math.max(pct, 1.5) + '%';
       cap.textContent = `${bytes(s.bytes)} of ${bytes(s.quota)} available`;
-    } else {
-      $('pjStorageFill').style.width = s.bytes ? '8%' : '0%';
-      cap.textContent = bytes(s.bytes) + ' used';
+      return;
     }
+
+    // Cloud mode has no per-user quota to divide by — Supabase's limit covers
+    // the whole database — so the bar would be inventing a denominator.
+    $('pjStorageFill').style.width = '8%';
+    cap.textContent = bytes(s.bytes) + ' in your account';
   }
 
   /* -------------------------------------------------------------------------
@@ -224,8 +241,7 @@
    * ---------------------------------------------------------------------- */
 
   function closeMenu() {
-    const m = document.querySelector('.pj-menu');
-    if (m) m.remove();
+    document.querySelectorAll('.pj-menu').forEach(m => m.remove());
     openMenuFor = null;
   }
 
@@ -316,10 +332,49 @@
   const av = $('pjAvatar');
   av.textContent = user.initials;
   av.style.background = user.color;
-  av.addEventListener('click', () => {
-    if (!confirm(`Sign out of ${user.name}?\n\nYour projects stay on this device.`)) return;
-    signOut();
-    location.href = 'login.html';
+  av.title = user.name + ' — account';
+  av.setAttribute('aria-label', 'Account menu for ' + user.name);
+
+  // A menu rather than a bare sign-out on click. An unlabelled avatar that
+  // logs you out the moment you touch it is both undiscoverable — nobody
+  // guesses it — and hostile once discovered, since there is no way to click
+  // it and change your mind.
+  av.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = document.getElementById('pjAcctMenu');
+    if (open) { open.remove(); return; }
+
+    const menu = document.createElement('div');
+    menu.id = 'pjAcctMenu';
+    menu.className = 'pj-menu pj-acct-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = `
+      <div class="pj-acct-head">
+        <div class="nm"></div>
+        <div class="em"></div>
+        <div class="src"></div>
+      </div>
+      <button type="button" role="menuitem" data-act="signout" class="danger">Sign out</button>`;
+    // textContent for anything that came from the account — a display name
+    // arrives from an identity provider and is not ours to trust as markup.
+    menu.querySelector('.nm').textContent = user.name;
+    menu.querySelector('.em').textContent = user.email || '';
+    menu.querySelector('.src').textContent = (typeof projectsSource === 'function' && projectsSource() === 'cloud')
+      ? 'Projects saved to your account'
+      : 'Projects saved on this device';
+
+    av.parentElement.appendChild(menu);
+    menu.querySelector('button').focus();
+    menu.addEventListener('click', async ev => {
+      const b = ev.target.closest('button');
+      if (!b) return;
+      ev.stopPropagation();
+      menu.remove();
+      if (b.dataset.act === 'signout') {
+        await signOut();
+        location.replace('login.html');
+      }
+    });
   });
 
   // Theme
