@@ -3206,3 +3206,40 @@ input[type=checkbox]:disabled {
 .pb-acct-menu button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
 .pb-acct-menu button.danger { color: var(--danger); }
 .pb-acct-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+
+/* The stale-page notice. Fixed to the bottom so it cannot be missed and
+   cannot displace anything — the page under it is still usable, just old. */
+.fresh-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--border-strong, #2a3550);
+  border-radius: 999px;
+  background: var(--glass-solid, #101a2c);
+  color: var(--text, #EAF0F9);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+  font-size: var(--fs-micro, 11.5px);
+  line-height: 1.45;
+}
+
+.fresh-bar button {
+  flex: none;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--orange, #FF7A1A), var(--orange2, #FFA149));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fresh-bar button:hover { filter: brightness(1.06); }

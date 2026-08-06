@@ -25,6 +25,10 @@ window.DBOTExport = { exportDeck };
   if (el) el.textContent = 'v' + APP_VERSION;
 })();
 
+// Warn if the browser is serving a document older than what is deployed.
+// See js/core/freshness.js — the assets bust on ?v=, the HTML cannot.
+initFreshness();
+
 // ---------- DBOT brand asset ----------
 document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
 

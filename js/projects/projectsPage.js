@@ -15,6 +15,7 @@
   'use strict';
 
   applyTheme();
+  initFreshness();
   document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
 
   // Must settle before the guard: Supabase may need a network round trip to
