@@ -85,6 +85,28 @@ function sessionHash(s) {
 }
 
 /**
+ * A readable name from an address, for accounts created in the Supabase
+ * dashboard — those carry no metadata at all, so the only thing to work from
+ * is the email. "aditya.bachal@…" reading as "aditya.bachal" in the header is
+ * the difference between a product and a database row.
+ *
+ * Only separators that are conventionally word breaks are split on. Digits are
+ * left attached rather than stripped, because plenty of real addresses carry
+ * them meaningfully.
+ *
+ * @param {string} email @returns {string}
+ */
+function nameFromEmail(email) {
+  const local = String(email || '').split('@')[0];
+  if (!local) return '';
+  return local
+    .split(/[._\-+]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
  * Turn a Supabase user into the shape the rest of the app expects, so no
  * caller has to know which provider someone signed in with.
  * @param {object} u @returns {object}
@@ -95,7 +117,7 @@ function fromSupabaseUser(u) {
   // the tenant is configured, so several are tried before falling back to the
   // address itself. A blank name in the header looks like a broken page.
   const name = meta.full_name || meta.name || meta.preferred_username
-    || (u.email ? u.email.split('@')[0] : '') || 'Signed in';
+    || nameFromEmail(u.email) || 'Signed in';
   const seed = (u.email || u.id).toLowerCase();
   return {
     id: u.id,
