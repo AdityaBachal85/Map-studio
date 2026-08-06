@@ -326,6 +326,12 @@
    * Wiring
    * ---------------------------------------------------------------------- */
 
+  // Which build this is. Same purpose as the studio's version chip: without
+  // it, a feature that has not arrived yet is indistinguishable from one that
+  // is broken — GitHub Pages caches the HTML itself, and the ?v= on the assets
+  // cannot bust the document that references them.
+  if ($('pjVer')) $('pjVer').textContent = 'v' + APP_VERSION;
+
   // Account
   $('pjWhoName').textContent = user.name;
   $('pjWhoEmail').textContent = user.email || '';

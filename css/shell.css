@@ -619,3 +619,17 @@
 
 .auth-switch button:hover { text-decoration: underline; }
 .auth-switch button:focus-visible { outline: none; text-decoration: underline; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px; }
+
+/* Build markers. Quiet enough to ignore, present enough to answer "is this
+   page stale?" without opening devtools. */
+.auth-ver,
+.pj-ver {
+  margin-top: var(--sp-5);
+  color: var(--text-2);
+  opacity: .65;
+  font-size: var(--fs-micro);
+  font-family: var(--mono);
+  text-align: center;
+}
+
+.pj-ver { margin-top: var(--sp-3); }
