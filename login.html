@@ -5,12 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0035" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0036" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0035">
-  <link rel="stylesheet" href="./css/style.css?v=6.0035">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0035">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0036">
+  <link rel="stylesheet" href="./css/style.css?v=6.0036">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0036">
 </head>
 
 <body class="shell-body auth-body">
@@ -25,6 +25,12 @@
          external request. It also cannot go stale or 404.
          Hidden below 1000px: it is reassurance, and the form is the task. -->
     <aside class="auth-stage" aria-hidden="true">
+      <!-- A real photograph if one has been added, the drawn scene if not.
+           Layered rather than swapped so a missing or corrupt file costs
+           nothing: onerror removes the img and the SVG beneath is simply
+           revealed. Drop a JPG or PNG at this path and it takes over with no
+           code change; delete it and the illustration comes back. -->
+      <img class="auth-photo" id="authPhoto" src="./assets/images/login-hero.jpg" alt="">
       <svg class="auth-scene" viewBox="0 0 1000 900" preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -83,44 +89,46 @@
         </g>
 
         <!-- The measured route, and its stops.
-             Kept to the right of x=430: the headline occupies the left third,
-             and a glowing line crossing a 46px display face makes both
-             illegible. The scrim above does the rest. -->
+             Confined to x > 430 and y 250-730. The horizontal bound keeps the
+             glowing line off a 46px display face, which made both unreadable.
+             The vertical one survives cropping: the scene is drawn with
+             `slice`, so a wide, short window trims top and bottom, and a label
+             sitting near the edge gets sliced in half. -->
         <g filter="url(#routeGlow)">
-          <path d="M446 838 C 520 754, 542 700, 574 640 C 612 566, 618 520, 664 452
-                   C 712 380, 758 322, 812 246"
+          <path d="M446 730 C 516 664, 540 622, 574 580 C 612 522, 620 478, 664 430
+                   C 712 372, 758 312, 812 250"
             fill="none" stroke="url(#routeGrad)" stroke-width="7"
             stroke-linecap="round" stroke-linejoin="round" />
         </g>
 
         <g class="scene-pin" font-family="Geist, system-ui, sans-serif" font-size="19" font-weight="600">
           <!-- Project Site -->
-          <line x1="812" y1="246" x2="812" y2="200" stroke="#FF7A1A" stroke-width="2" opacity=".85" />
-          <rect x="700" y="160" width="224" height="40" rx="9" fill="#0A1524" opacity=".94" />
-          <rect x="700" y="160" width="224" height="40" rx="9" fill="none" stroke="#FF7A1A" opacity=".55" />
-          <text x="812" y="186" fill="#FFF" text-anchor="middle">Project Site</text>
-          <circle cx="812" cy="246" r="13" fill="#FF7A1A" />
-          <circle cx="812" cy="246" r="5" fill="#0A1524" />
+          <line x1="812" y1="250" x2="812" y2="210" stroke="#FF7A1A" stroke-width="2" opacity=".85" />
+          <rect x="700" y="170" width="224" height="40" rx="9" fill="#0A1524" opacity=".94" />
+          <rect x="700" y="170" width="224" height="40" rx="9" fill="none" stroke="#FF7A1A" opacity=".55" />
+          <text x="812" y="196" fill="#FFF" text-anchor="middle">Project Site</text>
+          <circle cx="812" cy="250" r="13" fill="#FF7A1A" />
+          <circle cx="812" cy="250" r="5" fill="#0A1524" />
 
           <!-- MG Road -->
-          <line x1="664" y1="452" x2="716" y2="430" stroke="#EAF0F9" stroke-width="1.6" opacity=".5" />
-          <rect x="716" y="408" width="150" height="36" rx="9" fill="#0A1524" opacity=".9" />
-          <text x="791" y="432" fill="#EAF0F9" text-anchor="middle">MG Road</text>
-          <circle cx="664" cy="452" r="8" fill="#EAF0F9" opacity=".92" />
+          <line x1="664" y1="430" x2="716" y2="410" stroke="#EAF0F9" stroke-width="1.6" opacity=".5" />
+          <rect x="716" y="390" width="150" height="36" rx="9" fill="#0A1524" opacity=".9" />
+          <text x="791" y="414" fill="#EAF0F9" text-anchor="middle">MG Road</text>
+          <circle cx="664" cy="430" r="8" fill="#EAF0F9" opacity=".92" />
 
           <!-- Railway Station -->
-          <line x1="574" y1="640" x2="632" y2="622" stroke="#2E9BFF" stroke-width="1.6" opacity=".6" />
-          <rect x="632" y="600" width="232" height="38" rx="9" fill="#0A1524" opacity=".9" />
-          <circle cx="657" cy="619" r="7" fill="#2E9BFF" />
-          <text x="676" y="626" fill="#EAF0F9">Railway Station</text>
-          <circle cx="574" cy="640" r="8" fill="#2E9BFF" />
+          <line x1="574" y1="580" x2="632" y2="564" stroke="#2E9BFF" stroke-width="1.6" opacity=".6" />
+          <rect x="632" y="545" width="232" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="657" cy="564" r="7" fill="#2E9BFF" />
+          <text x="676" y="571" fill="#EAF0F9">Railway Station</text>
+          <circle cx="574" cy="580" r="8" fill="#2E9BFF" />
 
           <!-- Airport -->
-          <line x1="446" y1="838" x2="512" y2="826" stroke="#12B886" stroke-width="1.6" opacity=".6" />
-          <rect x="512" y="806" width="146" height="38" rx="9" fill="#0A1524" opacity=".9" />
-          <circle cx="537" cy="825" r="7" fill="#12B886" />
-          <text x="556" y="832" fill="#EAF0F9">Airport</text>
-          <circle cx="446" cy="838" r="8" fill="#12B886" />
+          <line x1="446" y1="730" x2="512" y2="720" stroke="#12B886" stroke-width="1.6" opacity=".6" />
+          <rect x="512" y="700" width="146" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="537" cy="719" r="7" fill="#12B886" />
+          <text x="556" y="726" fill="#EAF0F9">Airport</text>
+          <circle cx="446" cy="730" r="8" fill="#12B886" />
         </g>
 
         <rect width="1000" height="900" fill="url(#vignette)" />
@@ -347,15 +355,25 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0035"></script>
-  <script src="./js/core/prefs.js?v=6.0035"></script>
-  <script src="./js/constants.js?v=6.0035"></script>
-  <script src="./js/core/freshness.js?v=6.0035"></script>
-  <script src="./js/config.js?v=6.0035"></script>
-  <script src="./js/auth/session.js?v=6.0035"></script>
+  <script src="./vendor/supabase.js?v=6.0036"></script>
+  <script src="./js/core/prefs.js?v=6.0036"></script>
+  <script src="./js/constants.js?v=6.0036"></script>
+  <script src="./js/core/freshness.js?v=6.0036"></script>
+  <script src="./js/config.js?v=6.0036"></script>
+  <script src="./js/auth/session.js?v=6.0036"></script>
   <script>
     applyTheme();
     initFreshness();
+
+    // No photo, or an unreadable one: fall back to the drawn scene rather than
+    // showing a broken-image glyph over it.
+    (function () {
+      const photo = document.getElementById('authPhoto');
+      if (!photo) return;
+      photo.addEventListener('error', () => photo.remove());
+      // A cached 404 can resolve before this listener attaches.
+      if (photo.complete && photo.naturalWidth === 0) photo.remove();
+    })();
     document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
     document.getElementById('authVer').textContent = 'v' + APP_VERSION;
 

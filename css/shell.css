@@ -36,15 +36,20 @@
 
 .auth-body { background: #060D18; }
 
+/* One frame, never a page that scrolls. dvh rather than vh because mobile
+   browsers count their own collapsing chrome in vh, which makes a "full
+   height" layout overflow by exactly the height of the address bar. */
 .auth-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 
 /* ---- Left: the scene ---- */
 
-.auth-stage { position: relative; overflow: hidden; }
+.auth-stage { position: relative; height: 100%; overflow: hidden; }
 
 .auth-scene {
   position: absolute;
@@ -69,8 +74,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: clamp(28px, 4vw, 52px);
+  padding: clamp(20px, 3.2vh, 48px) clamp(28px, 4vw, 52px);
   color: #EAF0F9;
+  overflow: hidden;
 }
 
 .auth-brand,
@@ -91,11 +97,11 @@
 .auth-brand .wordmark,
 .auth-card-brand .wordmark { font-weight: 700; letter-spacing: -.01em; }
 
-.auth-copy { margin-top: auto; margin-bottom: auto; max-width: 30rem; padding-top: clamp(24px, 5vh, 60px); }
+.auth-copy { margin-top: auto; margin-bottom: auto; max-width: 30rem; padding-top: clamp(12px, 3vh, 48px); }
 
 .auth-copy h2 {
-  margin: 0 0 var(--sp-4);
-  font-size: clamp(30px, 3.6vw, 46px);
+  margin: 0 0 clamp(12px, 2.2vh, 20px);
+  font-size: clamp(26px, min(3.6vw, 5.4vh), 46px);
   font-weight: 700;
   line-height: 1.12;
   letter-spacing: -.025em;
@@ -103,9 +109,9 @@
 
 .auth-copy h2 em { font-style: normal; color: var(--orange); }
 
-.auth-sub { margin: 0 0 clamp(24px, 4vh, 40px); color: #A9BACE; font-size: var(--fs-small); line-height: 1.6; }
+.auth-sub { margin: 0 0 clamp(14px, 3.2vh, 36px); color: #A9BACE; font-size: var(--fs-small); line-height: 1.6; }
 
-.auth-points { display: flex; flex-direction: column; gap: var(--sp-4); }
+.auth-points { display: flex; flex-direction: column; gap: clamp(10px, 2vh, 18px); }
 
 .auth-point { display: flex; gap: 14px; align-items: flex-start; }
 
@@ -140,11 +146,16 @@
 
 /* ---- Right: the card ---- */
 
+/* The column scrolls, not the document. On a genuinely tiny viewport the card
+   can still be reached; on every normal one the rules below keep it from
+   needing to. */
 .auth-main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(24px, 4vw, 56px) clamp(20px, 3vw, 48px);
+  height: 100%;
+  overflow-y: auto;
+  padding: clamp(16px, 3vh, 48px) clamp(20px, 3vw, 48px);
 }
 
 .auth-card {
@@ -158,7 +169,7 @@
 
   width: 100%;
   max-width: 420px;
-  padding: clamp(26px, 3vw, 40px);
+  padding: clamp(20px, 3.2vh, 38px) clamp(22px, 2.6vw, 36px);
   border: 1px solid rgba(255, 255, 255, .1);
   border-radius: 22px;
   background: #FFFFFF;
@@ -166,17 +177,17 @@
   box-shadow: 0 30px 70px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .2);
 }
 
-.auth-card-brand { margin-bottom: clamp(22px, 3vh, 34px); }
+.auth-card-brand { margin-bottom: clamp(14px, 2.6vh, 30px); }
 
 .auth-card h1 {
-  margin: 0 0 6px;
-  font-size: 26px;
+  margin: 0 0 5px;
+  font-size: clamp(21px, 2.9vh, 26px);
   font-weight: 700;
   letter-spacing: -.02em;
   color: var(--text);
 }
 
-.auth-card .lede { margin: 0 0 var(--sp-5); color: var(--text-2); font-size: var(--fs-small); }
+.auth-card .lede { margin: 0 0 clamp(14px, 2.4vh, 22px); color: var(--text-2); font-size: var(--fs-small); }
 
 /* Provider button. Microsoft's mark stays on a neutral surface, per their
    brand guidance — and it puts the accent where it belongs, on the one
@@ -205,7 +216,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: var(--sp-4) 0;
+  margin: clamp(10px, 1.8vh, 16px) 0;
   color: var(--text-2);
   font-size: var(--fs-micro);
 }
@@ -213,7 +224,7 @@
 .auth-or::before,
 .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-.auth-field { margin-bottom: var(--sp-4); }
+.auth-field { margin-bottom: clamp(10px, 1.8vh, 16px); }
 
 .auth-field label {
   display: block;
@@ -253,7 +264,7 @@
 .auth-input input {
   flex: 1;
   min-width: 0;
-  padding: 12px 0;
+  padding: clamp(9px, 1.5vh, 12px) 0;
   border: 0;
   background: none;
   color: var(--text);
@@ -297,8 +308,8 @@
   justify-content: center;
   gap: 9px;
   width: 100%;
-  margin-top: var(--sp-2);
-  padding: 13px 18px;
+  margin-top: 6px;
+  padding: clamp(10px, 1.7vh, 13px) 18px;
   border: 0;
   border-radius: 11px;
   /* Matches .btn-primary: the orange fill is identical in both themes, so its
@@ -323,7 +334,7 @@
 /* Sign in ⇄ create account. Link weight, not a second button: there is one
    primary action on this card and it is above. */
 .auth-switch {
-  margin-top: var(--sp-4);
+  margin-top: clamp(10px, 1.8vh, 16px);
   text-align: center;
   color: var(--text-2);
   font-size: var(--fs-small);
@@ -790,3 +801,16 @@
 }
 
 .fresh-bar button:hover { filter: brightness(1.06); }
+
+/* The optional hero photograph, layered over the drawn scene. object-fit
+   cover so any aspect ratio fills the column without distorting — a login
+   background that stretches faces or skews a skyline looks broken in a way
+   nobody can quite name. */
+.auth-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
