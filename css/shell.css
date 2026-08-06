@@ -58,14 +58,22 @@
   height: 100%;
 }
 
-/* A left-to-right scrim so the copy reads over the busiest part of the map
-   without dimming the whole illustration. */
+/* The scrim, and it has to be heavier than it looks like it should be.
+   Tuned first against the drawn scene — dark navy, low contrast — where a
+   light wash was plenty. A daylight photograph is a different problem: pale
+   rooftops and sunlit water sit directly behind 11px muted type, and the
+   subtitle and feature descriptions vanished into them entirely.
+   So: near-opaque to 32%, still substantial to 46%, and only then releasing
+   the photograph. The right half stays essentially untouched, which is where
+   the route and pins are and the only part anyone is really looking at. */
 .auth-stage::after {
   content: '';
   position: absolute;
+  z-index: 1;
   inset: 0;
-  background: linear-gradient(96deg, rgba(6, 13, 24, .97) 0%, rgba(6, 13, 24, .93) 26%,
-    rgba(6, 13, 24, .62) 44%, rgba(6, 13, 24, .12) 66%, rgba(6, 13, 24, .3) 100%);
+  background: linear-gradient(96deg,
+    rgba(6, 13, 24, .97) 0%, rgba(6, 13, 24, .95) 32%, rgba(6, 13, 24, .82) 46%,
+    rgba(6, 13, 24, .42) 62%, rgba(6, 13, 24, .10) 80%, rgba(6, 13, 24, .34) 100%);
 }
 
 .auth-stage-inner {
@@ -77,6 +85,7 @@
   padding: clamp(20px, 3.2vh, 48px) clamp(28px, 4vw, 52px);
   color: #EAF0F9;
   overflow: hidden;
+  text-shadow: 0 1px 3px rgba(2, 8, 18, .7);
 }
 
 .auth-brand,
@@ -109,7 +118,7 @@
 
 .auth-copy h2 em { font-style: normal; color: var(--orange); }
 
-.auth-sub { margin: 0 0 clamp(14px, 3.2vh, 36px); color: #A9BACE; font-size: var(--fs-small); line-height: 1.6; }
+.auth-sub { margin: 0 0 clamp(14px, 3.2vh, 36px); color: #C7D4E3; font-size: var(--fs-small); line-height: 1.6; }
 
 .auth-points { display: flex; flex-direction: column; gap: clamp(10px, 2vh, 18px); }
 
@@ -142,7 +151,7 @@
 }
 
 .auth-point b { display: block; margin-bottom: 2px; font-size: var(--fs-small); font-weight: 650; }
-.auth-point span { color: #93A6BC; font-size: var(--fs-micro); line-height: 1.55; }
+.auth-point span { color: #B6C4D6; font-size: var(--fs-micro); line-height: 1.55; }
 
 /* ---- Right: the card ---- */
 
@@ -809,6 +818,10 @@
 .auth-photo {
   position: absolute;
   inset: 0;
+  /* Above the SVG, which follows it in the DOM and would otherwise paint on
+     top — two absolutely positioned siblings with no z-index stack in source
+     order, so the fallback was hiding the thing it is a fallback for. */
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;

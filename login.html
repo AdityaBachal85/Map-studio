@@ -5,24 +5,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0036" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0037" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0036">
-  <link rel="stylesheet" href="./css/style.css?v=6.0036">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0036">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0037">
+  <link rel="stylesheet" href="./css/style.css?v=6.0037">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0037">
 </head>
 
 <body class="shell-body auth-body">
   <div class="auth-wrap">
 
     <!-- ===== Left: the product, shown rather than described ================
-         The scene is inline SVG, not a photograph. A photo would mean shipping
-         a megabyte of someone else's aerial imagery, licensing it, and having
-         it look wrong at every viewport that isn't the one it was cropped for.
-         This draws the thing the product actually makes — a measured route
-         between real places — at any size, in a few kilobytes, with no
-         external request. It also cannot go stale or 404.
+         Two layers. The photograph on top when there is one; the inline SVG
+         beneath as a fallback that needs no file, no request and no licence,
+         and draws the same thing the photo shows — a measured route between
+         named places. Delete the image and the page still looks deliberate.
          Hidden below 1000px: it is reassurance, and the form is the task. -->
     <aside class="auth-stage" aria-hidden="true">
       <!-- A real photograph if one has been added, the drawn scene if not.
@@ -355,12 +353,12 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0036"></script>
-  <script src="./js/core/prefs.js?v=6.0036"></script>
-  <script src="./js/constants.js?v=6.0036"></script>
-  <script src="./js/core/freshness.js?v=6.0036"></script>
-  <script src="./js/config.js?v=6.0036"></script>
-  <script src="./js/auth/session.js?v=6.0036"></script>
+  <script src="./vendor/supabase.js?v=6.0037"></script>
+  <script src="./js/core/prefs.js?v=6.0037"></script>
+  <script src="./js/constants.js?v=6.0037"></script>
+  <script src="./js/core/freshness.js?v=6.0037"></script>
+  <script src="./js/config.js?v=6.0037"></script>
+  <script src="./js/auth/session.js?v=6.0037"></script>
   <script>
     applyTheme();
     initFreshness();
