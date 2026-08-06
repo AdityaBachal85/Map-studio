@@ -3100,79 +3100,77 @@ input[type=checkbox]:disabled {
 }
 
 /* ---------------------------------------------------------------------------
-   17. Project bar
-   Shown only when the studio was opened from projects.html. It answers the
-   two questions that page creates — which document is this, and how do I get
-   back — which the map itself cannot.
+   18. Project + account, in the sidebar header
+   Both live inside .brandbar so they read as part of the app's identity block
+   rather than chrome bolted above it. .brandbar is position:relative and puts
+   .prefs-gear at top:12px right:14px; the avatar sits immediately left of it.
    --------------------------------------------------------------------------- */
 
+.pb-avatar {
+  position: absolute;
+  top: 12px;
+  right: 52px;              /* clears the 30px gear at right:14px, plus a gap */
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.pb-avatar:hover { filter: brightness(1.12); }
+.pb-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+/* The breadcrumb. Sits under the tagline, inside the header's own padding, so
+   it aligns with the product name above it instead of spanning the panel. */
 .pb-bar {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: 6px;
   min-width: 0;
-  margin: 0 0 var(--sp-3);
-  padding-bottom: var(--sp-3);
-  border-bottom: 1px solid var(--border);
+  margin-top: 10px;
+  font-size: var(--fs-micro);
 }
 
 .pb-back {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: none;
-  padding: 4px 10px 4px 6px;
-  border-radius: var(--r-pill, 999px);
-  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-2);
-  font-size: var(--fs-micro);
   font-weight: 650;
   text-decoration: none;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
-.pb-back:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--text); }
-.pb-back:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.pb-back:hover { color: var(--accent); }
+.pb-back:focus-visible { outline: none; color: var(--accent); text-decoration: underline; }
 
-/* The name can be anything the user typed, including something very long, and
-   it must not be allowed to push the back link off the panel. */
+.pb-sep { flex: none; color: var(--text-2); opacity: .5; }
+
+/* A project name can be anything someone typed, including something very
+   long, and must never push the back link out of reach. */
 .pb-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-size: var(--fs-small);
   font-weight: 650;
 }
 
-/* The studio's account control, beside the project name in the sidebar
-   header. Same job as the one on the projects page: say whose session this
-   is, and offer the way out. */
-
-.pb-avatar {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  border: 0;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.pb-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
-
-.pb-bar { position: relative; }
-
+/* The account menu, hanging off the avatar. */
 .pb-acct-menu {
   position: absolute;
-  right: 0;
-  top: 34px;
+  top: 48px;
+  right: 14px;
   z-index: 60;
   min-width: 220px;
   padding: 6px;

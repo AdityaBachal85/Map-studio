@@ -152,41 +152,52 @@ function projectBridgeClaimed() { return !!_pbActiveId; }
  * the wrong one.
  */
 function projectBridgeMarkUi() {
-  const host = document.querySelector('.brand-line, .sidebar .brand, .sidebar');
-  if (!host || document.getElementById('pbBar')) return;
+  // Inside the existing header block, not above it. Inserted at the top of the
+  // sidebar this read as a detached strip pinned over the product name — the
+  // page's first line was navigation chrome rather than the app. The brandbar
+  // already owns identity and already carries the divider below it, so both of
+  // these belong within it.
+  const brandbar = document.querySelector('.sidebar .brandbar');
+  if (!brandbar || document.getElementById('pbBar')) return;
 
   const user = typeof currentUser === 'function' ? currentUser() : null;
-  // Nothing to say on either count: no project open and nobody signed in.
-  if (!_pbActiveId && !user) return;
+  if (!_pbActiveId && !user) return;   // nothing to say on either count
 
-  const bar = document.createElement('div');
-  bar.id = 'pbBar';
-  bar.className = 'pb-bar';
-  bar.innerHTML = `
-    <a class="pb-back" href="./projects.html" title="All projects">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"
-        stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      Projects
-    </a>
-    <span class="pb-name" id="pbName"></span>
-    <button class="pb-avatar" id="pbAvatar" type="button" aria-haspopup="menu"></button>`;
-
-  // textContent, not markup — both a project name and a display name from an
-  // identity provider are outside text going into the page on every boot.
-  bar.querySelector('#pbName').textContent = _pbName || '';
-
-  const av = bar.querySelector('#pbAvatar');
+  // The account control sits beside the preferences gear, which is absolutely
+  // positioned in the brandbar's top-right. Two round controls in a row reads
+  // as a toolbar; one below the other would read as an accident.
   if (user) {
+    const av = document.createElement('button');
+    av.id = 'pbAvatar';
+    av.className = 'pb-avatar';
+    av.type = 'button';
+    av.setAttribute('aria-haspopup', 'menu');
     av.textContent = user.initials;
     av.style.background = user.color;
     av.title = user.name + ' — account';
     av.setAttribute('aria-label', 'Account menu for ' + user.name);
     av.addEventListener('click', e => { e.stopPropagation(); projectBridgeAccountMenu(av, user); });
-  } else {
-    av.remove();
+    brandbar.appendChild(av);
   }
 
-  host.insertBefore(bar, host.firstChild);
+  if (!_pbActiveId) return;   // signed in, but not editing a named project
+
+  const bar = document.createElement('div');
+  bar.id = 'pbBar';
+  bar.className = 'pb-bar';
+  bar.innerHTML = `
+    <a class="pb-back" href="./projects.html" title="Back to all projects">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Projects
+    </a>
+    <span class="pb-sep">/</span>
+    <span class="pb-name" id="pbName"></span>`;
+  // textContent, not markup — a project name is outside text going into the
+  // page on every boot.
+  bar.querySelector('#pbName').textContent = _pbName || '';
+  bar.querySelector('#pbName').title = _pbName || '';
+  brandbar.appendChild(bar);
 }
 
 /**
