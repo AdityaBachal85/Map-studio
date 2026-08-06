@@ -111,3 +111,16 @@ function fmtAreaPref(m2) {
 
 loadPrefs();
 applyTheme();   // before first paint
+
+/**
+ * Version-stamp an internal link, if js/core/freshness.js is loaded.
+ *
+ * Lives here rather than in freshness.js because prefs.js is the first script
+ * on every page, and a navigation helper that might not be defined yet is a
+ * navigation helper nobody can rely on.
+ *
+ * @param {string} url @returns {string}
+ */
+function vlink(url) {
+  return typeof versioned === 'function' ? versioned(url) : url;
+}

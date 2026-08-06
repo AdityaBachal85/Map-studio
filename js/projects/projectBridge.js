@@ -132,7 +132,7 @@ function projectBridgeGuard() {
   if (typeof currentUser === 'function' && currentUser()) return false;
 
   const here = location.pathname.split('/').pop() || 'index.html';
-  location.replace('login.html?next=' + encodeURIComponent(here + location.search));
+  location.replace(vlink('login.html?next=' + encodeURIComponent(here + location.search)));
   return true;
 }
 
@@ -186,7 +186,7 @@ function projectBridgeMarkUi() {
   bar.id = 'pbBar';
   bar.className = 'pb-bar';
   bar.innerHTML = `
-    <a class="pb-back" href="./projects.html" title="Back to all projects">
+    <a class="pb-back" href="./projects.html" data-vlink title="Back to all projects">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6"
         stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       Projects
@@ -197,6 +197,8 @@ function projectBridgeMarkUi() {
   // page on every boot.
   bar.querySelector('#pbName').textContent = _pbName || '';
   bar.querySelector('#pbName').title = _pbName || '';
+  const back = bar.querySelector('[data-vlink]');
+  if (back) back.setAttribute('href', vlink(back.getAttribute('href')));
   brandbar.appendChild(bar);
 }
 
@@ -230,14 +232,14 @@ function projectBridgeAccountMenu(anchor, user) {
     if (!b) return;
     e.stopPropagation();
     menu.remove();
-    if (b.dataset.act === 'projects') { location.href = './projects.html'; return; }
+    if (b.dataset.act === 'projects') { location.href = vlink('./projects.html'); return; }
     if (b.dataset.act === 'signout') {
       // Get whatever is on screen into the project before leaving, or the last
       // few seconds of work go with the session.
       try { if (typeof autosaveNow === 'function') await autosaveNow({ force: true, reason: 'sign-out' }); }
       catch (err) { /* saving is best effort; signing out must still happen */ }
       if (typeof signOut === 'function') await signOut();
-      location.replace('login.html');
+      location.replace(vlink('login.html'));
     }
   });
 

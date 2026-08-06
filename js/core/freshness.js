@@ -98,3 +98,27 @@ function initFreshness() {
     if (document.visibilityState === 'visible') run();
   });
 }
+
+/**
+ * A same-site URL that a browser cannot answer from a stale cache entry.
+ *
+ * Every asset carries ?v=APP_VERSION and busts on release. The HTML does not:
+ * GitHub Pages sets its own Cache-Control on documents, and the CDN in front
+ * of it keys on path, so neither a reload nor an invented query parameter
+ * reliably refetches the page itself.
+ *
+ * Stamping the version onto internal navigations closes that. login.html?v=6.0034
+ * is a different cache key from login.html?v=6.0033, so the first visit after
+ * a release always goes to the network — and every visit after it is served
+ * from cache as normal. No cost, no thundering herd, no "hard-refresh and try
+ * again" as a support instruction.
+ *
+ * @param {string} url e.g. 'login.html' or 'projects.html?next=index.html'
+ * @returns {string}
+ */
+function versioned(url) {
+  if (typeof APP_VERSION !== 'string') return url;
+  const [path, hash] = String(url).split('#');
+  const sep = path.includes('?') ? '&' : '?';
+  return path + sep + 'v=' + encodeURIComponent(APP_VERSION) + (hash ? '#' + hash : '');
+}

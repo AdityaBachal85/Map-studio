@@ -412,7 +412,7 @@ async function signOut() {
 function requireSession(loginUrl) {
   if (_user) return _user;
   const back = encodeURIComponent(location.pathname.split('/').pop() + location.search);
-  location.replace((loginUrl || 'login.html') + '?next=' + back);
+  location.replace(vlink((loginUrl || 'login.html') + '?next=' + back));
   return null;
 }
 

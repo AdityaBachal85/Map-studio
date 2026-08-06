@@ -320,12 +320,20 @@
   /** @param {string} id */
   function openProject(id) {
     localStorage.setItem(ACTIVE_KEY, id);
-    location.href = 'index.html?project=' + encodeURIComponent(id);
+    location.href = vlink('index.html?project=' + encodeURIComponent(id));
   }
 
   /* -------------------------------------------------------------------------
    * Wiring
    * ---------------------------------------------------------------------- */
+
+  // Plain <a> links between pages need the same stamp as the scripted
+  // navigations: without it, clicking "Open the studio" can land on a cached
+  // document from a previous release.
+  document.querySelectorAll('a[href$=".html"], a[href^="./"]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href && !/^https?:|^\/\//.test(href) && !/[?&]v=/.test(href)) a.setAttribute('href', vlink(href));
+  });
 
   // Which build this is. Same purpose as the studio's version chip: without
   // it, a feature that has not arrived yet is indistinguishable from one that
@@ -379,7 +387,7 @@
       menu.remove();
       if (b.dataset.act === 'signout') {
         await signOut();
-        location.replace('login.html');
+        location.replace(vlink('login.html'));
       }
     });
   });
@@ -462,7 +470,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
 
   // Sign-out in another tab should not leave this one showing a list.
-  onSessionChange(u => { if (!u) location.replace('login.html'); });
+  onSessionChange(u => { if (!u) location.replace(vlink('login.html')); });
 
   // Ask the browser to keep this data rather than evicting it under pressure.
   // Best effort — Chrome grants it silently on engaged sites, others decline.
