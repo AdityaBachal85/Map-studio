@@ -50,8 +50,15 @@ initIconPicker();
 wireOpenProject();
 // Autosave last, so the restore happens after every subsystem it touches
 // (basemaps, brand, drawing) is wired and ready to be handed state.
+//
+// The project bridge has to settle *before* initAutosave, not merely start
+// before it: initAutosave asks whether a named project claimed this session,
+// and an unawaited promise would have it answer "no" every time and restore
+// the previous session over the project the user just opened.
 initAutosaveUI();
-initAutosave();
+projectBridgeBoot()
+  .catch(e => console.warn('Project bridge: boot failed —', e && e.message))
+  .then(() => initAutosave());
 
 buildImageryLookControl();
 buildRoadLookControl();

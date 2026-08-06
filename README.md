@@ -476,10 +476,15 @@ just runs, in a browser or on GitHub Pages alike.
 ```
 Map-studio/
   index.html      — the whole app's markup + the ordered list of <script> tags
+  login.html      — sign-in. Names the person using this browser; see the note
+                      below on what that does and does not mean.
+  projects.html   — the projects list: everything saved on this device, with
+                      new / open / rename / copy / download / delete
   vendor/fonts/   — Geist + Geist Mono variable woff2 + OFL licence
   vendor/         — third-party libraries, vendored as plain files (leaflet.js/.css,
                        leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
   css/
+    shell.css       — login.html + projects.html only (the pages outside the map)
     themes.css, style.css, map.css, sidebar.css, components.css, layout.css,
       refine.css    — linked individually from index.html, in that order. Do not
                         reorder: later sheets override earlier ones and refine
@@ -490,6 +495,15 @@ Map-studio/
   js/
     app.js          — runs last: wires everything together, prints the boot message
     constants.js, config.js   (config.js holds ROUTERS + the Geoapify API key)
+    auth/session.js  — who is using this browser. A profile, NOT security — a
+                         static site cannot gate itself with client-side JS, and
+                         the file says so at length. It is also the seam a real
+                         account server slots into without touching the pages.
+    projects/       — projectStore (many named projects in IndexedDB, metadata
+                        split from payload so the list stays fast), projectsPage
+                        (drives projects.html), projectBridge (loads the opened
+                        project into the studio and writes it back by wrapping
+                        autosaveNow, leaving autosave.js itself untouched)
     core/state.js    — locations[], routes[], brand{}, uiState{} — the single
                          source of truth every other file reads/writes
     map/            — mapEngine, billboard (pin/label overlay), snapping,

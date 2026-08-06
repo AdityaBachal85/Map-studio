@@ -3098,3 +3098,50 @@ input[type=checkbox]:disabled {
     inset: -7px -3px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   17. Project bar
+   Shown only when the studio was opened from projects.html. It answers the
+   two questions that page creates — which document is this, and how do I get
+   back — which the map itself cannot.
+   --------------------------------------------------------------------------- */
+
+.pb-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.pb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 4px 10px 4px 6px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pb-back:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--text); }
+.pb-back:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* The name can be anything the user typed, including something very long, and
+   it must not be allowed to push the back link off the panel. */
+.pb-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}

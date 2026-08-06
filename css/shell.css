@@ -1,0 +1,515 @@
+/* shell.css — the pages outside the map: sign-in, and the projects list.
+ *
+ * These are full pages rather than panels, so they need a page-level layout
+ * the map app never did. Everything below is built from the tokens in
+ * themes.css, which is what keeps these screens looking like the same product
+ * as the studio rather than a bolted-on admin area — and means both themes and
+ * any future palette change reach them for free.
+ *
+ * Loaded only by login.html and projects.html. index.html does not need it. */
+
+/* ---------------------------------------------------------------------------
+   1. Page frame
+   --------------------------------------------------------------------------- */
+
+.shell-body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--sans, system-ui, sans-serif);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   2. Sign-in
+   Two columns on a wide screen: the form, and a panel that says what this is.
+   The panel is the first thing to go when the viewport narrows — it is
+   reassurance, and the form is the task.
+   --------------------------------------------------------------------------- */
+
+.auth-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+  background:
+    radial-gradient(1200px 600px at 20% 10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    var(--bg1);
+  border-right: 1px solid var(--border);
+}
+
+.auth-panel h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  letter-spacing: -.02em;
+}
+
+.auth-panel p { margin: 0; max-width: 46ch; color: var(--text-2); }
+
+.auth-points { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-2); }
+
+.auth-point { display: flex; gap: var(--sp-3); align-items: flex-start; }
+
+.auth-point svg { flex: none; margin-top: 2px; color: var(--accent); }
+
+.auth-point b { display: block; font-weight: 650; }
+
+.auth-point span { color: var(--text-2); font-size: var(--fs-small); }
+
+.auth-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-5);
+}
+
+.auth-card { width: 100%; max-width: 380px; }
+
+.auth-brand { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-5); }
+
+.auth-brand img { height: 34px; width: auto; }
+
+.auth-brand .kicker {
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.auth-card h1 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+
+.auth-card .lede { margin: 0 0 var(--sp-5); color: var(--text-2); font-size: var(--fs-small); }
+
+.auth-field { margin-bottom: var(--sp-4); }
+
+.auth-field label {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.auth-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: var(--bg0);
+  color: var(--text);
+  font: inherit;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.auth-field .hint { margin-top: var(--sp-2); font-size: var(--fs-micro); color: var(--text-2); }
+
+.auth-submit {
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--r-md, 10px);
+  /* Matches .btn-primary in sidebar.css: the orange fill is identical in both
+     themes, so its ink is a fixed near-black rather than a themed token.
+     --accent-ink is *accent-coloured* text for dark surfaces — using it here
+     put orange on orange and the label vanished in dark mode. */
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.auth-submit:hover { filter: brightness(1.06); }
+.auth-submit:active { transform: translateY(1px); }
+.auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* The honesty notice. Deliberately not styled as a warning — it is a fact
+   about how the product works, not an error the person just caused. */
+.auth-note {
+  margin-top: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+}
+
+.auth-error {
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+@media (max-width: 900px) {
+  .auth-wrap { grid-template-columns: minmax(0, 1fr); }
+  .auth-panel { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   3. Projects — app frame
+   A fixed rail, a fixed top bar, and one scrolling region. Only the list
+   scrolls, so the rail and the account controls never travel away.
+   --------------------------------------------------------------------------- */
+
+.pj-app {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-areas: 'rail top' 'rail main';
+  height: 100vh;
+}
+
+.pj-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  overflow-y: auto;
+}
+
+.pj-rail-brand { display: flex; align-items: center; gap: 10px; padding: var(--sp-2) var(--sp-2) var(--sp-4); }
+.pj-rail-brand img { height: 30px; width: auto; }
+.pj-rail-brand .nm { font-weight: 700; letter-spacing: -.01em; }
+
+.pj-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 12px 16px;
+  margin-bottom: var(--sp-3);
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--accent-glow, var(--elev-2));
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.pj-new:hover { filter: brightness(1.06); }
+.pj-new:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.pj-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 14px;
+  border-radius: var(--r-pill, 999px);
+  color: var(--text-2);
+  text-decoration: none;
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-nav a:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+
+.pj-nav a[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.pj-rail hr { width: 100%; height: 1px; border: 0; margin: var(--sp-4) 0; background: var(--border); }
+
+/* Storage meter */
+.pj-storage { padding: 0 var(--sp-2); }
+.pj-storage .hd { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
+.pj-storage .bar { height: 4px; margin: var(--sp-3) 0 var(--sp-2); border-radius: 999px; background: color-mix(in srgb, var(--text) 12%, transparent); overflow: hidden; }
+.pj-storage .fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width var(--dur-base) var(--ease-out); }
+.pj-storage .cap { color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-rail-foot { margin-top: auto; padding-top: var(--sp-4); }
+
+/* Top bar */
+.pj-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+}
+
+.pj-search { position: relative; flex: 1; max-width: 520px; }
+
+.pj-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-2); pointer-events: none; }
+
+.pj-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px 10px 42px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  font: inherit;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.pj-search input::placeholder { color: var(--text-2); }
+.pj-search input:focus { outline: none; background: var(--bg0); border-color: var(--accent); }
+
+.pj-top-spacer { flex: 1; }
+
+.pj-iconbtn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-iconbtn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.pj-iconbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-account { display: flex; align-items: center; gap: 10px; padding-left: var(--sp-4); border-left: 1px solid var(--border); }
+.pj-account .who { text-align: right; line-height: 1.25; }
+.pj-account .who .n { font-weight: 650; font-size: var(--fs-small); }
+.pj-account .who .e { color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: .02em;
+}
+
+.pj-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   4. Projects — the list
+   --------------------------------------------------------------------------- */
+
+.pj-main { grid-area: main; overflow-y: auto; padding: var(--sp-5) var(--sp-5) var(--sp-6); }
+
+.pj-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.pj-head h1 { margin: 0; font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.015em; }
+
+.pj-seg { display: flex; margin-left: auto; padding: 3px; border: 1px solid var(--border); border-radius: var(--r-pill, 999px); background: var(--bg1); }
+
+.pj-seg button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pj-seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.pj-seg button:disabled { opacity: .45; cursor: not-allowed; }
+.pj-seg button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-filters { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+
+.pj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-chip:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.pj-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* The table. A real <table> — this is tabular data, it sorts by column, and a
+   screen reader should be told so rather than handed a pile of divs. */
+.pj-table { width: 100%; border-collapse: collapse; }
+
+.pj-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px var(--sp-3);
+  background: var(--bg0);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pj-table thead th.num { text-align: right; }
+
+.pj-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.pj-table tbody tr:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pj-table tbody tr:focus-visible { outline: none; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.pj-table td { padding: 12px var(--sp-3); vertical-align: middle; }
+.pj-table td.num { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pj-table td.when { color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Hidden from sight, kept for screen readers — the actions column has a
+   heading because the table has five columns, but the heading would be noise
+   on screen above a row of icon buttons. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pj-name { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.pj-name .ic { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--r-sm, 8px); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.pj-name .tx { min-width: 0; }
+/* Stacked, not side by side: the name is the identity and the counts are the
+   gloss under it. As inline spans they ran together on one line and the name
+   stopped being scannable. */
+.pj-name .t { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-name .s { display: block; margin-top: 1px; color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-owner { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); }
+.pj-owner .av { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700; }
+
+.pj-rowmenu { position: relative; width: 44px; text-align: right; }
+
+/* Row actions. Kept visible rather than hover-revealed: hover-only controls
+   are invisible on touch, and this table is a plausible thing to use on a
+   tablet in a site office. */
+.pj-menubtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.pj-menubtn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.pj-menubtn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-menu {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  z-index: 30;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: var(--glass-solid, var(--bg1));
+  box-shadow: var(--elev-3, var(--elev-2));
+}
+
+.pj-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pj-menu button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.pj-menu button.danger { color: var(--danger); }
+.pj-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+.pj-empty {
+  padding: var(--sp-6) var(--sp-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  text-align: center;
+  color: var(--text-2);
+}
+
+.pj-empty b { display: block; margin-bottom: var(--sp-2); color: var(--text); font-size: var(--fs-lg); font-weight: 650; }
+
+/* Narrow screens: the rail becomes a top strip, and the columns that are
+   context rather than identity drop out. Name and date survive, because
+   those are what someone scans for. */
+@media (max-width: 860px) {
+  .pj-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 56px minmax(0, 1fr); grid-template-areas: 'rail' 'top' 'main'; height: auto; min-height: 100vh; }
+  .pj-rail { flex-direction: row; align-items: center; gap: var(--sp-3); overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .pj-rail hr, .pj-storage, .pj-rail-foot { display: none; }
+  .pj-new { margin-bottom: 0; white-space: nowrap; }
+  .pj-nav { flex-direction: row; }
+  .pj-account .who { display: none; }
+  .pj-table .col-owner, .pj-table .col-size { display: none; }
+}

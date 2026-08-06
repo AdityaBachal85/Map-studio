@@ -366,7 +366,17 @@ async function initAutosave() {
   const reset = new URLSearchParams(location.search).get('reset');
   autosaveRequestPersistence();
 
-  if (!reset) {
+  // Opening a named project from projects.html has already put a document on
+  // screen. Restoring the last session over it would replace what was just
+  // asked for with whatever happened to be open last — and then autosave that
+  // result back into the project, losing it. The bridge owns the session in
+  // that case; here we only seed the hash so the first tick sees no change.
+  const bridged = typeof projectBridgeClaimed === 'function' && projectBridgeClaimed();
+  if (bridged) {
+    try { _asLastHash = autosaveHash(JSON.stringify(serialiseProject())); } catch (e) { /* leave unseeded */ }
+  }
+
+  if (!reset && !bridged) {
     const rec = await autosaveGet(AUTOSAVE_KEY);
     if (rec && rec.project && projectHasContent(rec.project)) {
       try {

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sign in · DBOT Map Studio</title>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0028" as="font" type="font/woff2" crossorigin>
+  <!-- Same order rule as index.html: later sheets override earlier ones. This
+       page needs the tokens and the base typography, then its own layout. -->
+  <link rel="stylesheet" href="./css/themes.css?v=6.0028">
+  <link rel="stylesheet" href="./css/style.css?v=6.0028">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0028">
+</head>
+
+<body class="shell-body">
+  <div class="auth-wrap">
+
+    <!-- Left: what this is. Hidden below 900px — see shell.css. -->
+    <aside class="auth-panel">
+      <h2>Property maps that carry their evidence.</h2>
+      <p>Real coordinates, real roads, real routing — and every distance on the page measured rather than
+        estimated.</p>
+
+      <div class="auth-points">
+        <div class="auth-point">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
+            <polyline points="2 15.5 12 22 22 15.5" />
+          </svg>
+          <div>
+            <b>Many projects, one place</b>
+            <span>Every map you have made on this machine, listed by what you touched last.</span>
+          </div>
+        </div>
+        <div class="auth-point">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+          <div>
+            <b>Nothing is lost</b>
+            <span>Work saves as you go and keeps recent versions you can step back to.</span>
+          </div>
+        </div>
+        <div class="auth-point">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v18M3 12h18" />
+          </svg>
+          <div>
+            <b>Export what you present</b>
+            <span>PDF, PowerPoint, Word, Excel, KML and GeoJSON from the same map.</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right: the task. -->
+    <main class="auth-main">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <img class="dbotLogo" alt="DBOT">
+          <div>
+            <div class="kicker">Market Research</div>
+            <div style="font-weight:700">Map Studio</div>
+          </div>
+        </div>
+
+        <h1>Sign in</h1>
+        <p class="lede">Your projects are kept in this browser and listed under the name you use here.</p>
+
+        <div class="auth-error" id="authError" hidden></div>
+
+        <form id="authForm" novalidate>
+          <div class="auth-field">
+            <label for="authName">Your name</label>
+            <input id="authName" name="name" type="text" autocomplete="name" placeholder="Aditya Bachal" required>
+          </div>
+
+          <div class="auth-field">
+            <label for="authEmail">Email <span style="text-transform:none;letter-spacing:0;font-weight:600">(optional)</span></label>
+            <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="you@dbotrealty.com">
+            <div class="hint">Used only to recognise you again on this machine, so you return to the same
+              projects. It is not sent anywhere.</div>
+          </div>
+
+          <button class="auth-submit" type="submit">Continue</button>
+        </form>
+
+        <div class="auth-note">
+          <b>What this sign-in is and isn't.</b> Map Studio runs entirely in your browser, so this names you and
+          keeps separate people's projects apart on a shared machine — it does not lock anything. Anyone with
+          access to this computer can open the app directly. Treat a project here as a file on this disk, because
+          that is what it is.
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="./js/core/prefs.js?v=6.0028"></script>
+  <script src="./js/constants.js?v=6.0028"></script>
+  <script src="./js/auth/session.js?v=6.0028"></script>
+  <script>
+    applyTheme();
+    document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
+
+    const form = document.getElementById('authForm');
+    const nameEl = document.getElementById('authName');
+    const emailEl = document.getElementById('authEmail');
+    const errEl = document.getElementById('authError');
+
+    // Coming back to a machine you have used before should not mean retyping
+    // your own name, so the last session pre-fills the form.
+    const prior = currentUser();
+    if (prior) { nameEl.value = prior.name; emailEl.value = prior.email || ''; }
+    nameEl.focus();
+    nameEl.select();
+
+    /** Only same-page targets — an open redirect is trivially avoidable here. */
+    function safeNext() {
+      const raw = new URLSearchParams(location.search).get('next') || 'projects.html';
+      const decoded = decodeURIComponent(raw);
+      return /^[\w.-]+\.html(\?[^#]*)?$/.test(decoded) ? decoded : 'projects.html';
+    }
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      errEl.hidden = true;
+      try {
+        signIn({ name: nameEl.value, email: emailEl.value });
+        location.href = safeNext();
+      } catch (ex) {
+        errEl.textContent = ex.message || 'Could not sign in.';
+        errEl.hidden = false;
+        nameEl.focus();
+      }
+    });
+  </script>
+</body>
+
+</html>

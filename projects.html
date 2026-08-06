@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Map projects · DBOT Map Studio</title>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0028" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/themes.css?v=6.0028">
+  <link rel="stylesheet" href="./css/style.css?v=6.0028">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0028">
+</head>
+
+<body class="shell-body">
+  <div class="pj-app">
+
+    <aside class="pj-rail">
+      <div class="pj-rail-brand">
+        <img class="dbotLogo" alt="DBOT">
+        <span class="nm">Map Studio</span>
+      </div>
+
+      <button class="pj-new" id="pjNew" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        New project
+      </button>
+
+      <nav class="pj-nav">
+        <a href="./projects.html" aria-current="page">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6" />
+            <path d="M8 3v15M16 6v15" />
+          </svg>
+          Map projects
+        </a>
+        <a href="./index.html">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
+            <polyline points="2 15.5 12 22 22 15.5" />
+          </svg>
+          Open the studio
+        </a>
+      </nav>
+
+      <hr>
+
+      <div class="pj-storage">
+        <div class="hd">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="5.5" rx="8.5" ry="3" />
+            <path d="M3.5 5.5v13c0 1.7 3.8 3 8.5 3s8.5-1.3 8.5-3v-13" />
+            <path d="M3.5 12c0 1.7 3.8 3 8.5 3s8.5-1.3 8.5-3" />
+          </svg>
+          Storage
+        </div>
+        <div class="bar"><div class="fill" id="pjStorageFill" style="width:0%"></div></div>
+        <div class="cap" id="pjStorageCap">Reading…</div>
+      </div>
+
+      <div class="pj-rail-foot">
+        <button class="pj-chip" id="pjImport" type="button" style="width:100%;justify-content:center">
+          Import a .json project
+        </button>
+        <input type="file" id="pjImportFile" accept="application/json,.json" hidden>
+      </div>
+    </aside>
+
+    <header class="pj-top">
+      <div class="pj-search">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round">
+          <circle cx="11" cy="11" r="7" />
+          <line x1="21" y1="21" x2="16.5" y2="16.5" />
+        </svg>
+        <input id="pjSearch" type="search" placeholder="Search your projects…" autocomplete="off">
+      </div>
+
+      <div class="pj-top-spacer"></div>
+
+      <button class="pj-iconbtn" id="pjTheme" type="button" title="Switch theme" aria-label="Switch theme">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+        </svg>
+      </button>
+
+      <div class="pj-account">
+        <div class="who">
+          <div class="n" id="pjWhoName">—</div>
+          <div class="e" id="pjWhoEmail"></div>
+        </div>
+        <button class="pj-avatar" id="pjAvatar" type="button" title="Sign out" aria-label="Sign out">?</button>
+      </div>
+    </header>
+
+    <main class="pj-main">
+      <div class="pj-head">
+        <h1>Map projects</h1>
+        <div class="pj-seg">
+          <button type="button" id="pjSrcLocal" aria-pressed="true">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="13" rx="2" />
+              <path d="M8 21h8" />
+            </svg>
+            This device
+          </button>
+          <button type="button" id="pjSrcCloud" aria-pressed="false" disabled
+            title="Cloud projects need an account server. Not connected yet.">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.3 9.4 4.3 4.3 0 0 0 7 19z" />
+            </svg>
+            Cloud
+          </button>
+        </div>
+      </div>
+
+      <div class="pj-filters">
+        <button class="pj-chip" id="pjSort" type="button">
+          <span id="pjSortLabel">Last modified</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <span class="cap" id="pjCount" style="color:var(--text-2);font-size:var(--fs-small)"></span>
+      </div>
+
+      <div id="pjListWrap"></div>
+    </main>
+
+  </div>
+
+  <script src="./js/core/prefs.js?v=6.0028"></script>
+  <script src="./js/constants.js?v=6.0028"></script>
+  <script src="./js/auth/session.js?v=6.0028"></script>
+  <script src="./js/projects/projectStore.js?v=6.0028"></script>
+  <script src="./js/projects/projectsPage.js?v=6.0028"></script>
+</body>
+
+</html>
