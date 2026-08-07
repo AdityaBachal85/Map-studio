@@ -212,28 +212,71 @@ function boundaryMessage(reason, name) {
 }
 
 /* ---------------------------------------------------------------------------
- * The action behind the Boundary button on a location card
+ * The Boundary toggle on a location card
  * ------------------------------------------------------------------------ */
 
 /**
- * Fetch a location's outline and add it to the map as an ordinary shape.
+ * The boundary shape belonging to a location, if it is on the map.
+ * @param {number} locId @returns {object|undefined}
+ */
+function boundaryForLocation(locId) {
+  return geometries.find(g => g.boundaryFor === locId);
+}
+
+/**
+ * Paint every Boundary button to match what is actually on the map.
  *
- * WHY IT BECOMES A SHAPE RATHER THAN A NEW KIND OF OBJECT. Everything the
- * drawing tools already give a polygon — restyling, reshaping a vertex,
- * renaming, hiding from the Layer Manager, area measurement, export to PPT and
- * KML, undo — applies the moment this is a geometry. A dedicated "boundary"
- * type would arrive with none of it and would have to earn each one back.
+ * Called after this file changes anything, and after a shape is removed
+ * anywhere else — deleting the polygon from the Draw tab has to leave the
+ * button saying "add", or the next click reads as broken.
+ */
+function syncBoundaryButtons() {
+  document.querySelectorAll('.item-card .bnd').forEach(btn => {
+    const card = btn.closest('[data-loc-id]');
+    const id = card ? +card.getAttribute('data-loc-id') : NaN;
+    const on = !!boundaryForLocation(id);
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.title = on
+      ? "Remove this place's boundary from the map"
+      : "Draw this place's real boundary from OpenStreetMap";
+  });
+}
+
+/**
+ * Remove a boundary, and offer it straight back.
+ * @param {object} loc @param {object} g the boundary geometry
+ */
+function removeBoundaryForLocation(loc, g) {
+  const name = g.name;
+  removeGeomById(g.id);
+  syncBoundaryButtons();
+  status(`Removed the boundary of ${loc.name || 'this location'}.`, false, {
+    label: 'Undo',
+    onClick: () => { toggleBoundaryForLocation(loc); },
+  });
+}
+
+/**
+ * Add the boundary, or take it away — one control, both directions.
  *
- * An OSM boundary is also a starting point, not gospel: municipal edges are
- * disputed, occasionally out of date, and sometimes drawn to a different
- * standard than a client brief needs. Making it editable is the honest form.
+ * WHY A TOGGLE. The first version added on the first click and, on a second,
+ * zoomed to what was already there. That reads as a dead button: the thing you
+ * asked for is on screen, you press again to take it off, and the map just
+ * moves. Removing it meant finding the polygon in the Draw tab, which is a
+ * different pane, a different mental model, and a shape whose name you did not
+ * choose. A control that adds a thing should take it away.
  *
  * @param {object} loc a location record
- * @param {HTMLElement} [btn] the button, disabled while in flight
+ * @param {HTMLElement} [btn] the button, disabled while a fetch is in flight
  * @returns {Promise<void>}
  */
-async function addBoundaryForLocation(loc, btn) {
+async function toggleBoundaryForLocation(loc, btn) {
   if (!loc) return;
+
+  const existing = boundaryForLocation(loc.id);
+  if (existing) { removeBoundaryForLocation(loc, existing); return; }
+
   const label = loc.name || 'this location';
   const restore = btn ? btn.textContent : null;
   if (btn) { btn.disabled = true; btn.textContent = 'Looking…'; }
@@ -249,17 +292,6 @@ async function addBoundaryForLocation(loc, btn) {
   }
 
   if (!r.ok) { status(boundaryMessage(r.reason, label), true); return; }
-
-  // Already drawn. Clicking again should take you to it, not stack a second
-  // identical polygon on the first — where the duplicate is invisible until
-  // you delete one and the outline stubbornly remains.
-  const existing = geometries.find(g => g.boundaryFor === loc.id);
-  if (existing) {
-    try { map.fitBounds(existing.layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* ignore */ }
-    status(`${label} already has its boundary on the map — ${existing.name}. `
-      + 'Delete it in the Draw tab first if you want to fetch it again.');
-    return;
-  }
 
   // The location's own colour when it has been given one, so a boundary reads
   // as belonging to its pin. The default navy is skipped: it is the palette's
@@ -293,11 +325,12 @@ async function addBoundaryForLocation(loc, btn) {
     fillColor: accent,
     fillOpacity: 0.06,
     corner: 'round',
-    // Which location this belongs to, so a second click finds it rather than
-    // drawing over it. Survives save/load with the rest of the geometry.
+    // Which location this belongs to, so the toggle can find it again.
+    // Survives save/load with the rest of the geometry.
     boundaryFor: loc.id,
   });
 
+  syncBoundaryButtons();
   try { map.fitBounds(layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* degenerate ring */ }
 
   // Counted off the layer, not the response: GeoJSON rings repeat their first
@@ -311,8 +344,196 @@ async function addBoundaryForLocation(loc, btn) {
 
   const cached = r.cached ? ' (from cache)' : '';
   status(`Added the boundary of ${r.label || label} — ${drawn} points${cached}. `
-    + 'It is a normal shape: restyle it, reshape it, or delete it in the Draw tab.', false, {
-      label: 'Undo',
-      onClick: () => { removeGeomById(g.id); status('Boundary removed.'); },
-    });
+    + 'Press Boundary again to remove it, or restyle it in the Draw tab.');
 }
+
+/**
+ * Keep the buttons honest when a shape is removed elsewhere.
+ *
+ * Wrapping rather than editing drawing.js: that file owns shapes and knows
+ * nothing about boundaries, and it should stay that way. Same composition the
+ * project bridge uses over autosaveNow() — if this file is absent, removal
+ * behaves exactly as it always did.
+ */
+(function watchGeomRemoval() {
+  if (typeof removeGeomById !== 'function') return;
+  const original = removeGeomById;
+  // eslint-disable-next-line no-global-assign
+  removeGeomById = function boundaryAwareRemoveGeomById(id) {
+    const out = original.apply(this, arguments);
+    try { syncBoundaryButtons(); } catch (e) { /* never block a delete */ }
+    return out;
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+ * Click the map, see the boundary
+ * ------------------------------------------------------------------------ */
+
+const BOUNDARY_REVERSE_ENDPOINT = 'https://nominatim.openstreetmap.org/reverse';
+
+/**
+ * Zoom level Nominatim resolves a click to.
+ *
+ * Its `zoom` is a granularity, not a map zoom: 18 is a building, 16 a street,
+ * 14 a suburb or neighbourhood, 10 a city. 14 is the level a property brief
+ * actually talks about — "Airoli", not "Plot 42" and not "Navi Mumbai" — and
+ * it is the one whose edge people picture when they say boundary.
+ */
+const BOUNDARY_REVERSE_ZOOM = 14;
+
+/**
+ * The outline of whatever locality contains a point.
+ *
+ * One request, not two: reverse geocoding with polygon_geojson returns the
+ * matched feature *and* its geometry together, so a click does not have to
+ * resolve a name and then go looking for its shape.
+ *
+ * @param {number} lat @param {number} lng
+ * @returns {Promise<{ok:boolean, latlngs?:Array, label?:string, reason?:string,
+ *                    points?:number, osm?:string, cached?:boolean}>}
+ */
+async function fetchBoundaryAt(lat, lng) {
+  if (!isFinite(lat) || !isFinite(lng)) return { ok: false, reason: 'no-name' };
+
+  // Coarse key: two clicks a few metres apart are the same locality, and
+  // asking twice for the same suburb is exactly the waste the cache exists to
+  // prevent. ~1 km at this latitude.
+  const key = 'at|' + lat.toFixed(2) + ',' + lng.toFixed(2);
+  const cached = boundaryCacheGet(key);
+  if (cached) return Object.assign({}, cached, { cached: true });
+  if (_boundaryPending.has(key)) return _boundaryPending.get(key);
+
+  const params = new URLSearchParams({
+    lat: String(lat), lon: String(lng),
+    format: 'jsonv2',
+    zoom: String(BOUNDARY_REVERSE_ZOOM),
+    polygon_geojson: '1',
+    polygon_threshold: String(BOUNDARY_SIMPLIFY_DEG),
+  });
+
+  const job = (async () => {
+    let row;
+    try {
+      const res = await fetch(BOUNDARY_REVERSE_ENDPOINT + '?' + params.toString(),
+        { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return { ok: false, reason: 'http-' + res.status };
+      row = await res.json();
+    } catch (e) {
+      return { ok: false, reason: 'network' };
+    }
+    if (!row || row.error) return { ok: false, reason: 'not-found' };
+
+    const latlngs = boundaryToLatLngs(row.geojson);
+    if (!latlngs) {
+      const out = { ok: false, reason: 'no-polygon', label: row.display_name || 'that place' };
+      boundaryCacheWrite(key, out);
+      return out;
+    }
+
+    const out = {
+      ok: true,
+      latlngs,
+      label: (row.name || row.display_name || 'Boundary').split(',')[0].trim(),
+      points: boundaryPointCount(latlngs),
+      osm: row.osm_type && row.osm_id ? row.osm_type + '/' + row.osm_id : null,
+    };
+    boundaryCacheWrite(key, out);
+    return out;
+  })();
+
+  _boundaryPending.set(key, job);
+  try { return await job; }
+  finally { _boundaryPending.delete(key); }
+}
+
+/** Whether the map is armed to outline the next place clicked. */
+let boundaryPickMode = false;
+
+/**
+ * Arm or disarm click-to-outline.
+ *
+ * Mutually exclusive with click-to-add: two modes both waiting for the same
+ * click is a coin toss, and the one that loses feels broken.
+ *
+ * @param {boolean} on
+ */
+function setBoundaryPickMode(on) {
+  boundaryPickMode = !!on;
+  const btn = document.getElementById('boundaryPickBtn');
+  if (btn) {
+    btn.classList.toggle('toggled', boundaryPickMode);
+    btn.lastChild.textContent = boundaryPickMode ? ' Click a place… (Esc)' : ' Click map for a boundary';
+  }
+  document.getElementById('mapWrap').classList.toggle('picking-boundary', boundaryPickMode);
+  if (boundaryPickMode) {
+    if (typeof uiState === 'object' && uiState.addingMode && typeof setAdding === 'function') setAdding(false);
+    if (typeof disableAllDrawModes === 'function') disableAllDrawModes();
+    if (typeof disableAllEditModes === 'function') disableAllEditModes();
+    status('Click any place on the map to outline it. Esc to stop.', true);
+  }
+}
+
+/**
+ * Draw the outline of the locality under a click.
+ * @param {number} lat @param {number} lng
+ */
+async function addBoundaryAt(lat, lng) {
+  status('Finding the place here…', true);
+  let r;
+  try { r = await fetchBoundaryAt(lat, lng); }
+  catch (e) { r = { ok: false, reason: 'network' }; }
+
+  if (!r.ok) { status(boundaryMessage(r.reason, r.label || 'this point'), true); return; }
+
+  // Already on the map — outlining the same suburb twice stacks identical
+  // polygons that only reveal themselves when you delete one.
+  const dup = geometries.find(g => g.boundaryOsm && g.boundaryOsm === r.osm);
+  if (dup) {
+    try { map.fitBounds(dup.layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* ignore */ }
+    status(`${r.label} is already outlined — ${dup.name}.`);
+    return;
+  }
+
+  let layer;
+  try { layer = L.polygon(r.latlngs); }
+  catch (e) { status('That boundary came back in a shape this map could not draw.', true); return; }
+
+  const g = registerGeom(layer, 'Polygon', {
+    name: r.label,
+    description: 'Administrative boundary from OpenStreetMap' + (r.osm ? ' (' + r.osm + ')' : ''),
+    borderColor: '#FF7A1A',
+    borderWidth: 2.5,
+    lineStyle: 'dashed',
+    fillColor: '#FF7A1A',
+    fillOpacity: 0.06,
+    corner: 'round',
+    boundaryOsm: r.osm || null,
+  });
+
+  try { map.fitBounds(layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* ignore */ }
+  status(`Outlined ${r.label}.`, false, {
+    label: 'Undo',
+    onClick: () => { removeGeomById(g.id); status('Boundary removed.'); },
+  });
+}
+
+// Wiring. Kept in this file rather than toolbar.js so the whole feature —
+// service, toggle, mode and its one click handler — reads in one place.
+(function wireBoundaryPicking() {
+  const btn = document.getElementById('boundaryPickBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => setBoundaryPickMode(!boundaryPickMode));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && boundaryPickMode) { setBoundaryPickMode(false); status('Boundary picking off.'); }
+  });
+
+  // Click-to-add is armed from toolbar.js on the same event. Its handler
+  // returns early unless uiState.addingMode is set, and setBoundaryPickMode
+  // clears that, so the two can never both act on one click.
+  map.on('click', e => {
+    if (!boundaryPickMode) return;
+    addBoundaryAt(e.latlng.lat, e.latlng.lng);
+  });
+})();

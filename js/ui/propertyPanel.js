@@ -45,6 +45,9 @@
 function locCardMarkup(loc) {
         const card = document.createElement('div');
         card.className = 'item-card';
+        // Lets anything outside this file find the card for a given location —
+        // the boundary toggle repaints itself from the shapes on the map.
+        card.dataset.locId = loc.id;
         card.innerHTML = `
     <div class="r">
       <!-- Plain input: enhanceColorInputs() wraps it in the swatch + picker,
@@ -260,7 +263,7 @@ function wireLocCard(card, loc) {
         });
         card.querySelector('.sl').addEventListener('change', e => { loc.showLabel = e.target.checked; updateLocLabel(loc); scheduleRepaint(); });
         card.querySelector('.lbg').addEventListener('input', e => { loc.labelBg = e.target.value; updateLocLabel(loc); scheduleRepaint(); });
-        card.querySelector('.bnd').addEventListener('click', e => addBoundaryForLocation(loc, e.currentTarget));
+        card.querySelector('.bnd').addEventListener('click', e => toggleBoundaryForLocation(loc, e.currentTarget));
         card.querySelector('.ctr').addEventListener('click', () => map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 15)));
         card.querySelector('.dup').addEventListener('click', () => {
           addLocation(Object.assign({}, loc, {

@@ -3243,3 +3243,19 @@ input[type=checkbox]:disabled {
 }
 
 .fresh-bar button:hover { filter: brightness(1.06); }
+
+/* Armed to outline the next place clicked. A crosshair rather than the
+   click-to-add cursor: this picks something that already exists rather than
+   placing something new, and the cursor is the only thing telling you which
+   mode you are in once your eyes are on the map. */
+.map-wrap.picking-boundary,
+.map-wrap.picking-boundary .leaflet-container { cursor: crosshair; }
+
+/* The Boundary toggle, when that place's outline is on the map. Filled rather
+   than outlined: the button is reporting a state, not offering an action, and
+   at mini-btn size a border change alone is too quiet to read as "on". */
+.mini-btn.bnd.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text);
+}
