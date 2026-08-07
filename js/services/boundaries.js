@@ -6,14 +6,25 @@
  * question from the one being asked. This fetches the administrative boundary
  * OpenStreetMap holds for a place and hands back a polygon.
  *
- * WHY NOMINATIM. It is the only free source that returns a locality outline
- * for one request with no key. Google's Places API returns a *viewport* — an
- * axis-aligned rectangle around the place — which is not a boundary and looks
- * obviously wrong drawn over a coastline or a curved municipal edge. Overpass
- * can do better but needs a relation id we would have to look up first, which
- * is two round trips to answer one question.
+ * WHY NOT GOOGLE. Asked for, and it genuinely cannot do this. The Geocoding
+ * and Places APIs return a *viewport* — an axis-aligned rectangle around the
+ * place — which is not a boundary and looks obviously wrong drawn over a
+ * coastline or a curved village edge. Google does hold the real outlines, but
+ * exposes them only through data-driven styling in the Maps JavaScript SDK,
+ * which *paints* a boundary onto a Google vector map and never hands over the
+ * coordinates. There is nothing to put in a Leaflet layer, nothing to save into
+ * a project, and nothing to export to PowerPoint. A rectangle is the most
+ * Google can give, so Google is not in this chain.
  *
- * WHAT IT CANNOT DO, and the UI must say so rather than fail quietly:
+ * WHY TWO PROVIDERS. Nominatim alone was one donated service with no fallback,
+ * and when a browser could not reach it — corporate DNS, an ad blocker, its own
+ * rate limiter — the feature was simply dead with a network error. Geoapify
+ * serves the same OpenStreetMap boundary data over a keyed endpoint this app
+ * already talks to successfully for search and reverse geocoding, so it is the
+ * primary; Nominatim stays as the fallback for anything Geoapify has not
+ * imported. Two independent hosts, one of which is already proven reachable.
+ *
+ * WHAT NEITHER CAN DO, and the UI must say so rather than fail quietly:
  * plenty of places exist in OSM only as a node. A village, a new township, an
  * informal neighbourhood — all real places, none with an outline anyone has
  * drawn. `ok:false, reason:'no-polygon'` is a normal answer here, not an
@@ -27,7 +38,18 @@
  */
 
 const BOUNDARY_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
-const BOUNDARY_CACHE_KEY = 'dbot.boundaryCache.v1';
+const BOUNDARY_GEOAPIFY_ENDPOINT = 'https://api.geoapify.com/v1/boundaries/part-of';
+
+/**
+ * Geoapify's simplification level, named for the viewport width the geometry is
+ * meant to survive. `geometry_5000` is a boundary that still reads correctly on
+ * a 5000-pixel canvas — more than any screen here, and enough that a PowerPoint
+ * export at full-slide width does not show the corners being cut.
+ */
+const BOUNDARY_GEOAPIFY_DETAIL = 'geometry_5000';
+
+/** Bumped from v1: entries now carry a provider, and old ones lack it. */
+const BOUNDARY_CACHE_KEY = 'dbot.boundaryCache.v2';
 const BOUNDARY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -105,29 +127,181 @@ function boundaryPointCount(latlngs) {
   return latlngs.reduce((n, x) => n + boundaryPointCount(x), 0);
 }
 
+/* ---------------------------------------------------------------------------
+ * Geoapify — the primary provider
+ * ------------------------------------------------------------------------ */
+
+/** @param {object} f a GeoJSON feature @returns {object} its OSM passthrough */
+function boundaryRawOf(f) {
+  const p = (f && f.properties) || {};
+  return (p.datasource && p.datasource.raw) || {};
+}
+
 /**
- * Find the administrative outline of a place.
+ * How local a boundary is, higher being more local.
+ *
+ * `part-of` answers with every administrative area containing the point —
+ * country, state, district, city, ward — and the one somebody means when they
+ * click a village is the innermost, not the first in the array. OSM's
+ * admin_level already ranks exactly this (2 country … 10 suburb), so use it
+ * when it survived the import and fall back to the category taxonomy when it
+ * did not.
+ *
+ * @param {object} f @returns {number}
+ */
+function boundarySpecificity(f) {
+  const lvl = Number(boundaryRawOf(f).admin_level);
+  if (isFinite(lvl) && lvl > 0) return lvl;
+
+  const cats = (((f && f.properties && f.properties.categories) || [])).join(' ');
+  if (/suburb|neighbourhood|neighborhood|quarter|village|hamlet|ward/.test(cats)) return 10;
+  if (/city|town|municipal/.test(cats)) return 8;
+  if (/county|district/.test(cats)) return 6;
+  if (/state|province|region/.test(cats)) return 4;
+  if (/country/.test(cats)) return 2;
+  return 7;   // unknown: between a city and a district, so it never wins a tie outright
+}
+
+/**
+ * Bounding-box area in square degrees — the tie-breaker when two areas claim
+ * the same admin_level, which happens when a village and its gram panchayat are
+ * both level 8. The smaller one is the one that was clicked.
+ * @param {object} geom a GeoJSON geometry @returns {number}
+ */
+function boundarySpan(geom) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const walk = a => {
+    if (!Array.isArray(a)) return;
+    if (typeof a[0] === 'number') {
+      if (a[0] < minX) minX = a[0];
+      if (a[0] > maxX) maxX = a[0];
+      if (a[1] < minY) minY = a[1];
+      if (a[1] > maxY) maxY = a[1];
+      return;
+    }
+    a.forEach(walk);
+  };
+  walk(geom && geom.coordinates);
+  if (!isFinite(minX)) return Infinity;
+  return Math.abs((maxX - minX) * (maxY - minY));
+}
+
+/** @param {object} f @returns {string} a human name for the area */
+function geoapifyBoundaryLabel(f) {
+  const p = (f && f.properties) || {};
+  const raw = boundaryRawOf(f);
+  const name = p.name || raw['name:en'] || raw.name || p.address_line1
+    || p.suburb || p.village || p.city || p.county || p.state || p.formatted || 'Boundary';
+  return String(name).split(',')[0].trim();
+}
+
+/**
+ * A stable identity for the area, so clicking the same village twice does not
+ * stack two polygons. Geoapify carries the OSM id through, which keeps the id
+ * comparable with whatever Nominatim would have returned for the same place.
+ * @param {object} f @returns {string|null}
+ */
+function geoapifyBoundaryId(f) {
+  const raw = boundaryRawOf(f);
+  if (raw.osm_id) {
+    const t = String(raw.osm_type || 'relation').toLowerCase()[0];
+    return (t === 'w' ? 'way' : t === 'n' ? 'node' : 'relation') + '/' + raw.osm_id;
+  }
+  const pid = f && f.properties && f.properties.place_id;
+  return pid ? 'geoapify/' + pid : null;
+}
+
+/**
+ * The innermost administrative area containing a point, from Geoapify.
+ *
+ * One request answers both halves of the question — which place is here, and
+ * what shape is it — the same way Nominatim's reverse does, so a click never
+ * costs two round trips.
+ *
+ * @param {number} lat @param {number} lng
+ * @returns {Promise<object>} a normalised result, ok or not
+ */
+async function geoapifyBoundaryAt(lat, lng) {
+  if (typeof GEOAPIFY_API_KEY !== 'string' || !GEOAPIFY_API_KEY) {
+    return { ok: false, reason: 'no-provider' };
+  }
+  const params = new URLSearchParams({
+    lon: String(lng),
+    lat: String(lat),
+    geometry: BOUNDARY_GEOAPIFY_DETAIL,
+    apiKey: GEOAPIFY_API_KEY,
+  });
+
+  let data;
+  try {
+    const res = await fetch(BOUNDARY_GEOAPIFY_ENDPOINT + '?' + params.toString(),
+      { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return { ok: false, reason: 'http-' + res.status };
+    data = await res.json();
+  } catch (e) {
+    return { ok: false, reason: 'network' };
+  }
+
+  const all = (data && Array.isArray(data.features)) ? data.features : [];
+  const drawable = all.filter(f => f && f.geometry
+    && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+
+  if (!drawable.length) {
+    // A point inside a country but inside no imported outline is a real answer,
+    // not a failure — and it is the common case for a new township.
+    return all.length
+      ? { ok: false, reason: 'no-polygon', label: geoapifyBoundaryLabel(all[0]) }
+      : { ok: false, reason: 'not-found' };
+  }
+
+  drawable.sort((a, b) =>
+    boundarySpecificity(b) - boundarySpecificity(a)
+    || boundarySpan(a.geometry) - boundarySpan(b.geometry));
+
+  const best = drawable[0];
+  const latlngs = boundaryToLatLngs(best.geometry);
+  if (!latlngs) return { ok: false, reason: 'no-polygon' };
+
+  return {
+    ok: true,
+    latlngs,
+    label: geoapifyBoundaryLabel(best),
+    points: boundaryPointCount(latlngs),
+    osm: geoapifyBoundaryId(best),
+    provider: 'Geoapify',
+  };
+}
+
+/**
+ * Which of several failures to show the user.
+ *
+ * A definite answer beats a transport failure: if Geoapify says the place has
+ * no outline and Nominatim could not be reached, "nobody has drawn this" is the
+ * true and useful sentence, and "check your connection" would send someone off
+ * to debug a network that is working.
+ *
+ * @param {string[]} reasons @returns {string}
+ */
+function boundaryWorstReason(reasons) {
+  const rank = r => r === 'no-polygon' ? 5
+    : r === 'not-found' ? 4
+    : String(r).startsWith('http-') ? 3
+    : r === 'network' ? 2 : 1;
+  return reasons.slice().sort((a, b) => rank(b) - rank(a))[0] || 'network';
+}
+
+/**
+ * Nominatim, searched by name — the fallback half of fetchBoundary().
  *
  * Coordinates are used to bias the search rather than filter it: "Airoli"
  * matches more than one place on earth, and the one being asked about is the
  * one under the pin. Nominatim's `viewbox` without `bounded=1` prefers results
  * in the box while still answering if the true match sits just outside it.
  *
- * @param {{name:string, lat:number, lng:number}} place
- * @returns {Promise<{ok:boolean, latlngs?:Array, label?:string, reason?:string,
- *                    points?:number, adminLevel?:string, cached?:boolean}>}
+ * @param {string} name @param {number} lat @param {number} lng
+ * @returns {Promise<object>} a normalised result, ok or not
  */
-async function fetchBoundary(place) {
-  const name = String((place && place.name) || '').trim();
-  if (!name) return { ok: false, reason: 'no-name' };
-
-  const lat = Number(place.lat), lng = Number(place.lng);
-  const key = name.toLowerCase() + '|' + (isFinite(lat) ? lat.toFixed(2) : '') + ',' + (isFinite(lng) ? lng.toFixed(2) : '');
-
-  const cached = boundaryCacheGet(key);
-  if (cached) return Object.assign({}, cached, { cached: true });
-  if (_boundaryPending.has(key)) return _boundaryPending.get(key);
-
+async function nominatimBoundaryByName(name, lat, lng) {
   const params = new URLSearchParams({
     q: name,
     format: 'jsonv2',
@@ -141,43 +315,89 @@ async function fetchBoundary(place) {
     params.set('viewbox', [lng - d, lat + d, lng + d, lat - d].join(','));
   }
 
+  let rows;
+  try {
+    const res = await fetch(BOUNDARY_ENDPOINT + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) return { ok: false, reason: 'http-' + res.status };
+    rows = await res.json();
+  } catch (e) {
+    return { ok: false, reason: 'network' };
+  }
+  if (!Array.isArray(rows) || !rows.length) return { ok: false, reason: 'not-found' };
+
+  // Prefer a result that actually has an outline. Nominatim ranks by its own
+  // relevance, which puts a well-known node above a lesser-known area — and
+  // a node cannot be drawn.
+  const withPolygon = rows.filter(r => r.geojson
+    && (r.geojson.type === 'Polygon' || r.geojson.type === 'MultiPolygon'));
+  if (!withPolygon.length) {
+    return { ok: false, reason: 'no-polygon', label: rows[0].display_name || name };
+  }
+
+  const best = withPolygon[0];
+  const latlngs = boundaryToLatLngs(best.geojson);
+  if (!latlngs) return { ok: false, reason: 'no-polygon' };
+
+  return {
+    ok: true,
+    latlngs,
+    label: (best.display_name || name).split(',').slice(0, 2).join(',').trim(),
+    points: boundaryPointCount(latlngs),
+    adminLevel: (best.address && best.address.admin_level) || best.place_rank || null,
+    osm: best.osm_type && best.osm_id ? best.osm_type + '/' + best.osm_id : null,
+    provider: 'OpenStreetMap',
+  };
+}
+
+/**
+ * Find the administrative outline of a place.
+ *
+ * The location's own coordinates are asked first, not its name. A pin dropped
+ * inside Muthaval is unambiguous evidence of which Muthaval is meant; the
+ * string "Muthaval" is not, and a name search has to guess. The name search
+ * stays as the second attempt because it still rescues the case where the pin
+ * sits just outside the area it is named for.
+ *
+ * @param {{name:string, lat:number, lng:number}} place
+ * @returns {Promise<{ok:boolean, latlngs?:Array, label?:string, reason?:string,
+ *                    points?:number, adminLevel?:string, cached?:boolean}>}
+ */
+async function fetchBoundary(place) {
+  const name = String((place && place.name) || '').trim();
+  const lat = Number(place && place.lat), lng = Number(place && place.lng);
+  const hasPoint = isFinite(lat) && isFinite(lng);
+  if (!name && !hasPoint) return { ok: false, reason: 'no-name' };
+
+  const key = 'named|' + name.toLowerCase() + '|'
+    + (hasPoint ? lat.toFixed(2) + ',' + lng.toFixed(2) : '');
+
+  const cached = boundaryCacheGet(key);
+  if (cached) return Object.assign({}, cached, { cached: true });
+  if (_boundaryPending.has(key)) return _boundaryPending.get(key);
+
   const job = (async () => {
-    let rows;
-    try {
-      const res = await fetch(BOUNDARY_ENDPOINT + '?' + params.toString(), {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!res.ok) return { ok: false, reason: 'http-' + res.status };
-      rows = await res.json();
-    } catch (e) {
-      return { ok: false, reason: 'network' };
-    }
-    if (!Array.isArray(rows) || !rows.length) return { ok: false, reason: 'not-found' };
+    const failures = [];
+    let label = '';
 
-    // Prefer a result that actually has an outline. Nominatim ranks by its own
-    // relevance, which puts a well-known node above a lesser-known area — and
-    // a node cannot be drawn.
-    const withPolygon = rows.filter(r => r.geojson
-      && (r.geojson.type === 'Polygon' || r.geojson.type === 'MultiPolygon'));
-    if (!withPolygon.length) {
-      const out = { ok: false, reason: 'no-polygon', label: rows[0].display_name || name };
-      boundaryCacheWrite(key, out);     // a place with no outline still has no outline tomorrow
-      return out;
+    for (const attempt of [
+      () => hasPoint ? geoapifyBoundaryAt(lat, lng) : { ok: false, reason: 'no-name' },
+      () => name ? nominatimBoundaryByName(name, lat, lng) : { ok: false, reason: 'no-name' },
+    ]) {
+      let r;
+      try { r = await attempt(); }
+      catch (e) { r = { ok: false, reason: 'network' }; }
+      if (r.ok) { boundaryCacheWrite(key, r); return r; }
+      failures.push(r.reason);
+      label = label || r.label || '';
     }
 
-    const best = withPolygon[0];
-    const latlngs = boundaryToLatLngs(best.geojson);
-    if (!latlngs) return { ok: false, reason: 'no-polygon' };
-
-    const out = {
-      ok: true,
-      latlngs,
-      label: (best.display_name || name).split(',').slice(0, 2).join(',').trim(),
-      points: boundaryPointCount(latlngs),
-      adminLevel: (best.address && best.address.admin_level) || best.place_rank || null,
-      osm: best.osm_type && best.osm_id ? best.osm_type + '/' + best.osm_id : null,
-    };
-    boundaryCacheWrite(key, out);
+    const out = { ok: false, reason: boundaryWorstReason(failures), label: label || name };
+    // A place with no outline still has no outline tomorrow. A network that was
+    // down for one request tells us nothing about the next one, so it is never
+    // written — caching it would make one blip look permanent.
+    if (out.reason === 'no-polygon' || out.reason === 'not-found') boundaryCacheWrite(key, out);
     return out;
   })();
 
@@ -193,22 +413,40 @@ async function fetchBoundary(place) {
  */
 function boundaryMessage(reason, name) {
   if (reason === 'no-polygon') {
-    return `OpenStreetMap knows “${name}” but nobody has drawn its outline — it exists there `
+    return `“${name}” is on the map but nobody has drawn its outline — it exists `
       + 'only as a point. Try a larger area it sits inside, or draw the boundary by hand.';
   }
   if (reason === 'not-found') {
-    return `OpenStreetMap has no place called “${name}”. Try the name as locals write it, `
+    return `No administrative area was found at “${name}”. Try the name as locals write it, `
       + 'or add the city after it.';
   }
   if (reason === 'network') {
-    return 'Could not reach OpenStreetMap. Check the connection and try again.';
+    return 'Could not reach either boundary service (Geoapify or OpenStreetMap). '
+      + 'An office firewall or an ad blocker will do this as surely as being offline.';
+  }
+  if (reason === 'no-provider') {
+    return 'No boundary provider is configured — GEOAPIFY_API_KEY is empty in js/config.js.';
   }
   if (reason === 'no-name') return 'Give this location a name first — the boundary is looked up by name.';
   if (String(reason).startsWith('http-')) {
-    return 'OpenStreetMap refused the request (' + reason.slice(5) + '). It rate-limits heavy use; '
-      + 'wait a moment and try again.';
+    return 'The boundary service refused the request (' + reason.slice(5) + '). '
+      + 'Both providers rate-limit heavy use; wait a moment and try again.';
   }
   return 'The boundary could not be fetched.';
+}
+
+/**
+ * Where the shape came from, written onto the shape itself rather than left in
+ * a status line that scrolls away. It matters once a boundary reaches a client
+ * document and someone asks what the dashed line is — and both providers serve
+ * OpenStreetMap data, whose licence asks to be credited.
+ *
+ * @param {object} r a successful boundary result @returns {string}
+ */
+function boundaryCredit(r) {
+  const via = (r && r.provider && r.provider !== 'OpenStreetMap') ? ' via ' + r.provider : '';
+  return 'Administrative boundary from OpenStreetMap' + via
+    + (r && r.osm && r.osm.indexOf('geoapify/') !== 0 ? ' (' + r.osm + ')' : '');
 }
 
 /* ---------------------------------------------------------------------------
@@ -291,7 +529,15 @@ async function toggleBoundaryForLocation(loc, btn) {
     if (btn) { btn.disabled = false; btn.textContent = restore; }
   }
 
-  if (!r.ok) { status(boundaryMessage(r.reason, label), true); return; }
+  if (!r.ok) {
+    const msg = boundaryMessage(r.reason, label);
+    if (r.reason === 'network' || String(r.reason).startsWith('http-')) {
+      status(msg, true, { label: 'Try again', onClick: () => { toggleBoundaryForLocation(loc, btn); } });
+    } else {
+      status(msg, true);
+    }
+    return;
+  }
 
   // The location's own colour when it has been given one, so a boundary reads
   // as belonging to its pin. The default navy is skipped: it is the palette's
@@ -311,11 +557,7 @@ async function toggleBoundaryForLocation(loc, btn) {
   // shape after itself.
   const g = registerGeom(layer, 'Polygon', {
     name: r.label || label,
-    // Where it came from, carried on the object rather than in a status line
-    // that scrolls away — this matters when the shape ends up in a client
-    // document and someone asks what the line is.
-    description: 'Administrative boundary from OpenStreetMap'
-      + (r.osm ? ' (' + r.osm + ')' : ''),
+    description: boundaryCredit(r),
     // Outline, not fill: it frames the site rather than burying it, which is
     // how a boundary is drawn on every planning document this will sit beside.
     // Property names taken from defaultGeomStyle() — borderColor, not stroke.
@@ -328,6 +570,8 @@ async function toggleBoundaryForLocation(loc, btn) {
     // Which location this belongs to, so the toggle can find it again.
     // Survives save/load with the rest of the geometry.
     boundaryFor: loc.id,
+    boundaryOsm: r.osm || null,
+    boundaryLabel: r.label || null,
   });
 
   syncBoundaryButtons();
@@ -393,6 +637,41 @@ const BOUNDARY_REVERSE_ZOOM = 14;
  * @returns {Promise<{ok:boolean, latlngs?:Array, label?:string, reason?:string,
  *                    points?:number, osm?:string, cached?:boolean}>}
  */
+async function nominatimBoundaryAt(lat, lng) {
+  const params = new URLSearchParams({
+    lat: String(lat), lon: String(lng),
+    format: 'jsonv2',
+    zoom: String(BOUNDARY_REVERSE_ZOOM),
+    polygon_geojson: '1',
+    polygon_threshold: String(BOUNDARY_SIMPLIFY_DEG),
+  });
+
+  let row;
+  try {
+    const res = await fetch(BOUNDARY_REVERSE_ENDPOINT + '?' + params.toString(),
+      { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return { ok: false, reason: 'http-' + res.status };
+    row = await res.json();
+  } catch (e) {
+    return { ok: false, reason: 'network' };
+  }
+  if (!row || row.error) return { ok: false, reason: 'not-found' };
+
+  const latlngs = boundaryToLatLngs(row.geojson);
+  if (!latlngs) {
+    return { ok: false, reason: 'no-polygon', label: row.name || row.display_name || 'that place' };
+  }
+
+  return {
+    ok: true,
+    latlngs,
+    label: (row.name || row.display_name || 'Boundary').split(',')[0].trim(),
+    points: boundaryPointCount(latlngs),
+    osm: row.osm_type && row.osm_id ? row.osm_type + '/' + row.osm_id : null,
+    provider: 'OpenStreetMap',
+  };
+}
+
 async function fetchBoundaryAt(lat, lng) {
   if (!isFinite(lat) || !isFinite(lng)) return { ok: false, reason: 'no-name' };
 
@@ -404,41 +683,24 @@ async function fetchBoundaryAt(lat, lng) {
   if (cached) return Object.assign({}, cached, { cached: true });
   if (_boundaryPending.has(key)) return _boundaryPending.get(key);
 
-  const params = new URLSearchParams({
-    lat: String(lat), lon: String(lng),
-    format: 'jsonv2',
-    zoom: String(BOUNDARY_REVERSE_ZOOM),
-    polygon_geojson: '1',
-    polygon_threshold: String(BOUNDARY_SIMPLIFY_DEG),
-  });
-
   const job = (async () => {
-    let row;
-    try {
-      const res = await fetch(BOUNDARY_REVERSE_ENDPOINT + '?' + params.toString(),
-        { headers: { 'Accept': 'application/json' } });
-      if (!res.ok) return { ok: false, reason: 'http-' + res.status };
-      row = await res.json();
-    } catch (e) {
-      return { ok: false, reason: 'network' };
-    }
-    if (!row || row.error) return { ok: false, reason: 'not-found' };
+    const failures = [];
+    let label = '';
 
-    const latlngs = boundaryToLatLngs(row.geojson);
-    if (!latlngs) {
-      const out = { ok: false, reason: 'no-polygon', label: row.display_name || 'that place' };
-      boundaryCacheWrite(key, out);
-      return out;
+    for (const attempt of [
+      () => geoapifyBoundaryAt(lat, lng),
+      () => nominatimBoundaryAt(lat, lng),
+    ]) {
+      let r;
+      try { r = await attempt(); }
+      catch (e) { r = { ok: false, reason: 'network' }; }
+      if (r.ok) { boundaryCacheWrite(key, r); return r; }
+      failures.push(r.reason);
+      label = label || r.label || '';
     }
 
-    const out = {
-      ok: true,
-      latlngs,
-      label: (row.name || row.display_name || 'Boundary').split(',')[0].trim(),
-      points: boundaryPointCount(latlngs),
-      osm: row.osm_type && row.osm_id ? row.osm_type + '/' + row.osm_id : null,
-    };
-    boundaryCacheWrite(key, out);
+    const out = { ok: false, reason: boundaryWorstReason(failures), label: label || 'this point' };
+    if (out.reason === 'no-polygon' || out.reason === 'not-found') boundaryCacheWrite(key, out);
     return out;
   })();
 
@@ -484,11 +746,26 @@ async function addBoundaryAt(lat, lng) {
   try { r = await fetchBoundaryAt(lat, lng); }
   catch (e) { r = { ok: false, reason: 'network' }; }
 
-  if (!r.ok) { status(boundaryMessage(r.reason, r.label || 'this point'), true); return; }
+  if (!r.ok) {
+    const msg = boundaryMessage(r.reason, r.label || 'this point');
+    // A transport failure is the one worth offering back, because the fix is
+    // often just waiting a moment. "No outline exists" is not retryable and a
+    // button saying otherwise would be a lie.
+    if (r.reason === 'network' || String(r.reason).startsWith('http-')) {
+      status(msg, true, { label: 'Try again', onClick: () => { addBoundaryAt(lat, lng); } });
+    } else {
+      status(msg, true);
+    }
+    return;
+  }
 
   // Already on the map — outlining the same suburb twice stacks identical
-  // polygons that only reveal themselves when you delete one.
-  const dup = geometries.find(g => g.boundaryOsm && g.boundaryOsm === r.osm);
+  // polygons that only reveal themselves when you delete one. Matched on the
+  // area's id where there is one, and on its name otherwise, because the two
+  // providers can answer the same click with different ids for the same place.
+  const dup = geometries.find(g =>
+    (g.boundaryOsm && r.osm && g.boundaryOsm === r.osm)
+    || (g.boundaryLabel && r.label && g.boundaryLabel === r.label));
   if (dup) {
     try { map.fitBounds(dup.layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* ignore */ }
     status(`${r.label} is already outlined — ${dup.name}.`);
@@ -501,7 +778,7 @@ async function addBoundaryAt(lat, lng) {
 
   const g = registerGeom(layer, 'Polygon', {
     name: r.label,
-    description: 'Administrative boundary from OpenStreetMap' + (r.osm ? ' (' + r.osm + ')' : ''),
+    description: boundaryCredit(r),
     borderColor: '#FF7A1A',
     borderWidth: 2.5,
     lineStyle: 'dashed',
@@ -509,6 +786,7 @@ async function addBoundaryAt(lat, lng) {
     fillOpacity: 0.06,
     corner: 'round',
     boundaryOsm: r.osm || null,
+    boundaryLabel: r.label || null,
   });
 
   try { map.fitBounds(layer.getBounds(), { padding: [40, 40] }); } catch (e) { /* ignore */ }
