@@ -3268,20 +3268,26 @@ input[type=checkbox]:disabled {
    rounds its label to 1/2/3/5 and varies its width; this one fixes the width
    and varies the label, so a quarter-level zoom is visible as 1.0 -> 1.2 km
    rather than looking like nothing moved. */
+/* Plain rgba, no color-mix() and no theme tokens — for two reasons that both
+   bite. It sits over imagery rather than over app chrome, so a dark chip with
+   white text is legible in either theme and over any basemap; and this element
+   is inside the exported area, where Chrome serialises a computed color-mix()
+   as `color(srgb ...)`, which html2canvas cannot parse — it throws
+   "unsupported color function" and the whole PNG export fails. The scale
+   control this replaced was styled exactly this way, for the same reason. */
 .fine-scale {
   display: flex;
   align-items: center;
   gap: 7px;
   margin-bottom: 6px !important;
   padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg1) 88%, transparent);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
-  font: 600 11px/1 var(--font, inherit);
+  border: 1px solid rgba(255, 255, 255, .5);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .42);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  font: 600 10.5px/1 var(--font, inherit);
   letter-spacing: .02em;
-  color: var(--text);
+  color: #fff;
   cursor: default;
   user-select: none;
 }
@@ -3301,8 +3307,9 @@ input[type=checkbox]:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* The readout is chrome, not map content — out of exports with the rest. */
-.map-wrap.capturing .fine-scale { display: none; }
+/* Deliberately NOT hidden during capture. It replaced Leaflet's scale control,
+   which was always kept in exports — a map handed to a client carries its
+   scale, and dropping it here would have quietly removed one. */
 
 /* A file being dragged over the map. Drawn on the wrapper rather than the
    Leaflet pane so it survives a tile redraw mid-drag, and inset so it reads as
@@ -3317,7 +3324,10 @@ input[type=checkbox]:disabled {
   pointer-events: none;     /* or the element under the pointer stops being the map */
   border: 2px dashed var(--accent);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  /* rgba, not color-mix — see .fine-scale above. This one only paints during a
+     drag, so it cannot reach an export, but the landmine is not worth leaving
+     inside .map-wrap for the next person. */
+  background: rgba(255, 122, 26, .1);
   font: 700 15px/1 var(--font, inherit);
   letter-spacing: .04em;
   color: var(--text);

@@ -42,26 +42,33 @@
         zoomSnap: ZOOM_SNAP, zoomDelta: 1, wheelPxPerZoomLevel: WHEEL_PX_PER_ZOOM,
       }).setView([21.5, 78.5], 5);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      let scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
-      buildFineScaleReadout();
+      let scaleCtl = buildScaleReadout();
 
       /**
-       * An exact distance readout, sitting above the zoom buttons.
+       * The map's one scale bar.
        *
-       * Leaflet's scale bar is a *ruler*: it rounds its label to a nice number —
-       * 1, 2, 3, 5 or 10 times a power of ten — and varies the bar's width to
-       * suit. That is right for measuring something off the map, but it means
-       * the label physically cannot read "1.2 km", so a quarter-level zoom looks
-       * like nothing happened even though the map did move.
+       * There were briefly two. Leaflet's own control went in at the bottom left
+       * and this one at the bottom right, on the reasoning that they answer
+       * different questions — and they do, but nobody wants two scale bars on
+       * one map, and a deliverable with two looks like a mistake. So this
+       * replaces Leaflet's outright and stands in its corner.
        *
-       * This is the other half: a fixed-width bar whose *label* changes. Between
-       * them you can see both what a distance measures and exactly how far you
-       * have zoomed, which is what "I want to go from 1 km to 1.2" needs.
+       * Leaflet's was a *ruler*: it rounds its label to a nice number — 1, 2, 3,
+       * 5 or 10 times a power of ten — and varies the bar's width to suit. Good
+       * for measuring something off the map, but the label physically cannot
+       * read "1.2 km", so a quarter-level zoom looked like nothing had happened.
+       * This one fixes the width and varies the label instead, which is what
+       * "I want to go from 1 km to 1.2" needs.
+       *
+       * Kept in exports, like Leaflet's was: a map handed to a client should
+       * carry its scale.
+       *
+       * @returns {L.Control} so the Scale bar checkbox can remove and rebuild it
        */
-      function buildFineScaleReadout() {
+      function buildScaleReadout() {
         const WIDTH_PX = 84;
 
-        const ctl = L.control({ position: 'bottomright' });
+        const ctl = L.control({ position: 'bottomleft' });
         ctl.onAdd = () => {
           const el = L.DomUtil.create('div', 'fine-scale');
           el.title = 'Distance across this bar. Scroll the map for quarter-level zoom steps; '
@@ -76,7 +83,7 @@
         };
         ctl.addTo(map);
 
-        const label = () => document.querySelector('.fine-scale-label');
+        const label = () => ctl.getContainer() && ctl.getContainer().querySelector('.fine-scale-label');
 
         const update = () => {
           const el = label();
@@ -102,6 +109,7 @@
 
         map.on('zoom zoomend move moveend resize', update);
         update();
+        return ctl;
       }
       const vectorRenderer = L.canvas({ padding: 0.5 });
 
@@ -769,7 +777,7 @@
       }
 
       $('scaleTgl').addEventListener('change', e => {
-        if (e.target.checked) { scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map); }
+        if (e.target.checked) { scaleCtl = buildScaleReadout(); }
         else if (scaleCtl) { map.removeControl(scaleCtl); scaleCtl = null; }
       });
       /** Set the 3D tilt angle (degrees) — used by project load. @param {number} v */

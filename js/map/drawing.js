@@ -24,7 +24,7 @@ let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', showLabel: false, glow: false }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', showLabel: false, glow: false }; }
 
 /** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
 function dashArrayFor(style, w) {
@@ -73,6 +73,10 @@ function applyGeomStyle(g) {
       color: g.borderColor, weight: g.borderWidth, fillColor: g.fillColor, fillOpacity: g.fillOpacity,
       dashArray: dashArrayFor(g.lineStyle, g.borderWidth), lineCap: cap, lineJoin: join,
     });
+    // After setStyle, never before: Leaflet rewrites `fill` from fillColor on
+    // every call, so a pattern applied first would be wiped by the next change
+    // to anything at all.
+    applyFillPatternTo(g.layer, g.fillPattern, g.fillColor);
   }
   ensureGlow(g);
   ensureGeomLabel(g);

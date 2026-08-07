@@ -17,6 +17,10 @@ function geomCardMarkup(g) {
   const card = document.createElement('div');
   card.className = 'item-card geom-card';
   const isLine = g.shape === 'Line' || g.shape === 'Marker' || g.shape === 'CircleMarker';
+  // A pattern needs an SVG path with a fill to hang on. A Line has no fill, and
+  // a Marker is a divIcon rather than a path — CircleMarker is neither, so it
+  // is deliberately not lumped in with `isLine` here the way opacity is.
+  const noFill = g.shape === 'Line' || g.shape === 'Marker';
   card.innerHTML = `
     <div class="r">
       <input type="color" class="gclr" value="${esc(g.fillColor)}" title="Fill color">
@@ -31,6 +35,7 @@ function geomCardMarkup(g) {
     </div>
     <div class="r">
       <span class="sub" style="width:52px;">Fill</span>
+      <select class="gfp" style="flex:0 0 94px;" title="Fill pattern — ruled lines read as water or land use, and let the imagery show through"${noFill ? ' disabled' : ''}>${optionList(FILL_PATTERN_OPTS, g.fillPattern || 'none')}</select>
       <input type="range" class="gop" min="0" max="100" step="5" value="${Math.round(g.fillOpacity * 100)}" style="flex:1;" title="Fill opacity">
       <span class="pct gop-v" style="width:32px;">${Math.round(g.fillOpacity * 100)}%</span>
     </div>
@@ -69,6 +74,7 @@ function syncGeomCardStyleControls(g) {
   c.querySelector('.gbw-v').textContent = g.borderWidth;
   c.querySelector('.gop').value = Math.round(g.fillOpacity * 100);
   c.querySelector('.gop-v').textContent = Math.round(g.fillOpacity * 100) + '%';
+  c.querySelector('.gfp').value = g.fillPattern || 'none';
   c.querySelector('.gls').value = g.lineStyle;
   c.querySelector('.gcorner').value = g.corner;
   c.querySelector('.glbl').checked = !!g.showLabel;
@@ -88,6 +94,22 @@ function wireGeomCard(card, g) {
   card.querySelector('.gop').addEventListener('input', e => {
     g.fillOpacity = (+e.target.value) / 100;
     card.querySelector('.gop-v').textContent = e.target.value + '%';
+    applyGeomStyle(g); touchGeom(g);
+  });
+  card.querySelector('.gfp').addEventListener('change', e => {
+    g.fillPattern = e.target.value;
+    // A pattern is mostly gaps, so the 25% that suits a solid wash leaves it
+    // nearly invisible over imagery. Move the slider rather than overriding it
+    // behind the slider's back — the jump is visible, and dragging it back
+    // does exactly what it looks like it does.
+    if (isFillPattern(g.fillPattern)) {
+      const want = fillPatternOpacityFor(g.fillOpacity);
+      if (want !== g.fillOpacity) {
+        g.fillOpacity = want;
+        card.querySelector('.gop').value = Math.round(want * 100);
+        card.querySelector('.gop-v').textContent = Math.round(want * 100) + '%';
+      }
+    }
     applyGeomStyle(g); touchGeom(g);
   });
   card.querySelector('.gls').addEventListener('change', e => { g.lineStyle = e.target.value; applyGeomStyle(g); touchGeom(g); });

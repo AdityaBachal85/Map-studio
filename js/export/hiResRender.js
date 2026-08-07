@@ -351,10 +351,21 @@ async function renderGroundPass(o) {
     let vectors = null;
     if (o.includeVectors !== false) {
       const clones = [];
+      const patternWork = [];
       collectMapPaths(map).forEach(p => {
         const clone = scaledPathClone(p, scale);
-        if (clone) { clone.addTo(exportMap); clones.push(clone); }
+        if (!clone) return;
+        clone.addTo(exportMap);
+        // After addTo, because the renderer's context only exists once the layer
+        // is on a map — and awaited below, because rasterising the tile goes
+        // through an Image load. The tile is scaled with the export so a hatch
+        // keeps its on-screen spacing instead of thinning to hairlines at 3x.
+        if (typeof applyCanvasFillPattern === 'function' && clone.options.fillPattern) {
+          patternWork.push(applyCanvasFillPattern(clone, clone.options.fillPattern, clone.options.fillColor, scale));
+        }
+        clones.push(clone);
       });
+      if (patternWork.length) await Promise.all(patternWork);
       if (clones.length) {
         // Same reason as the reference pass — and worse here, since vectors
         // are composited at full alpha: an opaque backdrop would not wash the
