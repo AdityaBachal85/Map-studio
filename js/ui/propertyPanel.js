@@ -117,6 +117,7 @@ function locCardMarkup(loc) {
       <label class="chk"><input type="checkbox" class="sl" ${loc.showLabel ? 'checked' : ''}> Label</label>
       <input type="color" class="lbg" value="${esc(loc.labelBg)}" title="Label background color">
       <span class="grow"></span>
+      <button class="mini-btn bnd" title="Draw this place's real boundary from OpenStreetMap">⬡ Boundary</button>
       <button class="mini-btn dup" title="Duplicate this location">⧉</button>
       <button class="mini-btn ctr" title="Center map here">⌖</button>
     </div>`;
@@ -259,6 +260,7 @@ function wireLocCard(card, loc) {
         });
         card.querySelector('.sl').addEventListener('change', e => { loc.showLabel = e.target.checked; updateLocLabel(loc); scheduleRepaint(); });
         card.querySelector('.lbg').addEventListener('input', e => { loc.labelBg = e.target.value; updateLocLabel(loc); scheduleRepaint(); });
+        card.querySelector('.bnd').addEventListener('click', e => addBoundaryForLocation(loc, e.currentTarget));
         card.querySelector('.ctr').addEventListener('click', () => map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 15)));
         card.querySelector('.dup').addEventListener('click', () => {
           addLocation(Object.assign({}, loc, {
