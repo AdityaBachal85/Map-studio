@@ -13,9 +13,96 @@
       // z22). Individual layers stop at their own maxNativeZoom; Leaflet upscales
       // the parent tile past that rather than requesting a level that doesn't exist.
       const MAX_MAP_ZOOM = 22;
-      const map = L.map('map', { zoomControl: false, attributionControl: false, maxZoom: MAX_MAP_ZOOM }).setView([21.5, 78.5], 5);
+
+      /**
+       * How far one notch of the wheel moves, and how finely the map may sit.
+       *
+       * Leaflet's defaults are one whole zoom level per snap and 60 px of wheel
+       * per level, which together made one detent of a mouse wheel jump *two*
+       * levels — a 4x change of scale. Framing a site at 1.5 km across was not
+       * something you could do slowly; the map went from 1 km to 4 km and back,
+       * and the only way to land between was to give up and drag.
+       *
+       * zoomSnap 0.25 lets the map rest on quarter levels, each a factor of
+       * 2^0.25 = 1.19 in scale: 1.0 km, 1.2, 1.4, 1.7, 2.0. wheelPxPerZoomLevel
+       * 360 is what makes one detent equal one of those quarters rather than
+       * several — the two numbers only give fine control together, since the
+       * wheel step is computed first and snapped afterwards.
+       *
+       * zoomDelta is deliberately left at 1. The +/- buttons, double-click and
+       * the keyboard should stay decisive whole levels; it is the wheel that
+       * needed to become gentle, and making every control gentle would just
+       * move the complaint to "the buttons barely do anything".
+       */
+      const ZOOM_SNAP = 0.25;
+      const WHEEL_PX_PER_ZOOM = 360;
+
+      const map = L.map('map', {
+        zoomControl: false, attributionControl: false, maxZoom: MAX_MAP_ZOOM,
+        zoomSnap: ZOOM_SNAP, zoomDelta: 1, wheelPxPerZoomLevel: WHEEL_PX_PER_ZOOM,
+      }).setView([21.5, 78.5], 5);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
       let scaleCtl = L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+      buildFineScaleReadout();
+
+      /**
+       * An exact distance readout, sitting above the zoom buttons.
+       *
+       * Leaflet's scale bar is a *ruler*: it rounds its label to a nice number —
+       * 1, 2, 3, 5 or 10 times a power of ten — and varies the bar's width to
+       * suit. That is right for measuring something off the map, but it means
+       * the label physically cannot read "1.2 km", so a quarter-level zoom looks
+       * like nothing happened even though the map did move.
+       *
+       * This is the other half: a fixed-width bar whose *label* changes. Between
+       * them you can see both what a distance measures and exactly how far you
+       * have zoomed, which is what "I want to go from 1 km to 1.2" needs.
+       */
+      function buildFineScaleReadout() {
+        const WIDTH_PX = 84;
+
+        const ctl = L.control({ position: 'bottomright' });
+        ctl.onAdd = () => {
+          const el = L.DomUtil.create('div', 'fine-scale');
+          el.title = 'Distance across this bar. Scroll the map for quarter-level zoom steps; '
+            + 'the +/- buttons move a whole level, and Shift with them moves three.';
+          el.innerHTML = '<span class="fine-scale-bar" style="width:' + WIDTH_PX + 'px"></span>'
+            + '<span class="fine-scale-label"></span>';
+          // Without this a scroll over the readout zooms nothing and a drag
+          // across it pans the map out from under the pointer.
+          L.DomEvent.disableClickPropagation(el);
+          L.DomEvent.disableScrollPropagation(el);
+          return el;
+        };
+        ctl.addTo(map);
+
+        const label = () => document.querySelector('.fine-scale-label');
+
+        const update = () => {
+          const el = label();
+          if (!el) return;
+          // Measured horizontally across the middle of the viewport rather than
+          // computed from the zoom level: that way it stays true under the CSS
+          // tilt and at any latitude, where a degree of longitude is not a
+          // fixed distance.
+          const y = map.getSize().y / 2;
+          let m;
+          try {
+            m = map.containerPointToLatLng([0, y]).distanceTo(map.containerPointToLatLng([WIDTH_PX, y]));
+          } catch (e) { return; }
+          if (!isFinite(m) || m <= 0) return;
+
+          // One decimal only where it carries information. "1.2 km" is the whole
+          // point of this control; "1234.6 m" is noise.
+          const txt = m >= 1000
+            ? (m < 10000 ? (m / 1000).toFixed(1) : Math.round(m / 1000)) + ' km'
+            : (m < 10 ? m.toFixed(1) : Math.round(m)) + ' m';
+          if (el.textContent !== txt) el.textContent = txt;
+        };
+
+        map.on('zoom zoomend move moveend resize', update);
+        update();
+      }
       const vectorRenderer = L.canvas({ padding: 0.5 });
 
       /**

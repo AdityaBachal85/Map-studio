@@ -62,6 +62,12 @@ wireOpenProject();
 initAutosaveUI();
 projectBridgeBoot()
   .catch(e => console.warn('Project bridge: boot failed —', e && e.message))
+  // A file chosen on the projects page is waiting in sessionStorage. It has to
+  // land after the project it belongs to has been applied — applyProject()
+  // clears the map, so importing first would draw the places and then wipe
+  // them — and before initAutosave(), so the very first autosave already has
+  // the imported map in it.
+  .then(() => runPendingImport())
   .then(() => initAutosave());
 
 buildImageryLookControl();

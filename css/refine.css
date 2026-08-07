@@ -3259,3 +3259,67 @@ input[type=checkbox]:disabled {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--text);
 }
+
+/* ---------------------------------------------------------------------------
+   19. Fine scale readout, and the file drop target
+   ------------------------------------------------------------------------ */
+
+/* The exact-distance readout above the zoom buttons. Leaflet's own scale bar
+   rounds its label to 1/2/3/5 and varies its width; this one fixes the width
+   and varies the label, so a quarter-level zoom is visible as 1.0 -> 1.2 km
+   rather than looking like nothing moved. */
+.fine-scale {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px !important;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg1) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+  font: 600 11px/1 var(--font, inherit);
+  letter-spacing: .02em;
+  color: var(--text);
+  cursor: default;
+  user-select: none;
+}
+
+/* Ticked at both ends, so it reads as a measured span rather than a divider. */
+.fine-scale-bar {
+  position: relative;
+  height: 7px;
+  border: 1px solid currentColor;
+  border-top: 0;
+  opacity: .65;
+}
+
+.fine-scale-label {
+  min-width: 46px;          /* "1.2 km" and "970 m" must not shift the bar */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The readout is chrome, not map content — out of exports with the rest. */
+.map-wrap.capturing .fine-scale { display: none; }
+
+/* A file being dragged over the map. Drawn on the wrapper rather than the
+   Leaflet pane so it survives a tile redraw mid-drag, and inset so it reads as
+   a target rather than a border on the window. */
+.map-wrap.file-over::after {
+  content: "Drop to import";
+  position: absolute;
+  inset: 10px;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  pointer-events: none;     /* or the element under the pointer stops being the map */
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font: 700 15px/1 var(--font, inherit);
+  letter-spacing: .04em;
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}

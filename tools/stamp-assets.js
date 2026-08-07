@@ -30,7 +30,22 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const HTML = path.join(ROOT, 'index.html');
+
+/**
+ * Every page that loads app scripts, not just the studio.
+ *
+ * index.html was the only entry for most of this app's life, so it was the only
+ * file stamped. Then login.html and projects.html arrived carrying their own
+ * <script> tags — and, because nothing rewrote them, kept whatever version they
+ * were hand-typed at. A release would ship, the studio would update, and the
+ * projects page would go on serving the js/*.js it had cached at that frozen
+ * stamp: an old constants.js, so an old version chip, so a page reporting a
+ * release it was not running. Adding a page here is what makes it part of a
+ * release; forgetting to is silent, which is why --check now walks all of them.
+ */
+const HTML_FILES = ['index.html', 'login.html', 'projects.html']
+  .map(f => path.join(ROOT, f))
+  .filter(fs.existsSync);
 const CONSTANTS = path.join(ROOT, 'js', 'constants.js');
 
 /** Matches src/href for local js/css assets, capturing any existing ?v=. */
@@ -64,31 +79,36 @@ function writeVersion(v) {
 }
 
 /**
- * Stamp every local asset reference in index.html.
+ * Stamp every local asset reference in every page.
  * @param {string} version
  * @returns {number} assets stamped
  */
 function stamp(version) {
-  const html = fs.readFileSync(HTML, 'utf8');
   let count = 0;
-  const out = html.replace(ASSET, (_, pre, file, __, post) => {
-    count++;
-    return `${pre}${file}?v=${version}${post}`;
+  HTML_FILES.forEach(file => {
+    const html = fs.readFileSync(file, 'utf8');
+    const out = html.replace(ASSET, (_, pre, asset, __, post) => {
+      count++;
+      return `${pre}${asset}?v=${version}${post}`;
+    });
+    if (out !== html) fs.writeFileSync(file, out);
   });
-  fs.writeFileSync(HTML, out);
   return count;
 }
 
 /** Report anything unstamped or stamped at the wrong version. */
 function check(version) {
-  const html = fs.readFileSync(HTML, 'utf8');
   const problems = [];
-  let m;
-  const re = new RegExp(ASSET.source, 'g');
-  while ((m = re.exec(html))) {
-    if (!m[3]) problems.push(`unstamped  ${m[2]}`);
-    else if (m[3] !== `?v=${version}`) problems.push(`stale ${m[3].slice(3)}  ${m[2]}`);
-  }
+  HTML_FILES.forEach(file => {
+    const html = fs.readFileSync(file, 'utf8');
+    const name = path.basename(file);
+    const re = new RegExp(ASSET.source, 'g');
+    let m;
+    while ((m = re.exec(html))) {
+      if (!m[3]) problems.push(`unstamped  ${name}  ${m[2]}`);
+      else if (m[3] !== `?v=${version}`) problems.push(`stale ${m[3].slice(3)}  ${name}  ${m[2]}`);
+    }
+  });
   if (problems.length) {
     console.error(`Assets out of step with APP_VERSION ${version} (run: node tools/stamp-assets.js --bump):`);
     problems.forEach(p => console.error('  ' + p));

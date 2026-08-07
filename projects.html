@@ -5,10 +5,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Map projects · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0039" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./css/themes.css?v=6.0039">
-  <link rel="stylesheet" href="./css/style.css?v=6.0039">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0039">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0041" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/themes.css?v=6.0041">
+  <link rel="stylesheet" href="./css/style.css?v=6.0041">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0041">
 </head>
 
 <body class="shell-body">
@@ -64,10 +64,12 @@
       </div>
 
       <div class="pj-rail-foot">
-        <button class="pj-chip" id="pjImport" type="button" style="width:100%;justify-content:center">
-          Import a .json project
+        <button class="pj-chip" id="pjImport" type="button" style="width:100%;justify-content:center"
+                title="A saved .json project, or a map from Google Earth — .kmz, .kml, .gpx, .geojson or a .csv of coordinates">
+          Import a map or project
         </button>
-        <input type="file" id="pjImportFile" accept="application/json,.json" hidden>
+        <input type="file" id="pjImportFile" hidden
+               accept=".json,.geojson,.kml,.kmz,.gpx,.csv,.tsv,.txt,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/gpx+xml,text/csv">
         <div class="pj-ver" id="pjVer"></div>
       </div>
     </aside>
@@ -139,15 +141,16 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0039"></script>
-  <script src="./js/core/prefs.js?v=6.0039"></script>
-  <script src="./js/config.js?v=6.0039"></script>
-  <script src="./js/constants.js?v=6.0039"></script>
-  <script src="./js/core/freshness.js?v=6.0039"></script>
-  <script src="./js/auth/session.js?v=6.0039"></script>
-  <script src="./js/projects/projectStore.js?v=6.0039"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0039"></script>
-  <script src="./js/projects/projectsPage.js?v=6.0039"></script>
+  <script src="./vendor/supabase.js?v=6.0041"></script>
+  <script src="./js/core/prefs.js?v=6.0041"></script>
+  <script src="./js/config.js?v=6.0041"></script>
+  <script src="./js/constants.js?v=6.0041"></script>
+  <script src="./js/core/freshness.js?v=6.0041"></script>
+  <script src="./js/auth/session.js?v=6.0041"></script>
+  <script src="./js/projects/projectStore.js?v=6.0041"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0041"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0041"></script>
+  <script src="./js/projects/projectsPage.js?v=6.0041"></script>
 </body>
 
 </html>

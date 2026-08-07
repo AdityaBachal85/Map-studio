@@ -433,23 +433,44 @@
     const file = e.target.files && e.target.files[0];
     e.target.value = '';               // so the same file can be picked twice
     if (!file) return;
-    let project;
-    try {
-      project = JSON.parse(await file.text());
-    } catch (ex) {
-      return alert('That file is not valid JSON, so it cannot be a Map Studio project.');
+
+    // A saved project is the one format this page can finish by itself: it is
+    // already the shape the store holds, so it goes straight in without a map
+    // ever being drawn. Everything else — KMZ, KML, GPX, GeoJSON, CSV — has to
+    // be read against a live map, so it travels to the studio instead.
+    if (/\.json$/i.test(file.name)) {
+      let project = null;
+      try { project = JSON.parse(await file.text()); } catch (ex) { project = null; }
+      if (project && typeof project === 'object' && Array.isArray(project.locations)) {
+        const meta = await projectsSave({
+          name: importHandoffBaseName(file.name),
+          ownerId: user.id,
+          ownerName: user.name,
+          project,
+        });
+        if (!meta) return alert('Could not save the imported project — storage refused the write.');
+        return refresh();
+      }
+      if (!project) {
+        return alert('That file is not valid JSON, so it is neither a Map Studio project nor GeoJSON.');
+      }
+      // Valid JSON that is not a project: fall through — it may well be GeoJSON,
+      // which the studio importer knows how to read.
     }
-    if (!project || typeof project !== 'object' || !Array.isArray(project.locations)) {
-      return alert('That JSON does not look like a Map Studio project — it has no locations array.');
-    }
+
+    const stashed = await importHandoffPut(file);
+    if (!stashed.ok) return alert(stashed.error);
+
+    // An empty project to import into. Named after the file, because "Imported
+    // project 3" tells nobody which of the three it is.
     const meta = await projectsSave({
-      name: file.name.replace(/\.json$/i, '') || 'Imported project',
+      name: importHandoffBaseName(file.name),
       ownerId: user.id,
       ownerName: user.name,
-      project,
+      project: { locations: [], routes: [], geometries: [] },
     });
-    if (!meta) return alert('Could not save the imported project — storage refused the write.');
-    await refresh();
+    if (!meta) return alert('Could not create a project for that file — storage refused the write.');
+    openProject(meta.id);
   });
 
   // One delegated listener for the whole table, so re-rendering never leaves
