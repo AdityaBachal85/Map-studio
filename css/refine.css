@@ -3333,3 +3333,75 @@ input[type=checkbox]:disabled {
   color: var(--text);
   text-shadow: 0 1px 3px rgba(0, 0, 0, .5);
 }
+
+/* ---------------------------------------------------------------------------
+   20. Style by colour — editing every shape of one colour at once
+   ------------------------------------------------------------------------ */
+
+.geom-groups {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.geom-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* The count sits on the swatch rather than beside it: the row has to stay
+   scannable at a glance, and "which colour, how many" is one fact. */
+.geom-swatch {
+  position: relative;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid var(--sw-ring, transparent);
+  border-radius: var(--r-sm);
+  background: var(--sw, #888);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.geom-swatch:hover { transform: translateY(-1px); }
+
+.geom-swatch.on {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25), 0 0 0 2px var(--accent);
+}
+
+/* Text over an arbitrary user colour, so it carries its own contrast rather
+   than trusting a palette token to be readable on top of it. */
+.geom-swatch > span {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font: 700 10px/1 var(--font, inherit);
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, .95), 0 1px 2px rgba(0, 0, 0, .8);
+  pointer-events: none;
+}
+
+.geom-group-edit { margin-top: 8px; }
+.geom-group-edit .r { margin-bottom: 5px; }
+
+/* Cards outside the selected group: still readable, plainly not the subject.
+   Not hidden — the list is also how you find the shape you actually wanted. */
+.geom-card.off-group { opacity: .38; }
+.geom-card.off-group:hover { opacity: 1; }
+
+/* Answering "which ones are those?" on the map, without changing anything that
+   would then need undoing. */
+@keyframes geomGroupPulse {
+  0%, 100% { stroke-width: inherit; filter: none; }
+  35%      { filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 12px var(--accent)); }
+}
+
+.geom-group-flash { animation: geomGroupPulse 700ms ease-in-out 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .geom-group-flash { animation: none; filter: drop-shadow(0 0 6px var(--accent)); }
+  .geom-swatch:hover { transform: none; }
+}

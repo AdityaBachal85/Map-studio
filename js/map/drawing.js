@@ -202,9 +202,31 @@ function refreshGeomCardMeta(g) {
 }
 
 /** Mark a geometry as modified now and refresh its card's timestamp. @param {object} g */
-function touchGeom(g) { g.modifiedAt = new Date().toISOString(); refreshGeomCardMeta(g); }
+function touchGeom(g) {
+  g.modifiedAt = new Date().toISOString();
+  refreshGeomCardMeta(g);
+  // Recolouring one shape from its own card can create, empty or move a colour
+  // group. Deferred so a batch edit repaints once at the end rather than once
+  // per shape in it.
+  if (typeof scheduleGeomGroups === 'function') scheduleGeomGroups();
+}
 
-function syncGeomEmpty() { $('geomEmpty').style.display = geometries.length ? 'none' : ''; }
+let _geomGroupsTimer = null;
+/** Coalesce swatch rebuilds to one per frame-ish. */
+function scheduleGeomGroups() {
+  if (_geomGroupsTimer) return;
+  _geomGroupsTimer = setTimeout(() => {
+    _geomGroupsTimer = null;
+    if (typeof renderGeomGroups === 'function') renderGeomGroups();
+  }, 60);
+}
+
+function syncGeomEmpty() {
+  $('geomEmpty').style.display = geometries.length ? 'none' : '';
+  // The one place every add and remove already funnels through, so the colour
+  // swatches cannot drift out of step with the shapes they describe.
+  if (typeof renderGeomGroups === 'function') renderGeomGroups();
+}
 
 /** Briefly highlight a geometry's sidebar card (used when its shape is clicked on the map). @param {object} g */
 function selectGeom(g) {
@@ -249,7 +271,7 @@ function snapshotGeom(g) {
   return {
     id: g.id, shape: g.shape, name: g.name, description: g.description, notes: g.notes,
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
-    lineStyle: g.lineStyle, corner: g.corner, showLabel: g.showLabel, glow: g.glow,
+    lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern, showLabel: g.showLabel, glow: g.glow,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -378,25 +400,38 @@ function recreateGeomFromSnapshot(snap) {
   return registerGeom(layer, snap.shape, {
     id: snap.id, name: snap.name, description: snap.description, notes: snap.notes,
     fillColor: snap.fillColor, borderColor: snap.borderColor, borderWidth: snap.borderWidth, fillOpacity: snap.fillOpacity,
-    lineStyle: snap.lineStyle, corner: snap.corner, showLabel: snap.showLabel, glow: snap.glow,
+    lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
+    showLabel: snap.showLabel, glow: snap.glow,
     createdAt: snap.createdAt,
   });
+}
+
+/** Put one geometry back to a snapshot. @param {number} id @param {object} snap */
+function restoreGeomSnapshot(id, snap) {
+  const g = geomById(id);
+  if (!g) return;
+  applyGeomCoords(g, snap.geom);
+  g.fillColor = snap.fillColor; g.borderColor = snap.borderColor; g.borderWidth = snap.borderWidth; g.fillOpacity = snap.fillOpacity;
+  g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
+  g.showLabel = snap.showLabel; g.glow = snap.glow;
+  if (g.card) syncGeomCardStyleControls(g);
+  applyGeomStyle(g);
+  touchGeom(g);
+  updateGeomMeasurement(g);
 }
 
 function applyHistoryEntry(entry, isUndo) {
   if (entry.type === 'create') { if (isUndo) removeGeomById(entry.snap.id); else recreateGeomFromSnapshot(entry.snap); }
   else if (entry.type === 'delete') { if (isUndo) recreateGeomFromSnapshot(entry.snap); else removeGeomById(entry.snap.id); }
   else if (entry.type === 'edit') {
-    const g = geomById(entry.id);
-    if (!g) return;
-    const snap = isUndo ? entry.before : entry.after;
-    applyGeomCoords(g, snap.geom);
-    g.fillColor = snap.fillColor; g.borderColor = snap.borderColor; g.borderWidth = snap.borderWidth; g.fillOpacity = snap.fillOpacity;
-    g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.showLabel = snap.showLabel; g.glow = snap.glow;
-    if (g.card) syncGeomCardStyleControls(g);
-    applyGeomStyle(g);
-    touchGeom(g);
-    updateGeomMeasurement(g);
+    restoreGeomSnapshot(entry.id, isUndo ? entry.before : entry.after);
+  } else if (entry.type === 'batch') {
+    // Restyling a whole colour group is one action to the person who did it,
+    // so it is one entry here. Undoing it shape by shape would mean pressing
+    // Undo forty times and watching the map change forty times to get back to
+    // where they were one click ago.
+    entry.edits.forEach(e => restoreGeomSnapshot(e.id, isUndo ? e.before : e.after));
+    if (typeof renderGeomGroups === 'function') renderGeomGroups();
   }
 }
 
