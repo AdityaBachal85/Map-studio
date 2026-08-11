@@ -462,6 +462,10 @@
           dragging = true; sx = e.clientX; sy = e.clientY;
           ox = ent.labelOffset.x; oy = ent.labelOffset.y;
           ent.labelPinned = true;
+          // A route label re-ties itself to the nearest point on its own line
+          // as it moves; the snapshot that makes that cheap is taken here, once
+          // per drag. Anything without the hooks drags exactly as before.
+          if (ent.onLabelDragStart) ent.onLabelDragStart();
           wrap.setPointerCapture(e.pointerId);
           e.preventDefault();
         });
@@ -469,9 +473,21 @@
           if (!dragging) return;
           ent.labelOffset.x = ox + (e.clientX - sx);
           ent.labelOffset.y = oy + (e.clientY - sy);
+          if (ent.onLabelDrag) {
+            ent.onLabelDrag();
+            // The hook rewrites labelOffset relative to the new anchor, so the
+            // drag's own baseline has to move with it or the next pointermove
+            // would re-apply the whole delta from the old anchor and the label
+            // would shoot off.
+            ox = ent.labelOffset.x - (e.clientX - sx);
+            oy = ent.labelOffset.y - (e.clientY - sy);
+          }
           scheduleRepaint();
         });
-        wrap.addEventListener('pointerup', () => { dragging = false; });
+        wrap.addEventListener('pointerup', () => {
+          dragging = false;
+          if (ent.onLabelDragEnd) ent.onLabelDragEnd();
+        });
         wrap.addEventListener('dblclick', () => { if (ent.onLabelDblclick) ent.onLabelDblclick(); });
         setTimeout(() => wrap.classList.remove('drop-label'), 600);
         bbLayer.appendChild(wrap);

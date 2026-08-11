@@ -22,6 +22,151 @@
         return rt.approx ? km + ' (direct)' : km + ' • ' + Math.round(alt.t / 60) + ' min';
       }
       function routeLabelText(rt) { return rt.labelText && rt.labelText.trim() ? rt.labelText : routeAutoText(rt); }
+      /* ---------- where along the route the label sits ---------- */
+
+      /**
+       * WHY A FRACTION AND NOT A POINT.
+       *
+       * The label used to hang off the route's midpoint — coords[length/2] —
+       * and dragging it only moved the box away from that one spot on a leader
+       * line. So a label could be put anywhere on the map and nowhere on the
+       * route: "Kalyan-Murbad Road" pointing at the middle of a road it names
+       * the whole of, with no way to move it to the end where there was room.
+       *
+       * `rt.labelPos` is a fraction of the route's length, 0 at the origin and
+       * 1 at the destination, and the anchor is resolved from it every time the
+       * route is drawn. A fraction rather than a coordinate because a route is
+       * recomputed constantly — a waypoint dragged, a mode changed, an
+       * alternative cycled — and a stored coordinate would end up off the line
+       * it belongs to. A fraction lands in the same *relative* place on
+       * whatever geometry comes back.
+       *
+       * Measured in metres along the path, not in vertices: OSRM returns
+       * vertices bunched at corners and sparse on straights, so "halfway
+       * through the array" can be nowhere near halfway along the road.
+       */
+
+      /**
+       * Cumulative distance along a coordinate array, in metres.
+       * @param {Array} coords [[lat,lng], ...]
+       * @returns {{cum:number[], total:number}}
+       */
+      function routeCumLengths(coords) {
+        const cum = [0];
+        let total = 0;
+        for (let i = 1; i < coords.length; i++) {
+          total += map.distance(coords[i - 1], coords[i]);
+          cum.push(total);
+        }
+        return { cum, total };
+      }
+
+      /**
+       * The point a fraction of the way along a route.
+       * @param {Array} coords @param {number} t 0..1
+       * @returns {L.LatLng}
+       */
+      function routeAnchorAt(coords, t) {
+        if (!coords || !coords.length) return null;
+        if (coords.length === 1) return L.latLng(coords[0]);
+        const f = Math.min(1, Math.max(0, isFinite(t) ? t : 0.5));
+        const { cum, total } = routeCumLengths(coords);
+        if (!total) return L.latLng(coords[0]);
+
+        const want = f * total;
+        let i = 1;
+        while (i < cum.length - 1 && cum[i] < want) i++;
+        const segLen = cum[i] - cum[i - 1];
+        const k = segLen ? (want - cum[i - 1]) / segLen : 0;
+        const a = coords[i - 1], b = coords[i];
+        const lat = a[0] !== undefined ? a[0] : a.lat, lng = a[1] !== undefined ? a[1] : a.lng;
+        const lat2 = b[0] !== undefined ? b[0] : b.lat, lng2 = b[1] !== undefined ? b[1] : b.lng;
+        return L.latLng(lat + (lat2 - lat) * k, lng + (lng2 - lng) * k);
+      }
+
+      /**
+       * Snapshot the route in screen space for the duration of a label drag.
+       *
+       * Projecting every vertex on each pointermove would be a few thousand
+       * transforms per frame on a city-scale route. The map cannot move while a
+       * label is being dragged — the pointer is captured — so one projection at
+       * the start stays correct until the pointer is released.
+       *
+       * @param {object} rt
+       */
+      function cacheRouteLabelDrag(rt) {
+        rt._dragPts = null;
+        if (!rt.line || typeof projectPin !== 'function') return;
+        let lls = rt.line.getLatLngs();
+        if (Array.isArray(lls[0])) lls = lls[0];
+        if (!lls || lls.length < 2) return;
+
+        rt._dragLatLngs = lls.map(ll => [ll.lat, ll.lng]);
+        rt._dragPts = lls.map(ll => projectPin(ll));
+        rt._dragGeo = routeCumLengths(rt._dragLatLngs);
+      }
+
+      /**
+       * Re-anchor a dragged label to the nearest point on its own route.
+       *
+       * The box stays exactly where it was dropped; what moves is the point it
+       * is tied to. That is the useful half of "snap to the line" — snapping
+       * the box itself onto the road would put type on top of the very thing it
+       * labels, and there would be no way to nudge it clear.
+       *
+       * Nearest is measured in screen space, because that is where the drag
+       * happens and where "nearest" means what the eye says it means; the
+       * result is then converted to a distance-along fraction so it survives
+       * the next recompute.
+       *
+       * @param {object} rt
+       */
+      function reanchorRouteLabel(rt) {
+        const pts = rt._dragPts;
+        if (!pts || !rt.anchor || typeof projectPin !== 'function') return;
+
+        // Where the box is right now, from the same numbers the repaint uses.
+        const pin = projectPin(rt.anchor);
+        const bw = rt._el ? rt._el.offsetWidth : 0;
+        const bh = rt._el ? rt._el.offsetHeight : 0;
+        const cx = pin.x + rt.labelOffset.x + bw / 2;
+        const cy = pin.y + rt.labelOffset.y + bh / 2;
+
+        let bestI = 1, bestK = 0, bestD = Infinity;
+        for (let i = 1; i < pts.length; i++) {
+          const ax = pts[i - 1].x, ay = pts[i - 1].y;
+          const dx = pts[i].x - ax, dy = pts[i].y - ay;
+          const len2 = dx * dx + dy * dy;
+          // Clamped projection onto the segment: past either end the nearest
+          // point is that end, which is what makes the route's start and finish
+          // reachable rather than only its interior.
+          const k = len2 ? Math.min(1, Math.max(0, ((cx - ax) * dx + (cy - ay) * dy) / len2)) : 0;
+          const px = ax + dx * k, py = ay + dy * k;
+          const d = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+          if (d < bestD) { bestD = d; bestI = i; bestK = k; }
+        }
+
+        const geo = rt._dragGeo;
+        if (!geo || !geo.total) return;
+        const segLen = geo.cum[bestI] - geo.cum[bestI - 1];
+        rt.labelPos = Math.min(1, Math.max(0, (geo.cum[bestI - 1] + segLen * bestK) / geo.total));
+
+        // Move the anchor, and take the same amount back out of the offset, so
+        // the box does not jump out from under the pointer as the tie-point
+        // slides along the road.
+        const next = routeAnchorAt(rt._dragLatLngs, rt.labelPos);
+        if (!next) return;
+        const nextPin = projectPin(next);
+        rt.labelOffset.x = (pin.x + rt.labelOffset.x) - nextPin.x;
+        rt.labelOffset.y = (pin.y + rt.labelOffset.y) - nextPin.y;
+        rt.anchor = next;
+      }
+
+      /** Free the drag snapshot. @param {object} rt */
+      function endRouteLabelDrag(rt) {
+        rt._dragPts = null; rt._dragLatLngs = null; rt._dragGeo = null;
+      }
+
       function drawRoute(rt) {
         if (rt.line) map.removeLayer(rt.line);
         if (rt._labelEl) { removeBB(rt._labelEl); rt._labelEl = null; rt._el = null; }
@@ -39,17 +184,19 @@
           L.DomEvent.stopPropagation(ev);
           showRouteContextMenu(rt, ev.originalEvent.clientX, ev.originalEvent.clientY, ev.latlng);
         });
-        if (coords.length === 2) {
-          rt.anchor = L.latLng((coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2);
-        } else {
-          rt.anchor = L.latLng(coords[Math.floor(coords.length / 2)]);
-        }
+        // Resolved from labelPos every draw, so a recompute puts the label back
+        // where the user left it rather than snapping it to the middle again.
+        rt.anchor = routeAnchorAt(coords, rt.labelPos == null ? 0.5 : rt.labelPos)
+          || L.latLng(coords[Math.floor(coords.length / 2)]);
         if (rt.showLabel) {
           const bg = rt.labelBg || '#FFFFFF';
           const el = makeLabelEl(rt, 'route', { klass: 'route', bg: bg, color: textOn(bg), text: routeLabelText(rt) });
           rt._labelEl = el;
           rt._el = el.firstChild;
           rt._leaderColor = rt.color;
+          rt.onLabelDragStart = () => cacheRouteLabelDrag(rt);
+          rt.onLabelDrag = () => reanchorRouteLabel(rt);
+          rt.onLabelDragEnd = () => endRouteLabelDrag(rt);
           rt.onLabelDblclick = () => {
             const v = prompt('Route label (leave empty for auto distance/time):', rt.labelText || '');
             if (v !== null) { rt.labelText = v; rt.card.querySelector('.lt').value = v; drawRoute(rt); rebuildLegend(); }
@@ -129,6 +276,8 @@
           weight: opts.weight || 5, dash: !!opts.dash, offsetPx: opts.offsetPx || 0,
           labelText: opts.labelText || '', showLabel: opts.showLabel !== undefined ? opts.showLabel : true,
           labelOffset: opts.labelOffset || { x: 12, y: -26 },
+          // How far along the route the label ties on: 0 origin, 1 destination.
+          labelPos: opts.labelPos == null ? 0.5 : Math.min(1, Math.max(0, +opts.labelPos)),
           labelBg: opts.labelBg || '#FFFFFF',
           viaPoints: (opts.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
           // Waypoint dots off, without giving up the waypoints themselves. They

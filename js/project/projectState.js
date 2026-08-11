@@ -59,6 +59,7 @@ function serialiseRoute(r) {
     id: r.id, fromId: r.fromId, toId: r.toId, mode: r.mode, color: r.color,
     weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
     showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
+    labelPos: r.labelPos,
     viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
     viaHidden: !!r.viaHidden,
     // The computed geometry travels with the route so reopening a project
