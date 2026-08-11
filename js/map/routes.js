@@ -278,6 +278,7 @@
           labelOffset: opts.labelOffset || { x: 12, y: -26 },
           // How far along the route the label ties on: 0 origin, 1 destination.
           labelPos: opts.labelPos == null ? 0.5 : Math.min(1, Math.max(0, +opts.labelPos)),
+          labelScale: opts.labelScale == null ? 100 : +opts.labelScale,
           labelBg: opts.labelBg || '#FFFFFF',
           viaPoints: (opts.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
           // Waypoint dots off, without giving up the waypoints themselves. They

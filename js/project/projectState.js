@@ -31,7 +31,7 @@ function serialiseLocation(l) {
   return {
     id: l.id, name: l.name, lat: l.lat, lng: l.lng, color: l.color, type: l.type,
     badgeText: l.badgeText,
-    showLabel: l.showLabel, labelOffset: l.labelOffset, labelPinned: l.labelPinned,
+    showLabel: l.showLabel, labelOffset: l.labelOffset, labelPinned: l.labelPinned, labelScale: l.labelScale,
     // labelShowIcon is deliberately not saved: labels carry the name only
     // (see map/markers.js). Writing it back would keep resurrecting the
     // setting in files long after nothing reads it.
@@ -59,7 +59,7 @@ function serialiseRoute(r) {
     id: r.id, fromId: r.fromId, toId: r.toId, mode: r.mode, color: r.color,
     weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
     showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
-    labelPos: r.labelPos,
+    labelPos: r.labelPos, labelScale: r.labelScale,
     viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
     viaHidden: !!r.viaHidden,
     // The computed geometry travels with the route so reopening a project

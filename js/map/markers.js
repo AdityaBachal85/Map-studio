@@ -107,6 +107,9 @@
           labelOffset: opts.labelOffset || { x: 22, y: -40 },
           labelPinned: !!opts.labelPinned,
           labelBg: opts.labelBg || (opts.type === 'site' ? '#0A1E3C' : '#FFFFFF'),
+          // Per-label size as a percentage of the global chip scale — 100 means
+          // "follow Settings", which is what every existing location gets.
+          labelScale: opts.labelScale == null ? 100 : +opts.labelScale,
           // No labelShowIcon: labels carry the name only, and nothing reads
           // the field any more. Keeping it would mean a project saved before
           // this change still arrived with icons in its labels — the exact

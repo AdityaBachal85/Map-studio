@@ -119,6 +119,8 @@ function locCardMarkup(loc) {
       <button class="mini-btn addring" title="Add a catchment ring (radius circle)">+ Ring</button>
       <label class="chk"><input type="checkbox" class="sl" ${loc.showLabel ? 'checked' : ''}> Label</label>
       <input type="color" class="lbg" value="${esc(loc.labelBg)}" title="Label background color">
+      <input type="range" class="lsz" min="50" max="220" step="5" value="${loc.labelScale == null ? 100 : loc.labelScale}" style="width:56px;flex:none;" title="This label's size, as a percentage of the global chip scale in Settings. Double-click to reset." aria-label="Label size for this location">
+      <span class="sub lsz-v" style="width:34px;font-family:var(--mono);">${loc.labelScale == null ? 100 : loc.labelScale}%</span>
       <span class="grow"></span>
       <button class="mini-btn bnd" title="Draw this place's real boundary from OpenStreetMap">⬡ Boundary</button>
       <button class="mini-btn dup" title="Duplicate this location">⧉</button>
@@ -263,6 +265,24 @@ function wireLocCard(card, loc) {
         });
         card.querySelector('.sl').addEventListener('change', e => { loc.showLabel = e.target.checked; updateLocLabel(loc); scheduleRepaint(); });
         card.querySelector('.lbg').addEventListener('input', e => { loc.labelBg = e.target.value; updateLocLabel(loc); scheduleRepaint(); });
+        const lsz = card.querySelector('.lsz');
+        lsz.addEventListener('input', e => {
+          loc.labelScale = +e.target.value;
+          card.querySelector('.lsz-v').textContent = loc.labelScale + '%';
+          // Not a full re-render: the size is a CSS variable on the element that
+          // is already there, so nothing has to be rebuilt to change it.
+          applyLabelScale(loc);
+          scheduleRepaint();
+        });
+        // Back to following Settings, without hunting for exactly 100 on a
+        // 5-step slider.
+        lsz.addEventListener('dblclick', () => {
+          loc.labelScale = 100;
+          lsz.value = 100;
+          card.querySelector('.lsz-v').textContent = '100%';
+          applyLabelScale(loc);
+          scheduleRepaint();
+        });
         card.querySelector('.bnd').addEventListener('click', e => toggleBoundaryForLocation(loc, e.currentTarget));
         card.querySelector('.ctr').addEventListener('click', () => map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 15)));
         card.querySelector('.dup').addEventListener('click', () => {
@@ -334,6 +354,8 @@ function wireLocCard(card, loc) {
     <div class="r">
       <label class="chk"><input type="checkbox" class="sl" ${rt.showLabel ? 'checked' : ''}> Label</label>
       <input type="color" class="lbg" value="${esc(rt.labelBg)}" title="Label background color">
+      <input type="range" class="lsz" min="50" max="220" step="5" value="${rt.labelScale == null ? 100 : rt.labelScale}" style="width:56px;flex:none;" title="This label's size, as a percentage of the global chip scale in Settings. Double-click to reset." aria-label="Label size for this route">
+      <span class="sub lsz-v" style="width:34px;font-family:var(--mono);">${rt.labelScale == null ? 100 : rt.labelScale}%</span>
       <span class="grow"></span>
       <button class="mini-btn dup" title="Duplicate route">⧉</button>
       <button class="mini-btn zm" title="Zoom to this route">⌖</button>
@@ -357,6 +379,20 @@ function wireLocCard(card, loc) {
         card.querySelector('.ds').addEventListener('change', e => { rt.dash = e.target.checked; drawRoute(rt); });
         card.querySelector('.sl').addEventListener('change', e => { rt.showLabel = e.target.checked; drawRoute(rt); });
         card.querySelector('.lbg').addEventListener('input', e => { rt.labelBg = e.target.value; drawRoute(rt); });
+        const rlsz = card.querySelector('.lsz');
+        rlsz.addEventListener('input', e => {
+          rt.labelScale = +e.target.value;
+          card.querySelector('.lsz-v').textContent = rt.labelScale + '%';
+          applyLabelScale(rt);
+          scheduleRepaint();
+        });
+        rlsz.addEventListener('dblclick', () => {
+          rt.labelScale = 100;
+          rlsz.value = 100;
+          card.querySelector('.lsz-v').textContent = '100%';
+          applyLabelScale(rt);
+          scheduleRepaint();
+        });
         card.querySelector('.alt').addEventListener('click', () => {
           if (!rt.alts || rt.alts.length < 2) { status('Only one route was found between these points.'); return; }
           rt.altIndex = (rt.altIndex + 1) % rt.alts.length;

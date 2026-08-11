@@ -202,9 +202,14 @@
       gap: 7px;
       background: #FFFFFF;
       color: #17202B;
-      padding: 6px 11px 6px 8px;
+      /* --label-scale multiplies the global chip size for THIS label only, so
+         the Settings slider still moves everything and each label keeps its own
+         size relative to it. An absolute px per label would have severed that
+         link: the global slider would stop reaching anything ever resized. */
+      padding: calc(6px * var(--label-scale, 1)) calc(11px * var(--label-scale, 1))
+               calc(6px * var(--label-scale, 1)) calc(8px * var(--label-scale, 1));
       border-radius: 999px;
-      font-size: var(--chipFont);
+      font-size: calc(var(--chipFont) * var(--label-scale, 1));
       font-weight: 600;
       letter-spacing: -.005em;
       box-shadow: 0 4px 14px rgba(0, 0, 0, .22), 0 1px 3px rgba(0, 0, 0, .14);
@@ -214,8 +219,8 @@
     }
 
     .label-badge .lb-ico {
-      width: 16px;
-      height: 16px;
+      width: calc(16px * var(--label-scale, 1));
+      height: calc(16px * var(--label-scale, 1));
       border-radius: 50%;
       flex: none;
       display: flex;
@@ -239,8 +244,9 @@
     .label-badge.site {
       background: #0A1E3C;
       color: #fff;
-      padding: 7px 13px 7px 9px;
-      font-size: calc(var(--chipFont) + 1px);
+      padding: calc(7px * var(--label-scale, 1)) calc(13px * var(--label-scale, 1))
+               calc(7px * var(--label-scale, 1)) calc(9px * var(--label-scale, 1));
+      font-size: calc((var(--chipFont) + 1px) * var(--label-scale, 1));
       font-weight: 700;
       box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .09);
     }
@@ -251,15 +257,15 @@
 
     .label-badge.route {
       font-family: var(--mono);
-      font-size: calc(var(--chipFont) - 1px);
+      font-size: calc((var(--chipFont) - 1px) * var(--label-scale, 1));
       font-weight: 700;
-      padding: 5px 10px;
+      padding: calc(5px * var(--label-scale, 1)) calc(10px * var(--label-scale, 1));
     }
 
     .label-badge.ring {
       font-family: var(--mono);
-      font-size: calc(var(--chipFont) - 2.5px);
-      padding: 3px 8px;
+      font-size: calc((var(--chipFont) - 2.5px) * var(--label-scale, 1));
+      padding: calc(3px * var(--label-scale, 1)) calc(8px * var(--label-scale, 1));
       color: #17202B;
       background: rgba(255, 255, 255, .96);
     }

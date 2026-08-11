@@ -440,6 +440,27 @@
         return wrap;
       }
 
+      /**
+       * This label's size relative to the global chip scale, as a multiplier.
+       *
+       * Stored on the entity as a percentage to match the Settings slider it
+       * composes with — 100 means "whatever Settings says", 160 means "half
+       * again bigger than whatever Settings says". Clamped, because a label
+       * scaled to zero is a label nobody can find again to fix.
+       *
+       * @param {object} ent @returns {number}
+       */
+      function labelScaleOf(ent) {
+        const pct = Number(ent && ent.labelScale);
+        return Math.min(3, Math.max(0.5, (isFinite(pct) && pct > 0 ? pct : 100) / 100));
+      }
+
+      /** Push an entity's own label size onto its label element. @param {object} ent */
+      function applyLabelScale(ent) {
+        if (!ent || !ent._labelEl) return;
+        ent._labelEl.style.setProperty('--label-scale', labelScaleOf(ent));
+      }
+
       function makeLabelEl(ent, kind, opts, animate) {
         // kind: 'loc' | 'route' | 'ring'
         const wrap = document.createElement('div');
@@ -490,6 +511,10 @@
         });
         wrap.addEventListener('dblclick', () => { if (ent.onLabelDblclick) ent.onLabelDblclick(); });
         setTimeout(() => wrap.classList.remove('drop-label'), 600);
+        // Set here rather than at each call site: every label in the app is
+        // built through this one function, so this is the only place that
+        // cannot be forgotten when a new kind of label is added.
+        wrap.style.setProperty('--label-scale', labelScaleOf(ent));
         bbLayer.appendChild(wrap);
         return wrap;
       }
