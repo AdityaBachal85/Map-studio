@@ -33,7 +33,7 @@
 /* Everything that is not the map is out of the way in map mode. Kept as
    display:none rather than off-screen so none of it costs layout or paints
    while the studio is being used. */
-#dashNav, #dashTop, #dashGrid,
+#dashNav, #dashTop, #dashGrid, #dashFormat,
 #rsHead, #rsLegend, #rsRight, #rsFoot { display: none; }
 
 .app[data-mode="dashboard"],
@@ -52,19 +52,30 @@
    the canvas; where each tile sits inside the canvas is the user's business,
    not the stylesheet's. */
 .app[data-mode="dashboard"] {
-  grid-template-columns: 210px minmax(0, 1fr);
+  grid-template-columns: 210px minmax(0, 1fr) 0;
   grid-template-rows: 58px auto;
   grid-template-areas:
-    "nav  top"
-    "nav  canvas";
+    "nav  top    fmt"
+    "nav  canvas fmt";
   column-gap: 14px;
   row-gap: 14px;
   padding: 0 14px 14px 0;
+  /* Deliberately NOT transitioned. Animating the column width means the canvas
+     is a different size on every frame, and the tile geometry is computed from
+     that width — so the layout would either be measured mid-animation (wrong)
+     or re-measured every frame (wasteful). The tiles have their own transition
+     and glide to their new places anyway, which is the animation you actually
+     see. */
 }
+
+/* The format pane only takes a column when it has something to show. A
+   permanent empty rail costs the board 270px for nothing. */
+.app[data-mode="dashboard"].df-open { grid-template-columns: 210px minmax(0, 1fr) 268px; }
 
 .app[data-mode="dashboard"] #dashNav { display: flex; grid-area: nav; }
 .app[data-mode="dashboard"] #dashTop { display: flex; grid-area: top; }
 .app[data-mode="dashboard"] #dashGrid { display: block; grid-area: canvas; }
+.app[data-mode="dashboard"].df-open #dashFormat { display: block; grid-area: fmt; }
 
 /* The whole board scrolls as one. Scrolling the card grid inside its own box
    would leave the map pinned while the numbers move under it, which reads as
@@ -309,38 +320,78 @@
    6. Top bar
    ----------------------------------------------------------------------- */
 
+/* One bar, one surface, one row of controls sitting on it. The first version
+   was a bare strip with three differently-shaped things floating on the page
+   background, which read as leftovers rather than a toolbar. */
 #dashTop {
   align-items: center;
-  gap: 12px;
-  padding: 0 4px 0 14px;
+  gap: 10px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  box-shadow: var(--elev-1);
 }
 
 .dt-spacer { flex: 1; }
 
-.dt-meter {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 7px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-2);
-  font-size: 11px;
-  white-space: nowrap;
+/* A hairline between the search and the controls, so the bar reads as two
+   zones instead of one queue of unrelated buttons. */
+.dt-div {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex: none;
 }
-.dt-meter b { color: var(--text-2); font-weight: 600; }
+
+.dt-meter,
+.dt-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.dt-meter b,
+.dt-btn b { color: var(--text-2); font-weight: 600; }
 .dt-meter i { font-style: normal; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.dt-btn:hover,
+.dt-meter:hover { border-color: var(--border-strong); }
+.dt-btn.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.dt-btn:focus-visible,
+.dt-meter:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .dt-cta {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 15px;
+  height: 32px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--accent);
-  color: var(--accent-ink, #1a0d00);
-  font: 700 12.5px/1 var(--font, inherit);
+  /* Fixed ink, NOT var(--accent-ink): in dark mode that token resolves to the
+     orange itself — it is the "accent cast readable as text on the page", which
+     is the opposite of what an accent-filled button needs. It shipped as orange
+     text on an orange fill, i.e. a button with no visible label at all.
+     #2A1200 on #FF7A1A measures 6.8:1, and --accent is orange in both themes so
+     one value covers both. (White would be 2.6:1 — a fail.) */
+  color: #2A1200;
+  font: 700 12px/1 var(--font, inherit);
   cursor: pointer;
   box-shadow: var(--accent-glow);
   transition: filter .18s ease, transform .18s ease;
@@ -348,6 +399,64 @@
 .dt-cta:hover { filter: brightness(1.07); }
 .dt-cta:active { transform: scale(.98); }
 .dt-cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* ---- the AI reports menu ---- */
+
+.dt-wrap { position: relative; }
+
+.dt-pop {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  box-shadow: var(--elev-3);
+}
+.dt-pop[hidden] { display: none; }
+
+.dt-pop h4 {
+  margin: 2px 6px 8px;
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.dt-rep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 9px;
+}
+.dt-rep:hover { background: var(--surface-2); }
+.dt-rep-main { flex: 1; min-width: 0; }
+.dt-rep-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-rep-meta { font-size: 10.5px; color: var(--text-2); margin-top: 2px; }
+.dt-rep a {
+  flex: none;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: 600 10.5px/1 var(--font, inherit);
+  color: var(--text);
+  text-decoration: none;
+}
+.dt-rep a:hover { border-color: var(--accent); color: var(--accent); }
+.dt-empty { padding: 10px 8px 12px; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
 
 /* In dashboard mode the studio's floating search moves into the top bar. Same
    element, same handlers, same results list — re-homed, not rebuilt. */
@@ -545,6 +654,31 @@ body.dash-gesture .map-wrap { transition: none; }
 
 .viz-cross { stroke: var(--text-2); stroke-width: 1; opacity: .45; pointer-events: none; }
 
+/* Pie slices and treemap tiles are separated by a ring in the surface colour —
+   the same negative-space trick as the dots, so no segment needs a border. */
+.viz-slice { stroke: var(--viz-surface); stroke-width: 2; }
+.viz-tm { stroke: none; }
+
+.viz-label {
+  font-size: 10px;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A label sitting *inside* a coloured fill is the one place text may leave the
+   ink tokens: white clears every slot in the palette, and the alternative is a
+   dark label vanishing into slot 7. */
+.viz-inlabel {
+  font: 700 10px/1 var(--font, inherit);
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, .25);
+  stroke-width: 2px;
+}
+
+.viz-tm-name { font: 700 11px/1 var(--font, inherit); fill: #fff; }
+.viz-tm-val { font-size: 10px; fill: rgba(255, 255, 255, .82); font-variant-numeric: tabular-nums; }
+
 .viz-tip {
   position: absolute;
   z-index: 3;
@@ -557,8 +691,16 @@ body.dash-gesture .map-wrap { transition: none; }
   white-space: nowrap;
   font-size: 11px;
 }
-.viz-tip b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.viz-tip i { font-style: normal; color: var(--text-2); margin-left: 6px; }
+.viz-tip em {
+  display: block;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.viz-tip span { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.viz-tip i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.viz-tip b { margin-left: auto; padding-left: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------------------
    9. Card internals
@@ -903,6 +1045,301 @@ body.dash-gesture { cursor: grabbing; user-select: none; }
   cursor: pointer;
 }
 #dashAdd button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Chrome, not content: none of the edit furniture is in an export. */
+#dashGrid.exporting .dc-rz,
+#dashGrid.exporting .dc-grip,
+#dashGrid.exporting .dc-maphandles,
+#dashGrid.exporting #dashAdd,
+#dashGrid.exporting .dc-tools { display: none !important; }
+
+/* --------------------------------------------------------------------------
+   11. Legend, table, slicer
+   ----------------------------------------------------------------------- */
+
+.dc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.dc-legend-top { margin-bottom: 8px; }
+.dc-legend-bottom { order: 2; margin-top: 8px; }
+
+/* A right-hand legend is a column beside the plot, which is what a donut or a
+   pie wants — the slices are round, the labels are a list. */
+.dc-type-chart .dc-body:has(> .dc-legend-right) { flex-direction: row-reverse; align-items: stretch; gap: 12px; }
+.dc-legend-right {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+  justify-content: center;
+  width: 40%;
+  max-width: 150px;
+  overflow: auto;
+}
+
+.dc-key { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dc-key i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+.dc-key b {
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- table ---- */
+
+.dc-tablewrap { overflow: auto; min-height: 0; }
+.dc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.dc-table th, .dc-table td {
+  text-align: left;
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.dc-th {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  outline: none;
+}
+.dc-td { color: var(--text); outline: none; font-variant-numeric: tabular-nums; }
+.dc-table tbody tr:last-child th, .dc-table tbody tr:last-child td { border-bottom: 0; }
+.dc-tw { width: 22px; padding-right: 0 !important; }
+.dc-tblbtns { display: flex; gap: 6px; margin-top: 8px; }
+
+/* ---- slicer ---- */
+
+.dc-slicer { display: flex; flex-wrap: wrap; gap: 6px; overflow: auto; min-height: 0; align-content: flex-start; }
+.dc-chip {
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.dc-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.dc-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Fixed ink on the accent fill, for the reason spelled out on .dt-cta. */
+  color: #2A1200;
+}
+.dc-clear { margin-top: 9px; align-self: flex-start; }
+
+/* A transparent card sits straight on the board — for a title block or a note
+   that should not read as another panel. */
+.dash-card.plain {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+.app.dash-editing .dash-card.plain { border-color: var(--border); border-style: dashed; }
+
+.dc-grip-float { position: absolute; top: 8px; left: 8px; z-index: 3; }
+
+/* The selected visual, in edit mode. A ring rather than a colour change: the
+   card's own colours are the user's, and a selection that recolours them lies
+   about what the board looks like. */
+.app.dash-editing .dash-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--elev-2);
+}
+
+/* --------------------------------------------------------------------------
+   12. The format pane
+   ----------------------------------------------------------------------- */
+
+#dashFormat {
+  overflow: auto;
+  padding: 0 0 14px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+}
+
+.df-empty {
+  padding: 16px 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.df-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.df-head b {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.df-head span { font-size: 10px; color: var(--text-2); white-space: nowrap; }
+
+.df-sec { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.df-sec:last-child { border-bottom: 0; }
+.df-sec h4 {
+  margin: 0 0 9px;
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.df-row { display: block; margin-bottom: 9px; }
+.df-row > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.df-note { margin: 8px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--text-2); }
+
+.df-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.df-kinds button,
+.df-seg button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 10.5px/1 var(--font, inherit);
+  padding: 7px 6px;
+  cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.df-kinds button:hover, .df-seg button:hover { color: var(--text); border-color: var(--border-strong); }
+.df-kinds button.on,
+.df-seg button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+.df-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.df-seg button { flex: 1; min-width: 44px; }
+
+.df-tgl {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  cursor: pointer;
+  text-align: left;
+}
+.df-tgl i {
+  flex: none;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  position: relative;
+  transition: background .16s ease;
+}
+.df-tgl i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+  transition: transform .16s ease;
+}
+.df-tgl.on i { background: var(--accent); }
+.df-tgl.on i::after { transform: translateX(11px); }
+.df-tgl:hover { border-color: var(--border-strong); }
+
+.df-series {
+  padding: 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+.df-series-hd { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.df-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.df-input,
+.df-name {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  font-size: 11px;
+  color: var(--text);
+  outline: none;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.df-input:focus, .df-name:focus { border-color: var(--accent); }
+
+.df-sw-row { display: flex; gap: 4px; margin-top: 7px; }
+
+.df-add {
+  padding: 7px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.df-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.df-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.df-grid4 label { display: block; }
+.df-grid4 span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  color: var(--text-2);
+}
+.df-grid4 input {
+  width: 100%;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  color: var(--text);
+  font: 600 11px/1 var(--font, inherit);
+  text-align: center;
+}
+.df-grid4 input:focus { border-color: var(--accent); outline: none; }
+
+.df-btns { display: flex; gap: 6px; margin-top: 9px; }
+.df-btns .df-add { flex: 1; text-align: center; }
 
 /* --------------------------------------------------------------------------
    10. Report sheet panels

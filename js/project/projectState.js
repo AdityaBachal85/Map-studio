@@ -94,6 +94,11 @@ function serialiseProject() {
     hd: $('hdTgl').checked,
     brand: $('brandTgl').checked,
     north: $('northTgl').checked,
+    // Whether the title card and the scale bar are showing, not just what the
+    // title says. They default to off now, so a project that deliberately turns
+    // them on has to carry that or it loses the setting every time it opens.
+    titleOn: $('titleTgl').checked,
+    scaleOn: $('scaleTgl').checked,
     projectLogo: brand.projectLogo,
     siteUsesProjLogo: brand.siteUsesProjLogo,
     // The Key Distances card's overrides. Only what differs from the measured
@@ -158,6 +163,16 @@ function applyProject(proj, opts) {
   else if (proj.chipFont) setChipPct(Math.round(+proj.chipFont / 11.5 * 100));
   else applyChipScale();
   if (proj.brand !== undefined) { $('brandTgl').checked = !!proj.brand; document.body.classList.toggle('no-brand', !proj.brand); }
+  // Dispatched rather than set directly: the toggle's own handler owns building
+  // and tearing down the scale control, and duplicating that here is how the
+  // two get out of step.
+  [['titleTgl', proj.titleOn], ['scaleTgl', proj.scaleOn]].forEach(([id, on]) => {
+    if (on === undefined) return;
+    const el = $(id);
+    if (!el || el.checked === !!on) return;
+    el.checked = !!on;
+    el.dispatchEvent(new Event('change'));
+  });
   if (proj.north !== undefined) { $('northTgl').checked = !!proj.north; document.body.classList.toggle('no-north', !proj.north); }
   if (proj.projectLogo) setProjectLogo(proj.projectLogo);
   if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }

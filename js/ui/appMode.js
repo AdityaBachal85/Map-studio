@@ -114,6 +114,53 @@ function setAppMode(mode, opts) {
   }
 }
 
+/**
+ * Fill the AI-reports popover.
+ *
+ * Lists what this browser has a record of, and says so plainly when the
+ * backend's count is higher — a report generated on another machine is not
+ * downloadable from here, and pretending the list is complete would send
+ * someone hunting for a file that was never in this browser.
+ *
+ * @param {number|null} serverCount today's count from the backend, if known
+ */
+function renderReportsMenu(serverCount) {
+  const host = document.getElementById('dtReports');
+  if (!host) return;
+  const list = (typeof aiReportLog === 'function') ? aiReportLog() : [];
+
+  let html = '<h4>Your reports</h4>';
+  if (!list.length) {
+    html += '<div class="dt-empty">Nothing to download yet. Generate one with '
+      + '<b>New research</b> — the PDF and Word links land here and stay for 48 hours.</div>';
+  } else {
+    html += list.map(r =>
+      '<div class="dt-rep"><div class="dt-rep-main">'
+      + '<div class="dt-rep-name">' + esc(r.site || 'Site report') + '</div>'
+      + '<div class="dt-rep-meta">' + esc(aiReportWhen(r.createdAt))
+      + (r.expiresAt ? ' · ' + esc(aiReportLeft(r.expiresAt)) : '') + '</div></div>'
+      + (r.pdfUrl ? '<a href="' + esc(r.pdfUrl) + '" data-dl="PDF">PDF</a>' : '')
+      + (r.docxUrl ? '<a href="' + esc(r.docxUrl) + '" data-dl="Word document">Word</a>' : '')
+      + '</div>').join('');
+  }
+
+  if (typeof serverCount === 'number' && serverCount > list.length) {
+    html += '<div class="dt-empty">' + serverCount + ' report'
+      + (serverCount === 1 ? ' was' : 's were') + ' generated on this account today, but only '
+      + list.length + ' ' + (list.length === 1 ? 'is' : 'are') + ' saved in this browser. '
+      + 'The rest were made elsewhere — the download links only exist where the report was made.</div>';
+  }
+
+  host.innerHTML = html;
+  host.querySelectorAll('[data-dl]').forEach(a => {
+    a.addEventListener('click', e => {
+      if (typeof aiDownload !== 'function') return;   // let the plain link work
+      e.preventDefault();
+      aiDownload(a.getAttribute('href'), a.dataset.dl);
+    });
+  });
+}
+
 (function wireAppMode() {
   document.querySelectorAll('[data-mode-btn]').forEach(b => {
     b.addEventListener('click', () => setAppMode(b.dataset.modeBtn));
@@ -156,17 +203,50 @@ function setAppMode(mode, opts) {
   // first opened. Left as an em-dash rather than a guess if it cannot be
   // reached — a made-up quota is worse than a visibly absent one.
   const usage = document.getElementById('dtUsageVal');
+  let usageCount = null;
   if (usage) {
     const fill = () => {
       if (typeof getUsage !== 'function') { usage.textContent = 'not configured'; return; }
       getUsage()
-        .then(u => { usage.textContent = (u.reportsGenerated ?? 0) + ' / ' + (u.reportsCap ?? '?') + ' today'; })
+        .then(u => {
+          usageCount = u.reportsGenerated ?? 0;
+          usage.textContent = usageCount + ' / ' + (u.reportsCap ?? '?') + ' today';
+        })
         .catch(() => { usage.textContent = 'unavailable'; });
     };
     let asked = false;
     document.querySelectorAll('[data-mode-btn="dashboard"]').forEach(b =>
       b.addEventListener('click', () => { if (!asked) { asked = true; fill(); } }));
   }
+
+  /* ---- the two top-bar popovers ---- */
+
+  // One handler for both: only one may be open, and a click anywhere else
+  // closes whichever is.
+  const pops = [['dtUsage', 'dtReports'], ['dashExportBtn', 'dashExportMenu']];
+  const closeAll = except => pops.forEach(([bid, mid]) => {
+    const m = document.getElementById(mid), b = document.getElementById(bid);
+    if (!m || m === except) return;
+    m.hidden = true;
+    if (b) b.setAttribute('aria-expanded', 'false');
+  });
+
+  pops.forEach(([bid, mid]) => {
+    const b = document.getElementById(bid), m = document.getElementById(mid);
+    if (!b || !m) return;
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = m.hidden;
+      closeAll(open ? m : null);
+      m.hidden = !open;
+      b.setAttribute('aria-expanded', String(open));
+      if (open && mid === 'dtReports') renderReportsMenu(usageCount);
+    });
+    m.addEventListener('click', e => e.stopPropagation());
+  });
+
+  document.addEventListener('click', () => closeAll(null));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(null); });
 
   // Restore the last view. Deliberately not part of the project file: which
   // layout someone was looking at is about them, not about the map, and a

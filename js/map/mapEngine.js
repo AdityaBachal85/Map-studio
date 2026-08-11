@@ -42,7 +42,10 @@
         zoomSnap: ZOOM_SNAP, zoomDelta: 1, wheelPxPerZoomLevel: WHEEL_PX_PER_ZOOM,
       }).setView([21.5, 78.5], 5);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      let scaleCtl = buildScaleReadout();
+      // Off until asked for — see the note on the toggles in index.html. Built
+      // lazily by the same toggle handler that removes it, so there is one code
+      // path for "the scale bar exists" rather than an initial special case.
+      let scaleCtl = null;
 
       /**
        * The map's one scale bar.
@@ -797,4 +800,8 @@
         map.fitBounds(pts, { padding: [80, 80] });
       }
       $('fitBtn').addEventListener('click', fitAll);
+      // The same action from the map itself. On the board the sidebar is
+      // off-canvas, so without this there is no way to recentre at all.
+      const centerBtn = $('centerBtn');
+      if (centerBtn) centerBtn.addEventListener('click', fitAll);
 

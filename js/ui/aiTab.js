@@ -167,6 +167,12 @@ function aiShowResults(job) {
   console.log('AI report ready:', { pdf: job.pdfUrl, docx: job.docxUrl });
   $('aiPdfLink').onclick = e => { e.preventDefault(); aiDownload(job.pdfUrl, 'PDF'); };
   $('aiDocxLink').onclick = e => { e.preventDefault(); aiDownload(job.docxUrl, 'Word document'); };
+  // Written down here, where the signed URLs actually exist. This panel loses
+  // them on the next tab switch; the files stay downloadable for 48 hours.
+  if (typeof aiReportLogAdd === 'function') {
+    const sel = $('aiSitePicker');
+    aiReportLogAdd(job, sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '');
+  }
   const when = job.expiresAt ? new Date(job.expiresAt).toLocaleString() : null;
   $('aiExpiryLine').textContent = (when ? `These links expire ${when}` : 'These links expire in 48 hours')
     + " — download now, they can't be recovered after that.";

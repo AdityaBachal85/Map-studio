@@ -9,9 +9,9 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0058" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0058">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0058">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0059" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0059">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0059">
   <!-- Listed individually rather than behind main.css's @import list, because
        an @import carries its own ?v= that has to be bumped in a second place,
        and when it isn't, index.html busts while the sheets it pulls in keep
@@ -21,17 +21,19 @@
        there is one version per file and the release bump covers them.
        Order is load-bearing — later sheets override earlier ones, and refine
        must stay last. Do not reorder. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0058">
-  <link rel="stylesheet" href="./css/style.css?v=6.0058">
-  <link rel="stylesheet" href="./css/map.css?v=6.0058">
-  <link rel="stylesheet" href="./css/sidebar.css?v=6.0058">
-  <link rel="stylesheet" href="./css/components.css?v=6.0058">
-  <link rel="stylesheet" href="./css/layout.css?v=6.0058">
-  <link rel="stylesheet" href="./css/dashboard.css?v=6.0058">
-  <link rel="stylesheet" href="./css/refine.css?v=6.0058">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0059">
+  <link rel="stylesheet" href="./css/style.css?v=6.0059">
+  <link rel="stylesheet" href="./css/map.css?v=6.0059">
+  <link rel="stylesheet" href="./css/sidebar.css?v=6.0059">
+  <link rel="stylesheet" href="./css/components.css?v=6.0059">
+  <link rel="stylesheet" href="./css/layout.css?v=6.0059">
+  <link rel="stylesheet" href="./css/dashboard.css?v=6.0059">
+  <link rel="stylesheet" href="./css/refine.css?v=6.0059">
 </head>
 
-<body>
+<!-- no-brand matches the DBOT-logo toggle, which starts off. A saved project
+     that had it on turns it back on when it loads. -->
+<body class="no-brand">
   <!-- data-mode drives the whole layout: 'map' (full-screen studio, the
        default), 'dashboard' (the map becomes one resizable tile among the
        cards) and 'report' (the map becomes the middle of an A4 sheet). The map
@@ -70,13 +72,35 @@
     <header id="dashTop">
       <div id="dashTopSearch"></div>
       <span class="dt-spacer"></span>
-      <div class="dt-meter" id="dtUsage" title="Report allowance on the AI backend today">
-        <b>AI reports</b><i id="dtUsageVal">—</i>
+      <span class="dt-div"></span>
+
+      <!-- The allowance doubles as the way in to the reports it counts: a
+           number with no way to open what it is counting is just a scold. -->
+      <div class="dt-wrap">
+        <button class="dt-meter" id="dtUsage" type="button" aria-haspopup="true" aria-expanded="false"
+          title="Reports generated today — click to open or download them">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 13.6 8 19 9.6 13.6 11.2 12 16.6 10.4 11.2 5 9.6 10.4 8Z"/></svg>
+          <b>AI reports</b><i id="dtUsageVal">—</i>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="dt-pop" id="dtReports" hidden role="menu" aria-label="AI reports"></div>
       </div>
-      <button class="dt-meter" id="dashEditBtn" type="button" aria-pressed="false" title="Edit the board: retype any value, drag cards to rearrange">
+
+      <div class="dt-wrap">
+        <button class="dt-btn" id="dashExportBtn" type="button" aria-haspopup="true" aria-expanded="false"
+          title="Export the board as an image or a PDF">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          Export
+        </button>
+        <div class="dt-pop" id="dashExportMenu" hidden role="menu" aria-label="Export the board"></div>
+      </div>
+
+      <button class="dt-btn" id="dashEditBtn" type="button" aria-pressed="false"
+        title="Edit the board: retype any value, move and resize any tile">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        <b>Edit board</b>
+        Edit board
       </button>
+
       <button class="dt-cta" id="dtNewReport" type="button">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         New research</button>
@@ -86,6 +110,9 @@
          from grid units by js/ui/dashLayout.js, so it is deliberately an empty
          positioned box here rather than a CSS grid. -->
     <section id="dashGrid" aria-label="Dashboard canvas"></section>
+    <!-- The format pane. Only takes a column while the board is unlocked and a
+         visual is selected — otherwise the board gets the full width. -->
+    <aside id="dashFormat" aria-label="Format the selected visual"></aside>
 
     <!-- ===== Report sheet panels ===== -->
     <header id="rsHead">
@@ -126,7 +153,8 @@
         </div>
         <div class="search-results frost" id="searchResults"></div>
       </div>
-      <div id="titleCard" contenteditable="true" spellcheck="false">PROPERTY LOCATION &amp; ACCESS</div>
+      <!-- Hidden to match its toggle, which now starts off. -->
+      <div id="titleCard" contenteditable="true" spellcheck="false" style="display:none;">PROPERTY LOCATION &amp; ACCESS</div>
       <div id="legendCard" style="display:none;">
         <div class="hd"><span class="grip" id="legendDrag">⠿</span><button id="legendEditBtn" type="button"
             class="legend-edit" title="Edit the rows, icons and values" aria-label="Edit key distances" aria-pressed="false">
@@ -176,6 +204,18 @@
           stroke-linecap="round" stroke-linejoin="round">
           <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
           <polyline points="2 15.5 12 22 22 15.5" />
+        </svg>
+      </button>
+      <!-- Recentre. There is a Fit button in the sidebar, but on the board the
+           sidebar is off-canvas and the map is a small tile you nudge around
+           constantly — the one control you reach for most had no place to be
+           reached from. -->
+      <button id="centerBtn" class="frost" title="Centre on your locations" aria-label="Centre the map on your locations">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M12 2v3.4M12 18.6V22M2 12h3.4M18.6 12H22" />
+          <circle cx="12" cy="12" r="8.4" opacity=".55" />
         </svg>
       </button>
       <button id="aiBtn" class="frost" title="AI Reports — research a site and generate a report">
@@ -490,13 +530,18 @@
             <button class="acc-hd" type="button">Overlays &amp; appearance<span class="acc-ch">▾</span></button>
             <div class="acc-body">
               <div class="stack">
-                <label class="chk"><input type="checkbox" id="titleTgl" checked> Map title card (click the title to
+                <!-- The title card, the logo and the scale bar start OFF. They
+                     are for a finished exhibit, and most of the time this is a
+                     working map: three overlays nobody asked for, sitting on
+                     top of the thing you are trying to look at. Turn them on
+                     when the map is going into a document. -->
+                <label class="chk"><input type="checkbox" id="titleTgl"> Map title card (click the title to
                   edit)</label>
                 <label class="chk"><input type="checkbox" id="legendTgl" checked> Key-distances panel (drag ⠿, click text
                   to edit)</label>
-                <label class="chk"><input type="checkbox" id="brandTgl" checked> DBOT logo on map &amp; exports</label>
+                <label class="chk"><input type="checkbox" id="brandTgl"> DBOT logo on map &amp; exports</label>
                 <label class="chk"><input type="checkbox" id="northTgl" checked> North arrow</label>
-                <label class="chk"><input type="checkbox" id="scaleTgl" checked> Scale bar</label>
+                <label class="chk"><input type="checkbox" id="scaleTgl"> Scale bar</label>
                 <label class="chk"><input type="checkbox" id="creditTgl" checked> Imagery credit line</label>
                 <div class="inline-ctl"><span class="sub">Label size</span><input type="range" id="chipRange" min="50"
                     max="200" step="5" value="100"><span class="val" id="chipVal">100%</span></div>
@@ -880,107 +925,110 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0058"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0058"></script>
-  <script src="./vendor/html2canvas.js?v=6.0058"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0058"></script>
-  <script src="./vendor/jszip.js?v=6.0058"></script>
-  <script src="./vendor/anime.min.js?v=6.0058"></script>
+  <script src="./vendor/leaflet.js?v=6.0059"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0059"></script>
+  <script src="./vendor/html2canvas.js?v=6.0059"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0059"></script>
+  <script src="./vendor/jszip.js?v=6.0059"></script>
+  <script src="./vendor/anime.min.js?v=6.0059"></script>
 
-  <script src="./js/core/prefs.js?v=6.0058"></script>
-  <script src="./js/constants.js?v=6.0058"></script>
-  <script src="./js/core/freshness.js?v=6.0058"></script>
-  <script src="./js/utils/dom.js?v=6.0058"></script>
-  <script src="./js/utils/color.js?v=6.0058"></script>
-  <script src="./js/export/exportPDF.js?v=6.0058"></script>
-  <script src="./js/export/captureMap.js?v=6.0058"></script>
-  <script src="./js/core/state.js?v=6.0058"></script>
-  <script src="./js/map/icons.js?v=6.0058"></script>
-  <script src="./js/config.js?v=6.0058"></script>
-  <script src="./js/ui/notifications.js?v=6.0058"></script>
-  <script src="./js/utils/math.js?v=6.0058"></script>
-  <script src="./js/map/billboard.js?v=6.0058"></script>
+  <script src="./js/core/prefs.js?v=6.0059"></script>
+  <script src="./js/constants.js?v=6.0059"></script>
+  <script src="./js/core/freshness.js?v=6.0059"></script>
+  <script src="./js/utils/dom.js?v=6.0059"></script>
+  <script src="./js/utils/color.js?v=6.0059"></script>
+  <script src="./js/export/exportPDF.js?v=6.0059"></script>
+  <script src="./js/export/captureMap.js?v=6.0059"></script>
+  <script src="./js/core/state.js?v=6.0059"></script>
+  <script src="./js/map/icons.js?v=6.0059"></script>
+  <script src="./js/config.js?v=6.0059"></script>
+  <script src="./js/ui/notifications.js?v=6.0059"></script>
+  <script src="./js/utils/math.js?v=6.0059"></script>
+  <script src="./js/map/billboard.js?v=6.0059"></script>
   <!-- Both define helpers propertyPanel.js calls when a card is built, so they
        load ahead of it. -->
-  <script src="./js/ui/colorPresets.js?v=6.0058"></script>
-  <script src="./js/ui/iconPicker.js?v=6.0058"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0058"></script>
-  <script src="./js/ui/legendTable.js?v=6.0058"></script>
-  <script src="./js/ui/dashCharts.js?v=6.0058"></script>
-  <script src="./js/ui/dashLayout.js?v=6.0058"></script>
-  <script src="./js/ui/dashCards.js?v=6.0058"></script>
-  <script src="./js/ui/reportSheet.js?v=6.0058"></script>
-  <script src="./js/ui/appMode.js?v=6.0058"></script>
-  <script src="./js/ui/dialogs.js?v=6.0058"></script>
-  <script src="./js/utils/colors.js?v=6.0058"></script>
-  <script src="./js/utils/animate.js?v=6.0058"></script>
-  <script src="./js/map/routes.js?v=6.0058"></script>
-  <script src="./js/map/markers.js?v=6.0058"></script>
-  <script src="./js/map/snapping.js?v=6.0058"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0058"></script>
-  <script src="./js/map/providerKeys.js?v=6.0058"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0058"></script>
-  <script src="./js/map/googleTiles.js?v=6.0058"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0058"></script>
-  <script src="./js/map/mapEngine.js?v=6.0058"></script>
-  <script src="./js/export/hiResRender.js?v=6.0058"></script>
-  <script src="./js/export/exportPNG.js?v=6.0058"></script>
-  <script src="./js/export/pptUtils.js?v=6.0058"></script>
-  <script src="./js/export/pptValidation.js?v=6.0058"></script>
-  <script src="./js/export/pptShapes.js?v=6.0058"></script>
-  <script src="./js/export/pptImages.js?v=6.0058"></script>
-  <script src="./js/export/pptLabels.js?v=6.0058"></script>
-  <script src="./js/export/pptTables.js?v=6.0058"></script>
-  <script src="./js/export/exportPPT.js?v=6.0058"></script>
-  <script src="./js/services/places.js?v=6.0058"></script>
-  <script src="./js/services/google.js?v=6.0058"></script>
-  <script src="./js/services/placeCache.js?v=6.0058"></script>
-  <script src="./js/services/geoapify.js?v=6.0058"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0058"></script>
-  <script src="./js/services/geocoder.js?v=6.0058"></script>
-  <script src="./js/services/boundaries.js?v=6.0058"></script>
-  <script src="./js/services/aiReports.js?v=6.0058"></script>
-  <script src="./js/ui/searchBox.js?v=6.0058"></script>
-  <script src="./js/ui/sliders.js?v=6.0058"></script>
-  <script src="./js/ui/tooltips.js?v=6.0058"></script>
-  <script src="./js/ui/toolbar.js?v=6.0058"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0058"></script>
-  <script src="./js/map/fillPatterns.js?v=6.0058"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0058"></script>
-  <script src="./js/ui/geomGroups.js?v=6.0058"></script>
-  <script src="./js/map/drawing.js?v=6.0058"></script>
-  <script src="./js/map/textLabels.js?v=6.0058"></script>
-  <script src="./js/map/markerCluster.js?v=6.0058"></script>
-  <script src="./js/map/nearby.js?v=6.0058"></script>
-  <script src="./js/project/geojson.js?v=6.0058"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0058"></script>
-  <script src="./js/project/xlsx.js?v=6.0058"></script>
-  <script src="./js/project/importSheet.js?v=6.0058"></script>
-  <script src="./js/project/kml.js?v=6.0058"></script>
+  <script src="./js/ui/colorPresets.js?v=6.0059"></script>
+  <script src="./js/ui/iconPicker.js?v=6.0059"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0059"></script>
+  <script src="./js/ui/legendTable.js?v=6.0059"></script>
+  <script src="./js/ui/dashCharts.js?v=6.0059"></script>
+  <script src="./js/ui/dashLayout.js?v=6.0059"></script>
+  <script src="./js/ui/dashCards.js?v=6.0059"></script>
+  <script src="./js/ui/dashFormat.js?v=6.0059"></script>
+  <script src="./js/export/dashExport.js?v=6.0059"></script>
+  <script src="./js/ui/reportSheet.js?v=6.0059"></script>
+  <script src="./js/ui/appMode.js?v=6.0059"></script>
+  <script src="./js/ui/dialogs.js?v=6.0059"></script>
+  <script src="./js/utils/colors.js?v=6.0059"></script>
+  <script src="./js/utils/animate.js?v=6.0059"></script>
+  <script src="./js/map/routes.js?v=6.0059"></script>
+  <script src="./js/map/markers.js?v=6.0059"></script>
+  <script src="./js/map/snapping.js?v=6.0059"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0059"></script>
+  <script src="./js/map/providerKeys.js?v=6.0059"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0059"></script>
+  <script src="./js/map/googleTiles.js?v=6.0059"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0059"></script>
+  <script src="./js/map/mapEngine.js?v=6.0059"></script>
+  <script src="./js/export/hiResRender.js?v=6.0059"></script>
+  <script src="./js/export/exportPNG.js?v=6.0059"></script>
+  <script src="./js/export/pptUtils.js?v=6.0059"></script>
+  <script src="./js/export/pptValidation.js?v=6.0059"></script>
+  <script src="./js/export/pptShapes.js?v=6.0059"></script>
+  <script src="./js/export/pptImages.js?v=6.0059"></script>
+  <script src="./js/export/pptLabels.js?v=6.0059"></script>
+  <script src="./js/export/pptTables.js?v=6.0059"></script>
+  <script src="./js/export/exportPPT.js?v=6.0059"></script>
+  <script src="./js/services/places.js?v=6.0059"></script>
+  <script src="./js/services/google.js?v=6.0059"></script>
+  <script src="./js/services/placeCache.js?v=6.0059"></script>
+  <script src="./js/services/geoapify.js?v=6.0059"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0059"></script>
+  <script src="./js/services/geocoder.js?v=6.0059"></script>
+  <script src="./js/services/boundaries.js?v=6.0059"></script>
+  <script src="./js/services/aiReports.js?v=6.0059"></script>
+  <script src="./js/services/aiReportLog.js?v=6.0059"></script>
+  <script src="./js/ui/searchBox.js?v=6.0059"></script>
+  <script src="./js/ui/sliders.js?v=6.0059"></script>
+  <script src="./js/ui/tooltips.js?v=6.0059"></script>
+  <script src="./js/ui/toolbar.js?v=6.0059"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0059"></script>
+  <script src="./js/map/fillPatterns.js?v=6.0059"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0059"></script>
+  <script src="./js/ui/geomGroups.js?v=6.0059"></script>
+  <script src="./js/map/drawing.js?v=6.0059"></script>
+  <script src="./js/map/textLabels.js?v=6.0059"></script>
+  <script src="./js/map/markerCluster.js?v=6.0059"></script>
+  <script src="./js/map/nearby.js?v=6.0059"></script>
+  <script src="./js/project/geojson.js?v=6.0059"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0059"></script>
+  <script src="./js/project/xlsx.js?v=6.0059"></script>
+  <script src="./js/project/importSheet.js?v=6.0059"></script>
+  <script src="./js/project/kml.js?v=6.0059"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0058"></script>
-  <script src="./js/project/history.js?v=6.0058"></script>
-  <script src="./js/project/autosave.js?v=6.0058"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0058"></script>
-  <script src="./js/project/importFiles.js?v=6.0058"></script>
-  <script src="./js/project/openProject.js?v=6.0058"></script>
+  <script src="./js/project/projectState.js?v=6.0059"></script>
+  <script src="./js/project/history.js?v=6.0059"></script>
+  <script src="./js/project/autosave.js?v=6.0059"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0059"></script>
+  <script src="./js/project/importFiles.js?v=6.0059"></script>
+  <script src="./js/project/openProject.js?v=6.0059"></script>
   <!-- After autosave.js: the bridge wraps autosaveNow(), so that function has
        to exist by the time this runs. -->
-  <script src="./vendor/supabase.js?v=6.0058"></script>
-  <script src="./js/auth/session.js?v=6.0058"></script>
-  <script src="./js/projects/projectStore.js?v=6.0058"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0058"></script>
-  <script src="./js/projects/projectBridge.js?v=6.0058"></script>
-  <script src="./js/project/saveProject.js?v=6.0058"></script>
-  <script src="./js/ui/sidebar.js?v=6.0058"></script>
-  <script src="./js/ui/aiTab.js?v=6.0058"></script>
-  <script src="./js/ui/layerManager.js?v=6.0058"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0058"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0058"></script>
-  <script src="./js/ui/importDialog.js?v=6.0058"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0058"></script>
-  <script src="./js/app.js?v=6.0058"></script>
+  <script src="./vendor/supabase.js?v=6.0059"></script>
+  <script src="./js/auth/session.js?v=6.0059"></script>
+  <script src="./js/projects/projectStore.js?v=6.0059"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0059"></script>
+  <script src="./js/projects/projectBridge.js?v=6.0059"></script>
+  <script src="./js/project/saveProject.js?v=6.0059"></script>
+  <script src="./js/ui/sidebar.js?v=6.0059"></script>
+  <script src="./js/ui/aiTab.js?v=6.0059"></script>
+  <script src="./js/ui/layerManager.js?v=6.0059"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0059"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0059"></script>
+  <script src="./js/ui/importDialog.js?v=6.0059"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0059"></script>
+  <script src="./js/app.js?v=6.0059"></script>
 </body>
 
 </html>

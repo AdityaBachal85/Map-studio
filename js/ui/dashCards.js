@@ -1,87 +1,112 @@
 /**
- * ui/dashCards.js — the board's cards: yours to fill in, size and arrange.
+ * ui/dashCards.js — the board's visuals: yours to fill in, size and arrange.
  *
  * WHY EVERY NUMBER IS TYPED, NOT COMPUTED. The board shows things this app has
  * no way of knowing — price per square foot, rental yield, demand-supply,
  * market sentiment. There is no source for them here, and a tool that prints a
  * confident price per square foot it invented is worse than one that prints
  * nothing: the number goes into a client document and nobody can tell it was
- * never real. So the cards are containers, and the figures are yours. Where
+ * never real. So the visuals are containers, and the figures are yours. Where
  * the app *does* know something — the routes, their distances, the Key
- * Distances table — the card reads it live and says so.
+ * Distances table — the visual reads it live and says so.
  *
- * A fresh board therefore arrives EMPTY, not seeded. Captions and axis labels
- * are scaffolding that says what a card is for; the values are em-dashes until
+ * This is the part a spreadsheet-driven tool gets from its query engine. There
+ * is no Power Query here and no formula language: data is typed, or pasted as a
+ * comma list, or read from the map. Everything downstream of the data — the
+ * visual gallery, multiple series, the formatting, cross-filtering, the layout
+ * — is here.
+ *
+ * A fresh board arrives EMPTY, not seeded. Captions and axis labels are
+ * scaffolding that says what a visual is for; the values are em-dashes until
  * somebody types them. A zero reads as measured.
  *
- * SEVEN TYPES, NOT SEVENTY. stat, stats, chart, gauges, list, access, text.
- * Between them they cover the whole mockup, and each one is small enough to
- * edit in place with a caret rather than a dialog.
- *
  * EDITING IS A MODE. Off, the board is a board — click anything and nothing
- * happens to it, and the tiles have no handles. On, every value carries a caret
- * and every tile can be moved and resized. A dashboard you can retype by
- * mis-clicking is a document, not a dashboard.
+ * happens to it, and the tiles have no handles. On, every value carries a caret,
+ * every tile can be moved and resized, and the selected one opens its format
+ * pane. A dashboard you can retype by mis-clicking is a document, not a board.
  *
- * Geometry lives in ui/dashLayout.js; charts in ui/dashCharts.js. Everything
- * here serialises into the project, so a board travels with the map it
- * describes.
+ * Geometry lives in ui/dashLayout.js, drawing in ui/dashCharts.js, the format
+ * pane in ui/dashFormat.js.
  */
 
-/** The board. Each card carries its own `{x, y, w, h}` on the canvas. */
+/** The board. Each visual carries its own `{x, y, w, h}` on the canvas. */
 let dashCards = [];
 
 /** Whether the board is being edited. A mode, not data — never serialised. */
 let dashEditing = false;
 
+/** The visual whose settings the format pane is showing. */
+let dashSelectedId = null;
+
 let dashCardSeq = 1;
 
-/** The chart forms, and what each is for. */
-const DASH_CHART_KINDS = [
-  ['line', 'Line'],
-  ['area', 'Area'],
-  ['bar', 'Column'],
-  ['donut', 'Donut'],
-];
-
-/** What the "add" bar offers, and what a fresh one of each looks like. */
-const DASH_CARD_TYPES = [
-  ['stat', 'Number', () => ({ label: 'Metric', value: '', sub: '', w: 3, h: 5 })],
-  ['stats', 'Three numbers', () => ({ w: 4, h: 5, items: [
+/**
+ * The gallery. `group` only sorts the picker; `make` is the fresh shape.
+ *
+ * Charts are all one card type with a `kind`, so switching a column chart to a
+ * line chart keeps its data — which is the whole reason Power BI's visual
+ * switcher is useful and a "delete it and add another" flow is not.
+ */
+const DASH_GALLERY = [
+  ['column', 'Column', 'Compare', () => dashChartShape('column')],
+  ['bar', 'Bar', 'Compare', () => dashChartShape('bar')],
+  ['stackedColumn', 'Stacked column', 'Compare', () => dashChartShape('stackedColumn')],
+  ['stackedBar', 'Stacked bar', 'Compare', () => dashChartShape('stackedBar')],
+  ['line', 'Line', 'Trend', () => dashChartShape('line')],
+  ['area', 'Area', 'Trend', () => dashChartShape('area')],
+  ['combo', 'Combo', 'Trend', () => dashChartShape('combo')],
+  ['scatter', 'Scatter', 'Trend', () => dashChartShape('scatter')],
+  ['pie', 'Pie', 'Share', () => dashChartShape('pie')],
+  ['donut', 'Donut', 'Share', () => dashChartShape('donut')],
+  ['funnel', 'Funnel', 'Share', () => dashChartShape('funnel')],
+  ['treemap', 'Treemap', 'Share', () => dashChartShape('treemap')],
+  ['stat', 'KPI number', 'Figures', () => ({ type: 'stat', title: 'Metric', label: 'Metric', value: '', sub: '', w: 3, h: 5 })],
+  ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 4, h: 5, items: [
     { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
-  ['chart', 'Chart', () => ({ kind: 'line', series: 1, w: 6, h: 9,
-    labels: ['2021', '2022', '2023', '2024', '2025'], values: [] })],
-  ['gauges', 'Score rings', () => ({ w: 6, h: 7, items: [
+  ['gauges', 'Score rings', 'Figures', () => ({ type: 'gauges', title: 'Scores', w: 6, h: 7, items: [
     { cap: 'Connectivity', value: '', color: '#22C55E' },
     { cap: 'Infrastructure', value: '', color: '#38BDF8' }] })],
-  ['list', 'List', () => ({ w: 4, h: 7, items: [{ name: 'Item', meta: '' }] })],
-  ['access', 'Key access points (live)', () => ({ w: 4, h: 7 })],
-  ['text', 'Text', () => ({ body: 'Type here.', w: 4, h: 5 })],
+  ['table', 'Table', 'Text', () => ({ type: 'table', title: 'Table', w: 5, h: 8,
+    columns: ['Item', 'Value'], rows: [['', ''], ['', '']] })],
+  ['list', 'List', 'Text', () => ({ type: 'list', title: 'List', w: 4, h: 7, items: [{ name: 'Item', meta: '' }] })],
+  ['text', 'Text', 'Text', () => ({ type: 'text', title: 'Notes', body: 'Type here.', w: 4, h: 5 })],
+  ['slicer', 'Slicer', 'Filter', () => ({ type: 'slicer', title: 'Filter', w: 3, h: 7,
+    items: ['2021', '2022', '2023'], picked: [] })],
+  ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 4, h: 7 })],
 ];
 
-/** @param {string} type @returns {object} a new card of that type */
-function dashNewCard(type) {
-  const def = DASH_CARD_TYPES.find(t => t[0] === type) || DASH_CARD_TYPES[0];
-  const card = Object.assign({
+/** @param {string} kind @returns {object} a fresh chart of that kind */
+function dashChartShape(kind) {
+  return {
+    type: 'chart',
+    kind,
+    title: 'Chart',
+    w: 6, h: 8,
+    labels: ['2021', '2022', '2023', '2024', '2025'],
+    seriesList: [{ name: 'Series 1', values: [], slot: 1 }],
+    fmt: { legend: 'auto', labels: false, grid: true, xAxis: true, yAxis: true, smooth: false },
+  };
+}
+
+/** @param {string} key a gallery key @returns {object} a new visual */
+function dashNewCard(key) {
+  const def = DASH_GALLERY.find(t => t[0] === key) || DASH_GALLERY[0];
+  return Object.assign({
     id: 'c' + (dashCardSeq++),
-    type: def[0],
     x: 0, y: 9999, w: 4, h: 5,   // y past the end: it lands at the bottom, then settles up
-    title: def[1],
-  }, def[2]());
-  return card;
+  }, def[3]());
 }
 
 /**
  * The board a new project starts with — the mockup's shape, in tiles.
  *
- * The map takes the left two-thirds with the three context cards beside it,
- * then the charts across the wall below. Every one of these is draggable and
- * resizable from the moment it appears; this is a starting point, not a layout.
+ * A starting point, not a layout: every one of these is draggable and resizable
+ * from the moment it appears.
  */
 function dashDefaultCards() {
   dashCardSeq = 1;
   dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
-  const c = (type, over) => Object.assign(dashNewCard(type), over);
+  const c = (key, over) => Object.assign(dashNewCard(key), over);
   return [
     c('text', { x: 8, y: 0, w: 4, h: 5, title: 'Property location & access',
       body: 'Type the address, the coordinates and anything else worth saying up front.' }),
@@ -94,8 +119,9 @@ function dashDefaultCards() {
       { cap: 'Infrastructure', value: '', color: '#38BDF8' },
       { cap: 'Development', value: '', color: '#F5C518' },
       { cap: 'Livability', value: '', color: '#22C55E' }] }),
-    c('chart', { x: 6, y: 14, w: 6, h: 7, title: 'Property price trend', kind: 'area', series: 1,
-      labels: ['2021', '2022', '2023', '2024', '2025'], values: [] }),
+    c('area', { x: 6, y: 14, w: 6, h: 7, title: 'Property price trend',
+      labels: ['2021', '2022', '2023', '2024', '2025'],
+      seriesList: [{ name: 'Rs / sq ft', values: [], slot: 1 }] }),
     c('text', { x: 0, y: 21, w: 6, h: 6, title: 'Executive summary',
       body: 'Type the summary that opens the report.' }),
     c('list', { x: 6, y: 21, w: 6, h: 6, title: 'Timeline (development)', items: [
@@ -104,31 +130,67 @@ function dashDefaultCards() {
 }
 
 /**
- * Bring a board saved before the canvas existed up to date.
+ * Bring a board saved by an older build up to date.
  *
- * Older boards positioned cards by a `slot` ('side' or 'grid') and a column
- * `span`; there was no y and no height. Rather than drop those boards, lay them
- * out in the order they were saved: the side rail becomes the right column, the
- * grid flows across the rest, and the settle pass tidies the result.
+ * Two generations to handle: boards laid out by `slot`/`span` before the canvas
+ * existed, and charts that stored one flat `values` array with `series` holding
+ * a colour number. Both are converted rather than dropped — somebody's board is
+ * not an acceptable casualty of a refactor.
  *
  * @param {object[]} cards
  */
 function dashMigrateCards(cards) {
   let sideY = 0, gridY = 0;
   cards.forEach(c => {
-    if (typeof c.w === 'number' && typeof c.h === 'number'
-      && typeof c.x === 'number' && typeof c.y === 'number') return;
-    const h = c.type === 'chart' ? 8 : c.type === 'gauges' ? 7 : c.type === 'stat' ? 5 : 6;
-    if (c.slot === 'side') {
-      c.x = 8; c.w = 4; c.y = sideY; sideY += h;
-    } else {
-      const w = Math.max(2, Math.min(12, c.span || 4));
-      c.w = w; c.x = (gridY % 2) ? Math.max(0, 12 - w) : 0;
-      c.y = 14 + gridY * h; gridY++;
+    /* ---- geometry ---- */
+    if (!(typeof c.w === 'number' && typeof c.h === 'number'
+      && typeof c.x === 'number' && typeof c.y === 'number')) {
+      const h = c.type === 'chart' ? 8 : c.type === 'gauges' ? 7 : c.type === 'stat' ? 5 : 6;
+      if (c.slot === 'side') { c.x = 8; c.w = 4; c.y = sideY; sideY += h; }
+      else {
+        const w = Math.max(2, Math.min(12, c.span || 4));
+        c.w = w; c.x = (gridY % 2) ? Math.max(0, 12 - w) : 0;
+        c.y = 14 + gridY * h; gridY++;
+      }
+      c.h = h;
     }
-    c.h = h;
     delete c.slot; delete c.span;
+
+    /* ---- chart data ---- */
+    if (c.type === 'chart') {
+      if (!Array.isArray(c.seriesList) || !c.seriesList.length) {
+        c.seriesList = [{
+          name: c.seriesName || 'Series 1',
+          values: Array.isArray(c.values) ? c.values.map(Number).filter(isFinite) : [],
+          slot: typeof c.series === 'number' ? c.series : 1,
+        }];
+      }
+      delete c.values; delete c.series; delete c.seriesName;
+      if (!c.fmt) c.fmt = { legend: 'auto', labels: false, grid: true, xAxis: true, yAxis: true, smooth: false };
+      if (!c.kind) c.kind = 'column';
+    }
   });
+}
+
+/* ---------------------------------------------------------------------------
+ * Cross-filtering
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The categories every visual is currently limited to, or null.
+ *
+ * A slicer that narrowed some visuals and not others would mislead worse than
+ * no slicer at all, so this is board-wide and every chart consults it.
+ *
+ * @returns {Set<string>|null}
+ */
+function dashFilter() {
+  const picked = new Set();
+  dashCards.forEach(c => {
+    if (c.type !== 'slicer') return;
+    (c.picked || []).forEach(v => picked.add(String(v)));
+  });
+  return picked.size ? picked : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -148,49 +210,53 @@ function dashField(card, path, v, cls) {
 }
 
 /**
- * A chart card: a plot host the chart is measured into, plus its controls.
+ * A chart: its legend, and the host its SVG is measured into.
  *
- * The SVG itself is not built here — it is drawn after layout, when the host
- * has a real width and height to measure. See ui/dashCharts.js.
+ * The SVG is not built here — it is drawn after layout, when the host has a
+ * real width and height. See ui/dashCharts.js.
  *
  * @param {object} card @returns {string} HTML
  */
 function dashChartHtml(card) {
-  const vals = (card.values || []).map(Number).filter(isFinite);
-  const labels = card.labels || [];
-  const kind = card.kind || 'line';
-  const enough = kind === 'donut' ? vals.length >= 1 : vals.length >= 2;
+  const fmt = vizFmt(card);
+  const kind = card.kind || 'column';
+  const series = vizSeries(card);
+  const share = VIZ_SHARE_KINDS.indexOf(kind) >= 0;
+  const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
+  const enough = share ? flat.length >= 1 : flat.length >= 2;
 
-  let s = '<div class="dc-plot" data-card="' + card.id + '"></div>';
-
-  if (!enough) {
-    s += '<div class="dc-empty">'
-      + (dashEditing
-        ? 'Type comma-separated values below — ' + (kind === 'donut' ? 'one per slice' : 'at least two')
-          + ' — and the chart draws itself.'
-        : 'No values yet — turn on Edit board to type them.')
+  // A legend is the dependable identity channel — never make the reader
+  // match colours by eye. One series needs none: the title already names it.
+  //
+  // A funnel needs none either, and gets it wrong if it has one: its stages are
+  // already named down the left, and the only percentage that means anything on
+  // a funnel is the share of the *first* stage, which is what the bars carry. A
+  // legend showing share-of-total put two different percentages for the same
+  // stage on one card.
+  let legend = '';
+  const wantLegend = fmt.legend !== 'off' && enough && kind !== 'funnel'
+    && (share ? true : series.length > 1);
+  if (wantLegend) {
+    const keys = share
+      ? vizCategories(card).map((c, i) => [c, i + 1])
+      : series.map(s => [s.name, s.slot]);
+    const totals = share ? (series[0] ? series[0].values.map(Number) : []) : null;
+    const sum = totals ? totals.reduce((a, b) => a + (isFinite(b) && b > 0 ? b : 0), 0) : 0;
+    legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (share ? 'right' : 'top') : fmt.legend) + '">'
+      + keys.map(([name, slot], i) =>
+        '<span class="dc-key"><i style="background:' + vizSlot(slot) + '"></i>' + esc(String(name || '—'))
+        + (sum ? '<b>' + Math.round(((totals[i] > 0 ? totals[i] : 0) / sum) * 100) + '%</b>' : '')
+        + '</span>').join('')
       + '</div>';
   }
 
-  if (dashEditing) {
-    s += '<div class="dc-ctl">'
-      + '<div class="dc-seg" role="group" aria-label="Chart type">'
-      + DASH_CHART_KINDS.map(k =>
-        '<button type="button" data-kind="' + k[0] + '"' + (k[0] === kind ? ' class="on"' : '')
-        + '>' + esc(k[1]) + '</button>').join('')
-      + '</div>'
-      + '<div class="dc-swatches" role="group" aria-label="Chart colour">'
-      + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
-        '<button type="button" class="dc-sw' + (n === (card.series || 1) ? ' on' : '')
-        + '" data-series="' + n + '" style="background:var(--viz-' + n + ')"'
-        + ' title="Colour ' + n + '" aria-label="Colour ' + n + '"></button>').join('')
-      + '</div></div>'
-      + '<div class="dc-fields">'
-      + '<label>Labels' + dashField(card, 'labels', labels.join(', '), 'dc-input') + '</label>'
-      + '<label>Values' + dashField(card, 'values', vals.join(', '), 'dc-input') + '</label>'
-      + '</div>';
-  }
-  return s;
+  const empty = enough ? '' : '<div class="dc-empty">'
+    + (dashEditing
+      ? 'No data yet — type values in the Format pane on the right.'
+      : 'No values yet — turn on Edit board to type them.')
+    + '</div>';
+
+  return legend + '<div class="dc-plot" data-card="' + card.id + '"></div>' + empty;
 }
 
 /** @param {object} card @returns {string} HTML */
@@ -218,10 +284,49 @@ function dashGaugesHtml(card) {
   }).join('') + '</div>';
 }
 
+/** A plain editable table. @param {object} card @returns {string} HTML */
+function dashTableHtml(card) {
+  const cols = card.columns || [];
+  const rows = card.rows || [];
+  return '<div class="dc-tablewrap"><table class="dc-table"><thead><tr>'
+    + cols.map((c, i) => '<th>' + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
+    + (dashEditing ? '<th class="dc-tw"></th>' : '')
+    + '</tr></thead><tbody>'
+    + rows.map((r, ri) => '<tr>'
+      + cols.map((c, ci) => '<td>' + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
+      + (dashEditing ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
+      + '</tr>').join('')
+    + '</tbody></table>'
+    + (dashEditing
+      ? '<div class="dc-tblbtns"><button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>'
+        + '<button class="dc-btn dc-addrow" data-add-col="1">+ Column</button></div>'
+      : '')
+    + '</div>';
+}
+
+/**
+ * A slicer: click values to limit every chart on the board to them.
+ *
+ * Works out of edit mode as well as in it — filtering is reading, not editing,
+ * and a filter you have to unlock the board to use would never get used.
+ */
+function dashSlicerHtml(card) {
+  const items = card.items || [];
+  const picked = new Set((card.picked || []).map(String));
+  return '<div class="dc-slicer">'
+    + items.map((v, i) =>
+      '<button type="button" class="dc-chip' + (picked.has(String(v)) ? ' on' : '')
+      + '" data-slice="' + esc(String(v)) + '">' + esc(String(v)) + '</button>').join('')
+    + '</div>'
+    + (picked.size
+      ? '<button type="button" class="dc-btn dc-addrow dc-clear" data-slice-clear="1">Clear filter</button>'
+      : '<div class="dc-empty">Click a value to filter every chart on the board.</div>');
+}
+
 /**
  * Key access points, read live from the same rows the Key Distances card uses.
  *
- * This one card is not typed in: it is the routes you have actually drawn, so
+ * This one visual is not typed in: it is the routes you have actually drawn, so
  * it cannot drift from the map. Editing its values happens where they live —
  * on the Key Distances card — rather than in a second copy here that would
  * disagree with the first.
@@ -248,7 +353,7 @@ function dashAccessHtml() {
     + '</div>').join('') + '</div>';
 }
 
-/** @param {object} card @returns {string} the card's body HTML */
+/** @param {object} card @returns {string} the visual's body HTML */
 function dashCardBody(card) {
   switch (card.type) {
     case 'stat':
@@ -267,6 +372,8 @@ function dashCardBody(card) {
 
     case 'chart': return dashChartHtml(card);
     case 'gauges': return dashGaugesHtml(card);
+    case 'table': return dashTableHtml(card);
+    case 'slicer': return dashSlicerHtml(card);
     case 'access': return dashAccessHtml();
 
     case 'list':
@@ -289,18 +396,26 @@ function dashCardBody(card) {
 /** @param {object} card @returns {HTMLElement} */
 function dashCardEl(card) {
   const el = document.createElement('section');
-  el.className = 'dash-card dash-tile dc-type-' + card.type;
+  el.className = 'dash-card dash-tile dc-type-' + card.type
+    + (card.id === dashSelectedId && dashEditing ? ' selected' : '');
   el.dataset.card = card.id;
+  if (card.fmt && card.fmt.plain) el.classList.add('plain');
+
+  const titleOn = !card.fmt || card.fmt.title !== false;
 
   el.innerHTML =
-    '<div class="dc-head">'
-    + (dashEditing ? '<span class="dc-grip" aria-hidden="true"></span>' : '')
-    + '<div class="dc-title" data-card="' + card.id + '" data-bind="title"'
-      + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + esc(card.title || '') + '</div>'
-    + '<div class="dc-tools">'
-      + '<button class="dc-btn danger" data-act="del" title="Remove this card" aria-label="Remove this card">'
-        + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
-    + '</div></div>'
+    (titleOn
+      ? '<div class="dc-head">'
+        + (dashEditing ? '<span class="dc-grip" aria-hidden="true"></span>' : '')
+        + '<div class="dc-title" data-card="' + card.id + '" data-bind="title"'
+          + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + esc(card.title || '') + '</div>'
+        + '<div class="dc-tools">'
+          + '<button class="dc-btn" data-act="dup" title="Duplicate" aria-label="Duplicate this visual">'
+            + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>'
+          + '<button class="dc-btn danger" data-act="del" title="Remove" aria-label="Remove this visual">'
+            + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
+        + '</div></div>'
+      : (dashEditing ? '<span class="dc-grip dc-grip-float" aria-hidden="true"></span>' : ''))
     + '<div class="dc-body">' + dashCardBody(card) + '</div>'
     + (dashEditing ? dashHandlesHtml() : '');
 
@@ -328,22 +443,24 @@ function renderDashboard() {
   if (dashEditing) {
     const add = document.createElement('div');
     add.id = 'dashAdd';
-    add.innerHTML = '<span class="da-cap">Add</span>' + DASH_CARD_TYPES.map(t =>
-      '<button type="button" data-add="' + t[0] + '">' + esc(t[1]) + '</button>').join('');
+    add.innerHTML = '<span class="da-cap">Add a visual</span>'
+      + DASH_GALLERY.map(t => '<button type="button" data-add="' + t[0] + '" title="'
+        + esc(t[2]) + '">' + esc(t[1]) + '</button>').join('');
     grid.appendChild(add);
   }
 
-  if (wrap) wrap.classList.toggle('tile-editing', dashEditing);
-  if (mapWasHere && dashEditing && !wrap.querySelector('.dc-rz')) {
-    const h = document.createElement('div');
-    h.className = 'dc-maphandles';
-    // Not also `.dc-grip`: that class is the 13px dotted square used inside a
-    // card header, and its fixed width squashed this chip to a blob.
-    h.innerHTML = '<span class="dc-maphead" title="Drag to move the map tile"></span>' + dashHandlesHtml();
-    wrap.appendChild(h);
-  } else if (wrap) {
-    const h = wrap.querySelector('.dc-maphandles');
-    if (h && !dashEditing) h.remove();
+  if (wrap) {
+    wrap.classList.toggle('tile-editing', dashEditing);
+    const old = wrap.querySelector('.dc-maphandles');
+    if (old) old.remove();
+    if (mapWasHere && dashEditing) {
+      const h = document.createElement('div');
+      h.className = 'dc-maphandles';
+      // Not also `.dc-grip`: that class is the 13px dotted square used inside a
+      // card header, and its fixed width squashed this chip to a blob.
+      h.innerHTML = '<span class="dc-maphead" title="Drag to move the map tile"></span>' + dashHandlesHtml();
+      wrap.appendChild(h);
+    }
   }
 
   const app = document.getElementById('app');
@@ -361,15 +478,28 @@ function renderDashboard() {
   // been inserted has not had its transition settle yet.
   dashDrawAllCharts();
   requestAnimationFrame(dashDrawAllCharts);
+  if (typeof renderDashFormat === 'function') renderDashFormat();
+}
+
+/** @param {boolean} on */
+function setDashEditing(on) {
+  dashEditing = !!on;
+  if (!dashEditing) dashSelectedId = null;
+  renderDashboard();
+  if (typeof status === 'function') {
+    status(dashEditing
+      ? 'Editing the board: click a visual to format it, drag to move, resize from any edge.'
+      : 'Board saved.');
+  }
 }
 
 /**
- * Redraw only the cards that read from the map.
+ * Redraw only the visuals that read from the map.
  *
  * Called whenever the distances change — routes measure asynchronously, so a
  * board opened straight after drawing one shows "measuring…" and has to catch
  * up on its own. Rebuilding the whole board would do it in one line and would
- * also blow away whatever was being typed into another card at that moment,
+ * also blow away whatever was being typed into another visual at that moment,
  * which is why this touches only the live ones. They contain no editable
  * fields, so there is nothing here to lose.
  */
@@ -381,17 +511,6 @@ function dashRefreshLive() {
   });
 }
 
-/** @param {boolean} on */
-function setDashEditing(on) {
-  dashEditing = !!on;
-  renderDashboard();
-  if (typeof status === 'function') {
-    status(dashEditing
-      ? 'Editing the board: retype any value, drag a card by its title bar, resize from any edge or corner.'
-      : 'Board saved.');
-  }
-}
-
 /* ---------------------------------------------------------------------------
  * Editing
  * ------------------------------------------------------------------------ */
@@ -399,12 +518,21 @@ function setDashEditing(on) {
 /** @param {string} id @returns {object|undefined} */
 function dashCardById(id) { return dashCards.find(c => c.id === id); }
 
+/** @param {string|null} id */
+function dashSelect(id) {
+  if (dashSelectedId === id) return;
+  dashSelectedId = id;
+  document.querySelectorAll('#dashGrid .dash-card').forEach(el =>
+    el.classList.toggle('selected', dashEditing && el.dataset.card === id));
+  if (typeof renderDashFormat === 'function') renderDashFormat();
+}
+
 /**
- * Write an edited field back into its card.
+ * Write an edited field back into its visual.
  *
- * `labels` and `values` are comma lists rather than a row of inputs: a chart
- * with eight points would otherwise be sixteen tiny fields, and pasting a
- * series from a spreadsheet is the fast path people actually want.
+ * `labels` and series values are comma lists rather than a row of inputs: a
+ * chart with eight points would otherwise be sixteen tiny fields, and pasting
+ * a series from a spreadsheet is the fast path people actually want.
  *
  * @param {HTMLElement} el a [data-bind] element
  */
@@ -414,13 +542,18 @@ function dashCommit(el) {
   const text = el.textContent.trim();
   const path = el.dataset.bind;
 
-  if (path === 'labels' || path === 'values') {
+  if (path === 'labels' || path === 'slicerItems') {
     const parts = text.split(',').map(s => s.trim()).filter(s => s !== '');
-    // A non-number in a value list is dropped rather than coerced to zero: a
-    // typo should not become a data point sitting on the axis.
-    card[path] = path === 'values'
-      ? parts.map(Number).filter(isFinite)
-      : parts;
+    if (path === 'labels') card.labels = parts;
+    else { card.items = parts; card.picked = (card.picked || []).filter(v => parts.indexOf(String(v)) >= 0); }
+    return;
+  }
+  // seriesList.<i>.values — a comma list of numbers. A non-number is dropped
+  // rather than coerced to zero: a typo should not become a data point.
+  const sv = path.match(/^seriesList\.(\d+)\.values$/);
+  if (sv) {
+    const s = card.seriesList && card.seriesList[+sv[1]];
+    if (s) s.values = text.split(',').map(x => Number(x.trim())).filter(isFinite);
     return;
   }
 
@@ -441,7 +574,7 @@ function dashCommit(el) {
   const app = document.getElementById('app');
   if (!app) return;
 
-  // One delegated set of listeners for the whole board: cards are rebuilt on
+  // One delegated set of listeners for the whole board: visuals are rebuilt on
   // every change, and per-card handlers would be re-attached each time.
   const inBoard = e => e.target.closest && e.target.closest('#dashGrid');
 
@@ -449,36 +582,78 @@ function dashCommit(el) {
     if (!inBoard(e)) return;
 
     const add = e.target.closest('[data-add]');
-    if (add) { dashCards.push(dashNewCard(add.dataset.add)); renderDashboard(); return; }
+    if (add) {
+      const card = dashNewCard(add.dataset.add);
+      dashCards.push(card);
+      dashSelectedId = card.id;
+      renderDashboard();
+      return;
+    }
 
     const cardEl = e.target.closest('.dash-card');
     if (!cardEl) return;
     const card = dashCardById(cardEl.dataset.card);
     if (!card) return;
 
+    // Slicers work whether or not the board is unlocked: filtering is reading.
+    const slice = e.target.closest('[data-slice]');
+    if (slice) {
+      const v = slice.dataset.slice;
+      const set = new Set((card.picked || []).map(String));
+      if (set.has(v)) set.delete(v); else set.add(v);
+      card.picked = [...set];
+      renderDashboard();
+      return;
+    }
+    if (e.target.closest('[data-slice-clear]')) { card.picked = []; renderDashboard(); return; }
+
+    if (!dashEditing) return;
+    dashSelect(card.id);
+
     const act = e.target.closest('[data-act]');
     if (act) {
-      if (act.dataset.act === 'del') dashCards = dashCards.filter(c => c !== card);
+      if (act.dataset.act === 'del') {
+        dashCards = dashCards.filter(c => c !== card);
+        if (dashSelectedId === card.id) dashSelectedId = null;
+      }
+      if (act.dataset.act === 'dup') {
+        const copy = JSON.parse(JSON.stringify(card));
+        copy.id = 'c' + (dashCardSeq++);
+        copy.y = card.y + card.h;
+        dashCards.push(copy);
+        dashSelectedId = copy.id;
+      }
       renderDashboard();
       return;
     }
 
-    const kind = e.target.closest('[data-kind]');
-    if (kind) { card.kind = kind.dataset.kind; renderDashboard(); return; }
-
-    const series = e.target.closest('[data-series]');
-    if (series) { card.series = +series.dataset.series; renderDashboard(); return; }
-
     const addRow = e.target.closest('[data-add-row]');
-    if (addRow) { (card.items = card.items || []).push({ name: 'Item', meta: '' }); renderDashboard(); return; }
-
+    if (addRow) {
+      if (card.type === 'table') (card.rows = card.rows || []).push((card.columns || []).map(() => ''));
+      else (card.items = card.items || []).push({ name: 'Item', meta: '' });
+      renderDashboard();
+      return;
+    }
+    const addCol = e.target.closest('[data-add-col]');
+    if (addCol) {
+      (card.columns = card.columns || []).push('Column');
+      (card.rows || []).forEach(r => r.push(''));
+      renderDashboard();
+      return;
+    }
     const dropRow = e.target.closest('[data-drop-row]');
-    if (dropRow) { card.items.splice(+dropRow.dataset.dropRow, 1); renderDashboard(); return; }
+    if (dropRow) {
+      const i = +dropRow.dataset.dropRow;
+      if (card.type === 'table') card.rows.splice(i, 1); else card.items.splice(i, 1);
+      renderDashboard();
+      return;
+    }
   });
 
   app.addEventListener('blur', e => {
     const el = e.target.closest && e.target.closest('[data-bind]');
-    if (!el || !dashEditing || !inBoard(e)) return;
+    if (!el || !dashEditing) return;
+    if (!inBoard(e) && !e.target.closest('#dashFormat')) return;
     dashCommit(el);
     // Charts and gauges have to redraw from the new numbers; text does not, but
     // rebuilding uniformly is one code path instead of a list of exceptions.
