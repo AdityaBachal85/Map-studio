@@ -131,6 +131,12 @@
           labelOffset: opts.labelOffset || { x: 12, y: -26 },
           labelBg: opts.labelBg || '#FFFFFF',
           viaPoints: (opts.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
+          // Waypoint dots off, without giving up the waypoints themselves. They
+          // are a control surface — something to drag while the route is being
+          // shaped — and once it is right they are scaffolding on a drawing
+          // that is about to be handed to somebody. Deleting them was the only
+          // way to get rid of them, and that changes the route.
+          viaHidden: !!opts.viaHidden,
           alts: opts.saved ? [opts.saved] : null, altIndex: 0, approx: opts.saved ? !!opts.saved.approx : false,
           line: null, _labelEl: null, _el: null, _viaEls: [], anchor: null, card: null
         };
@@ -147,11 +153,29 @@
         if (typeof refreshLayers === 'function') refreshLayers();
         return rt;
       }
+      /**
+       * Paint the waypoint dots' visibility from the two things that can hide
+       * them: the Layer Manager hiding the whole route, and the route's own
+       * "Dots" toggle. One function rather than two places setting `display`,
+       * because the previous arrangement had the Layer Manager unhiding dots
+       * the card had deliberately hidden.
+       * @param {object} rt
+       */
+      function applyViaVisibility(rt) {
+        const show = !rt._hidden && !rt.viaHidden;
+        (rt._viaEls || []).forEach(el => { el.style.display = show ? '' : 'none'; });
+      }
+
+      /** Show or hide just this route's waypoint dots. @param {object} rt @param {boolean} on */
+      function setViaDotsVisible(rt, on) {
+        rt.viaHidden = !on;
+        applyViaVisibility(rt);
+      }
+
       /** Show/hide a route line + label without deleting it. Used by the Layer Manager. @param {object} rt @param {boolean} on */
       function setRouteVisible(rt, on) {
         rt._hidden = !on;
-        if (on) (rt._viaEls || []).forEach(el => el.style.display = '');
-        else (rt._viaEls || []).forEach(el => el.style.display = 'none');
+        applyViaVisibility(rt);
         drawRoute(rt); rebuildLegend();
       }
       function deleteRoute(rt) {
@@ -212,6 +236,10 @@
           bbLayer.appendChild(wrap);
           rt._viaEls.push(wrap);
         });
+        // Re-hide immediately: renderViaDots() rebuilds the elements from
+        // scratch on every recompute, so without this a hidden set reappeared
+        // the moment the route was recalculated.
+        applyViaVisibility(rt);
         scheduleRepaint();
       }
 

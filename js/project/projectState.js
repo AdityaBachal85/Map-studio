@@ -60,6 +60,7 @@ function serialiseRoute(r) {
     weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
     showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
     viaPoints: (r.viaPoints || []).map(v => ({ lat: v.lat, lng: v.lng })),
+    viaHidden: !!r.viaHidden,
     // The computed geometry travels with the route so reopening a project
     // does not re-spend a routing request per route.
     saved: alt ? { d: alt.d, t: alt.t, coords: alt.coords, approx: r.approx } : null,

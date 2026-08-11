@@ -342,6 +342,7 @@ function wireLocCard(card, loc) {
     <div class="r via-row">
       <button class="mini-btn vAdd" title="Force this route through a waypoint you click on the map">+ Via-point</button>
       <button class="mini-btn vClear" title="Remove all waypoints from this route" style="display:none;">Clear vias</button>
+      <label class="chk vDots" style="display:none;" title="Hide the waypoint dots on the map. The route still goes through them — this only stops them being drawn, and keeps them out of exports."><input type="checkbox" class="vShow" ${rt.viaHidden ? '' : 'checked'}> Dots</label>
       <span class="grow"></span>
       <span class="sub via-count" style="font-family:var(--mono);"></span>
     </div>`;
@@ -364,6 +365,12 @@ function wireLocCard(card, loc) {
         card.querySelector('.rf').addEventListener('click', () => { rt.altIndex = 0; computeRoute(rt); });
         card.querySelector('.zm').addEventListener('click', () => {
           if (rt.line) map.fitBounds(rt.line.getBounds(), { padding: [70, 70] });
+        });
+        card.querySelector('.vShow').addEventListener('change', e => {
+          setViaDotsVisible(rt, e.target.checked);
+          status(e.target.checked
+            ? 'Waypoint dots shown.'
+            : 'Waypoint dots hidden — the route still runs through them.');
         });
         card.querySelector('.vAdd').addEventListener('click', () => armViaAdd(rt));
         card.querySelector('.vClear').addEventListener('click', () => {
@@ -412,6 +419,10 @@ function wireLocCard(card, loc) {
         const vClear = rt.card.querySelector('.vClear');
         const vCount = rt.card.querySelector('.via-count');
         if (vClear) vClear.style.display = vc ? '' : 'none';
+        // Only offered when there is something to hide: a Dots checkbox on a
+        // route with no waypoints is a control with nothing to control.
+        const vDots = rt.card.querySelector('.vDots');
+        if (vDots) vDots.style.display = vc ? '' : 'none';
         if (vCount) vCount.textContent = vc ? (vc + ' via-point' + (vc > 1 ? 's' : '')) : '';
       }
       // ---------- legend ----------
