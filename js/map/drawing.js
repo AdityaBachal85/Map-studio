@@ -286,7 +286,8 @@ function snapshotGeom(g) {
     id: g.id, shape: g.shape, name: g.name, description: g.description, notes: g.notes,
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
-    labelSize: g.labelSize, labelBold: g.labelBold, showLabel: g.showLabel, glow: g.glow,
+    labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
+    showLabel: g.showLabel, glow: g.glow,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -423,6 +424,7 @@ function recreateGeomFromSnapshot(snap) {
     fillColor: snap.fillColor, borderColor: snap.borderColor, borderWidth: snap.borderWidth, fillOpacity: snap.fillOpacity,
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
     labelSize: snap.labelSize, labelBold: snap.labelBold,
+    labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
     showLabel: snap.showLabel, glow: snap.glow,
     createdAt: snap.createdAt,
   });
@@ -436,6 +438,7 @@ function restoreGeomSnapshot(id, snap) {
   g.fillColor = snap.fillColor; g.borderColor = snap.borderColor; g.borderWidth = snap.borderWidth; g.fillOpacity = snap.fillOpacity;
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
   g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
+  g.labelStyle = snap.labelStyle; g.labelAngle = snap.labelAngle;
   g.showLabel = snap.showLabel; g.glow = snap.glow;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);

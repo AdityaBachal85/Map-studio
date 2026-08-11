@@ -34,6 +34,32 @@
 const TEXT_LABEL_MIN = 10;
 const TEXT_LABEL_MAX = 44;
 
+/**
+ * How the text is presented.
+ *
+ * `halo` is bare type with a contrasting outline — right over imagery, where a
+ * box would hide the thing being labelled. `plate` is a soft rounded panel.
+ * `pill` is the chrome the location and route chips already wear, so a
+ * free-standing label can sit next to one and belong there rather than looking
+ * like it came from a different tool.
+ *
+ * Plate colour and opacity mean the same thing in `plate` and `pill`; only
+ * `halo` ignores them, because a halo has no box to fill.
+ */
+const TEXT_LABEL_STYLES = [['halo', 'Halo'], ['plate', 'Plate'], ['pill', 'Label pill']];
+
+/** @param {object} g @returns {string} the presentation, defaulted */
+function textLabelStyle(g) {
+  const v = g && g.labelStyle;
+  return TEXT_LABEL_STYLES.some(o => o[0] === v) ? v : 'halo';
+}
+
+/** @param {object} g @returns {number} rotation in degrees, clamped */
+function textLabelAngle(g) {
+  const n = Number(g && g.labelAngle);
+  return isFinite(n) ? Math.max(-180, Math.min(180, n)) : 0;
+}
+
 /** Whether the map is armed to drop a label on the next click. */
 let textLabelPlacing = false;
 
@@ -83,28 +109,39 @@ function textLabelSize(g) {
 function geomTextIcon(g) {
   const size = textLabelSize(g);
   const ink = g.borderColor || '#EAF0F9';
-  const plated = (g.fillOpacity || 0) > 0.02;
 
-  const box = plated
-    ? 'background:' + textLabelRgba(g.fillColor, g.fillOpacity)
-      + ';padding:' + Math.round(size * 0.22) + 'px ' + Math.round(size * 0.5) + 'px'
-      + ';border-radius:' + Math.round(size * 0.34) + 'px'
+  const mode = textLabelStyle(g);
+  const angle = textLabelAngle(g);
+
+  let box;
+  if (mode === 'halo') {
     // 4-way shadow rather than -webkit-text-stroke: the stroke property thins
     // the glyph from the inside at small sizes, and is not honoured by every
     // rasteriser the export path runs through.
-    : 'text-shadow:0 0 3px ' + textLabelHalo(ink)
-      + ',1px 1px 2px ' + textLabelHalo(ink)
-      + ',-1px -1px 2px ' + textLabelHalo(ink)
-      + ',1px -1px 2px ' + textLabelHalo(ink);
+    const h = textLabelHalo(ink);
+    box = 'text-shadow:0 0 3px ' + h + ',1px 1px 2px ' + h
+      + ',-1px -1px 2px ' + h + ',1px -1px 2px ' + h;
+  } else {
+    // Padding scales with the type, so a 30px label is a bigger label rather
+    // than large text crammed into a small box. A pill's radius comes from
+    // .map-text.as-pill; a plate keeps a softer rectangular corner.
+    box = 'background:' + textLabelRgba(g.fillColor, g.fillOpacity == null ? 1 : g.fillOpacity)
+      + ';padding:' + Math.round(size * 0.34) + 'px ' + Math.round(size * 0.62) + 'px'
+      + (mode === 'pill' ? '' : ';border-radius:' + Math.round(size * 0.34) + 'px');
+  }
 
   const style = 'color:' + ink
     + ';font-size:' + size + 'px'
     + ';font-weight:' + (g.labelBold === false ? 600 : 800)
+    // translate first, rotate second: the other order swings the label around
+    // the map point instead of turning it in place.
+    + (angle ? ';transform:translate(-50%,-50%) rotate(' + angle + 'deg)' : '')
     + ';' + box;
 
   return L.divIcon({
     className: 'map-text-wrap',
-    html: '<span class="map-text" style="' + style + '">' + esc(g.name || ' ') + '</span>',
+    html: '<span class="map-text' + (mode === 'pill' ? ' as-pill' : '') + '" style="' + style + '">'
+      + esc(g.name || ' ') + '</span>',
     iconSize: [0, 0],
   });
 }
@@ -161,6 +198,8 @@ function addTextLabel(lat, lng, text) {
     fillOpacity: 0,
     labelSize: 15,
     labelBold: true,
+    labelStyle: 'halo',
+    labelAngle: 0,
   });
 
   if (typeof pushUndo === 'function') pushUndo({ type: 'create', snap: snapshotGeom(g) });
@@ -201,6 +240,8 @@ function textLabelCardMarkup(g) {
   card.className = 'item-card geom-card label-card';
   const size = textLabelSize(g);
   const plate = Math.round((g.fillOpacity || 0) * 100);
+  const mode = textLabelStyle(g);
+  const angle = textLabelAngle(g);
 
   card.innerHTML = `
     <div class="r">
@@ -214,10 +255,19 @@ function textLabelCardMarkup(g) {
       <span class="pct lsize-v">${size}px</span>
     </div>
     <div class="r">
+      <span class="sub gg-lbl">Style</span>
+      <select class="lstyle grow" title="Halo reads over imagery; Label pill matches the location and route chips" aria-label="Label style">${optionList(TEXT_LABEL_STYLES, mode)}</select>
+    </div>
+    <div class="r${mode === 'halo' ? ' is-off' : ''}">
       <span class="sub gg-lbl">Plate</span>
-      <input type="color" class="gclr" value="${esc(g.fillColor)}" title="Plate colour behind the text" aria-label="Plate colour behind the text">
-      <input type="range" class="gop" min="0" max="100" step="5" value="${plate}" style="flex:1;" title="Plate opacity — at 0 the text carries a halo instead" aria-label="Plate opacity">
-      <span class="pct gop-v">${plate ? plate + '%' : 'Halo'}</span>
+      <input type="color" class="gclr" value="${esc(g.fillColor)}" title="Plate colour behind the text" aria-label="Plate colour behind the text"${mode === 'halo' ? ' disabled' : ''}>
+      <input type="range" class="gop" min="0" max="100" step="5" value="${plate}" style="flex:1;" title="Plate opacity" aria-label="Plate opacity"${mode === 'halo' ? ' disabled' : ''}>
+      <span class="pct gop-v">${mode === 'halo' ? '\u2014' : plate + '%'}</span>
+    </div>
+    <div class="r">
+      <span class="sub gg-lbl">Rotate</span>
+      <input type="range" class="lrot" min="-180" max="180" step="5" value="${angle}" style="flex:1;" title="Angle the text — useful for running a name along a road. Double-click to straighten." aria-label="Text rotation">
+      <span class="pct lrot-v">${angle}\u00B0</span>
     </div>
     <div class="r">
       <label class="chk"><input type="checkbox" class="lbold" ${g.labelBold === false ? '' : 'checked'}> Bold</label>
@@ -264,6 +314,28 @@ function wireTextLabelCard(card, g) {
     restyle();
   });
 
+  card.querySelector('.lstyle').addEventListener('change', e => {
+    g.labelStyle = e.target.value;
+    // A pill with a transparent background is an invisible pill. Leaving Halo,
+    // where opacity has no meaning and is therefore usually 0, gives it one —
+    // visibly, by moving the slider, not behind it.
+    if (g.labelStyle !== 'halo' && (g.fillOpacity || 0) < 0.05) g.fillOpacity = 0.95;
+    restyle();
+    syncTextLabelCard(g);          // the plate row enables or greys out with it
+  });
+
+  const rot = card.querySelector('.lrot');
+  rot.addEventListener('input', e => {
+    g.labelAngle = +e.target.value;
+    card.querySelector('.lrot-v').textContent = g.labelAngle + '\u00B0';
+    restyle();
+  });
+  rot.addEventListener('dblclick', () => {
+    g.labelAngle = 0; rot.value = 0;
+    card.querySelector('.lrot-v').textContent = '0\u00B0';
+    restyle();
+  });
+
   card.querySelector('.lbold').addEventListener('change', e => { g.labelBold = e.target.checked; restyle(); });
   card.querySelector('.gnotes').addEventListener('change', e => { g.notes = e.target.value; touchGeom(g); });
   card.querySelector('.gzoom').addEventListener('click', () => {
@@ -286,8 +358,17 @@ function syncTextLabelCard(g) {
   c.querySelector('.gclr').value = g.fillColor;
   c.querySelector('.lsize').value = size;
   c.querySelector('.lsize-v').textContent = size + 'px';
+  const mode = textLabelStyle(g);
+  const angle = textLabelAngle(g);
   c.querySelector('.gop').value = plate;
-  c.querySelector('.gop-v').textContent = plate ? plate + '%' : 'Halo';
+  c.querySelector('.gop-v').textContent = mode === 'halo' ? '\u2014' : plate + '%';
+  c.querySelector('.lstyle').value = mode;
+  c.querySelector('.lrot').value = angle;
+  c.querySelector('.lrot-v').textContent = angle + '\u00B0';
+  const plateRow = c.querySelector('.gop').closest('.r');
+  if (plateRow) plateRow.classList.toggle('is-off', mode === 'halo');
+  c.querySelector('.gop').disabled = mode === 'halo';
+  c.querySelector('.gclr').disabled = mode === 'halo';
   c.querySelector('.lbold').checked = g.labelBold !== false;
   if (typeof syncColorSwatch === 'function') {
     syncColorSwatch(c.querySelector('.gbc'));
