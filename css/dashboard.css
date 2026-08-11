@@ -1,0 +1,692 @@
+/* ===========================================================================
+   dashboard.css — the two layouts that are not the full-screen map.
+
+   ONE GRID, THREE MODES. `.app[data-mode]` switches between them, and the map
+   element is a grid item in all three. It is never moved between parents and
+   never re-created, because destroying a Leaflet container destroys everything
+   drawn on it — the pins, the shapes, the labels, the boundaries — and a
+   "switch to dashboard" that silently emptied the map would be the worst kind
+   of feature. The map you edit in the dashboard is the map, not a picture of
+   one.
+
+   Density follows a dashboard scale (8/12/16/20 rather than the marketing-page
+   24/32/48): this is a working surface, and the numbers on it are the content.
+   Motion is deliberately subtle — 220ms, small translations — because a panel
+   that flies across the screen on every mode change stops being useful the
+   third time you use it.
+
+   Colours are the app's own tokens throughout. A dashboard that arrived in a
+   different palette from the studio it lives inside would read as a different
+   product bolted on.
+   ========================================================================= */
+
+/* --------------------------------------------------------------------------
+   1. Mode plumbing
+   ----------------------------------------------------------------------- */
+
+/* Everything that is not the map is out of the way in map mode. Kept as
+   display:none rather than off-screen so none of it costs layout or paints
+   while the studio is being used. */
+#dashNav, #dashTop, #dashSide, #dashGrid,
+#rsHead, #rsLegend, #rsRight, #rsFoot { display: none; }
+
+.app[data-mode="dashboard"],
+.app[data-mode="report"] {
+  display: grid;
+  overflow: hidden;
+  background: var(--bg0);
+}
+
+/* --------------------------------------------------------------------------
+   2. Dashboard layout
+   ----------------------------------------------------------------------- */
+
+.app[data-mode="dashboard"] {
+  grid-template-columns: 210px minmax(0, 1fr) 336px;
+  grid-template-rows: 58px minmax(320px, 46vh) auto;
+  grid-template-areas:
+    "nav  top  top"
+    "nav  map  side"
+    "nav  grid grid";
+  column-gap: 14px;
+  row-gap: 14px;
+  padding: 0 14px 14px 0;
+}
+
+.app[data-mode="dashboard"] #dashNav { display: flex; grid-area: nav; }
+.app[data-mode="dashboard"] #dashTop { display: flex; grid-area: top; }
+.app[data-mode="dashboard"] #dashSide { display: block; grid-area: side; }
+.app[data-mode="dashboard"] #dashGrid { display: grid; grid-area: grid; }
+
+/* The whole board scrolls as one. Scrolling the card grid inside its own box
+   would leave the map pinned while the numbers move under it, which reads as
+   two pages that happen to share a window. */
+.app[data-mode="dashboard"],
+.app[data-mode="report"] { overflow-y: auto; overflow-x: hidden; }
+
+/* --------------------------------------------------------------------------
+   3. Report sheet layout
+   ----------------------------------------------------------------------- */
+
+/* The nav is here too, not just on the dashboard. It carries the only way back
+   out of this mode — the first cut hid it and left the report sheet a room with
+   no door, which a test found by running out of buttons to click. Keeping it
+   also means the switcher is in the same place in both non-map modes. */
+.app[data-mode="report"] {
+  grid-template-columns: 210px 236px minmax(0, 1fr) 292px;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+  grid-template-areas:
+    "nav rhead rhead rhead"
+    "nav rleg  map   rright"
+    "nav rfoot rfoot rfoot";
+  gap: 10px;
+  padding: 12px 12px 12px 0;
+  background: #10141d;
+}
+
+.app[data-mode="report"] #dashNav { display: flex; grid-area: nav; }
+.app[data-mode="report"] #rsHead { display: flex; grid-area: rhead; }
+.app[data-mode="report"] #rsLegend { display: block; grid-area: rleg; }
+.app[data-mode="report"] #rsRight { display: block; grid-area: rright; }
+.app[data-mode="report"] #rsFoot { display: flex; grid-area: rfoot; }
+
+/* --------------------------------------------------------------------------
+   4. The map, as a panel
+   ----------------------------------------------------------------------- */
+
+.app[data-mode="dashboard"] .map-wrap,
+.app[data-mode="report"] .map-wrap {
+  position: relative;
+  inset: auto;
+  grid-area: map;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  min-height: 0;      /* or the grid row refuses to shrink below the map's content */
+}
+
+.app[data-mode="report"] .map-wrap { border-radius: 8px; }
+
+/* The studio's own furniture is scaled back in a panel this size. The title
+   card and legend are the sheet's job in report mode, and in dashboard mode a
+   400px-tall map does not have room for both them and the controls. */
+.app[data-mode="report"] #titleCard,
+.app[data-mode="report"] #legendCard,
+.app[data-mode="report"] #mapHistory,
+.app[data-mode="report"] #fsBtn { display: none; }
+
+/* The studio sidebar is `position:absolute; left:0; z-index:1200` — it takes no
+   part in the grid, so outside map mode it lands directly on top of the left
+   nav and swallows every click meant for it. (Found the same way as the bug
+   below: a test could see a nav item, click it, and hit a sidebar tab
+   instead.) Off-canvas by default here; the nav's Tools item slides it back in
+   over the top, which is what an overlay panel should do anyway. */
+.app[data-mode="dashboard"] .sidebar,
+.app[data-mode="report"] .sidebar { transform: translateX(-102%) translateZ(0); }
+
+.app[data-mode="dashboard"].dash-side-open .sidebar,
+.app[data-mode="report"].dash-side-open .sidebar { transform: translateX(0) translateZ(0); }
+
+/* Its edge handle sits over the nav too, and Tools already does this job. */
+.app[data-mode="dashboard"] #sideToggle,
+.app[data-mode="report"] #sideToggle { display: none; }
+
+/* Everything the map positions off the sidebar's width has to stop doing that
+   once the sidebar is off-canvas — otherwise it is offset by ~400px of nothing.
+   On the sheet that put the search bar across the middle of the map. */
+.app[data-mode="report"] .search-box { left: 12px; }
+.app[data-mode="dashboard"] #titleCard,
+.app[data-mode="report"] #clickHint,
+.app[data-mode="dashboard"] #clickHint { left: 50%; }
+/* Left like the sidebar-hidden case, but lifted clear of the brand mark and the
+   scale bar, which own that corner and which it would otherwise sit straight on
+   top of (it is z-index 1000 against the mark's 800, so the mark loses). */
+.app[data-mode="dashboard"] #basemapSwitcher,
+.app[data-mode="report"] #basemapSwitcher { left: 12px; bottom: 86px; }
+
+/* --------------------------------------------------------------------------
+   4b. The mode switcher that lives on the map
+   -----------------------------------------------------------------------
+
+   In map mode the left nav is hidden, so without this there is literally no
+   way to reach the dashboard — the buttons that switch modes were themselves
+   inside the thing you were switching to. Caught by a test that could not
+   click a button it could see in the DOM.
+
+   Sits in the top-right control row, immediately left of undo/redo. Not a
+   floating action button and not buried in a menu: switching view is a
+   top-level action and the segmented control is the pattern people already
+   read as "these are the views". Labels are visible because three unlabelled
+   icons are a guessing game. */
+
+#modeSwitch {
+  position: absolute;
+  top: 12px;
+  right: 148px;          /* clears #mapHistory: right 58 + 82 wide + 8 gap */
+  z-index: 1000;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  height: 38px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+
+.ms-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  /* The theme's muted token (--dim in dark) is already borderline against a
+     frost panel; the app's own text colour at 72% is comfortably readable in
+     both themes without needing a per-theme value. */
+  color: var(--text);
+  opacity: .72;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .16s, color .16s;
+}
+
+.ms-item:hover { opacity: 1; background: rgba(127, 127, 127, .16); }
+
+/* The current view reads as pressed, not merely tinted — with three items of
+   equal weight, colour alone is too weak a signal for "you are here". */
+.ms-item.on {
+  opacity: 1;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.ms-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The nav is the switcher once you are out of map mode; two of them on screen
+   at once is one too many. */
+.app[data-mode="dashboard"] #modeSwitch,
+.app[data-mode="report"] #modeSwitch { display: none; }
+
+/* Chrome, not map content — out of exports with the rest of the furniture. */
+.map-wrap.capturing #modeSwitch { display: none; }
+
+/* Narrow windows: the search box grows toward this from the left, so the
+   labels go before anything overlaps. The tooltips and aria-labels stay. */
+@media (max-width: 1180px) {
+  .ms-item span { display: none; }
+  .ms-item { padding: 0 9px; }
+}
+
+/* --------------------------------------------------------------------------
+   5. Left nav
+   ----------------------------------------------------------------------- */
+
+#dashNav {
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  background: var(--surface-solid);
+  border-right: 1px solid var(--border);
+}
+
+.dn-brand { padding: 2px 8px 16px; line-height: 1; }
+.dn-mark {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+.dn-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: var(--text-2);
+}
+
+.dn-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  font: 600 12.5px/1 var(--font, inherit);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease;
+}
+
+.dn-item:hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+.dn-item svg { flex: none; }
+
+/* Current view, said twice: colour and a bar. Colour alone would be the only
+   signal for where you are, which is the one thing a nav must not get wrong
+   for anyone who cannot separate these two greys. */
+.dn-item.on {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.dn-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.dn-sep { height: 1px; margin: 10px 6px; background: var(--border); }
+.dn-foot { margin-top: auto; padding: 8px 6px 0; border-top: 1px solid var(--border); }
+
+/* --------------------------------------------------------------------------
+   6. Top bar
+   ----------------------------------------------------------------------- */
+
+#dashTop {
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px 0 14px;
+}
+
+.dt-spacer { flex: 1; }
+
+.dt-meter {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dt-meter b { color: var(--text-2); font-weight: 600; }
+.dt-meter i { font-style: normal; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.dt-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink, #1a0d00);
+  font: 700 12.5px/1 var(--font, inherit);
+  cursor: pointer;
+  box-shadow: var(--accent-glow);
+  transition: filter .18s ease, transform .18s ease;
+}
+.dt-cta:hover { filter: brightness(1.07); }
+.dt-cta:active { transform: scale(.98); }
+.dt-cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* In dashboard mode the studio's floating search moves into the top bar. Same
+   element, same handlers, same results list — re-homed, not rebuilt. */
+.app[data-mode="dashboard"] #searchBox {
+  position: static;
+  width: min(420px, 42vw);
+  transform: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. Right column + cards
+   ----------------------------------------------------------------------- */
+
+.dash-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  padding: 13px 14px;
+  min-width: 0;
+}
+
+.dash-card + .dash-card { margin-top: 12px; }
+
+.dc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dc-title {
+  flex: 1;
+  min-width: 0;
+  font: 700 10.5px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  outline: none;
+}
+
+.dc-title:focus { color: var(--accent2, var(--accent)); }
+
+#dashSide { overflow: visible; }
+
+#dashGrid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+#dashGrid .dash-card { margin-top: 0; grid-column: span var(--span, 3); }
+
+@media (max-width: 1180px) {
+  #dashGrid .dash-card { grid-column: span 6; }
+}
+
+/* --------------------------------------------------------------------------
+   8. Card internals
+   ----------------------------------------------------------------------- */
+
+.dc-stat-val {
+  font: 800 25px/1.05 var(--font, inherit);
+  letter-spacing: -.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.dc-stat-label,
+.dc-stat-sub {
+  font-size: 11px;
+  color: var(--text-2);
+  outline: none;
+}
+
+.dc-stat-label { margin-bottom: 5px; }
+.dc-stat-sub { margin-top: 6px; }
+
+.dc-delta { font-weight: 700; }
+.dc-delta.up { color: var(--ok); }
+.dc-delta.down { color: var(--danger); }
+
+/* Chart. Drawn as inline SVG rather than a library: the shapes here are a
+   polyline and some bars, and a charting dependency would be an order of
+   magnitude more code than the thing it draws. */
+.dc-chart { width: 100%; height: 74px; display: block; overflow: visible; }
+.dc-chart .grid { stroke: var(--border); stroke-width: 1; }
+.dc-chart .line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dc-chart .dot { stroke: var(--surface-solid); stroke-width: 2; }
+.dc-chart .bar { rx: 2; }
+
+.dc-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 9.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Gauge ring */
+.dc-gauges { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-around; }
+.dc-gauge { text-align: center; min-width: 74px; }
+.dc-gauge svg { display: block; margin: 0 auto; }
+.dc-gauge .track { fill: none; stroke: var(--border); }
+.dc-gauge .val { fill: none; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.dc-gauge-num {
+  font: 800 15px/1 var(--font, inherit);
+  fill: var(--text);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+.dc-gauge-cap { margin-top: 6px; font-size: 10.5px; color: var(--text-2); outline: none; }
+
+/* List */
+.dc-list { display: flex; flex-direction: column; gap: 9px; }
+.dc-row { display: flex; align-items: flex-start; gap: 9px; }
+.dc-row .dc-ico { flex: none; margin-top: 1px; }
+.dc-row-main { flex: 1; min-width: 0; }
+.dc-row-name { font-size: 12px; font-weight: 600; color: var(--text); outline: none; }
+.dc-row-meta { font-size: 10.5px; color: var(--text-2); margin-top: 2px; outline: none; font-variant-numeric: tabular-nums; }
+
+/* Free text */
+.dc-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  outline: none;
+  white-space: pre-wrap;
+}
+
+/* --------------------------------------------------------------------------
+   9. Edit affordances
+   ----------------------------------------------------------------------- */
+
+/* Off until the board is in edit mode. A dashboard you can accidentally retype
+   by clicking on it is not a dashboard, it is a document. */
+.dc-tools { display: none; gap: 2px; }
+.app.dash-editing .dc-tools { display: flex; }
+
+.dc-btn {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 5px;
+  line-height: 0;
+  transition: color .15s ease, background .15s ease;
+}
+.dc-btn:hover { color: var(--text); background: rgba(255, 255, 255, .07); }
+.dc-btn.danger:hover { color: var(--danger); background: rgba(255, 107, 129, .12); }
+.dc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.app.dash-editing [contenteditable] {
+  outline: 1px dashed rgba(255, 255, 255, .22);
+  outline-offset: 3px;
+  border-radius: 4px;
+  cursor: text;
+}
+.app.dash-editing [contenteditable]:focus {
+  outline: 2px solid var(--accent);
+  background: rgba(255, 122, 26, .07);
+}
+
+.app.dash-editing .dash-card { cursor: default; }
+.app.dash-editing .dc-head { cursor: grab; }
+.dash-card.dragging { opacity: .4; }
+.dash-card.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.dash-card.drop-after { box-shadow: 3px 0 0 var(--accent); }
+
+#dashAdd {
+  grid-column: 1 / -1;
+  display: none;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 13px;
+}
+.app.dash-editing #dashAdd { display: flex; }
+
+#dashAdd button {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  cursor: pointer;
+}
+#dashAdd button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --------------------------------------------------------------------------
+   10. Report sheet panels
+   ----------------------------------------------------------------------- */
+
+#rsHead {
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: linear-gradient(100deg, #143a2a 0%, #17624a 55%, #1c7a5c 100%);
+  color: #fff;
+}
+
+#rsHead h1 {
+  margin: 0;
+  font: 800 22px/1.1 var(--font, inherit);
+  letter-spacing: .01em;
+  outline: none;
+}
+#rsHead p { margin: 3px 0 0; font-size: 11.5px; outline: none; }
+#rsSubA { color: #FFD166; font-weight: 700; }
+#rsSubB { color: rgba(255, 255, 255, .86); }
+
+#rsLegend, #rsRight {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.rs-panel {
+  border: 1px solid rgba(10, 30, 60, .14);
+  border-radius: 8px;
+  background: #fff;
+  color: #17202B;
+  overflow: hidden;
+}
+.rs-panel + .rs-panel { margin-top: 10px; }
+
+.rs-panel > h3 {
+  margin: 0;
+  padding: 7px 11px;
+  background: #123a2b;
+  color: #fff;
+  font: 800 10px/1.3 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.rs-body { padding: 9px 11px; }
+
+.rs-line { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 11px; }
+.rs-line .rs-swatch { width: 26px; height: 3px; border-radius: 2px; flex: none; }
+.rs-line .rs-ico { width: 17px; flex: none; line-height: 0; text-align: center; }
+.rs-line span { flex: 1; min-width: 0; outline: none; }
+
+.rs-bullets { margin: 0; padding: 0; list-style: none; }
+.rs-bullets li {
+  position: relative;
+  padding: 4px 0 4px 18px;
+  font-size: 11px;
+  line-height: 1.4;
+  outline: none;
+}
+.rs-bullets li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #17624a;
+}
+
+.rs-rows { width: 100%; border-collapse: collapse; font-size: 11px; }
+.rs-rows td { padding: 5px 4px; }
+.rs-rows tr:nth-child(even) { background: rgba(10, 30, 60, .045); }
+.rs-rows td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+#rsFoot {
+  gap: 10px;
+  align-items: stretch;
+}
+
+.rs-foot-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: #fff;
+  color: #17202B;
+}
+
+.rs-foot-badge {
+  flex: none;
+  width: 74px;
+  text-align: center;
+  font: 800 9px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #17624a;
+}
+.rs-foot-badge svg { display: block; margin: 0 auto 5px; }
+
+.rs-foot-text { font-size: 11px; line-height: 1.5; outline: none; }
+
+.rs-rating {
+  flex: none;
+  width: 220px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: #123a2b;
+  color: #fff;
+  text-align: center;
+}
+.rs-rating h4 {
+  margin: 0 0 6px;
+  font: 800 9px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  outline: none;
+}
+.rs-score {
+  font: 800 26px/1 var(--font, inherit);
+  color: #FFD166;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.rs-score-note { margin-top: 6px; font-size: 9.5px; line-height: 1.4; color: rgba(255, 255, 255, .8); outline: none; }
+
+/* --------------------------------------------------------------------------
+   11. Motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .app[data-mode="dashboard"] #dashGrid > .dash-card,
+  .app[data-mode="dashboard"] #dashSide > .dash-card,
+  .app[data-mode="report"] .rs-panel {
+    animation: dashIn 260ms cubic-bezier(.16, 1, .3, 1) backwards;
+  }
+}
+
+@keyframes dashIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Small buttons the sheet uses for add/remove. Deliberately reusing the legend
+   card's .legend-x so the two editable surfaces feel like one product. */
+.rs-add {
+  border: 1px solid rgba(10, 30, 60, .2);
+  background: #fff;
+  color: #17202B;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font: 600 10.5px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.rs-add:hover { border-color: #17624a; color: #17624a; }
+.rs-del { color: #7C8AA0; }
+.rs-panel [contenteditable]:focus {
+  outline: 2px solid #17624a;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+#rsHead [contenteditable]:focus { outline: 2px solid #FFD166; outline-offset: 2px; border-radius: 4px; }

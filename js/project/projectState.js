@@ -103,6 +103,10 @@ function serialiseProject() {
     legendExtras: (typeof legendExtras !== 'undefined' && Array.isArray(legendExtras)) ? legendExtras : [],
     legendShowTime: (typeof legendShowTime === 'undefined') ? true : !!legendShowTime,
     legendOrder: (typeof legendOrder !== 'undefined' && Array.isArray(legendOrder)) ? legendOrder : [],
+    // The board and the sheet travel with the map they describe: they are
+    // about this place, not about this browser.
+    dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
+    reportSheet: (typeof reportSheet !== 'undefined' && reportSheet) ? reportSheet : undefined,
     locations: locations.map(serialiseLocation),
     routes: routes.map(serialiseRoute),
     geometries: geometries.map(geomToGeoJSONFeature),
@@ -154,6 +158,17 @@ function applyProject(proj, opts) {
   if (proj.north !== undefined) { $('northTgl').checked = !!proj.north; document.body.classList.toggle('no-north', !proj.north); }
   if (proj.projectLogo) setProjectLogo(proj.projectLogo);
   if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }
+
+  if (typeof dashCards !== 'undefined') {
+    dashCards = Array.isArray(proj.dashboard) ? proj.dashboard : [];
+    // Keep new cards from colliding with restored ids.
+    dashCardSeq = dashCards.reduce((n, c) => Math.max(n, (parseInt(String(c.id).slice(1), 10) || 0) + 1), 1);
+  }
+  if (typeof reportSheet !== 'undefined') {
+    reportSheet = (proj.reportSheet && typeof proj.reportSheet === 'object') ? proj.reportSheet : null;
+  }
+  if (typeof renderDashboard === 'function' && appMode() === 'dashboard') renderDashboard();
+  if (typeof renderReportSheet === 'function' && appMode() === 'report') renderReportSheet();
 
   if (typeof legendShowTime !== 'undefined') legendShowTime = proj.legendShowTime !== false;
   if (typeof legendOrder !== 'undefined') legendOrder = Array.isArray(proj.legendOrder) ? proj.legendOrder : [];

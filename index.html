@@ -9,9 +9,9 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0056" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0056">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0056">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0057" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0057">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0057">
   <!-- Listed individually rather than behind main.css's @import list, because
        an @import carries its own ?v= that has to be bumped in a second place,
        and when it isn't, index.html busts while the sheets it pulls in keep
@@ -21,17 +21,81 @@
        there is one version per file and the release bump covers them.
        Order is load-bearing — later sheets override earlier ones, and refine
        must stay last. Do not reorder. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0056">
-  <link rel="stylesheet" href="./css/style.css?v=6.0056">
-  <link rel="stylesheet" href="./css/map.css?v=6.0056">
-  <link rel="stylesheet" href="./css/sidebar.css?v=6.0056">
-  <link rel="stylesheet" href="./css/components.css?v=6.0056">
-  <link rel="stylesheet" href="./css/layout.css?v=6.0056">
-  <link rel="stylesheet" href="./css/refine.css?v=6.0056">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0057">
+  <link rel="stylesheet" href="./css/style.css?v=6.0057">
+  <link rel="stylesheet" href="./css/map.css?v=6.0057">
+  <link rel="stylesheet" href="./css/sidebar.css?v=6.0057">
+  <link rel="stylesheet" href="./css/components.css?v=6.0057">
+  <link rel="stylesheet" href="./css/layout.css?v=6.0057">
+  <link rel="stylesheet" href="./css/dashboard.css?v=6.0057">
+  <link rel="stylesheet" href="./css/refine.css?v=6.0057">
 </head>
 
 <body>
-  <div class="app" id="app">
+  <!-- data-mode drives the whole layout: 'map' (full-screen studio, the
+       default), 'dashboard' (the map becomes a panel among cards) and 'report'
+       (the map becomes the middle of an A4 sheet). The map element is NEVER
+       moved in the DOM or re-created between them — only the grid cell it sits
+       in changes — which is what keeps it the same live, editable Map Studio
+       with the same project, tools and undo history in every mode. -->
+  <div class="app" id="app" data-mode="map">
+
+    <!-- ===== Dashboard & report chrome. Siblings of .map-wrap rather than a
+         wrapper around it, so every mode is one CSS grid and the map is just
+         another grid item. A wrapper would have meant moving the map element
+         between parents, which destroys the Leaflet instance's DOM and with it
+         everything on the map. ===== -->
+
+    <nav id="dashNav" aria-label="Views">
+      <div class="dn-brand"><span class="dn-mark">dbot</span><span class="dn-sub">MAP STUDIO</span></div>
+      <button class="dn-item" data-mode-btn="map" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2Z"/><path d="M9 4v14M15 6v14"/></svg>
+        <span>Map studio</span></button>
+      <button class="dn-item" data-mode-btn="dashboard" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Dashboard</span></button>
+      <button class="dn-item" data-mode-btn="report" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+        <span>Report sheet</span></button>
+      <div class="dn-sep"></div>
+      <button class="dn-item" id="dnTools" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5"/></svg>
+        <span>Tools</span></button>
+      <a class="dn-item" id="dnProjects" href="./projects.html">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v12Z"/></svg>
+        <span>Projects</span></a>
+      <div class="dn-foot" id="dnFoot"></div>
+    </nav>
+
+    <header id="dashTop">
+      <div id="dashTopSearch"></div>
+      <span class="dt-spacer"></span>
+      <div class="dt-meter" id="dtUsage" title="Report allowance on the AI backend today">
+        <b>AI reports</b><i id="dtUsageVal">—</i>
+      </div>
+      <button class="dt-meter" id="dashEditBtn" type="button" aria-pressed="false" title="Edit the board: retype any value, drag cards to rearrange">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <b>Edit board</b>
+      </button>
+      <button class="dt-cta" id="dtNewReport" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        New research</button>
+    </header>
+
+    <aside id="dashSide"></aside>
+    <section id="dashGrid" aria-label="Dashboard cards"></section>
+
+    <!-- ===== Report sheet panels ===== -->
+    <header id="rsHead">
+      <div class="rs-head-main">
+        <h1 id="rsTitle" contenteditable="true" spellcheck="false">CONNECTIVITY MAP</h1>
+        <p id="rsSubA" contenteditable="true" spellcheck="false">Project Location: 17.329367, 78.434669</p>
+        <p id="rsSubB" contenteditable="true" spellcheck="false">Rajendranagar / Budvel, Hyderabad</p>
+      </div>
+    </header>
+    <aside id="rsLegend"></aside>
+    <aside id="rsRight"></aside>
+    <footer id="rsFoot"></footer>
 
     <div class="map-wrap" id="mapWrap">
       <div id="tiltStage">
@@ -79,6 +143,21 @@
         </div>
       </div>
       <div id="clickHint">Click anywhere to drop a location · Esc to finish</div>
+      <!-- The way into the other two modes. It has to live on the map, because
+           in map mode the left nav is hidden and this is the only thing that
+           can reach the dashboard. Same data-mode-btn attribute as the nav's
+           items, so it needs no JS of its own. -->
+      <div id="modeSwitch" class="frost" role="group" aria-label="View">
+        <button class="ms-item" data-mode-btn="map" type="button" title="Map studio">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2Z"/><path d="M9 4v14M15 6v14"/></svg>
+          <span>Map</span></button>
+        <button class="ms-item" data-mode-btn="dashboard" type="button" title="Dashboard — the map plus editable cards">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          <span>Dashboard</span></button>
+        <button class="ms-item" data-mode-btn="report" type="button" title="Report sheet — the A4 connectivity page">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+          <span>Report</span></button>
+      </div>
       <div id="mapHistory">
         <button id="mapUndoBtn" class="frost" type="button" title="Undo (Ctrl+Z) — covers everything: moves, styling, adds and deletes" aria-label="Undo" disabled>
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -799,102 +878,105 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0056"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0056"></script>
-  <script src="./vendor/html2canvas.js?v=6.0056"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0056"></script>
-  <script src="./vendor/jszip.js?v=6.0056"></script>
-  <script src="./vendor/anime.min.js?v=6.0056"></script>
+  <script src="./vendor/leaflet.js?v=6.0057"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0057"></script>
+  <script src="./vendor/html2canvas.js?v=6.0057"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0057"></script>
+  <script src="./vendor/jszip.js?v=6.0057"></script>
+  <script src="./vendor/anime.min.js?v=6.0057"></script>
 
-  <script src="./js/core/prefs.js?v=6.0056"></script>
-  <script src="./js/constants.js?v=6.0056"></script>
-  <script src="./js/core/freshness.js?v=6.0056"></script>
-  <script src="./js/utils/dom.js?v=6.0056"></script>
-  <script src="./js/utils/color.js?v=6.0056"></script>
-  <script src="./js/export/exportPDF.js?v=6.0056"></script>
-  <script src="./js/export/captureMap.js?v=6.0056"></script>
-  <script src="./js/core/state.js?v=6.0056"></script>
-  <script src="./js/map/icons.js?v=6.0056"></script>
-  <script src="./js/config.js?v=6.0056"></script>
-  <script src="./js/ui/notifications.js?v=6.0056"></script>
-  <script src="./js/utils/math.js?v=6.0056"></script>
-  <script src="./js/map/billboard.js?v=6.0056"></script>
+  <script src="./js/core/prefs.js?v=6.0057"></script>
+  <script src="./js/constants.js?v=6.0057"></script>
+  <script src="./js/core/freshness.js?v=6.0057"></script>
+  <script src="./js/utils/dom.js?v=6.0057"></script>
+  <script src="./js/utils/color.js?v=6.0057"></script>
+  <script src="./js/export/exportPDF.js?v=6.0057"></script>
+  <script src="./js/export/captureMap.js?v=6.0057"></script>
+  <script src="./js/core/state.js?v=6.0057"></script>
+  <script src="./js/map/icons.js?v=6.0057"></script>
+  <script src="./js/config.js?v=6.0057"></script>
+  <script src="./js/ui/notifications.js?v=6.0057"></script>
+  <script src="./js/utils/math.js?v=6.0057"></script>
+  <script src="./js/map/billboard.js?v=6.0057"></script>
   <!-- Both define helpers propertyPanel.js calls when a card is built, so they
        load ahead of it. -->
-  <script src="./js/ui/colorPresets.js?v=6.0056"></script>
-  <script src="./js/ui/iconPicker.js?v=6.0056"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0056"></script>
-  <script src="./js/ui/legendTable.js?v=6.0056"></script>
-  <script src="./js/ui/dialogs.js?v=6.0056"></script>
-  <script src="./js/utils/colors.js?v=6.0056"></script>
-  <script src="./js/utils/animate.js?v=6.0056"></script>
-  <script src="./js/map/routes.js?v=6.0056"></script>
-  <script src="./js/map/markers.js?v=6.0056"></script>
-  <script src="./js/map/snapping.js?v=6.0056"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0056"></script>
-  <script src="./js/map/providerKeys.js?v=6.0056"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0056"></script>
-  <script src="./js/map/googleTiles.js?v=6.0056"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0056"></script>
-  <script src="./js/map/mapEngine.js?v=6.0056"></script>
-  <script src="./js/export/hiResRender.js?v=6.0056"></script>
-  <script src="./js/export/exportPNG.js?v=6.0056"></script>
-  <script src="./js/export/pptUtils.js?v=6.0056"></script>
-  <script src="./js/export/pptValidation.js?v=6.0056"></script>
-  <script src="./js/export/pptShapes.js?v=6.0056"></script>
-  <script src="./js/export/pptImages.js?v=6.0056"></script>
-  <script src="./js/export/pptLabels.js?v=6.0056"></script>
-  <script src="./js/export/pptTables.js?v=6.0056"></script>
-  <script src="./js/export/exportPPT.js?v=6.0056"></script>
-  <script src="./js/services/places.js?v=6.0056"></script>
-  <script src="./js/services/google.js?v=6.0056"></script>
-  <script src="./js/services/placeCache.js?v=6.0056"></script>
-  <script src="./js/services/geoapify.js?v=6.0056"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0056"></script>
-  <script src="./js/services/geocoder.js?v=6.0056"></script>
-  <script src="./js/services/boundaries.js?v=6.0056"></script>
-  <script src="./js/services/aiReports.js?v=6.0056"></script>
-  <script src="./js/ui/searchBox.js?v=6.0056"></script>
-  <script src="./js/ui/sliders.js?v=6.0056"></script>
-  <script src="./js/ui/tooltips.js?v=6.0056"></script>
-  <script src="./js/ui/toolbar.js?v=6.0056"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0056"></script>
-  <script src="./js/map/fillPatterns.js?v=6.0056"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0056"></script>
-  <script src="./js/ui/geomGroups.js?v=6.0056"></script>
-  <script src="./js/map/drawing.js?v=6.0056"></script>
-  <script src="./js/map/textLabels.js?v=6.0056"></script>
-  <script src="./js/map/markerCluster.js?v=6.0056"></script>
-  <script src="./js/map/nearby.js?v=6.0056"></script>
-  <script src="./js/project/geojson.js?v=6.0056"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0056"></script>
-  <script src="./js/project/xlsx.js?v=6.0056"></script>
-  <script src="./js/project/importSheet.js?v=6.0056"></script>
-  <script src="./js/project/kml.js?v=6.0056"></script>
+  <script src="./js/ui/colorPresets.js?v=6.0057"></script>
+  <script src="./js/ui/iconPicker.js?v=6.0057"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0057"></script>
+  <script src="./js/ui/legendTable.js?v=6.0057"></script>
+  <script src="./js/ui/dashCards.js?v=6.0057"></script>
+  <script src="./js/ui/reportSheet.js?v=6.0057"></script>
+  <script src="./js/ui/appMode.js?v=6.0057"></script>
+  <script src="./js/ui/dialogs.js?v=6.0057"></script>
+  <script src="./js/utils/colors.js?v=6.0057"></script>
+  <script src="./js/utils/animate.js?v=6.0057"></script>
+  <script src="./js/map/routes.js?v=6.0057"></script>
+  <script src="./js/map/markers.js?v=6.0057"></script>
+  <script src="./js/map/snapping.js?v=6.0057"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0057"></script>
+  <script src="./js/map/providerKeys.js?v=6.0057"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0057"></script>
+  <script src="./js/map/googleTiles.js?v=6.0057"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0057"></script>
+  <script src="./js/map/mapEngine.js?v=6.0057"></script>
+  <script src="./js/export/hiResRender.js?v=6.0057"></script>
+  <script src="./js/export/exportPNG.js?v=6.0057"></script>
+  <script src="./js/export/pptUtils.js?v=6.0057"></script>
+  <script src="./js/export/pptValidation.js?v=6.0057"></script>
+  <script src="./js/export/pptShapes.js?v=6.0057"></script>
+  <script src="./js/export/pptImages.js?v=6.0057"></script>
+  <script src="./js/export/pptLabels.js?v=6.0057"></script>
+  <script src="./js/export/pptTables.js?v=6.0057"></script>
+  <script src="./js/export/exportPPT.js?v=6.0057"></script>
+  <script src="./js/services/places.js?v=6.0057"></script>
+  <script src="./js/services/google.js?v=6.0057"></script>
+  <script src="./js/services/placeCache.js?v=6.0057"></script>
+  <script src="./js/services/geoapify.js?v=6.0057"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0057"></script>
+  <script src="./js/services/geocoder.js?v=6.0057"></script>
+  <script src="./js/services/boundaries.js?v=6.0057"></script>
+  <script src="./js/services/aiReports.js?v=6.0057"></script>
+  <script src="./js/ui/searchBox.js?v=6.0057"></script>
+  <script src="./js/ui/sliders.js?v=6.0057"></script>
+  <script src="./js/ui/tooltips.js?v=6.0057"></script>
+  <script src="./js/ui/toolbar.js?v=6.0057"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0057"></script>
+  <script src="./js/map/fillPatterns.js?v=6.0057"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0057"></script>
+  <script src="./js/ui/geomGroups.js?v=6.0057"></script>
+  <script src="./js/map/drawing.js?v=6.0057"></script>
+  <script src="./js/map/textLabels.js?v=6.0057"></script>
+  <script src="./js/map/markerCluster.js?v=6.0057"></script>
+  <script src="./js/map/nearby.js?v=6.0057"></script>
+  <script src="./js/project/geojson.js?v=6.0057"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0057"></script>
+  <script src="./js/project/xlsx.js?v=6.0057"></script>
+  <script src="./js/project/importSheet.js?v=6.0057"></script>
+  <script src="./js/project/kml.js?v=6.0057"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0056"></script>
-  <script src="./js/project/history.js?v=6.0056"></script>
-  <script src="./js/project/autosave.js?v=6.0056"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0056"></script>
-  <script src="./js/project/importFiles.js?v=6.0056"></script>
-  <script src="./js/project/openProject.js?v=6.0056"></script>
+  <script src="./js/project/projectState.js?v=6.0057"></script>
+  <script src="./js/project/history.js?v=6.0057"></script>
+  <script src="./js/project/autosave.js?v=6.0057"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0057"></script>
+  <script src="./js/project/importFiles.js?v=6.0057"></script>
+  <script src="./js/project/openProject.js?v=6.0057"></script>
   <!-- After autosave.js: the bridge wraps autosaveNow(), so that function has
        to exist by the time this runs. -->
-  <script src="./vendor/supabase.js?v=6.0056"></script>
-  <script src="./js/auth/session.js?v=6.0056"></script>
-  <script src="./js/projects/projectStore.js?v=6.0056"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0056"></script>
-  <script src="./js/projects/projectBridge.js?v=6.0056"></script>
-  <script src="./js/project/saveProject.js?v=6.0056"></script>
-  <script src="./js/ui/sidebar.js?v=6.0056"></script>
-  <script src="./js/ui/aiTab.js?v=6.0056"></script>
-  <script src="./js/ui/layerManager.js?v=6.0056"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0056"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0056"></script>
-  <script src="./js/ui/importDialog.js?v=6.0056"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0056"></script>
-  <script src="./js/app.js?v=6.0056"></script>
+  <script src="./vendor/supabase.js?v=6.0057"></script>
+  <script src="./js/auth/session.js?v=6.0057"></script>
+  <script src="./js/projects/projectStore.js?v=6.0057"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0057"></script>
+  <script src="./js/projects/projectBridge.js?v=6.0057"></script>
+  <script src="./js/project/saveProject.js?v=6.0057"></script>
+  <script src="./js/ui/sidebar.js?v=6.0057"></script>
+  <script src="./js/ui/aiTab.js?v=6.0057"></script>
+  <script src="./js/ui/layerManager.js?v=6.0057"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0057"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0057"></script>
+  <script src="./js/ui/importDialog.js?v=6.0057"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0057"></script>
+  <script src="./js/app.js?v=6.0057"></script>
 </body>
 
 </html>
