@@ -400,6 +400,10 @@ async function importMapFileAndReport(file) {
   }
 
   if (r.replaced) {
+    // Opening a different project starts a new history. Without this, Ctrl+Z
+    // after an Open would pull the *previous* project's contents back into the
+    // one now on screen — and autosave would then write that as the truth.
+    if (typeof historyReset === 'function') historyReset();
     if (typeof status === 'function') status('Opened “' + file.name + '”.');
     return r;
   }

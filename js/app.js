@@ -68,7 +68,10 @@ projectBridgeBoot()
   // them — and before initAutosave(), so the very first autosave already has
   // the imported map in it.
   .then(() => runPendingImport())
-  .then(() => initAutosave());
+  .then(() => initAutosave())
+  // Last, so whatever the app opens with — a project, a restored session, a
+  // blank map — is the baseline rather than the first thing Undo takes back.
+  .then(() => { if (typeof historyStart === 'function') historyStart(); });
 
 buildImageryLookControl();
 buildRoadLookControl();

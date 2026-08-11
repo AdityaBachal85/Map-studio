@@ -294,16 +294,22 @@ function snapshotGeom(g) {
 
 // ---------- create / delete / history ----------
 
+/* Undo moved out of this file and up a level — see project/history.js.
+   It used to be a drawing feature that knew about creating, deleting and
+   reshaping a geometry and nothing else, so dragging a pin or restyling a route
+   was a one-way door. It is now one stack over the whole map, and these two
+   names stay as shims because a dozen call sites here and in ui/geomGroups.js
+   already say them, and because each of those sites marks a real "this action
+   is finished" moment that is worth recording immediately rather than waiting
+   for the watcher's next tick. */
+
 function updateUndoRedoButtons() {
-  $('drawUndoBtn').disabled = !undoStack.length;
-  $('drawRedoBtn').disabled = !redoStack.length;
+  if (typeof historyUpdateButtons === 'function') historyUpdateButtons();
 }
 
+/** @param {object} [entry] ignored — kept so existing call sites read the same */
 function pushUndo(entry) {
-  undoStack.push(entry);
-  if (undoStack.length > HISTORY_MAX) undoStack.shift();
-  redoStack.length = 0;
-  updateUndoRedoButtons();
+  if (typeof historyCommit === 'function') historyCommit();
 }
 
 /** Attach the live/edit/select listeners every geometry (drawn or imported) needs. @param {object} g */
@@ -461,22 +467,10 @@ function applyHistoryEntry(entry, isUndo) {
   }
 }
 
-function doUndo() {
-  const entry = undoStack.pop();
-  if (!entry) return;
-  applyHistoryEntry(entry, true);
-  redoStack.push(entry);
-  updateUndoRedoButtons();
-  status('Undid last drawing change.');
-}
-function doRedo() {
-  const entry = redoStack.pop();
-  if (!entry) return;
-  applyHistoryEntry(entry, false);
-  undoStack.push(entry);
-  updateUndoRedoButtons();
-  status('Redid drawing change.');
-}
+/* doUndo() and doRedo() now live in project/history.js and cover the whole map.
+   applyHistoryEntry() and the per-geometry snapshot helpers above are kept:
+   snapshotGeom() is still how geomGroups.js describes a batch, and
+   recreateGeomFromSnapshot() is still how a shape is rebuilt. */
 
 /** Remove every drawn/imported shape and reset history (used by "Open project"). */
 function clearAllGeometries() {
@@ -488,7 +482,6 @@ function clearAllGeometries() {
   });
   geometries.length = 0;
   undoStack.length = 0; redoStack.length = 0;
-  updateUndoRedoButtons();
   syncGeomEmpty();
 }
 
@@ -558,8 +551,12 @@ GEOM_SHAPES.forEach(shape => { const b = $(SHAPE_BTN_ID[shape]); if (b) b.addEve
 $('drawFinishBtn').addEventListener('click', finishActiveDraw);
 $('drawCancelBtn').addEventListener('click', () => { if (activeShape) { disableAllDrawModes(); status('Drawing cancelled.'); } });
 Object.keys(MODE_BTN_ID).forEach(mode => { const b = $(MODE_BTN_ID[mode]); if (b) b.addEventListener('click', () => toggleEditMode(mode)); });
-$('drawUndoBtn').addEventListener('click', doUndo);
-$('drawRedoBtn').addEventListener('click', doRedo);
+// Wrapped rather than passed by reference: doUndo/doRedo moved to
+// project/history.js, which loads after this file, so naming them here at load
+// time threw a ReferenceError — and that abandoned the rest of this file's
+// top-level wiring with it. An arrow resolves them at click time instead.
+$('drawUndoBtn').addEventListener('click', () => doUndo());
+$('drawRedoBtn').addEventListener('click', () => doRedo());
 updateUndoRedoButtons();
 
 // Live measurement while actively drawing (Geoman exposes the in-progress
@@ -605,8 +602,14 @@ document.addEventListener('keydown', e => {
     if (activeShape) { disableAllDrawModes(); status('Drawing cancelled.'); }
     else if (activeEditMode) { disableAllEditModes(); status('Shape editing off.'); }
   }
-  if (typing) return;
+  // Undo is deliberately NOT gated on `typing`. Everywhere else that guard is
+  // right — single-key shortcuts must not fire mid-word — but Ctrl+Z inside a
+  // text field is the browser's own undo for that field, and a name typed into
+  // a card is exactly the kind of change people expect Ctrl+Z to take back.
+  // The browser still handles it first while a field has an edit of its own to
+  // undo; this catches it once that runs out.
   const key = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && key === 'z') { e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); }
   else if ((e.ctrlKey || e.metaKey) && key === 'y') { e.preventDefault(); doRedo(); }
+  if (typing) return;
 });

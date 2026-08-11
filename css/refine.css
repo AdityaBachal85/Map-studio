@@ -3607,3 +3607,52 @@ input[type=checkbox]:disabled {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+   22. Undo / Redo on the map
+   ------------------------------------------------------------------------ */
+
+/* Top right, immediately left of the fullscreen button — a horizontal pair
+   rather than two more floors on that column, which is already four tall.
+
+   Not top-left, which is where an editor would normally put undo: the brand
+   block lives there, and the buttons landed underneath it. Found by taking a
+   screenshot of them and getting a picture of the logo. */
+#mapHistory {
+  position: absolute;
+  top: 12px;
+  right: 58px;
+  z-index: 1000;
+  display: flex;
+  gap: 6px;
+}
+
+#mapHistory button {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  transition: color .15s, opacity .15s;
+}
+
+#mapHistory button:hover:not(:disabled) { color: var(--accent); }
+
+/* Dimmed and inert rather than hidden: a control that vanishes when there is
+   nothing to undo makes the two buttons swap places as you work. */
+#mapHistory button:disabled {
+  opacity: .38;
+  cursor: default;
+}
+
+#mapHistory button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Chrome, not map content — out of exports with the rest of the furniture. */
+.map-wrap.capturing #mapHistory { display: none; }
