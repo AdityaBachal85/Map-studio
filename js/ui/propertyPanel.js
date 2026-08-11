@@ -462,29 +462,11 @@ function wireLocCard(card, loc) {
         if (vCount) vCount.textContent = vc ? (vc + ' via-point' + (vc > 1 ? 's' : '')) : '';
       }
       // ---------- legend ----------
-      function legendRows() {
-        const rows = [];
-        routes.forEach(rt => {
-          const A = locById(rt.fromId), B = locById(rt.toId);
-          if (!A || !B || !rt.alts) return;
-          const alt = rt.alts[rt.altIndex];
-          const name = rt.labelText && rt.labelText.trim() ? rt.labelText
-            : (A.type === 'site' ? B.name : A.name + ' → ' + B.name);
-          rows.push({ color: rt.color, name: name, km: (alt.d / 1000).toFixed(1) + ' km', min: alt.t ? Math.round(alt.t / 60) + ' min' : '—' });
-        });
-        return rows;
-      }
-      function rebuildLegend() {
-        const body = $('legendBody');
-        body.innerHTML = '';
-        legendRows().forEach(r => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td><span class="swatch" style="background:${esc(r.color)}"></span></td>
-      <td>${esc(r.name)}</td><td class="num">${esc(r.km)}</td><td class="num">${esc(r.min)}</td>`;
-          body.appendChild(tr);
-        });
-        $('legendCard').style.display = ($('legendTgl').checked && body.children.length) ? '' : 'none';
-      }
+      /* legendRows() and rebuildLegend() moved to ui/legendTable.js when the
+         Key Distances card became editable — see that file. They kept their
+         names because a dozen call sites here and in map/routes.js already say
+         them. */
+
       function syncEmpties() {
         $('locEmpty').style.display = locations.length ? 'none' : '';
         $('rtEmpty').style.display = routes.length ? 'none' : '';

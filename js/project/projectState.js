@@ -96,6 +96,12 @@ function serialiseProject() {
     north: $('northTgl').checked,
     projectLogo: brand.projectLogo,
     siteUsesProjLogo: brand.siteUsesProjLogo,
+    // The Key Distances card's overrides. Only what differs from the measured
+    // table is stored, so a project saved before this existed still opens with
+    // a live table rather than a frozen copy of one.
+    legendEdits: (typeof legendEdits === 'object' && legendEdits) ? legendEdits : {},
+    legendExtras: (typeof legendExtras !== 'undefined' && Array.isArray(legendExtras)) ? legendExtras : [],
+    legendShowTime: (typeof legendShowTime === 'undefined') ? true : !!legendShowTime,
     locations: locations.map(serialiseLocation),
     routes: routes.map(serialiseRoute),
     geometries: geometries.map(geomToGeoJSONFeature),
@@ -147,6 +153,14 @@ function applyProject(proj, opts) {
   if (proj.north !== undefined) { $('northTgl').checked = !!proj.north; document.body.classList.toggle('no-north', !proj.north); }
   if (proj.projectLogo) setProjectLogo(proj.projectLogo);
   if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }
+
+  if (typeof legendShowTime !== 'undefined') legendShowTime = proj.legendShowTime !== false;
+  if (typeof legendEdits !== 'undefined') legendEdits = (proj.legendEdits && typeof proj.legendEdits === 'object') ? proj.legendEdits : {};
+  if (typeof legendExtras !== 'undefined') {
+    legendExtras = Array.isArray(proj.legendExtras) ? proj.legendExtras : [];
+    // Keep new hand-added rows from colliding with restored ones.
+    legendExtraSeq = legendExtras.reduce((n, x) => Math.max(n, (+x.id || 0) + 1), 1);
+  }
 
   (proj.locations || []).forEach(l => addLocation(l));
   (proj.routes || []).forEach(r => addRoute(r));

@@ -3656,3 +3656,135 @@ input[type=checkbox]:disabled {
 
 /* Chrome, not map content — out of exports with the rest of the furniture. */
 .map-wrap.capturing #mapHistory { display: none; }
+
+/* ---------------------------------------------------------------------------
+   23. Key Distances — icons, editing, and the two-column shape
+   ------------------------------------------------------------------------ */
+
+/* Zebra striping. A dozen rows of "name … number" is a wall without it, and
+   the tint is the one every printed property sheet uses: barely there on
+   screen, still legible after a photocopier or a projector. */
+#legendCard tbody tr:nth-child(even) { background: rgba(10, 30, 60, .045); }
+
+/* The mark cell. Fixed width so names start on the same x whether a row has a
+   dot, a glyph or a logo — a ragged left edge is what makes a legend look
+   assembled rather than designed. */
+#legendCard .legend-mark {
+  width: 26px;
+  text-align: center;
+  line-height: 0;
+}
+
+#legendCard .legend-glyph { vertical-align: middle; }
+
+/* Contained rather than cropped: a client's logo is whatever aspect ratio they
+   sent, and cover would cut the ends off a wordmark. */
+#legendCard .legend-logo {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+/* ---- edit mode ---- */
+
+#legendCard .legend-edit {
+  border: 0;
+  background: none;
+  color: #8FA5C6;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 0;
+  border-radius: 5px;
+  transition: color .15s, background .15s;
+}
+
+#legendCard .legend-edit:hover { color: #fff; }
+#legendCard .legend-edit.on { color: var(--orange2); background: rgba(255, 255, 255, .12); }
+#legendCard .legend-edit:focus-visible { outline: 2px solid var(--orange2); outline-offset: 1px; }
+
+/* Editable cells are shown to be editable. Without the hint people read the
+   card as output and never try — the feature exists and stays undiscovered. */
+#legendCard.editing td[contenteditable] {
+  outline: 1px dashed rgba(10, 30, 60, .28);
+  outline-offset: -2px;
+  cursor: text;
+  border-radius: 3px;
+}
+
+#legendCard.editing td[contenteditable]:focus {
+  outline: 2px solid var(--orange);
+  background: rgba(255, 122, 26, .07);
+}
+
+#legendCard.editing .legend-mark { cursor: pointer; }
+#legendCard.editing .legend-mark:hover { background: rgba(255, 122, 26, .12); }
+
+#legendCard .legend-actions { white-space: nowrap; padding-right: 4px; }
+
+#legendCard .legend-x {
+  border: 0;
+  background: none;
+  color: #7C8AA0;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+
+#legendCard .legend-x:hover { color: var(--danger); background: rgba(255, 107, 129, .12); }
+#legendCard .legend-reset:hover { color: var(--orange); background: rgba(255, 122, 26, .14); }
+
+#legendFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-top: 1px solid rgba(10, 30, 60, .12);
+  background: rgba(10, 30, 60, .04);
+  font-size: 11px;
+  color: #33415C;
+}
+
+#legendFoot button {
+  border: 1px solid rgba(10, 30, 60, .2);
+  background: #fff;
+  color: #17202B;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#legendFoot button:hover { border-color: var(--orange); color: var(--orange); }
+#legendFoot .chk { color: #33415C; gap: 4px; }
+
+/* Edit affordances are chrome. The card itself stays in the export — it is the
+   deliverable — but the pencil, the row buttons and the footer are not. */
+.map-wrap.capturing #legendCard .legend-edit,
+.map-wrap.capturing #legendCard .legend-actions,
+.map-wrap.capturing #legendFoot { display: none !important; }
+
+.map-wrap.capturing #legendCard.editing td[contenteditable] {
+  outline: none;
+  background: none;
+}
+
+/* The pencil sits left of the title, not right of it. The right end of this
+   header is underneath the Layers button — #legendCard is z-index 900 and the
+   map-control stack is 1000 — so a button there was visible and unclickable.
+   Found by a test that timed out with "layerBtn intercepts pointer events". */
+#legendCard .hd .legend-edit { order: -1; margin-right: -2px; }
+
+/* Room for the per-row buttons edit mode adds. Without it the last column is
+   clipped by the card's max-width and the × sits half off the edge. */
+#legendCard.editing { max-width: 348px; }
+
+/* Clear of the map-control column. The card's default right:12px put its
+   header directly under the Layers and AI buttons — the title wrapped to two
+   lines to get out from under them, and this card is *in* the export, so that
+   was a defect in the deliverable rather than only on screen. Dragging still
+   overrides this; it is only where the card starts. */
+#legendCard { right: 58px; }
