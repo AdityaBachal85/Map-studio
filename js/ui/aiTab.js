@@ -69,14 +69,20 @@ async function aiRefreshUsage() {
   const line = $('aiUsageLine');
   if (!line) return;
   try {
-    const u = await getUsage();
+    // The waiting is narrated here rather than left as a blank line, because
+    // the free tier's cold start is most of a minute and an idle panel reads
+    // as a broken one.
+    const u = await getUsage({
+      onWaking: secs => { line.textContent = 'Starting the report server… ' + secs + 's'; },
+    });
     const g = u.gemini || {};
     const bits = [`${u.reportsGenerated ?? 0} of ${u.reportsCap ?? '?'} reports today`];
     if (g.totalTokens != null) bits.push(`${g.totalTokens.toLocaleString()} tokens used`);
     bits.push('resets at midnight IST');
     line.textContent = bits.join(' · ');
   } catch (e) {
-    line.textContent = 'Usage unavailable — ' + e.message;
+    line.textContent = e.message;
+    line.title = e.message;
   }
 }
 
@@ -219,16 +225,24 @@ async function aiGenerateReport() {
     status('Gathering nearby context…', true);
     const nearby = await aiGatherNearbyContext(site.lat, site.lng);
 
-    status('Sending to AI…', true);
+    status(aiBackendIsAwake() ? 'Sending to AI…' : 'Starting the report server…', true);
     const { jobId } = await createReportJob({
       site: { name: site.name, lat: site.lat, lng: site.lng },
       nearby,
+    }, {
+      onWaking: secs => status('Starting the report server… ' + secs + 's. '
+        + 'It sleeps after 15 minutes of no use and takes about a minute to wake.', true),
     });
     aiCurrentJobId = jobId;
     aiPollStartedAt = Date.now();
     aiPollJob();
   } catch (e) {
-    status('Could not start the report — ' + e.message, true);
+    // Some of these messages are already whole sentences that explain
+    // themselves; prefixing those produced "Could not start the report — The
+    // report server did not respond…", which reads like two separate faults.
+    status(/^(The|Could not|No |AI reports are)/.test(e.message)
+      ? e.message
+      : 'Could not start the report — ' + e.message, true);
   } finally {
     btn.disabled = false;
   }
@@ -272,6 +286,10 @@ function openAiPanel() {
   $('aiPanel').hidden = false;
   $('aiBtn').classList.add('toggled');
   aiRenderSitePicker();
+  // Doubles as the wake-up call. The server sleeps when idle and takes about a
+  // minute to start; spending that minute while a site is being chosen is the
+  // difference between a feature that works and one that fails on first press
+  // with a message nobody can act on.
   aiRefreshUsage();
 }
 
