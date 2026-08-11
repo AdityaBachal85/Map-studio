@@ -142,6 +142,42 @@ function geomGroupCommon(members, field) {
   return members.every(g => g[field] === first) ? first : null;
 }
 
+/**
+ * A readable name for an arbitrary colour.
+ *
+ * colorName() answers for the palette presets and hands back the raw hex for
+ * anything else, which is fine in a tooltip and useless as a heading — "#9b8ce0
+ * · 5 shapes" tells you nothing you could not see. Falling back to a hue name
+ * keeps the group's heading in words.
+ *
+ * @param {string} hex @returns {string}
+ */
+function geomColorLabel(hex) {
+  const named = (typeof colorName === 'function') ? colorName(hex) : hex;
+  if (named && named.toLowerCase() !== String(hex).toLowerCase()) return named;
+
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return String(hex || 'Colour');
+  const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if (d < 0.08) return max > 0.85 ? 'White' : max < 0.2 ? 'Black' : 'Grey';
+
+  let h;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+
+  const names = [[15, 'Red'], [45, 'Orange'], [70, 'Yellow'], [160, 'Green'], [200, 'Teal'],
+    [250, 'Blue'], [290, 'Violet'], [335, 'Pink'], [360, 'Red']];
+  return (names.find(n => h < n[0]) || names[names.length - 1])[1];
+}
+
+/** A tick, as SVG rather than a glyph, so it inherits weight and colour cleanly. */
+const GEOM_CHECK_SVG = '<svg class="geom-chip-check" viewBox="0 0 16 16" aria-hidden="true">'
+  + '<path d="M3.2 8.4l3.1 3.1 6.5-7.2" fill="none" stroke="currentColor" stroke-width="2.4"'
+  + ' stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 /** Rebuild the swatch row and, if a group is selected, its editor. */
 function renderGeomGroups() {
   const host = $('geomGroups');
@@ -161,14 +197,24 @@ function renderGeomGroups() {
 
   if (geomGroupSelected && !groups.some(g => g.key === geomGroupSelected)) geomGroupSelected = null;
 
+  // WHY THE COUNT SITS ON THE PANEL AND NOT ON THE COLOUR. It used to be white
+  // text printed straight onto the swatch, propped up with a heavy text-shadow.
+  // On a mid-amber that is roughly 2:1 against its background — below the 4.5:1
+  // a small bold label needs — and no threshold on luminance fixes it, because
+  // for a band of mid-tones neither white nor black reaches 4.5:1 on the colour
+  // itself. Splitting the chip solves it outright: the colour is a block, the
+  // number is on the panel's own surface, and every hue reads the same.
   const swatches = groups.map(grp => {
     const on = grp.key === geomGroupSelected;
-    // The ring shows the border colour when the group agrees on one, so a set
-    // that is already consistent looks different from one that is not.
-    const ring = grp.borders.length === 1 ? grp.borders[0] : 'transparent';
-    return `<button class="geom-swatch${on ? ' on' : ''}" data-key="${esc(grp.key)}"
-      title="${grp.count} shape${grp.count === 1 ? '' : 's'} in ${esc(grp.key)}${grp.borders.length > 1 ? ' — mixed border colours' : ''}"
-      style="--sw:${esc(grp.key)};--sw-ring:${esc(ring)}"><span>${grp.count}</span></button>`;
+    const name = geomColorLabel(grp.key);
+    const shapes = grp.count + ' shape' + (grp.count === 1 ? '' : 's');
+    return `<button type="button" class="geom-chip${on ? ' on' : ''}" data-key="${esc(grp.key)}"
+      aria-pressed="${on}" aria-label="${esc(name)}, ${shapes}"
+      title="${esc(name)} — ${shapes}${grp.borders.length > 1 ? ', mixed border colours' : ''}"
+      style="--sw:${esc(grp.key)}"
+      ><span class="geom-chip-swatch"></span
+      ><span class="geom-chip-tick">${GEOM_CHECK_SVG}</span
+      ><span class="geom-chip-n">${grp.count}</span></button>`;
   }).join('');
 
   let editor = '';
@@ -185,39 +231,52 @@ function renderGeomGroups() {
     const fillable = members.some(g => g.shape !== 'Line' && g.shape !== 'Marker');
     const noFill = fillable ? '' : ' disabled';
 
+    // A mixed value shows as "Mixed" rather than a made-up number. The old "–"
+    // in a slider's readout looked like a broken control; this says the group
+    // disagrees, and moving the slider is what makes them agree.
+    const mixed = v => v == null;
+
     editor = `
-      <div class="geom-group-edit">
+      <div class="geom-group-edit" style="--sw:${esc(geomGroupSelected)}">
+        <div class="gg-head">
+          <span class="gg-head-dot"></span>
+          <span class="gg-head-name">${esc(geomColorLabel(geomGroupSelected))}</span>
+          <span class="gg-head-count">${members.length} shape${members.length === 1 ? '' : 's'}</span>
+          <button type="button" class="mini-btn gg-zoom" title="Zoom the map to fit this group" aria-label="Zoom to fit this group">⌖</button>
+        </div>
+
         <div class="r">
-          <span class="sub" style="width:52px;">All ${members.length}</span>
-          <input type="color" class="gg-fill" value="${esc(geomGroupSelected)}" title="Colour for every shape in this group">
-          <input type="color" class="gg-border" value="${esc(border || '#0A1E3C')}" title="Border colour for every shape in this group">
+          <span class="sub gg-lbl">Colour</span>
+          <input type="color" class="gg-fill" value="${esc(geomGroupSelected)}" title="Colour for every shape in this group" aria-label="Colour for every shape in this group">
+          <span class="sub gg-lbl gg-lbl-2">Border</span>
+          <input type="color" class="gg-border" value="${esc(border || '#0A1E3C')}" title="Border colour for every shape in this group" aria-label="Border colour for every shape in this group">
           <span class="grow"></span>
-          <button class="mini-btn gg-zoom" title="Zoom to fit this group">⌖</button>
         </div>
+
         <div class="r">
-          <label class="chk"><input type="checkbox" class="gg-hasborder" ${hasBorder ? 'checked' : ''}> Border</label>
-          <input type="range" class="gg-width" min="0" max="10" step="1" value="${width == null ? 3 : width}" style="flex:1;" title="Border width for every shape in this group">
-          <span class="pct gg-width-v" style="width:22px;">${width == null ? '–' : width}</span>
+          <label class="chk gg-lbl"><input type="checkbox" class="gg-hasborder" ${hasBorder ? 'checked' : ''}> Border</label>
+          <input type="range" class="gg-width" min="0" max="10" step="1" value="${width == null ? 3 : width}" style="flex:1;" title="Border width for every shape in this group" aria-label="Border width for every shape in this group">
+          <span class="pct gg-width-v${mixed(width) ? ' is-mixed' : ''}">${mixed(width) ? 'Mixed' : width}</span>
         </div>
-        <div class="r"${fillable ? '' : ' style="opacity:.5"'}>
-          <span class="sub" style="width:52px;">Fill</span>
-          <select class="gg-pattern" style="flex:0 0 94px;" title="Fill pattern for every shape in this group"${noFill}>${optionList(FILL_PATTERN_OPTS, fp || 'none')}</select>
-          <input type="range" class="gg-op" min="0" max="100" step="5" value="${op == null ? 25 : Math.round(op * 100)}" style="flex:1;" title="Fill opacity for every shape in this group"${noFill}>
-          <span class="pct gg-op-v" style="width:32px;">${op == null ? '–' : Math.round(op * 100) + '%'}</span>
+
+        <div class="r${fillable ? '' : ' is-off'}">
+          <span class="sub gg-lbl">Fill</span>
+          <select class="gg-pattern" title="Fill pattern for every shape in this group" aria-label="Fill pattern for every shape in this group"${noFill}>${optionList(FILL_PATTERN_OPTS, fp || 'none')}</select>
+          <input type="range" class="gg-op" min="0" max="100" step="5" value="${op == null ? 25 : Math.round(op * 100)}" style="flex:1;" title="Fill opacity for every shape in this group" aria-label="Fill opacity for every shape in this group"${noFill}>
+          <span class="pct gg-op-v${mixed(op) ? ' is-mixed' : ''}">${mixed(op) ? 'Mixed' : Math.round(op * 100) + '%'}</span>
         </div>
+
         <div class="r">
-          <span class="sub" style="width:52px;">Line</span>
-          <select class="gg-linestyle grow" title="Line style for every shape in this group">${optionList(LINE_STYLE_OPTS, ls || 'solid')}</select>
+          <span class="sub gg-lbl">Line</span>
+          <select class="gg-linestyle grow" title="Line style for every shape in this group" aria-label="Line style for every shape in this group">${optionList(LINE_STYLE_OPTS, ls || 'solid')}</select>
         </div>
       </div>`;
   }
 
   host.innerHTML = `
-    <div class="lbl">Style by colour
-      <span class="sub" style="font-weight:400;text-transform:none;letter-spacing:0;">
-        — pick a colour to edit every shape that uses it</span>
-    </div>
-    <div class="geom-swatches">${swatches}</div>
+    <div class="lbl">Style by colour</div>
+    <p class="gg-hint">Pick a colour to restyle every shape using it.</p>
+    <div class="geom-chips" role="group" aria-label="Colour groups">${swatches}</div>
     ${editor}`;
 
   // The same swatch treatment the shape cards get, so the two sets of colour
@@ -231,7 +290,7 @@ function renderGeomGroups() {
 
 /** @param {HTMLElement} host */
 function wireGeomGroups(host) {
-  host.querySelectorAll('.geom-swatch').forEach(btn => {
+  host.querySelectorAll('.geom-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
       geomGroupSelected = (geomGroupSelected === key) ? null : key;
@@ -272,7 +331,11 @@ function wireGeomGroups(host) {
   });
 
   const width = q('.gg-width');
-  width.addEventListener('input', e => { q('.gg-width-v').textContent = e.target.value; });
+  width.addEventListener('input', e => {
+    const el = q('.gg-width-v');
+    el.textContent = e.target.value;
+    el.classList.remove('is-mixed');     // dragging is what resolves a mixed group
+  });
   width.addEventListener('change', e => {
     const w = +e.target.value;
     if (w) geomGroupLastWidth = w;
@@ -280,7 +343,11 @@ function wireGeomGroups(host) {
   });
 
   const op = q('.gg-op');
-  op.addEventListener('input', e => { q('.gg-op-v').textContent = e.target.value + '%'; });
+  op.addEventListener('input', e => {
+    const el = q('.gg-op-v');
+    el.textContent = e.target.value + '%';
+    el.classList.remove('is-mixed');
+  });
   op.addEventListener('change', e => {
     const v = (+e.target.value) / 100;
     geomGroupApply(key, g => { g.fillOpacity = v; }, 'Set the fill opacity');
