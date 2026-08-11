@@ -33,6 +33,22 @@ let appModeSearchHome = null;
 /** Whether it was collapsed before the dashboard borrowed it. */
 let appModeSearchWasCollapsed = true;
 
+/**
+ * Keep the Tools nav item showing whether its panel is up.
+ *
+ * Its own function because four things close that panel — the item, the
+ * sidebar's edge handle, Escape and the scrim — and each of them has to leave
+ * the button telling the truth.
+ */
+function syncDashToolsBtn() {
+  const app = document.getElementById('app');
+  const btn = document.getElementById('dnTools');
+  if (!app || !btn) return;
+  const open = app.classList.contains('dash-side-open');
+  btn.classList.toggle('on', open);
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+}
+
 /** @returns {string} the current mode */
 function appMode() {
   const m = document.getElementById('app');
@@ -55,8 +71,7 @@ function setAppMode(mode, opts) {
   // The tools overlay is per-visit, not a setting: leaving the board closes it
   // rather than leaving a panel hanging over whatever you switch to.
   app.classList.remove('dash-side-open');
-  const toolsBtn = document.getElementById('dnTools');
-  if (toolsBtn) { toolsBtn.classList.remove('on'); toolsBtn.setAttribute('aria-pressed', 'false'); }
+  syncDashToolsBtn();
 
   // The search box is one element with one set of handlers and one results
   // list. In dashboard mode it belongs in the top bar, so it is re-parented
@@ -178,11 +193,37 @@ function renderReportsMenu(serverCount) {
       // not change what you see when you go back to the map.
       const app = document.getElementById('app');
       if (!app) return;
-      const open = app.classList.toggle('dash-side-open');
-      tools.classList.toggle('on', open);
-      tools.setAttribute('aria-pressed', open ? 'true' : 'false');
+      app.classList.toggle('dash-side-open');
+      syncDashToolsBtn();
     });
   }
+
+  // Three ways out of the tools panel, because the first version had none: the
+  // Tools item again, the sidebar's own edge handle, Escape, or a click on the
+  // dimmed board behind it. A panel with one way to close it is one missed
+  // affordance away from being a trap, and this one had zero.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const app = document.getElementById('app');
+    if (!app || !app.classList.contains('dash-side-open')) return;
+    // Not while typing in the panel — Escape there means "stop editing this".
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    app.classList.remove('dash-side-open');
+    syncDashToolsBtn();
+  });
+
+  document.addEventListener('pointerdown', e => {
+    const app = document.getElementById('app');
+    if (!app || !app.classList.contains('dash-side-open')) return;
+    // Anything outside the panel and its two handles. Testing what the click is
+    // NOT inside, rather than hit-testing the scrim: the scrim is a pseudo
+    // element and never an event target, so a geometric test would be the only
+    // alternative and it would go wrong the first time the layout moved.
+    if (e.target.closest('.sidebar, #dnTools, #sideToggle')) return;
+    app.classList.remove('dash-side-open');
+    syncDashToolsBtn();
+  }, true);
 
   const editBtn = document.getElementById('dashEditBtn');
   if (editBtn) editBtn.addEventListener('click', () => setDashEditing(!dashEditing));

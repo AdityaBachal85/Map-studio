@@ -152,15 +152,53 @@
    below: a test could see a nav item, click it, and hit a sidebar tab
    instead.) Off-canvas by default here; the nav's Tools item slides it back in
    over the top, which is what an overlay panel should do anyway. */
+/* Offset by the nav's width rather than sitting at left:0. Flush left it
+   covered the nav completely — including the Tools item that opened it — so
+   once the panel was up there was no button anywhere on screen to put it back
+   down. Beside the nav, Tools stays visible and is the way out, and it reads
+   as pressed while the panel is up. */
 .app[data-mode="dashboard"] .sidebar,
-.app[data-mode="report"] .sidebar { transform: translateX(-102%) translateZ(0); }
+.app[data-mode="report"] .sidebar {
+  left: 210px;
+  transform: translateX(calc(-100% - 212px)) translateZ(0);
+}
 
 .app[data-mode="dashboard"].dash-side-open .sidebar,
 .app[data-mode="report"].dash-side-open .sidebar { transform: translateX(0) translateZ(0); }
 
-/* Its edge handle sits over the nav too, and Tools already does this job. */
+/* The edge handle is the second way out, in the place the studio always puts
+   it. Only while the panel is open — closed, it would be a tab floating in the
+   middle of the board pointing at nothing. */
 .app[data-mode="dashboard"] #sideToggle,
 .app[data-mode="report"] #sideToggle { display: none; }
+
+.app[data-mode="dashboard"].dash-side-open #sideToggle,
+.app[data-mode="report"].dash-side-open #sideToggle {
+  display: flex;
+  left: calc(var(--sbw) + 210px);
+}
+
+/* A dimmed board behind the panel: it says the panel is a layer over the board
+   rather than part of it, and gives click-anywhere-to-close something that
+   looks like a target. Hung off .app rather than #dashGrid because the canvas
+   is display:none in report mode, and a scrim that only exists on one of the
+   two modes is worse than none. */
+.app[data-mode="dashboard"].dash-side-open::after,
+.app[data-mode="report"].dash-side-open::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(3, 7, 15, .38);
+}
+
+/* Above the scrim, or the way out is behind the thing it is meant to dismiss —
+   which is the bug this whole block exists to fix. */
+.app[data-mode="dashboard"] #dashNav,
+.app[data-mode="report"] #dashNav {
+  position: relative;
+  z-index: 1250;
+}
 
 /* Everything the map positions off the sidebar's width has to stop doing that
    once the sidebar is off-canvas — otherwise it is offset by ~400px of nothing.

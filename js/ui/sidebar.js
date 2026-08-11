@@ -3,7 +3,17 @@
  * effect, and the four-tab pane switcher (Locations/Routes/Brand/Map).
  */
 
-      $('sideToggle').addEventListener('click', () => $('app').classList.toggle('side-hidden'));
+      // Two different "the sidebar is away" states, because they mean different
+      // things. In map mode it is the studio's own preference and persists. On
+      // the board and the sheet the panel is a layer over the top, opened by the
+      // nav's Tools item — closing that must not change what you see when you go
+      // back to the map. Same handle, whichever one is in play.
+      $('sideToggle').addEventListener('click', () => {
+        const app = $('app');
+        const mode = app.dataset.mode || 'map';
+        app.classList.toggle(mode === 'map' ? 'side-hidden' : 'dash-side-open');
+        if (mode !== 'map' && typeof syncDashToolsBtn === 'function') syncDashToolsBtn();
+      });
 
 // Cursor spotlight: track pointer position over panel controls (hover-capable devices only)
       if (window.matchMedia('(hover:hover)').matches) {
