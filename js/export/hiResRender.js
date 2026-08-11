@@ -321,31 +321,23 @@ async function renderGroundPass(o) {
       scale: 1,
     }, extra));
 
-    // Three separate captures, because three different colour treatments apply.
-    // html2canvas does not honour CSS filters, so anything that needs one has
-    // to be isolated and filtered at composite time instead:
+    // Three layer groups, three colour treatments applied at composite time,
+    // because html2canvas does not honour CSS filters and grading the whole
+    // tile pane at once saturated the road paint along with the ground:
     //   imagery   — graded
     //   reference — desaturated/softened road & label overlay
     //   vectors   — untouched; their colours were chosen, not captured
-    // Splitting also fixes a subtler error: grading the whole tile pane at once
-    // saturated the road paint along with the ground.
-    host.classList.add('hires-imagery-only');
-    const tiles = await shot({ backgroundColor: '#0d1522' });
-    host.classList.remove('hires-imagery-only');
+    //
+    // Each is now cut straight out of the DOM rather than re-rendered. See the
+    // note above rasteriseTileLayers() for what that was costing.
+    const isReference = el => el.classList.contains('basemap-reference');
+    const ground = rasteriseTileLayers(host, W, H, el => !isReference(el), '#0d1522');
 
-    // The host's dark fill backs the imagery pass, where it fills the gaps
-    // between tiles. Every later pass is composited *over* that imagery, so
-    // the fill must not paint into them — an opaque backdrop drawn at the
-    // road layer's 0.78 alpha is a 78% dark wash over the entire map, which
-    // is the "exported map is dark" report. The imagery is all there; it was
-    // being covered.
     let reference = null;
     const roadOpacity = (typeof roadExportStyle === 'function') ? roadExportStyle().opacity : 1;
     if (roadOpacity > 0 && host.querySelector('.basemap-reference')) {
-      host.classList.add('hires-reference-only', 'hires-transparent-bg');
-      await new Promise(r => requestAnimationFrame(r));
-      reference = await shot({ backgroundColor: null });
-      host.classList.remove('hires-reference-only', 'hires-transparent-bg');
+      const ref = rasteriseTileLayers(host, W, H, isReference, null);
+      if (ref.drawn) reference = ref.canvas;
     }
 
     let vectors = null;
@@ -367,20 +359,147 @@ async function renderGroundPass(o) {
       });
       if (patternWork.length) await Promise.all(patternWork);
       if (clones.length) {
-        // Same reason as the reference pass — and worse here, since vectors
-        // are composited at full alpha: an opaque backdrop would not wash the
-        // map, it would replace it.
-        host.classList.add('hires-vectors-only', 'hires-transparent-bg');
+        // One frame for Leaflet's canvas renderer to actually paint the clones
+        // it has only been handed so far.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        vectors = await shot({ backgroundColor: null });
-        host.classList.remove('hires-vectors-only', 'hires-transparent-bg');
+        const vec = rasteriseVectorCanvases(host, W, H);
+        if (vec.drawn) vectors = vec.canvas;
       }
     }
+
+    // Falling back rather than shipping a blank ground — but only when the DOM
+    // is not the shape this expects. Tiles that simply failed to load are
+    // counted as `missing`, and html2canvas cannot draw those either: falling
+    // back on a bad connection spent another fifty seconds arriving at the same
+    // dark canvas. The distinction is "we found no tile layers at all" versus
+    // "we found them and the network did not deliver".
+    let tiles = ground.canvas;
+    const domChanged = !ground.drawn && !ground.missing && host.querySelector('img.leaflet-tile');
+    if (domChanged) {
+      console.warn('Export: tile panes are not the expected shape; falling back to html2canvas.');
+      host.classList.add('hires-imagery-only');
+      tiles = await shot({ backgroundColor: '#0d1522' });
+      host.classList.remove('hires-imagery-only');
+    }
+
     return { canvas: tiles, reference, vectors, complete };
   } finally {
     if (exportMap) exportMap.remove();
     host.remove();
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Direct rasterisation — why this exists instead of html2canvas
+ * ------------------------------------------------------------------------ */
+
+/**
+ * WHAT THE GROUND PASS USED TO COST.
+ *
+ * It called html2canvas three times over the same offscreen map — once for the
+ * imagery, once for the road/label overlay, once for the vectors — because
+ * html2canvas ignores CSS filters and each of those needs a different colour
+ * treatment at composite time. Measured on a 1400x800 map at 3x: 48s, 60s and
+ * 62s. One hundred and seventy-one seconds of the export's two hundred and
+ * twenty-four, to draw pictures that were already sitting in the DOM as
+ * decoded images.
+ *
+ * That is what html2canvas is: a document cloner and a from-scratch layout
+ * renderer. Aimed at a pane of <img> tiles it re-does an enormous amount of
+ * work for something the browser has already finished doing.
+ *
+ * So the tile panes and the vector canvas are drawn straight onto a canvas
+ * with drawImage — a few hundred calls, each one a blit the GPU already has
+ * the pixels for. The three treatments stop needing three passes, because
+ * each layer group gets its own small canvas by construction.
+ *
+ * html2canvas is still right for the furniture pass: labels, the legend card
+ * and the title are real styled DOM, which is the job it is actually for.
+ *
+ * POSITIONS COME FROM getBoundingClientRect, not from Leaflet's tile
+ * arithmetic. The pane carries transforms — the zoom origin, the fractional
+ * zoom this export uses — and re-deriving where a tile landed means
+ * re-implementing all of that and getting it wrong at the edges. The rect is
+ * the browser's own answer to "where did this actually end up".
+ */
+
+/** @param {Element} el @returns {number} the element's own opacity, 1 if unset */
+function elOpacity(el) {
+  const v = parseFloat(getComputedStyle(el).opacity);
+  return isFinite(v) ? v : 1;
+}
+
+/**
+ * Draw a set of tile layers onto a fresh canvas.
+ *
+ * @param {HTMLElement} host the offscreen map container
+ * @param {number} W @param {number} H
+ * @param {function(Element):boolean} pick which .leaflet-layer containers to include
+ * @param {string|null} background fill first, or null for transparent
+ * @returns {{canvas:HTMLCanvasElement, drawn:number, missing:number}}
+ */
+function rasteriseTileLayers(host, W, H, pick, background) {
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, W, H); }
+
+  const hostRect = host.getBoundingClientRect();
+  let drawn = 0, missing = 0;
+
+  // z-index order, because a hillshade over imagery and imagery over hillshade
+  // are different pictures. Leaflet writes the order into the layer div.
+  const layers = Array.from(host.querySelectorAll('.leaflet-tile-pane .leaflet-layer'))
+    .filter(pick)
+    .sort((a, b) => (+a.style.zIndex || 0) - (+b.style.zIndex || 0));
+
+  layers.forEach(layer => {
+    ctx.globalAlpha = elOpacity(layer);
+    layer.querySelectorAll('img.leaflet-tile').forEach(img => {
+      // A tile that errored or has not decoded draws as nothing — and would
+      // throw on some browsers rather than being skipped politely.
+      if (!img.complete || !img.naturalWidth) { missing++; return; }
+      const r = img.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) { missing++; return; }
+      try {
+        ctx.drawImage(img, r.left - hostRect.left, r.top - hostRect.top, r.width, r.height);
+        drawn++;
+      } catch (e) {
+        missing++;     // tainted canvas, a CORS-less tile that slipped through
+      }
+    });
+  });
+
+  ctx.globalAlpha = 1;
+  return { canvas, drawn, missing };
+}
+
+/**
+ * Draw the vector renderer's own canvases onto a fresh one.
+ *
+ * The export map runs `preferCanvas`, so every path is already rasterised into
+ * a <canvas> in the overlay pane. Copying it is one drawImage.
+ *
+ * @param {HTMLElement} host @param {number} W @param {number} H
+ * @returns {{canvas:HTMLCanvasElement, drawn:number}}
+ */
+function rasteriseVectorCanvases(host, W, H) {
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const hostRect = host.getBoundingClientRect();
+  let drawn = 0;
+
+  host.querySelectorAll('.leaflet-overlay-pane canvas').forEach(src => {
+    if (!src.width || !src.height) return;
+    const r = src.getBoundingClientRect();
+    try {
+      ctx.drawImage(src, r.left - hostRect.left, r.top - hostRect.top, r.width, r.height);
+      drawn++;
+    } catch (e) { /* leave it out rather than fail the export */ }
+  });
+
+  return { canvas, drawn };
 }
 
 /* ---------------------------------------------------------------------------

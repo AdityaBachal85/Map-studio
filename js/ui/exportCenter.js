@@ -75,7 +75,7 @@ function buildExportCenter() {
       '<span class="xc-meta"></span>';
     b.addEventListener('click', () => {
       exportCenter.close();
-      runPngExport(p.scale);
+      runPngExport(p.scale, p.format);
     });
     rows.appendChild(b);
   });
