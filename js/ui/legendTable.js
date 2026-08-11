@@ -25,7 +25,7 @@
  * stops a hand-written row disappearing when a route is deleted.
  */
 
-/** routeId -> { name?, km?, min?, iconKey?, iconImage?, hidden? } */
+/** routeId -> { name?, km?, min?, color?, iconKey?, iconImage?, hidden? } */
 let legendEdits = {};
 
 /** Rows with no route behind them. */
@@ -105,13 +105,18 @@ function legendRows() {
     out.push({
       key: 'r:' + rt.id,
       routeId: rt.id,
-      color: base.color,
+      // The route's own colour until the row is given one. Overriding here does
+      // not touch the route: a legend can want a green train and a blue plane
+      // while the lines on the map stay in whatever colours read best over the
+      // imagery, and tying the two together would make each unusable for the
+      // other's sake.
+      color: e.color || base.color,
       name: e.name != null && e.name !== '' ? e.name : base.name,
       km: e.km != null && e.km !== '' ? e.km : base.km,
       min: e.min != null && e.min !== '' ? e.min : base.min,
       iconKey: e.iconKey || null,
       iconImage: e.iconImage || null,
-      edited: !!(e.name || e.km || e.min || e.iconKey || e.iconImage),
+      edited: !!(e.name || e.km || e.min || e.color || e.iconKey || e.iconImage),
     });
   });
 
@@ -174,6 +179,11 @@ function rebuildLegend() {
       + (legendShowTime ? '<td class="num legend-min"' + ed + '>' + esc(r.min) + '</td>' : '')
       + (legendEditing
         ? '<td class="legend-actions">'
+          // Disabled for an uploaded logo, which carries its own colours — a
+          // live control that changes nothing is worse than a greyed-out one.
+          + '<input type="color" class="legend-color" value="' + esc(r.color) + '"'
+            + (r.iconImage ? ' disabled title="An uploaded logo keeps its own colours"' : ' title="Icon colour for this row"')
+            + ' aria-label="Icon colour for this row">'
           + (r.edited ? '<button class="legend-x legend-reset" title="Back to the measured values">↺</button>' : '')
           + '<button class="legend-x legend-hide" title="' + (r.extra ? 'Delete this row' : 'Hide this row') + '">&times;</button>'
           + '</td>'
@@ -310,6 +320,18 @@ function legendResetAll() {
         rebuildLegend();
       });
     }
+  });
+
+  // 'input' so the swatch previews live while the OS colour picker is open;
+  // one committed colour per pick is what the history watcher records, since it
+  // only commits once the value stops changing.
+  body.addEventListener('input', e => {
+    const inp = e.target.closest && e.target.closest('.legend-color');
+    if (!inp || !legendEditing) return;
+    const st = legendRowStore(inp);
+    if (!st) return;
+    st.color = inp.value;
+    rebuildLegend();
   });
 
   // 'blur', not 'input': a contenteditable fires on every keystroke, and

@@ -3788,3 +3788,24 @@ input[type=checkbox]:disabled {
    was a defect in the deliverable rather than only on screen. Dragging still
    overrides this; it is only where the card starts. */
 #legendCard { right: 58px; }
+
+/* Per-row icon colour. A native swatch shrunk to fit the row — the app's
+   enhanceColorInputs() treatment is built for sidebar cards and would tower
+   over a 22px table row. */
+#legendCard .legend-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(10, 30, 60, .28);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+#legendCard .legend-color::-webkit-color-swatch-wrapper { padding: 1px; }
+#legendCard .legend-color::-webkit-color-swatch { border: 0; border-radius: 3px; }
+#legendCard .legend-color::-moz-color-swatch { border: 0; border-radius: 3px; }
+#legendCard .legend-color:disabled { opacity: .35; cursor: default; }
+#legendCard .legend-color:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
