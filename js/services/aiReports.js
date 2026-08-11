@@ -53,13 +53,47 @@ const AI_WAKING_STATUS = [502, 503, 504];
 /** Whether the backend has answered at least once this session. */
 let aiBackendAwake = false;
 
-/** @returns {string} the sentence to show when the backend cannot be reached at all */
-function aiUnreachableMessage() {
+/**
+ * Tell "the server is unreachable" apart from "the browser hid its answer".
+ *
+ * Both arrive at JavaScript as the same `TypeError: Failed to fetch`, and they
+ * need opposite things done about them — restart the backend, or change one
+ * environment variable on it. This is the one way to separate them from inside
+ * a page: a `no-cors` request is allowed to complete, giving back an opaque
+ * response that carries no readable data but does prove the host answered. If
+ * that succeeds where the real request failed, the server is up and CORS is
+ * what stopped us.
+ *
+ * @returns {Promise<'reachable'|'unreachable'>}
+ */
+async function aiProbeReachable() {
+  try {
+    await fetch(aiBaseUrl() + '/health', { mode: 'no-cors', cache: 'no-store' });
+    return 'reachable';
+  } catch (e) {
+    return 'unreachable';
+  }
+}
+
+/**
+ * The sentence to show when a request never came back, the cold-start window
+ * having already been waited out.
+ * @returns {Promise<string>}
+ */
+async function aiUnreachableMessage() {
   let base = '';
   try { base = aiBaseUrl(); } catch (e) { return e.message; }
   // Points at /health, not the base URL: the root answers 404 by design, which
   // would tell someone checking that their working server is broken.
-  return 'The report server did not respond. Open ' + base + '/health in a new tab — '
+  const health = base + '/health';
+
+  if (await aiProbeReachable() === 'reachable') {
+    return 'The report server is running but is refusing this site. That is a CORS setting, '
+      + 'not a fault: on Render, set ALLOWED_ORIGIN to ' + location.origin
+      + ' — the origin only, no path, no trailing slash — and redeploy. Open ' + health
+      + ' to see what it is currently configured for.';
+  }
+  return 'The report server did not respond. Open ' + health + ' in a new tab — '
     + 'if it shows {"ok":true} this was a temporary blip and trying again will work; '
     + 'if it does not load, the backend is stopped and needs restarting on Render.';
 }
@@ -96,7 +130,7 @@ async function aiFetch(url, init, opts) {
       if (res) throw new Error('The report server is not responding (' + res.status + '). '
         + 'It has been starting for ' + Math.round((Date.now() - startedAt) / 1000)
         + 's — give it another minute and try again.');
-      throw new Error(aiUnreachableMessage());
+      throw new Error(await aiUnreachableMessage());
     }
 
     if (onWaking) onWaking(Math.round((Date.now() - startedAt) / 1000));

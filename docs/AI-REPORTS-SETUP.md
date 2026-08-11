@@ -119,8 +119,17 @@ says "Airoli, Navi Mumbai". Without it the web agents search coordinates and
 find nothing.
 
 `ALLOWED_ORIGIN` is what stops other websites' JavaScript from calling your
-backend and spending your quota. Get it exactly right: protocol + host,
-nothing else.
+backend and spending your quota. Protocol + host, nothing else. A trailing
+slash is tolerated and stripped; a path is not, because an `Origin` header
+never carries one — `https://you.github.io/My-repo` matches nothing and blocks
+your own site. Several origins can be listed, comma-separated, for a staging
+copy or a custom domain.
+
+Leaving it unset means **any origin**, not none. It used to mean no
+`Access-Control-Allow-Origin` header at all, which does not lock the backend
+down — it makes it unusable from every browser while leaving it wide open to
+`curl`. The real limits are the per-IP rate limiter and the daily caps, and
+those apply either way. The startup log says which mode you are in.
 
 **For the Government Projects and News sections** — at least one of these, or
 those two sections will report that they could not be sourced:
@@ -251,9 +260,16 @@ the connection is encrypted, and a `fix` string naming the setting to change.
   asked for verification with `sslmode=verify-full` or `verify-ca` but no
   `DATABASE_CA_CERT` is set. Either supply the CA or drop the parameter; the
   default connects encrypted without it.
+- **"Could not start the report — Failed to fetch"** — the app now diagnoses
+  this itself rather than passing the browser's message through, so you should
+  no longer see it. It meant one of two things, and the app now says which:
+  the service was asleep (free tier, stops after ~15 minutes idle, takes about
+  a minute to wake — the app waits it out now), or `ALLOWED_ORIGIN` did not
+  match and the browser hid the refusal.
 - **CORS errors in the browser console** — `ALLOWED_ORIGIN` doesn't exactly
-  match your site's origin. Compare it character by character against what the
-  browser address bar shows.
+  match your site's origin. Open `<your-backend>/health` from the site itself:
+  it reports `yourOrigin`, `allowedOrigins` and `originAllowed`, which settles
+  it without character-by-character comparison.
 - **Every report fails at "Researching your site…"** — almost always the
   Gemini key: either wrong, or its project has no quota. Render's logs show
   the real error from Google, which usually says which.

@@ -20,6 +20,7 @@ const { createReportJob } = require('./http/createReportJob');
 const { getReportStatus } = require('./http/getReportStatus');
 const { downloadReport } = require('./http/downloadReport');
 const { chat } = require('./http/chat');
+const { withCors, corsStatus, allowedOrigins } = require('./lib/cors');
 
 const PORT = process.env.PORT || 8080;
 /** How often to look for jobs that hung, and files that outlived their 48h. */
@@ -37,7 +38,12 @@ app.use(express.json({ limit: '1mb' }));
 
 // Cheap and dependency-free, so an uptime pinger can hold a sleepy free-tier
 // instance awake without touching Postgres or Gemini.
-app.get('/health', (req, res) => res.status(200).json({ ok: true, activeJobs: jobs.activeCount() }));
+// `cors` reports what this deployment makes of the caller's Origin, so a
+// blocked browser is one click to diagnose instead of a guess: open this URL
+// from the app's own origin and read originAllowed.
+app.get('/health', withCors(async (req, res) => {
+  res.status(200).json({ ok: true, activeJobs: jobs.activeCount(), cors: corsStatus(req) });
+}));
 
 // Which external services actually answer with this deployment's keys, and
 // therefore which report sections can be sourced. First thing to hit after a
@@ -53,17 +59,14 @@ app.post('/chat', chat);
 // because the wildcard path syntax differs between Express 4 and 5 and
 // silently 404s on the wrong one — this matches on the method instead, which
 // behaves the same on both.
-app.use((req, res, next) => {
-  if (req.method !== 'OPTIONS') { next(); return; }
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
-  if (allowedOrigin) res.set('Access-Control-Allow-Origin', allowedOrigin);
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
-  res.set('Access-Control-Max-Age', '86400');
-  res.status(204).send('');
-});
-
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+app.use(withCors(async (req, res) => {
+  // Only OPTIONS reaches the handler body — withCors answers preflight itself
+  // and returns before calling this. Routing everything through it keeps one
+  // definition of the origin rules; the duplicate that used to live here read
+  // ALLOWED_ORIGIN differently and would have diverged the moment either
+  // changed.
+  res.status(404).json({ error: 'Not found' });
+}));
 
 /**
  * Periodic maintenance: fail jobs that hung, and free expired report files.
@@ -93,6 +96,16 @@ async function sweep(onlyStale) {
 
 const server = app.listen(PORT, async () => {
   console.log(`AI reports backend listening on :${PORT}`);
+
+  // Said out loud because the consequence is invisible from the server side:
+  // with no allowlist this backend answers any website that asks. Nothing here
+  // is unmetered — the per-IP limiter and the daily caps still apply — but the
+  // Gemini bill is ours either way, so name the origin in ALLOWED_ORIGIN.
+  const origins = allowedOrigins();
+  console.log(origins.length
+    ? 'CORS: accepting browser requests from ' + origins.join(', ')
+    : 'CORS: ALLOWED_ORIGIN is not set — accepting browser requests from ANY origin. '
+      + 'Set it to your site, e.g. https://adityabachal85.github.io');
 
   // Apply the schema before anything reads or writes. This used to be a
   // manual step in a browser SQL console, which fails silently: the service
