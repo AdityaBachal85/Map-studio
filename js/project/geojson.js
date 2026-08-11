@@ -13,7 +13,8 @@ function geomToGeoJSONFeature(g) {
     properties: {
       shape: g.shape, name: g.name, description: g.description, notes: g.notes,
       fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
-      lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern, showLabel: g.showLabel, glow: g.glow,
+      lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
+      labelSize: g.labelSize, labelBold: g.labelBold, showLabel: g.showLabel, glow: g.glow,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
       radius: g.shape === 'Circle' ? g.layer.getRadius() : undefined,
     },
@@ -43,6 +44,11 @@ function importGeoJSONFeature(feat) {
     if (shape === 'Circle') {
       const [lng, lat] = feat.geometry.coordinates;
       layer = L.circle([lat, lng], { radius: +props.radius || 100 });
+    } else if (shape === 'Label') {
+      // Blank icon; registerGeom -> applyGeomStyle writes the real one from
+      // the text and styling in `properties`.
+      const [lng, lat] = feat.geometry.coordinates;
+      layer = L.marker([lat, lng], { icon: L.divIcon({ className: 'map-text-wrap', html: '', iconSize: [0, 0] }) });
     } else if (shape === 'CircleMarker') {
       const [lng, lat] = feat.geometry.coordinates;
       layer = L.circleMarker([lat, lng]);
@@ -61,6 +67,8 @@ function importGeoJSONFeature(feat) {
     borderWidth: props.borderWidth != null ? +props.borderWidth : undefined,
     fillOpacity: props.fillOpacity != null ? +props.fillOpacity : undefined,
     lineStyle: props.lineStyle, corner: props.corner, fillPattern: props.fillPattern,
+    labelSize: props.labelSize != null ? +props.labelSize : undefined,
+    labelBold: props.labelBold != null ? !!props.labelBold : undefined,
     showLabel: props.showLabel != null ? !!props.showLabel : undefined,
     glow: props.glow != null ? !!props.glow : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,

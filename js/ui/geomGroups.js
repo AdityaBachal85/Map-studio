@@ -38,7 +38,7 @@ let geomGroupLastWidth = 3;
  * @param {object} g @returns {string}
  */
 function geomVisibleColor(g) {
-  const c = (g.shape === 'Line') ? g.borderColor : g.fillColor;
+  const c = (g.shape === 'Line' || g.shape === 'Label') ? g.borderColor : g.fillColor;
   return String(c || '#FF7A1A').toLowerCase();
 }
 
@@ -228,7 +228,7 @@ function renderGeomGroups() {
     const hasBorder = width === null ? true : width > 0;
     // A group of lines has a fill in the data model that is never drawn, so
     // offering fill controls for it would be offering settings that do nothing.
-    const fillable = members.some(g => g.shape !== 'Line' && g.shape !== 'Marker');
+    const fillable = members.some(g => g.shape !== 'Line' && g.shape !== 'Marker' && g.shape !== 'Label');
     const noFill = fillable ? '' : ' disabled';
 
     // A mixed value shows as "Mixed" rather than a made-up number. The old "–"

@@ -14,6 +14,9 @@ function optionList(opts, sel) {
 
 /** Build a geometry card's DOM (markup only, no event wiring). @param {object} g @returns {HTMLDivElement} */
 function geomCardMarkup(g) {
+  // A label's controls are a different set, not this set with rows hidden —
+  // see map/textLabels.js.
+  if (g.shape === 'Label') return textLabelCardMarkup(g);
   const card = document.createElement('div');
   card.className = 'item-card geom-card';
   const isLine = g.shape === 'Line' || g.shape === 'Marker' || g.shape === 'CircleMarker';
@@ -68,6 +71,7 @@ function geomCardMarkup(g) {
 /** Re-sync a card's style controls from its geometry (used after undo/redo). @param {object} g */
 function syncGeomCardStyleControls(g) {
   const c = g.card; if (!c) return;
+  if (g.shape === 'Label') { syncTextLabelCard(g); return; }
   c.querySelector('.gclr').value = g.fillColor;
   c.querySelector('.gbc').value = g.borderColor;
   c.querySelector('.gbw').value = g.borderWidth;
@@ -83,6 +87,7 @@ function syncGeomCardStyleControls(g) {
 
 /** Wire up every control in a geometry card built by geomCardMarkup(). @param {HTMLDivElement} card @param {object} g */
 function wireGeomCard(card, g) {
+  if (g.shape === 'Label') { wireTextLabelCard(card, g); return; }
   card.querySelector('.gclr').addEventListener('input', e => { g.fillColor = e.target.value; applyGeomStyle(g); touchGeom(g); });
   card.querySelector('.gnm').addEventListener('change', e => { g.name = e.target.value || nextGeomName(g.shape); ensureGeomLabel(g); touchGeom(g); });
   card.querySelector('.gbc').addEventListener('input', e => { g.borderColor = e.target.value; applyGeomStyle(g); touchGeom(g); });

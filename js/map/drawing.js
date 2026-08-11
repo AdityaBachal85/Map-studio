@@ -15,16 +15,20 @@ const editSnapshots = new Map(); // geom id -> snapshot taken at the start of th
 const undoStack = [], redoStack = [];
 const HISTORY_MAX = 50;
 
-const GEOM_SHAPES = ['Marker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'CircleMarker'];
-const SHAPE_BTN_ID = { Marker: 'drawMarkerBtn', Line: 'drawLineBtn', Polygon: 'drawPolygonBtn', Rectangle: 'drawRectBtn', Circle: 'drawCircleBtn', CircleMarker: 'drawCircleMarkerBtn' };
-const SHAPE_LABEL = { Marker: 'Marker', Line: 'Line', Polygon: 'Polygon', Rectangle: 'Rectangle', Circle: 'Circle', CircleMarker: 'Circle marker' };
+// 'Label' is a real shape here — see map/textLabels.js for why free-standing
+// text is a geometry rather than a collection of its own. It is the one entry
+// Geoman knows nothing about, so startDrawShape() hands it to our own
+// click-to-place mode instead of map.pm.enableDraw().
+const GEOM_SHAPES = ['Marker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'CircleMarker', 'Label'];
+const SHAPE_BTN_ID = { Marker: 'drawMarkerBtn', Line: 'drawLineBtn', Polygon: 'drawPolygonBtn', Rectangle: 'drawRectBtn', Circle: 'drawCircleBtn', CircleMarker: 'drawCircleMarkerBtn', Label: 'drawLabelBtn' };
+const SHAPE_LABEL = { Marker: 'Marker', Line: 'Line', Polygon: 'Polygon', Rectangle: 'Rectangle', Circle: 'Circle', CircleMarker: 'Circle marker', Label: 'Text' };
 const MODE_BTN_ID = { edit: 'drawEditBtn', drag: 'drawDragBtn', rotate: 'drawRotateBtn', remove: 'drawRemoveBtn' };
 
 let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', showLabel: false, glow: false }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false }; }
 
 /** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
 function dashArrayFor(style, w) {
@@ -65,6 +69,12 @@ function geomMarkerIcon(g) {
 
 /** Re-apply a geometry's current style fields onto its live Leaflet layer, plus its optional glow halo and on-map label. @param {object} g */
 function applyGeomStyle(g) {
+  if (g.shape === 'Label') {
+    g.layer.setIcon(geomTextIcon(g));
+    // No glow, no name label: the shape *is* its name, and a second copy of it
+    // floating beside the first is not a feature anyone asked for.
+    return;
+  }
   if (g.shape === 'Marker') {
     g.layer.setIcon(geomMarkerIcon(g));
   } else {
@@ -160,7 +170,7 @@ function ensureGeomLabel(g) {
  */
 function measureForLayer(shape, layer) {
   try {
-    if (shape === 'Marker' || shape === 'CircleMarker') {
+    if (shape === 'Marker' || shape === 'CircleMarker' || shape === 'Label') {
       const ll = layer.getLatLng();
       return { text: `Point: ${fmtCoord(ll.lat, ll.lng)}` };
     }
@@ -240,7 +250,7 @@ function selectGeom(g) {
 
 /** Extract this geometry's raw coordinates in a plain, serialisable form. @param {string} shape @param {L.Layer} layer */
 function extractGeomCoords(shape, layer) {
-  if (shape === 'Marker' || shape === 'CircleMarker') { const ll = layer.getLatLng(); return { lat: ll.lat, lng: ll.lng }; }
+  if (shape === 'Marker' || shape === 'CircleMarker' || shape === 'Label') { const ll = layer.getLatLng(); return { lat: ll.lat, lng: ll.lng }; }
   if (shape === 'Circle') { const ll = layer.getLatLng(); return { lat: ll.lat, lng: ll.lng, radius: layer.getRadius() }; }
   if (shape === 'Rectangle') { const b = layer.getBounds(); return { bounds: [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]] }; }
   let ring = layer.getLatLngs();
@@ -250,6 +260,10 @@ function extractGeomCoords(shape, layer) {
 
 /** Build a fresh, unattached Leaflet layer from extractGeomCoords() output. @param {string} shape @param {object} geom */
 function layerFromGeom(shape, geom) {
+  // The icon is left blank here and written by applyGeomStyle(), which every
+  // caller runs immediately after — the text and its styling live on the
+  // geometry record, not in the coordinates this rebuilds from.
+  if (shape === 'Label') return L.marker([geom.lat, geom.lng], { icon: L.divIcon({ className: 'map-text-wrap', html: '', iconSize: [0, 0] }) });
   if (shape === 'Marker') return L.marker([geom.lat, geom.lng]);
   if (shape === 'CircleMarker') return L.circleMarker([geom.lat, geom.lng], { radius: 8 });
   if (shape === 'Circle') return L.circle([geom.lat, geom.lng], { radius: geom.radius });
@@ -260,7 +274,7 @@ function layerFromGeom(shape, geom) {
 
 /** Reposition a geometry's existing layer in place to match a snapshot's coordinates (keeps the same layer instance/listeners). @param {object} g @param {object} geom */
 function applyGeomCoords(g, geom) {
-  if (g.shape === 'Marker' || g.shape === 'CircleMarker') g.layer.setLatLng([geom.lat, geom.lng]);
+  if (g.shape === 'Marker' || g.shape === 'CircleMarker' || g.shape === 'Label') g.layer.setLatLng([geom.lat, geom.lng]);
   else if (g.shape === 'Circle') { g.layer.setLatLng([geom.lat, geom.lng]); g.layer.setRadius(geom.radius); }
   else if (g.shape === 'Rectangle') g.layer.setBounds(geom.bounds);
   else g.layer.setLatLngs(geom.latlngs);
@@ -271,7 +285,8 @@ function snapshotGeom(g) {
   return {
     id: g.id, shape: g.shape, name: g.name, description: g.description, notes: g.notes,
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
-    lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern, showLabel: g.showLabel, glow: g.glow,
+    lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
+    labelSize: g.labelSize, labelBold: g.labelBold, showLabel: g.showLabel, glow: g.glow,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -320,6 +335,12 @@ function attachGeomLayerEvents(g) {
  * @param {object} g
  */
 function enableSingleShapeEdit(g) {
+  // A label has no vertices to drag. Double-clicking one should do the thing
+  // it obviously means: put the caret in the text.
+  if (g.shape === 'Label') {
+    if (typeof focusTextLabelField === 'function') focusTextLabelField(g);
+    return;
+  }
   disableAllDrawModes();
   disableAllEditModes();
   const wasEditing = g.layer.pm && g.layer.pm.enabled && g.layer.pm.enabled();
@@ -401,6 +422,7 @@ function recreateGeomFromSnapshot(snap) {
     id: snap.id, name: snap.name, description: snap.description, notes: snap.notes,
     fillColor: snap.fillColor, borderColor: snap.borderColor, borderWidth: snap.borderWidth, fillOpacity: snap.fillOpacity,
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
+    labelSize: snap.labelSize, labelBold: snap.labelBold,
     showLabel: snap.showLabel, glow: snap.glow,
     createdAt: snap.createdAt,
   });
@@ -413,6 +435,7 @@ function restoreGeomSnapshot(id, snap) {
   applyGeomCoords(g, snap.geom);
   g.fillColor = snap.fillColor; g.borderColor = snap.borderColor; g.borderWidth = snap.borderWidth; g.fillOpacity = snap.fillOpacity;
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
+  g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
   g.showLabel = snap.showLabel; g.glow = snap.glow;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);
@@ -489,6 +512,17 @@ function startDrawShape(shape) {
   if (typeof setAdding === 'function') setAdding(false);
   if (typeof armingViaFor !== 'undefined' && armingViaFor && typeof disarmVia === 'function') disarmVia();
   if (typeof aerialActive !== 'undefined' && aerialActive && typeof setAerialActive === 'function') setAerialActive(false);
+  // Geoman has no text tool, so this one is ours. Handed over before any of
+  // Geoman's state is touched, since there is nothing of Geoman's to set up.
+  if (shape === 'Label') {
+    if (activeShape) { map.pm.disableDraw(); activeShape = null; }
+    GEOM_SHAPES.forEach(s2 => { const b2 = $(SHAPE_BTN_ID[s2]); if (b2 && s2 !== 'Label') b2.classList.remove('toggled'); });
+    if (typeof setTextLabelPlacing === 'function') setTextLabelPlacing(!textLabelPlacing);
+    return;
+  }
+  if (typeof setTextLabelPlacing === 'function' && typeof textLabelPlacing !== 'undefined' && textLabelPlacing) {
+    setTextLabelPlacing(false);
+  }
   const wasActive = activeShape === shape;
   if (activeShape) map.pm.disableDraw();
   if (wasActive) { activeShape = null; GEOM_SHAPES.forEach(s => { const b = $(SHAPE_BTN_ID[s]); if (b) b.classList.remove('toggled'); }); return; }

@@ -3537,3 +3537,52 @@ input[type=checkbox]:disabled {
   .geom-chip:hover,
   .geom-chip:active { transform: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   21. Free-standing text labels
+   ------------------------------------------------------------------------ */
+
+/* Armed to drop a label on the next click. A text caret rather than a
+   crosshair: the crosshair already means "pick a place" for the boundary tool,
+   and two modes sharing one cursor is two modes you cannot tell apart. */
+.map-wrap.placing-label,
+.map-wrap.placing-label .leaflet-container { cursor: text; }
+
+/* The divIcon wrapper. Zero-sized and transparent so Leaflet anchors the text
+   by its own centre — a box sized to the text would shift the label sideways
+   as it was typed. */
+.map-text-wrap {
+  background: none;
+  border: none;
+  overflow: visible;
+}
+
+.map-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  /* Arial, not the brand face: this string is rasterised into PNG and PPTX
+     exports, and a webfont that has not finished loading exports as a blank
+     line. The shape-name labels made the same call for the same reason. */
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.25;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
+}
+
+/* Dragging is Geoman's global drag mode; this just makes the label look like
+   it will move before you try. */
+.leaflet-pm-draggable .map-text { cursor: move; }
+
+/* A label card has no fill/border pair, so its one colour input should not sit
+   in a two-swatch layout's worth of space. */
+.label-card .lsize-v,
+.label-card .gop-v {
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
