@@ -87,6 +87,12 @@ function setAppMode(mode, opts) {
     b.setAttribute('aria-current', on ? 'page' : 'false');
   });
 
+  // On the board the map is a tile on the canvas, so it moves into it — and
+  // back out again for the other two modes, where it is a grid item. Moving it
+  // costs the map nothing but its cached size (see dashLayout.js), and it has
+  // to happen before the board renders so the layout can measure it.
+  if (typeof dashMapToCanvas === 'function') dashMapToCanvas(mode === 'dashboard');
+
   if (mode === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
   if (mode === 'report' && typeof renderReportSheet === 'function') renderReportSheet();
 

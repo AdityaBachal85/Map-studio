@@ -1,5 +1,5 @@
 /**
- * ui/dashCards.js — the dashboard's cards: yours to fill in and arrange.
+ * ui/dashCards.js — the board's cards: yours to fill in, size and arrange.
  *
  * WHY EVERY NUMBER IS TYPED, NOT COMPUTED. The board shows things this app has
  * no way of knowing — price per square foot, rental yield, demand-supply,
@@ -10,21 +10,25 @@
  * the app *does* know something — the routes, their distances, the Key
  * Distances table — the card reads it live and says so.
  *
+ * A fresh board therefore arrives EMPTY, not seeded. Captions and axis labels
+ * are scaffolding that says what a card is for; the values are em-dashes until
+ * somebody types them. A zero reads as measured.
+ *
  * SEVEN TYPES, NOT SEVENTY. stat, stats, chart, gauges, list, access, text.
  * Between them they cover the whole mockup, and each one is small enough to
- * edit in place with a caret rather than a dialog. A card builder with a
- * property panel per card would be a bigger feature than the dashboard it
- * decorates.
+ * edit in place with a caret rather than a dialog.
  *
  * EDITING IS A MODE. Off, the board is a board — click anything and nothing
- * happens to it. On, every value carries a caret and the cards grow handles.
- * A dashboard you can retype by mis-clicking is a document, not a dashboard.
+ * happens to it, and the tiles have no handles. On, every value carries a caret
+ * and every tile can be moved and resized. A dashboard you can retype by
+ * mis-clicking is a document, not a dashboard.
  *
- * Everything here serialises into the project, so a board travels with the map
- * it describes.
+ * Geometry lives in ui/dashLayout.js; charts in ui/dashCharts.js. Everything
+ * here serialises into the project, so a board travels with the map it
+ * describes.
  */
 
-/** The board. `slot` is 'side' (right rail) or 'grid' (the wall below). */
+/** The board. Each card carries its own `{x, y, w, h}` on the canvas. */
 let dashCards = [];
 
 /** Whether the board is being edited. A mode, not data — never serialised. */
@@ -32,69 +36,99 @@ let dashEditing = false;
 
 let dashCardSeq = 1;
 
-/** Column span options a card cycles through, out of twelve. */
-const DASH_SPANS = [3, 4, 6, 12];
+/** The chart forms, and what each is for. */
+const DASH_CHART_KINDS = [
+  ['line', 'Line'],
+  ['area', 'Area'],
+  ['bar', 'Column'],
+  ['donut', 'Donut'],
+];
 
 /** What the "add" bar offers, and what a fresh one of each looks like. */
 const DASH_CARD_TYPES = [
-  ['stat', 'Number', () => ({ label: 'Metric', value: '0', sub: '' })],
-  ['stats', 'Three numbers', () => ({ items: [
-    { label: 'Score', value: '0' }, { label: 'Potential', value: '—' }, { label: 'Risk', value: '—' }] })],
-  ['chart', 'Chart', () => ({ kind: 'line', color: '#8B7CF0',
-    labels: ['2021', '2022', '2023', '2024', '2025'], values: [10, 12, 11, 14, 16] })],
-  ['gauges', 'Score rings', () => ({ items: [
-    { cap: 'Connectivity', value: 90, color: '#22C55E' },
-    { cap: 'Infrastructure', value: 80, color: '#38BDF8' }] })],
-  ['list', 'List', () => ({ items: [{ name: 'Item', meta: '' }] })],
-  ['access', 'Key access points (live)', () => ({})],
-  ['text', 'Text', () => ({ body: 'Type here.' })],
+  ['stat', 'Number', () => ({ label: 'Metric', value: '', sub: '', w: 3, h: 5 })],
+  ['stats', 'Three numbers', () => ({ w: 4, h: 5, items: [
+    { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
+  ['chart', 'Chart', () => ({ kind: 'line', series: 1, w: 6, h: 9,
+    labels: ['2021', '2022', '2023', '2024', '2025'], values: [] })],
+  ['gauges', 'Score rings', () => ({ w: 6, h: 7, items: [
+    { cap: 'Connectivity', value: '', color: '#22C55E' },
+    { cap: 'Infrastructure', value: '', color: '#38BDF8' }] })],
+  ['list', 'List', () => ({ w: 4, h: 7, items: [{ name: 'Item', meta: '' }] })],
+  ['access', 'Key access points (live)', () => ({ w: 4, h: 7 })],
+  ['text', 'Text', () => ({ body: 'Type here.', w: 4, h: 5 })],
 ];
 
 /** @param {string} type @returns {object} a new card of that type */
-function dashNewCard(type, slot) {
+function dashNewCard(type) {
   const def = DASH_CARD_TYPES.find(t => t[0] === type) || DASH_CARD_TYPES[0];
-  return Object.assign({
+  const card = Object.assign({
     id: 'c' + (dashCardSeq++),
     type: def[0],
-    slot: slot || 'grid',
-    span: 3,
+    x: 0, y: 9999, w: 4, h: 5,   // y past the end: it lands at the bottom, then settles up
     title: def[1],
   }, def[2]());
+  return card;
 }
 
 /**
- * The board a new project starts with.
+ * The board a new project starts with — the mockup's shape, in tiles.
  *
- * Shaped after the mockup, but every figure is a placeholder em-dash rather
- * than a plausible-looking number. A zero reads as measured; "—" reads as
- * "nobody has filled this in", which is the truth on a board that has just
- * been created.
+ * The map takes the left two-thirds with the three context cards beside it,
+ * then the charts across the wall below. Every one of these is draggable and
+ * resizable from the moment it appears; this is a starting point, not a layout.
  */
 function dashDefaultCards() {
   dashCardSeq = 1;
+  dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
   const c = (type, over) => Object.assign(dashNewCard(type), over);
   return [
-    c('text', { slot: 'side', title: 'Property location & access',
+    c('text', { x: 8, y: 0, w: 4, h: 5, title: 'Property location & access',
       body: 'Type the address, the coordinates and anything else worth saying up front.' }),
-    c('stats', { slot: 'side', title: 'Scores', items: [
-      { label: 'Investment', value: '—' }, { label: 'Growth', value: '—' }, { label: 'Risk', value: '—' }] }),
-    c('access', { slot: 'side', title: 'Key access points' }),
+    c('stats', { x: 8, y: 5, w: 4, h: 4, title: 'Scores', items: [
+      { label: 'Investment', value: '' }, { label: 'Growth', value: '' }, { label: 'Risk', value: '' }] }),
+    c('access', { x: 8, y: 9, w: 4, h: 5, title: 'Key access points' }),
 
-    // Captions and axis labels are scaffolding — they say what the card is for.
-    // The numbers are left empty: a fresh board should not arrive carrying
-    // scores and a price line nobody entered.
-    c('gauges', { span: 6, title: 'Infrastructure score', items: [
+    c('gauges', { x: 0, y: 14, w: 6, h: 7, title: 'Infrastructure score', items: [
       { cap: 'Connectivity', value: '', color: '#22C55E' },
       { cap: 'Infrastructure', value: '', color: '#38BDF8' },
       { cap: 'Development', value: '', color: '#F5C518' },
       { cap: 'Livability', value: '', color: '#22C55E' }] }),
-    c('chart', { span: 6, title: 'Property price trend',
+    c('chart', { x: 6, y: 14, w: 6, h: 7, title: 'Property price trend', kind: 'area', series: 1,
       labels: ['2021', '2022', '2023', '2024', '2025'], values: [] }),
-    c('text', { span: 6, title: 'Executive summary',
+    c('text', { x: 0, y: 21, w: 6, h: 6, title: 'Executive summary',
       body: 'Type the summary that opens the report.' }),
-    c('list', { span: 6, title: 'Timeline (development)', items: [
+    c('list', { x: 6, y: 21, w: 6, h: 6, title: 'Timeline (development)', items: [
       { name: 'Milestone', meta: 'Year' }] }),
   ];
+}
+
+/**
+ * Bring a board saved before the canvas existed up to date.
+ *
+ * Older boards positioned cards by a `slot` ('side' or 'grid') and a column
+ * `span`; there was no y and no height. Rather than drop those boards, lay them
+ * out in the order they were saved: the side rail becomes the right column, the
+ * grid flows across the rest, and the settle pass tidies the result.
+ *
+ * @param {object[]} cards
+ */
+function dashMigrateCards(cards) {
+  let sideY = 0, gridY = 0;
+  cards.forEach(c => {
+    if (typeof c.w === 'number' && typeof c.h === 'number'
+      && typeof c.x === 'number' && typeof c.y === 'number') return;
+    const h = c.type === 'chart' ? 8 : c.type === 'gauges' ? 7 : c.type === 'stat' ? 5 : 6;
+    if (c.slot === 'side') {
+      c.x = 8; c.w = 4; c.y = sideY; sideY += h;
+    } else {
+      const w = Math.max(2, Math.min(12, c.span || 4));
+      c.w = w; c.x = (gridY % 2) ? Math.max(0, 12 - w) : 0;
+      c.y = 14 + gridY * h; gridY++;
+    }
+    c.h = h;
+    delete c.slot; delete c.span;
+  });
 }
 
 /* ---------------------------------------------------------------------------
@@ -114,62 +148,49 @@ function dashField(card, path, v, cls) {
 }
 
 /**
- * A sparkline or bar chart, as inline SVG.
+ * A chart card: a plot host the chart is measured into, plus its controls.
  *
- * No charting library: this draws a polyline and some rectangles, and a
- * dependency for that would be more code than the thing it renders — and one
- * more thing to keep working through an export. Drawn on a 0-100 viewBox with
- * preserveAspectRatio off, so it stretches to whatever the card is wide.
+ * The SVG itself is not built here — it is drawn after layout, when the host
+ * has a real width and height to measure. See ui/dashCharts.js.
  *
  * @param {object} card @returns {string} HTML
  */
 function dashChartHtml(card) {
-  const vals = (card.values || []).map(Number).filter(n => isFinite(n));
+  const vals = (card.values || []).map(Number).filter(isFinite);
   const labels = card.labels || [];
-  const color = card.color || '#8B7CF0';
-  if (vals.length < 2) {
-    return '<div class="dc-stat-sub">'
+  const kind = card.kind || 'line';
+  const enough = kind === 'donut' ? vals.length >= 1 : vals.length >= 2;
+
+  let s = '<div class="dc-plot" data-card="' + card.id + '"></div>';
+
+  if (!enough) {
+    s += '<div class="dc-empty">'
       + (dashEditing
-        ? 'Type at least two comma-separated values below and the line draws itself.'
+        ? 'Type comma-separated values below — ' + (kind === 'donut' ? 'one per slice' : 'at least two')
+          + ' — and the chart draws itself.'
         : 'No values yet — turn on Edit board to type them.')
+      + '</div>';
+  }
+
+  if (dashEditing) {
+    s += '<div class="dc-ctl">'
+      + '<div class="dc-seg" role="group" aria-label="Chart type">'
+      + DASH_CHART_KINDS.map(k =>
+        '<button type="button" data-kind="' + k[0] + '"' + (k[0] === kind ? ' class="on"' : '')
+        + '>' + esc(k[1]) + '</button>').join('')
       + '</div>'
-      + (dashEditing
-        ? '<div class="dc-stat-sub">Labels ' + dashField(card, 'labels', labels.join(', '), 'dc-row-meta')
-          + 'Values ' + dashField(card, 'values', vals.join(', '), 'dc-row-meta') + '</div>'
-        : '');
+      + '<div class="dc-swatches" role="group" aria-label="Chart colour">'
+      + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
+        '<button type="button" class="dc-sw' + (n === (card.series || 1) ? ' on' : '')
+        + '" data-series="' + n + '" style="background:var(--viz-' + n + ')"'
+        + ' title="Colour ' + n + '" aria-label="Colour ' + n + '"></button>').join('')
+      + '</div></div>'
+      + '<div class="dc-fields">'
+      + '<label>Labels' + dashField(card, 'labels', labels.join(', '), 'dc-input') + '</label>'
+      + '<label>Values' + dashField(card, 'values', vals.join(', '), 'dc-input') + '</label>'
+      + '</div>';
   }
-
-  const max = Math.max.apply(null, vals);
-  const min = Math.min.apply(null, vals);
-  // A flat series would divide by zero and, worse, draw a line at the top of
-  // the box as though it were a maximum.
-  const span = (max - min) || 1;
-  const x = i => (i / (vals.length - 1)) * 100;
-  const y = v => 96 - ((v - min) / span) * 88;
-
-  let body = '';
-  if (card.kind === 'bar') {
-    const w = 100 / vals.length * 0.62;
-    body = vals.map((v, i) =>
-      '<rect class="bar" x="' + (x(i) - w / 2).toFixed(2) + '" y="' + y(v).toFixed(2)
-      + '" width="' + w.toFixed(2) + '" height="' + Math.max(0.5, 96 - y(v)).toFixed(2)
-      + '" fill="' + esc(color) + '"/>').join('');
-  } else {
-    body = '<polyline class="line" stroke="' + esc(color) + '" points="'
-      + vals.map((v, i) => x(i).toFixed(2) + ',' + y(v).toFixed(2)).join(' ') + '"/>'
-      + vals.map((v, i) => '<circle class="dot" cx="' + x(i).toFixed(2) + '" cy="' + y(v).toFixed(2)
-        + '" r="2.4" fill="' + esc(color) + '"/>').join('');
-  }
-
-  return '<svg class="dc-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img"'
-    + ' aria-label="' + esc(card.title || 'Chart') + '">'
-    + '<line class="grid" x1="0" y1="96" x2="100" y2="96"/>' + body + '</svg>'
-    + '<div class="dc-axis"><span>' + esc(labels[0] || '') + '</span>'
-    + '<span>' + esc(labels[labels.length - 1] || '') + '</span></div>'
-    + (dashEditing
-      ? '<div class="dc-stat-sub">Labels ' + dashField(card, 'labels', labels.join(', '), 'dc-row-meta')
-        + 'Values ' + dashField(card, 'values', vals.join(', '), 'dc-row-meta') + '</div>'
-      : '');
+  return s;
 }
 
 /** @param {object} card @returns {string} HTML */
@@ -183,7 +204,7 @@ function dashGaugesHtml(card) {
     const v = set ? Math.max(0, Math.min(100, Number(raw))) : 0;
     const r = 24, circ = 2 * Math.PI * r;
     return '<div class="dc-gauge">'
-      + '<svg viewBox="0 0 60 60" width="66" height="66" role="img" aria-label="'
+      + '<svg viewBox="0 0 60 60" width="62" height="62" role="img" aria-label="'
         + esc(g.cap || '') + ' ' + (set ? v + ' out of 100' : 'not set') + '">'
       + '<circle class="track" cx="30" cy="30" r="' + r + '" stroke-width="5"/>'
       + (set
@@ -192,7 +213,7 @@ function dashGaugesHtml(card) {
         : '')
       + '<text class="dc-gauge-num" x="30" y="35">' + (set ? v : '—') + '</text></svg>'
       + dashField(card, 'items.' + i + '.cap', g.cap, 'dc-gauge-cap')
-      + (dashEditing ? dashField(card, 'items.' + i + '.value', set ? String(v) : '', 'dc-row-meta') : '')
+      + (dashEditing ? dashField(card, 'items.' + i + '.value', set ? String(v) : '', 'dc-input') : '')
       + '</div>';
   }).join('') + '</div>';
 }
@@ -215,15 +236,15 @@ function dashAccessHtml() {
     // drawn nothing — and "No routes yet" under three visible routes reads as
     // the card being broken.
     const drawn = (typeof routes !== 'undefined' && routes) ? routes.length : 0;
-    return '<div class="dc-stat-sub">' + (drawn
+    return '<div class="dc-empty">' + (drawn
       ? 'Measuring ' + drawn + ' route' + (drawn === 1 ? '' : 's') + '… distances appear here once the routing service answers.'
       : 'No routes yet. Draw one in the Routes tab and it appears here.') + '</div>';
   }
-  return '<div class="dc-list">' + rows.slice(0, 8).map(r =>
+  return '<div class="dc-list">' + rows.map(r =>
     '<div class="dc-row">'
     + '<span class="dc-ico">' + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
-    + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.name) + '</div>'
-    + '<div class="dc-row-meta">' + esc(r.km) + (r.min && r.min !== '—' ? ' · ' + esc(r.min) : '') + '</div></div>'
+    + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.name) + '</div></div>'
+    + '<div class="dc-row-meta">' + esc(r.km) + (r.min && r.min !== '—' ? ' · ' + esc(r.min) : '') + '</div>'
     + '</div>').join('') + '</div>';
 }
 
@@ -231,16 +252,17 @@ function dashAccessHtml() {
 function dashCardBody(card) {
   switch (card.type) {
     case 'stat':
-      return dashField(card, 'label', card.label, 'dc-stat-label')
+      return '<div class="dc-stat">'
         + dashField(card, 'value', card.value, 'dc-stat-val')
-        + dashField(card, 'sub', card.sub, 'dc-stat-sub');
+        + dashField(card, 'label', card.label, 'dc-stat-label')
+        + dashField(card, 'sub', card.sub, 'dc-stat-sub') + '</div>';
 
     case 'stats':
-      return '<div style="display:flex;gap:14px;flex-wrap:wrap">'
+      return '<div class="dc-stats">'
         + (card.items || []).map((it, i) =>
-          '<div style="flex:1;min-width:78px">'
-          + dashField(card, 'items.' + i + '.label', it.label, 'dc-stat-label')
+          '<div class="dc-stats-cell">'
           + dashField(card, 'items.' + i + '.value', it.value, 'dc-stat-val')
+          + dashField(card, 'items.' + i + '.label', it.label, 'dc-stat-label')
           + '</div>').join('') + '</div>';
 
     case 'chart': return dashChartHtml(card);
@@ -251,11 +273,11 @@ function dashCardBody(card) {
       return '<div class="dc-list">' + (card.items || []).map((it, i) =>
         '<div class="dc-row"><div class="dc-row-main">'
         + dashField(card, 'items.' + i + '.name', it.name, 'dc-row-name')
-        + dashField(card, 'items.' + i + '.meta', it.meta, 'dc-row-meta')
         + '</div>'
+        + dashField(card, 'items.' + i + '.meta', it.meta, 'dc-row-meta')
         + (dashEditing ? '<button class="dc-btn danger" data-drop-row="' + i + '" title="Remove this row">&times;</button>' : '')
         + '</div>').join('')
-        + (dashEditing ? '<button class="dc-btn" data-add-row="1" style="align-self:flex-start;font-size:11px">+ Row</button>' : '')
+        + (dashEditing ? '<button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>' : '')
         + '</div>';
 
     case 'text':
@@ -267,47 +289,62 @@ function dashCardBody(card) {
 /** @param {object} card @returns {HTMLElement} */
 function dashCardEl(card) {
   const el = document.createElement('section');
-  el.className = 'dash-card';
+  el.className = 'dash-card dash-tile dc-type-' + card.type;
   el.dataset.card = card.id;
-  el.style.setProperty('--span', card.span || 3);
-  if (dashEditing) el.draggable = true;
 
   el.innerHTML =
     '<div class="dc-head">'
+    + (dashEditing ? '<span class="dc-grip" aria-hidden="true"></span>' : '')
     + '<div class="dc-title" data-card="' + card.id + '" data-bind="title"'
       + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + esc(card.title || '') + '</div>'
     + '<div class="dc-tools">'
-      + (card.slot === 'grid'
-        ? '<button class="dc-btn" data-act="span" title="Change how wide this card is">'
-          + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7 4 12l4 5M16 7l4 5-4 5"/></svg></button>'
-        : '')
-      + '<button class="dc-btn danger" data-act="del" title="Remove this card">'
+      + '<button class="dc-btn danger" data-act="del" title="Remove this card" aria-label="Remove this card">'
         + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
     + '</div></div>'
-    + dashCardBody(card);
+    + '<div class="dc-body">' + dashCardBody(card) + '</div>'
+    + (dashEditing ? dashHandlesHtml() : '');
 
   return el;
 }
 
-/** Redraw both slots. */
+/** Redraw the canvas. */
 function renderDashboard() {
-  const side = document.getElementById('dashSide');
   const grid = document.getElementById('dashGrid');
-  if (!side || !grid) return;
+  if (!grid) return;
 
   if (!dashCards.length) dashCards = dashDefaultCards();
+  dashMigrateCards(dashCards);
 
-  side.innerHTML = '';
+  // The map lives on the canvas and must survive the rebuild, so it is lifted
+  // out before the wipe rather than being innerHTML'd away.
+  const wrap = document.getElementById('mapWrap');
+  const mapWasHere = wrap && wrap.parentNode === grid;
+  if (mapWasHere) grid.removeChild(wrap);
   grid.innerHTML = '';
-  dashCards.forEach(c => (c.slot === 'side' ? side : grid).appendChild(dashCardEl(c)));
+  if (mapWasHere) grid.appendChild(wrap);
 
-  // The add bar lives inside the grid so it flows with the cards rather than
-  // sitting in a toolbar somewhere else on the page.
-  const add = document.createElement('div');
-  add.id = 'dashAdd';
-  add.innerHTML = DASH_CARD_TYPES.map(t =>
-    '<button type="button" data-add="' + t[0] + '">+ ' + esc(t[1]) + '</button>').join('');
-  grid.appendChild(add);
+  dashCards.forEach(c => grid.appendChild(dashCardEl(c)));
+
+  if (dashEditing) {
+    const add = document.createElement('div');
+    add.id = 'dashAdd';
+    add.innerHTML = '<span class="da-cap">Add</span>' + DASH_CARD_TYPES.map(t =>
+      '<button type="button" data-add="' + t[0] + '">' + esc(t[1]) + '</button>').join('');
+    grid.appendChild(add);
+  }
+
+  if (wrap) wrap.classList.toggle('tile-editing', dashEditing);
+  if (mapWasHere && dashEditing && !wrap.querySelector('.dc-rz')) {
+    const h = document.createElement('div');
+    h.className = 'dc-maphandles';
+    // Not also `.dc-grip`: that class is the 13px dotted square used inside a
+    // card header, and its fixed width squashed this chip to a blob.
+    h.innerHTML = '<span class="dc-maphead" title="Drag to move the map tile"></span>' + dashHandlesHtml();
+    wrap.appendChild(h);
+  } else if (wrap) {
+    const h = wrap.querySelector('.dc-maphandles');
+    if (h && !dashEditing) h.remove();
+  }
 
   const app = document.getElementById('app');
   if (app) app.classList.toggle('dash-editing', dashEditing);
@@ -316,6 +353,32 @@ function renderDashboard() {
     btn.classList.toggle('on', dashEditing);
     btn.setAttribute('aria-pressed', String(dashEditing));
   }
+
+  dashSettle();
+  dashLayoutApply();
+  // Charts measure their host, so they are drawn after the layout has given
+  // every host a size — and once more next frame, because a card that has just
+  // been inserted has not had its transition settle yet.
+  dashDrawAllCharts();
+  requestAnimationFrame(dashDrawAllCharts);
+}
+
+/**
+ * Redraw only the cards that read from the map.
+ *
+ * Called whenever the distances change — routes measure asynchronously, so a
+ * board opened straight after drawing one shows "measuring…" and has to catch
+ * up on its own. Rebuilding the whole board would do it in one line and would
+ * also blow away whatever was being typed into another card at that moment,
+ * which is why this touches only the live ones. They contain no editable
+ * fields, so there is nothing here to lose.
+ */
+function dashRefreshLive() {
+  dashCards.forEach(c => {
+    if (c.type !== 'access') return;
+    const body = document.querySelector('#dashGrid .dash-card[data-card="' + c.id + '"] .dc-body');
+    if (body) body.innerHTML = dashAccessHtml();
+  });
 }
 
 /** @param {boolean} on */
@@ -324,7 +387,7 @@ function setDashEditing(on) {
   renderDashboard();
   if (typeof status === 'function') {
     status(dashEditing
-      ? 'Editing the board: click any value to retype it, drag a card by its title to move it.'
+      ? 'Editing the board: retype any value, drag a card by its title bar, resize from any edge or corner.'
       : 'Board saved.');
   }
 }
@@ -353,7 +416,11 @@ function dashCommit(el) {
 
   if (path === 'labels' || path === 'values') {
     const parts = text.split(',').map(s => s.trim()).filter(s => s !== '');
-    card[path] = path === 'values' ? parts.map(Number).map(n => (isFinite(n) ? n : 0)) : parts;
+    // A non-number in a value list is dropped rather than coerced to zero: a
+    // typo should not become a data point sitting on the axis.
+    card[path] = path === 'values'
+      ? parts.map(Number).filter(isFinite)
+      : parts;
     return;
   }
 
@@ -376,7 +443,7 @@ function dashCommit(el) {
 
   // One delegated set of listeners for the whole board: cards are rebuilt on
   // every change, and per-card handlers would be re-attached each time.
-  const inBoard = e => e.target.closest && e.target.closest('#dashSide, #dashGrid');
+  const inBoard = e => e.target.closest && e.target.closest('#dashGrid');
 
   app.addEventListener('click', e => {
     if (!inBoard(e)) return;
@@ -392,12 +459,15 @@ function dashCommit(el) {
     const act = e.target.closest('[data-act]');
     if (act) {
       if (act.dataset.act === 'del') dashCards = dashCards.filter(c => c !== card);
-      if (act.dataset.act === 'span') {
-        card.span = DASH_SPANS[(DASH_SPANS.indexOf(card.span) + 1) % DASH_SPANS.length];
-      }
       renderDashboard();
       return;
     }
+
+    const kind = e.target.closest('[data-kind]');
+    if (kind) { card.kind = kind.dataset.kind; renderDashboard(); return; }
+
+    const series = e.target.closest('[data-series]');
+    if (series) { card.series = +series.dataset.series; renderDashboard(); return; }
 
     const addRow = e.target.closest('[data-add-row]');
     if (addRow) { (card.items = card.items || []).push({ name: 'Item', meta: '' }); renderDashboard(); return; }
@@ -423,63 +493,5 @@ function dashCommit(el) {
       e.preventDefault();
       el.blur();
     }
-  });
-
-  /* ---- drag to reorder ---- */
-  let dragId = null;
-
-  app.addEventListener('dragstart', e => {
-    const el = e.target.closest && e.target.closest('.dash-card');
-    if (!el || !dashEditing) return;
-    dragId = el.dataset.card;
-    el.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    // Firefox refuses to start a drag without data on the transfer.
-    try { e.dataTransfer.setData('text/plain', dragId); } catch (err) { /* ignore */ }
-  });
-
-  app.addEventListener('dragover', e => {
-    if (!dragId) return;
-    const el = e.target.closest && e.target.closest('.dash-card');
-    if (!el || el.dataset.card === dragId) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    const after = (e.clientX - r.left) > r.width / 2;
-    el.classList.toggle('drop-after', after);
-    el.classList.toggle('drop-before', !after);
-  });
-
-  app.addEventListener('dragleave', e => {
-    const el = e.target.closest && e.target.closest('.dash-card');
-    if (el) el.classList.remove('drop-before', 'drop-after');
-  });
-
-  app.addEventListener('drop', e => {
-    if (!dragId) return;
-    const el = e.target.closest && e.target.closest('.dash-card');
-    if (!el) return;
-    e.preventDefault();
-
-    const from = dashCards.findIndex(c => c.id === dragId);
-    const onto = dashCards.findIndex(c => c.id === el.dataset.card);
-    if (from < 0 || onto < 0 || from === onto) { dragId = null; renderDashboard(); return; }
-
-    const r = el.getBoundingClientRect();
-    const after = (e.clientX - r.left) > r.width / 2;
-    const moved = dashCards.splice(from, 1)[0];
-    // A card dragged into the other slot joins it — that is how something moves
-    // between the right rail and the wall without a separate control for it.
-    moved.slot = dashCards[onto > from ? onto - 1 : onto].slot;
-    let at = dashCards.findIndex(c => c.id === el.dataset.card);
-    dashCards.splice(at + (after ? 1 : 0), 0, moved);
-
-    dragId = null;
-    renderDashboard();
-  });
-
-  app.addEventListener('dragend', () => {
-    dragId = null;
-    document.querySelectorAll('.dragging, .drop-before, .drop-after')
-      .forEach(el => el.classList.remove('dragging', 'drop-before', 'drop-after'));
   });
 })();

@@ -62,6 +62,37 @@ function reportSheetData() {
   return reportSheet;
 }
 
+/**
+ * Redraw only the distances panel.
+ *
+ * Its own function, and its own element, because it is the one part of the
+ * sheet that changes without anybody editing the sheet: routes measure
+ * asynchronously, so the table is empty for a second or two after the sheet
+ * opens and then fills in. Re-rendering the whole sheet on every route update
+ * would be the easy way to catch that and would throw away whatever somebody
+ * was typing into a hub or a highlight at the time.
+ */
+function rsRefreshDistances() {
+  const host = document.getElementById('rsDist');
+  if (!host) return;
+  const rows = (typeof legendRows === 'function') ? legendRows() : [];
+  const pending = !rows.length && typeof routes !== 'undefined' && routes && routes.length;
+  host.innerHTML =
+    '<h3>Key connectivity — approx. distances</h3>'
+    + (rows.length
+      ? '<table class="rs-rows"><tbody>' + rows.map(r =>
+          '<tr><td style="width:22px;line-height:0">'
+          + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</td>'
+          + '<td>' + esc(r.name) + '</td>'
+          + '<td class="num">' + esc(r.km) + '</td></tr>').join('')
+        + '</tbody></table>'
+      : '<div class="rs-body" style="font-size:11px;color:#5B6779">'
+        + (pending
+          ? 'Measuring ' + routes.length + ' route' + (routes.length === 1 ? '' : 's') + '…'
+          : 'Draw a route and it appears here. Edit the wording on the Key Distances card over the map.')
+        + '</div>');
+}
+
 /** @param {string} path @param {*} v @param {string} cls @param {string} [tag] */
 function rsField(path, v, cls, tag) {
   const t = tag || 'div';
@@ -107,19 +138,8 @@ function renderReportSheet() {
   /* ---- right: the live distances, then the prose ---- */
   const right = document.getElementById('rsRight');
   if (right) {
-    const rows = (typeof legendRows === 'function') ? legendRows() : [];
     right.innerHTML =
-      '<div class="rs-panel"><h3>Key connectivity — approx. distances</h3>'
-      + (rows.length
-        ? '<table class="rs-rows"><tbody>' + rows.map(r =>
-            '<tr><td style="width:22px;line-height:0">'
-            + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</td>'
-            + '<td>' + esc(r.name) + '</td>'
-            + '<td class="num">' + esc(r.km) + '</td></tr>').join('')
-          + '</tbody></table>'
-        : '<div class="rs-body" style="font-size:11px;color:#5B6779">Draw a route and it appears here. '
-          + 'Edit the wording on the Key Distances card over the map.</div>')
-      + '</div>'
+      '<div class="rs-panel" id="rsDist"></div>'
 
       + '<div class="rs-panel"><h3>Connectivity highlights</h3><div class="rs-body">'
       + '<ul class="rs-bullets">' + d.highlights.map((h, i) =>
@@ -134,6 +154,7 @@ function renderReportSheet() {
         + '<td style="width:16px"><button class="legend-x rs-del" data-rs-del="hubs.' + i + '" title="Remove">&times;</button></td></tr>').join('')
       + '</tbody></table><div class="rs-body" style="padding-top:0">'
       + '<button class="rs-add" data-rs-add="hubs">+ Hub</button></div></div>';
+    rsRefreshDistances();
   }
 
   /* ---- bottom: the comment and the score ---- */

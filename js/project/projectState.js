@@ -106,6 +106,9 @@ function serialiseProject() {
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
+    // The map's tile goes with them: how big the map was on the board is part
+    // of the layout somebody arranged, not a preference of this browser.
+    dashMap: (typeof dashMapTile !== 'undefined' && dashMapTile) ? dashMapTile : undefined,
     reportSheet: (typeof reportSheet !== 'undefined' && reportSheet) ? reportSheet : undefined,
     locations: locations.map(serialiseLocation),
     routes: routes.map(serialiseRoute),
@@ -163,6 +166,14 @@ function applyProject(proj, opts) {
     dashCards = Array.isArray(proj.dashboard) ? proj.dashboard : [];
     // Keep new cards from colliding with restored ids.
     dashCardSeq = dashCards.reduce((n, c) => Math.max(n, (parseInt(String(c.id).slice(1), 10) || 0) + 1), 1);
+  }
+  if (typeof dashMapTile !== 'undefined') {
+    const m = proj.dashMap;
+    // Sanity-check the restored geometry rather than trusting the file: a bad
+    // width would put the map off the canvas with no handle to drag it back.
+    dashMapTile = (m && isFinite(m.x) && isFinite(m.y) && m.w > 0 && m.h > 0)
+      ? { id: DASH_MAP_ID, x: +m.x, y: +m.y, w: +m.w, h: +m.h }
+      : { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
   }
   if (typeof reportSheet !== 'undefined') {
     reportSheet = (proj.reportSheet && typeof proj.reportSheet === 'object') ? proj.reportSheet : null;

@@ -268,6 +268,17 @@ function rebuildLegend() {
     editBtn.setAttribute('aria-pressed', String(legendEditing));
     editBtn.title = legendEditing ? 'Done editing' : 'Edit the rows, icons and values';
   }
+
+  // The board and the sheet both show these same rows, and this is the one
+  // place that knows they changed. Only the live panels are redrawn — never the
+  // whole board or sheet, which would discard anything being typed elsewhere on
+  // them at the moment a route finished measuring.
+  if (typeof dashRefreshLive === 'function' && typeof appMode === 'function' && appMode() === 'dashboard') {
+    dashRefreshLive();
+  }
+  if (typeof rsRefreshDistances === 'function' && typeof appMode === 'function' && appMode() === 'report') {
+    rsRefreshDistances();
+  }
 }
 
 /**
