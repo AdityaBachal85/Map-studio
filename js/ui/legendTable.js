@@ -32,6 +32,18 @@ let legendEdits = {};
 let legendExtras = [];
 
 /**
+ * Display order, as row keys ('r:12', 'x:3').
+ *
+ * Sparse on purpose: it holds only what has been moved. A row nobody has
+ * touched is not in here at all and falls in at its natural position — routes
+ * in the order they were drawn, then hand-added rows. That is what stops a new
+ * route from vanishing off the bottom of a table whose order was fixed months
+ * ago, and what lets a saved order survive rows being added and deleted around
+ * it without needing to be rewritten each time.
+ */
+let legendOrder = [];
+
+/**
  * Whether the Time column is drawn.
  *
  * On by default, because that is what the card has always shown. Off gives the
@@ -130,7 +142,49 @@ function legendRows() {
     });
   });
 
-  return out;
+  return legendSorted(out);
+}
+
+/**
+ * Apply the saved order.
+ *
+ * Rows named in legendOrder come first, in that order; everything else keeps
+ * its natural position after them. Sorting by "position in legendOrder, or
+ * Infinity" with a stable sort does both in one pass — and the tie-break on
+ * the original index is what keeps two unordered rows in the order they were
+ * created rather than at the mercy of the engine's sort.
+ *
+ * @param {Array<object>} rows @returns {Array<object>}
+ */
+function legendSorted(rows) {
+  if (!legendOrder.length) return rows;
+  const rank = k => {
+    const i = legendOrder.indexOf(k);
+    return i === -1 ? Infinity : i;
+  };
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => (rank(a.r.key) - rank(b.r.key)) || (a.i - b.i))
+    .map(x => x.r);
+}
+
+/**
+ * Move one row up or down by one place.
+ *
+ * The whole current display order is written back, not just the pair that
+ * swapped: legendOrder is otherwise sparse, and moving a row that is not in it
+ * yet past one that is would otherwise produce an order that means nothing.
+ *
+ * @param {string} key @param {number} dir -1 up, +1 down
+ */
+function legendMoveRow(key, dir) {
+  const keys = legendRows().map(r => r.key);
+  const i = keys.indexOf(key);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= keys.length) return;
+  keys.splice(j, 0, keys.splice(i, 1)[0]);
+  legendOrder = keys;
+  rebuildLegend();
 }
 
 /**
@@ -164,7 +218,9 @@ function rebuildLegend() {
   body.innerHTML = '';
 
   const rows = legendRows();
-  rows.forEach(r => {
+  rows.forEach((r, i) => {
+    r.first = i === 0;
+    r.last = i === rows.length - 1;
     const tr = document.createElement('tr');
     tr.dataset.key = r.key;
     // contenteditable is applied per cell rather than to the row: the mark cell
@@ -184,6 +240,8 @@ function rebuildLegend() {
           + '<input type="color" class="legend-color" value="' + esc(r.color) + '"'
             + (r.iconImage ? ' disabled title="An uploaded logo keeps its own colours"' : ' title="Icon colour for this row"')
             + ' aria-label="Icon colour for this row">'
+          + '<button class="legend-x legend-up" title="Move up"' + (r.first ? ' disabled' : '') + '>\u2191</button>'
+          + '<button class="legend-x legend-down" title="Move down"' + (r.last ? ' disabled' : '') + '>\u2193</button>'
           + (r.edited ? '<button class="legend-x legend-reset" title="Back to the measured values">↺</button>' : '')
           + '<button class="legend-x legend-hide" title="' + (r.extra ? 'Delete this row' : 'Hide this row') + '">&times;</button>'
           + '</td>'
@@ -274,6 +332,7 @@ function legendAddExtraRow() {
 function legendResetAll() {
   legendEdits = {};
   legendExtras = [];
+  legendOrder = [];
   rebuildLegend();
   status('Key distances back to the measured values.');
 }
@@ -287,6 +346,14 @@ function legendResetAll() {
   // leak the old ones.
   body.addEventListener('click', e => {
     if (!legendEditing) return;
+
+    const up = e.target.closest('.legend-up');
+    const down = e.target.closest('.legend-down');
+    if (up || down) {
+      const tr = (up || down).closest('tr');
+      legendMoveRow(tr.dataset.key, up ? -1 : 1);
+      return;
+    }
 
     const hide = e.target.closest('.legend-hide');
     if (hide) {

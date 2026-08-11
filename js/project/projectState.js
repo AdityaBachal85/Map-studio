@@ -102,6 +102,7 @@ function serialiseProject() {
     legendEdits: (typeof legendEdits === 'object' && legendEdits) ? legendEdits : {},
     legendExtras: (typeof legendExtras !== 'undefined' && Array.isArray(legendExtras)) ? legendExtras : [],
     legendShowTime: (typeof legendShowTime === 'undefined') ? true : !!legendShowTime,
+    legendOrder: (typeof legendOrder !== 'undefined' && Array.isArray(legendOrder)) ? legendOrder : [],
     locations: locations.map(serialiseLocation),
     routes: routes.map(serialiseRoute),
     geometries: geometries.map(geomToGeoJSONFeature),
@@ -155,6 +156,7 @@ function applyProject(proj, opts) {
   if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }
 
   if (typeof legendShowTime !== 'undefined') legendShowTime = proj.legendShowTime !== false;
+  if (typeof legendOrder !== 'undefined') legendOrder = Array.isArray(proj.legendOrder) ? proj.legendOrder : [];
   if (typeof legendEdits !== 'undefined') legendEdits = (proj.legendEdits && typeof proj.legendEdits === 'object') ? proj.legendEdits : {};
   if (typeof legendExtras !== 'undefined') {
     legendExtras = Array.isArray(proj.legendExtras) ? proj.legendExtras : [];

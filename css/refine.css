@@ -3809,3 +3809,26 @@ input[type=checkbox]:disabled {
 #legendCard .legend-color::-moz-color-swatch { border: 0; border-radius: 3px; }
 #legendCard .legend-color:disabled { opacity: .35; cursor: default; }
 #legendCard .legend-color:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+
+/* Five controls now share the actions cell — colour, up, down, reset, delete —
+   in a card that has to stay narrow enough to sit on a map. Tighter padding
+   and a nudged-down arrow glyph, rather than a wider card. */
+#legendCard .legend-up,
+#legendCard .legend-down {
+  font-size: 11px;
+  padding: 1px 1px;
+  line-height: 1;
+}
+
+#legendCard .legend-up:hover:not(:disabled),
+#legendCard .legend-down:hover:not(:disabled) {
+  color: var(--orange);
+  background: rgba(255, 122, 26, .14);
+}
+
+/* Dimmed at the ends of the list rather than removed: buttons that disappear
+   make the whole column reflow as rows are shuffled. */
+#legendCard .legend-up:disabled,
+#legendCard .legend-down:disabled { opacity: .25; cursor: default; }
+
+#legendCard.editing { max-width: 392px; }
