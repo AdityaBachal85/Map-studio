@@ -1,0 +1,273 @@
+/**
+ * ui/ringScanPanel.js — the ring's scan dialog: what was found, and what to keep.
+ *
+ * WHY A PICK-LIST AND NOT AUTOMATIC. A 5 km ring over a city holds hundreds of
+ * ways. Dropping all of them on the map would bury the drawing they were meant
+ * to support, and every one becomes a card in the Draw list and a shape the
+ * undo system re-serialises twice a second. So the scan reports counts per
+ * class, and you tick the ones you want. Nothing lands unasked.
+ *
+ * What you tick becomes an ordinary shape — restyleable, renameable, hideable,
+ * deletable, saved with the project — because the alternative (a managed layer
+ * that refetches on open) needs the network every time somebody opens the file,
+ * and a colleague opening it on a blocked office connection would see an empty
+ * map where you saw a metro line.
+ */
+
+/** Which classes the checklist starts with. Remembered per device. */
+function ringScanClasses() {
+  let saved = null;
+  try { saved = getPref('ringScanClasses'); } catch (e) { /* ignore */ }
+  if (Array.isArray(saved) && saved.length) return saved.slice();
+  return RING_FEATURE_DEFAULTS.slice();
+}
+
+/** @param {string[]} ids */
+function setRingScanClasses(ids) {
+  try { setPref('ringScanClasses', ids); } catch (e) { /* ignore */ }
+}
+
+/** The scan currently on screen. */
+let ringScanState = null;
+
+/** @returns {HTMLElement|null} */
+function ringScanOverlay() { return document.getElementById('ringScanOverlay'); }
+
+/**
+ * Close the dialog. Leaves whatever was already kept on the map.
+ *
+ * `.on` drives the opacity transition and `hidden` takes it out of the layout;
+ * both are needed. Clearing only `hidden` leaves a fully-built, fully-readable
+ * dialog at `opacity: 0` — which is how this shipped for one test run, passing
+ * every assertion because textContent works fine on an invisible element. A
+ * screenshot is what caught it.
+ */
+function closeRingScan() {
+  const o = ringScanOverlay();
+  if (o) {
+    o.classList.remove('on');
+    const done = () => { o.hidden = true; o.removeEventListener('transitionend', done); };
+    o.addEventListener('transitionend', done);
+    setTimeout(done, 320);          // fallback when transitions are off
+  }
+  ringScanState = null;
+}
+
+/**
+ * Open the dialog for one ring and start the scan.
+ *
+ * @param {object} loc @param {object} ring the `{km, color, op}` entry
+ */
+async function openRingScan(loc, ring) {
+  const o = ringScanOverlay();
+  if (!o) return;
+  const km = parseFloat(ring && ring.km);
+  if (!(km > 0)) { status('Give the ring a radius first.'); return; }
+
+  ringScanState = { loc, km, ids: ringScanClasses(), result: null, picked: new Set() };
+  o.hidden = false;
+  // Next frame, so the opacity transition has a start state to animate from.
+  requestAnimationFrame(() => o.classList.add('on'));
+  renderRingScan();
+  await runRingScan();
+}
+
+/** Fetch, then redraw. */
+async function runRingScan() {
+  if (!ringScanState) return;
+  const s = ringScanState;
+  s.busy = true; s.error = null; s.result = null;
+  renderRingScan();
+
+  const res = await fetchRingFeatures(s.loc.lat, s.loc.lng, s.km * 1000, s.ids);
+  if (!ringScanState || ringScanState !== s) return;    // dialog closed mid-flight
+  s.busy = false;
+  if (!res.ok) { s.error = res.reason; s.skipped = res.skipped || []; }
+  else {
+    s.result = res.features || [];
+    s.skipped = res.skipped || [];
+    s.truncated = !!res.truncated;
+    s.cached = !!res.cached;
+    // Everything found starts ticked: the common case is "yes, put the metro
+    // line on the map". Unticking a class is one click; ticking six is six.
+    s.picked = new Set(s.result.map((f, i) => i));
+  }
+  renderRingScan();
+}
+
+/** @param {object[]} features @returns {Map<string, object[]>} grouped by class */
+function ringScanGroups(features) {
+  const g = new Map();
+  features.forEach((f, i) => {
+    if (!g.has(f.classId)) g.set(f.classId, []);
+    g.get(f.classId).push(Object.assign({ _i: i }, f));
+  });
+  return g;
+}
+
+/** Draw the dialog from `ringScanState`. */
+function renderRingScan() {
+  const body = document.getElementById('ringScanBody');
+  const foot = document.getElementById('ringScanFoot');
+  if (!body || !ringScanState) return;
+  const s = ringScanState;
+
+  /* ---- the class checklist, always shown ---- */
+  let html = '<div class="rs-scan-classes">'
+    + RING_FEATURE_CLASSES.map(c => {
+      const on = s.ids.indexOf(c.id) >= 0;
+      const tooWide = s.km > c.max;
+      return '<label class="chk' + (tooWide ? ' rs-wide' : '') + '"'
+        + (tooWide ? ' title="Not searched — a ' + s.km + ' km ring is wider than the '
+          + c.max + ' km limit for this type"' : '') + '>'
+        + '<input type="checkbox" data-scan-cls="' + c.id + '"' + (on ? ' checked' : '')
+        + (tooWide ? ' disabled' : '') + '> ' + esc(c.label) + '</label>';
+    }).join('') + '</div>';
+
+  if (s.busy) {
+    html += '<div class="rs-scan-note">Searching OpenStreetMap inside the '
+      + esc(String(s.km)) + ' km ring…</div>';
+  } else if (s.error) {
+    html += '<div class="rs-scan-err">' + esc(ringFeatureMessage(s.error, { skipped: s.skipped })) + '</div>';
+  } else if (s.result) {
+    const groups = ringScanGroups(s.result);
+    if (!groups.size) {
+      html += '<div class="rs-scan-note">Nothing of those types is mapped inside this ring.'
+        + ' That is a real answer — OpenStreetMap\'s coverage of smaller stations and'
+        + ' waterways is patchy in places.</div>';
+    } else {
+      html += [...groups.entries()].map(([cid, items]) => {
+        const fc = ringFeatureClass(cid);
+        const cc = typeof connClass === 'function' ? connClass(fc ? fc.cls : null) : null;
+        const allOn = items.every(it => s.picked.has(it._i));
+        return '<div class="rs-scan-group">'
+          + '<div class="rs-scan-hd">'
+          + '<label class="chk"><input type="checkbox" data-scan-group="' + cid + '"'
+            + (allOn ? ' checked' : '') + '> <b>' + esc(fc ? fc.label : cid) + '</b></label>'
+          + '<span class="rs-scan-sw" style="background:' + esc(cc ? cc.color : '#888') + '"></span>'
+          + '<span class="rs-scan-count">' + items.length + '</span></div>'
+          + '<div class="rs-scan-items">'
+          + items.slice(0, 40).map(it =>
+            '<label class="chk"><input type="checkbox" data-scan-i="' + it._i + '"'
+            + (s.picked.has(it._i) ? ' checked' : '') + '> '
+            + esc(it.name || (it.kind === 'point' ? 'Unnamed' : 'Unnamed section'))
+            + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '') + '</label>').join('')
+          + (items.length > 40
+            ? '<div class="rs-scan-note">…and ' + (items.length - 40) + ' more, included by the group tick.</div>'
+            : '')
+          + '</div></div>';
+      }).join('');
+    }
+
+    if (s.skipped && s.skipped.length) {
+      html += '<div class="rs-scan-note">Not searched: '
+        + s.skipped.map(k => esc(k.label) + ' (over ' + k.max + ' km)').join(', ')
+        + '. A ring this wide returns thousands of those.</div>';
+    }
+    if (s.truncated) {
+      html += '<div class="rs-scan-note">Overpass returned its maximum. There is more inside this'
+        + ' ring than is shown — narrow the ring for a complete answer.</div>';
+    }
+    if (s.cached) html += '<div class="rs-scan-note">From this browser\'s cache.</div>';
+  }
+
+  body.innerHTML = html;
+
+  if (foot) {
+    const n = s.picked ? s.picked.size : 0;
+    foot.innerHTML =
+      '<button class="btn btn-ghost" id="ringScanAgain">'
+      + (s.error && ringFeatureRetryable(s.error) ? 'Try again' : 'Search again') + '</button>'
+      + '<span class="grow"></span>'
+      + '<button class="btn btn-primary" id="ringScanKeep"' + (n ? '' : ' disabled') + '>'
+      + (n ? 'Add ' + n + ' to the map' : 'Nothing selected') + '</button>';
+  }
+}
+
+/**
+ * Turn the ticked features into real shapes.
+ *
+ * Registered through the same `registerGeom` every drawn shape uses, with the
+ * connectivity class attached — so they take the standard colours, appear in
+ * the road-type legend, and can be edited or deleted like anything else.
+ */
+function keepRingScanSelection() {
+  if (!ringScanState || !ringScanState.result) return;
+  const s = ringScanState;
+  let n = 0;
+
+  s.result.forEach((f, i) => {
+    if (!s.picked.has(i)) return;
+    const fc = ringFeatureClass(f.classId);
+    const clsId = fc ? fc.cls : null;
+    const cc = typeof connClass === 'function' ? connClass(clsId) : null;
+    const name = f.name || (fc ? fc.label : 'Feature');
+
+    let layer = null, shape = null;
+    if (f.kind === 'point') {
+      layer = L.circleMarker([f.lat, f.lng], { radius: 7 });
+      shape = 'CircleMarker';
+    } else if (f.kind === 'area') {
+      layer = L.polygon(f.pts);
+      shape = 'Polygon';
+    } else {
+      layer = L.polyline(f.pts);
+      shape = 'Line';
+    }
+
+    const meta = { name, cls: clsId, fromRing: true };
+    if (cc) {
+      meta.borderColor = cc.color;
+      meta.borderWidth = cc.weight;
+      meta.lineStyle = cc.dash ? 'dashed' : 'solid';
+      if (shape !== 'Line') { meta.fillColor = cc.color; meta.fillOpacity = 0.18; }
+    }
+    registerGeom(layer, shape, meta);
+    n++;
+  });
+
+  closeRingScan();
+  if (typeof rebuildLegend === 'function') rebuildLegend();
+  if (typeof pushHistory === 'function') pushHistory();
+  status(n + ' feature' + (n === 1 ? '' : 's') + ' added to Draw — restyle, rename or delete'
+    + ' any of them like anything else you drew.');
+}
+
+(function wireRingScan() {
+  const o = ringScanOverlay();
+  if (!o) return;
+
+  o.addEventListener('click', e => {
+    if (e.target === o || e.target.closest('#ringScanClose')) { closeRingScan(); return; }
+    if (!ringScanState) return;
+    const s = ringScanState;
+
+    const cls = e.target.closest('[data-scan-cls]');
+    if (cls) {
+      const id = cls.dataset.scanCls;
+      s.ids = cls.checked ? s.ids.concat([id]) : s.ids.filter(x => x !== id);
+      setRingScanClasses(s.ids);
+      return;
+    }
+    const grp = e.target.closest('[data-scan-group]');
+    if (grp) {
+      const items = ringScanGroups(s.result || []).get(grp.dataset.scanGroup) || [];
+      items.forEach(it => { if (grp.checked) s.picked.add(it._i); else s.picked.delete(it._i); });
+      renderRingScan();
+      return;
+    }
+    const one = e.target.closest('[data-scan-i]');
+    if (one) {
+      const i = +one.dataset.scanI;
+      if (one.checked) s.picked.add(i); else s.picked.delete(i);
+      renderRingScan();
+      return;
+    }
+    if (e.target.closest('#ringScanAgain')) { runRingScan(); return; }
+    if (e.target.closest('#ringScanKeep')) { keepRingScanSelection(); return; }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && ringScanState) closeRingScan();
+  });
+})();

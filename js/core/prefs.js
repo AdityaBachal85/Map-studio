@@ -16,6 +16,11 @@ const PREF_DEFAULTS = {
   basemap: 'hybrid',      // last-selected basemap key (remembered by the switcher)
   imageryLook: 'natural', // satellite colour grading (map/imageryEnhance.js)
   roadLook: 'subtle',     // roads/labels overlay treatment (map/imageryEnhance.js)
+  layout: 'satellite',    // 'satellite' | 'connectivity' — the default for a NEW map
+  // Which feature types a ring scan looks for. Declared here rather than left
+  // to fall back inside the panel, so the whole set of remembered settings is
+  // readable in one place.
+  ringScanClasses: null,  // null = the module's own defaults
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

@@ -3890,3 +3890,86 @@ input[type=checkbox]:disabled {
   color: var(--orange);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   Ring scan — the "what is inside this ring" dialog
+   ------------------------------------------------------------------------ */
+
+.ring-row .rscan {
+  flex: none;
+  padding: 4px 7px;
+  font-size: 10.5px;
+}
+
+.rs-scan-classes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+/* A class the ring is too wide for. Shown and disabled rather than hidden:
+   "why is Streams not in the list" is a worse question than a greyed row whose
+   tooltip says a 12 km ring holds thousands of them. */
+.rs-scan-classes .chk.rs-wide { opacity: .45; }
+
+.rs-scan-group { margin-bottom: 14px; }
+
+.rs-scan-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--stroke);
+  margin-bottom: 6px;
+}
+.rs-scan-hd .chk { flex: 1; min-width: 0; }
+.rs-scan-hd b { font-size: 12px; }
+
+.rs-scan-sw {
+  flex: none;
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.rs-scan-count {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+.rs-scan-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 190px;
+  overflow: auto;
+  padding-left: 4px;
+}
+.rs-scan-items .chk { font-size: 11.5px; }
+.rs-scan-items i { font-style: normal; color: var(--dim); font-family: var(--mono); font-size: 10.5px; }
+
+.rs-scan-note {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dim);
+  padding: 8px 0;
+}
+
+.rs-scan-err {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgba(255, 107, 129, .10);
+  border: 1px solid rgba(255, 107, 129, .34);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+
+#ringScanFoot { display: flex; align-items: center; gap: 8px; }
+#ringScanFoot .grow { flex: 1; }

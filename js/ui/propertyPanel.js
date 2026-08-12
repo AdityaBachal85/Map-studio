@@ -23,6 +23,7 @@
       <input type="color" class="rclr" value="${esc(r.color)}" title="Ring color">
       <input type="range" class="rop" min="0" max="60" step="2" value="${Math.round((r.op || 0) * 100)}" title="Fill transparency">
       <span class="pct">${Math.round((r.op || 0) * 100)}%</span>
+      <button class="mini-btn rscan" title="Find the metro, railway, rivers and airports inside this ring">⊙ Scan</button>
       <button class="x-btn" title="Remove ring">&times;</button>`;
           row.querySelector('.rkm').addEventListener('change', e => { r.km = e.target.value; updateRings(loc); });
           row.querySelector('.rclr').addEventListener('input', e => { r.color = e.target.value; updateRings(loc); });
@@ -30,6 +31,12 @@
             r.op = (+e.target.value) / 100;
             row.querySelector('.pct').textContent = e.target.value + '%';
             updateRings(loc);
+          });
+          // Deliberately a button, not something the radius input fires on
+          // change. Typing "3" then "30" would otherwise launch two city-scale
+          // Overpass queries nobody asked for, against a donated service.
+          row.querySelector('.rscan').addEventListener('click', () => {
+            if (typeof openRingScan === 'function') openRingScan(loc, r);
           });
           row.querySelector('.x-btn').addEventListener('click', () => { loc.rings.splice(idx, 1); renderRingRows(loc); updateRings(loc); });
           enhanceColorInputs(row);
