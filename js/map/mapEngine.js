@@ -639,6 +639,7 @@
         if (key !== activeKey) return;
         lastGoodBasemap = key;
         if (typeof setPref === 'function') setPref('basemap', key);
+        if (typeof rememberLayoutBasemap === 'function') rememberLayoutBasemap(key);
       }
 
       /**

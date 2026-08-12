@@ -54,6 +54,38 @@ let mapLayoutId = MAP_LAYOUT_DEFAULT;
 /** @returns {string} the current layout id */
 function mapLayout() { return mapLayoutId; }
 
+/**
+ * The ground a layout should open on: whatever it was last left on, else the
+ * layout's own default.
+ * @param {string} id @returns {string}
+ */
+function layoutBasemap(id) {
+  const spec = MAP_LAYOUTS[id];
+  let byLayout = null;
+  try { byLayout = getPref('basemapByLayout'); } catch (e) { /* ignore */ }
+  const saved = byLayout && byLayout[id];
+  return (saved && (typeof BASEMAPS === 'undefined' || BASEMAPS[saved])) ? saved : (spec ? spec.basemap : 'osm');
+}
+
+/**
+ * Remember that this layout is being used with this ground.
+ *
+ * Called when a basemap actually renders, not when it is picked — the same
+ * rule mapEngine already applies to the plain `basemap` pref, so a provider
+ * that cannot draw is never remembered as a preference.
+ *
+ * @param {string} key
+ */
+function rememberLayoutBasemap(key) {
+  try {
+    const cur = getPref('basemapByLayout') || {};
+    if (cur[mapLayoutId] === key) return;
+    const next = Object.assign({}, cur);
+    next[mapLayoutId] = key;
+    setPref('basemapByLayout', next);
+  } catch (e) { /* prefs unavailable */ }
+}
+
 /** @returns {boolean} whether classed objects should take their class colours */
 function connStandardOn() {
   const spec = MAP_LAYOUTS[mapLayoutId];
@@ -75,12 +107,15 @@ function setMapLayout(id, opts) {
   mapLayoutId = id;
 
   if (!opts.keepBasemap && typeof setBasemap === 'function') {
+    // The ground this layout was last left on, else the layout's own. A layout
+    // that does not set its ground is not a layout, it is a checkbox.
+    const ground = layoutBasemap(id);
     // Only when it is not already right: setBasemap tears down and rebuilds the
     // tile layers, which is a visible flash for no reason if nothing moved.
-    if (typeof activeKey === 'undefined' || activeKey !== spec.basemap) {
+    if (typeof activeKey === 'undefined' || activeKey !== ground) {
       const sel = document.getElementById('basemapSel');
-      if (sel) sel.value = spec.basemap;
-      try { setBasemap(spec.basemap); } catch (e) { /* provider gone; keep the old ground */ }
+      if (sel) sel.value = ground;
+      try { setBasemap(ground); } catch (e) { /* provider gone; keep the old ground */ }
     }
   }
 
@@ -126,5 +161,11 @@ function setMapLayout(id, opts) {
   try { saved = getPref('layout') || MAP_LAYOUT_DEFAULT; } catch (e) { /* ignore */ }
   // Deferred a beat: setBasemap needs the basemap registry built, and the
   // registry is assembled after this file's top-level runs.
-  setTimeout(() => setMapLayout(saved, { silent: true, keepBasemap: saved === MAP_LAYOUT_DEFAULT }), 300);
+  // No keepBasemap here. It used to skip applying the ground whenever the saved
+  // layout matched the default — which became "always" the moment the default
+  // layout and the default ground were made to agree, so an upgraded install
+  // opened in the Connectivity layout on last year's satellite ground: the
+  // layout said one thing and the map showed another. Deliberate deviations are
+  // now remembered per layout instead, which is what that guard was reaching for.
+  setTimeout(() => setMapLayout(saved, { silent: true }), 300);
 })();

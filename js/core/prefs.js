@@ -24,6 +24,11 @@ const PREF_DEFAULTS = {
   // to fall back inside the panel, so the whole set of remembered settings is
   // readable in one place.
   ringScanClasses: null,  // null = the module's own defaults
+  // The ground remembered per layout, e.g. {connectivity:'osm', satellite:'hybrid'}.
+  // A single `basemap` cannot express this: the two layouts want different
+  // grounds by design, so one slot means whichever you touched last overwrites
+  // the other and the layout stops meaning anything.
+  basemapByLayout: null,
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);
