@@ -265,6 +265,31 @@
         }
         drawRoute(rt); renderViaDots(rt); rebuildLegend();
       }
+      /**
+       * A new route's colour: its class's, under the standard; otherwise the
+       * next palette entry. Split out of addRoute so the three style fields
+       * read the same way and the fallback is stated once.
+       * @param {object} opts @returns {string}
+       */
+      function routeInitialColor(opts) {
+        const c = (typeof connClass === 'function' && opts.cls) ? connClass(opts.cls) : null;
+        if (c && typeof connStandardOn === 'function' && connStandardOn()) return c.color;
+        return PALETTE[routes.length % PALETTE.length];
+      }
+
+      /** @param {object} opts @returns {number} */
+      function routeInitialWeight(opts) {
+        const c = (typeof connClass === 'function' && opts.cls) ? connClass(opts.cls) : null;
+        return (c && typeof connStandardOn === 'function' && connStandardOn()) ? c.weight : 5;
+      }
+
+      /** @param {object} opts @returns {boolean} */
+      function routeInitialDash(opts) {
+        if (opts.proposed) return true;
+        const c = (typeof connClass === 'function' && opts.cls) ? connClass(opts.cls) : null;
+        return !!(c && typeof connStandardOn === 'function' && connStandardOn() && c.dash);
+      }
+
       function addRoute(opts) {
         opts = opts || {};
         const rt = {
@@ -272,8 +297,18 @@
           fromId: opts.fromId || (locations[0] && locations[0].id) || null,
           toId: opts.toId || (locations[1] && locations[1].id) || null,
           mode: opts.mode || 'car',
-          color: opts.color || PALETTE[routes.length % PALETTE.length],
-          weight: opts.weight || 5, dash: !!opts.dash, offsetPx: opts.offsetPx || 0,
+          // What kind of road this is. Only meaningful under the connectivity
+          // standard, but carried always so switching layouts does not lose it.
+          cls: opts.cls || null,
+          proposed: !!opts.proposed,
+          // The rotating palette is right for "N unrelated destinations" and
+          // wrong for road classes — it made the same road a different colour
+          // in every report. Under the standard the class decides; otherwise
+          // the palette keeps its old behaviour.
+          color: opts.color || routeInitialColor(opts),
+          weight: opts.weight || routeInitialWeight(opts),
+          dash: opts.dash !== undefined ? !!opts.dash : routeInitialDash(opts),
+          offsetPx: opts.offsetPx || 0,
           labelText: opts.labelText || '', showLabel: opts.showLabel !== undefined ? opts.showLabel : true,
           labelOffset: opts.labelOffset || { x: 12, y: -26 },
           // How far along the route the label ties on: 0 origin, 1 destination.
@@ -334,6 +369,11 @@
         (rt._viaEls || []).forEach(removeBB);
         if (rt.card) rt.card.remove();
         routes.splice(routes.indexOf(rt), 1);
+        // A traced road's two endpoints exist only to hold it. Left behind they
+        // are invisible, unlisted and unreachable — a leak you could only find
+        // by reading the project file. Guarded because roadDraw.js loads after
+        // this file, the same way refreshLayers is guarded below.
+        if (typeof cleanupRoadAnchors === 'function') cleanupRoadAnchors(rt);
         rebuildLegend(); syncEmpties();
         scheduleRepaint();
         if (typeof refreshLayers === 'function') refreshLayers();

@@ -266,7 +266,7 @@ function setNearbyChipCount(key, n) {
  * @param {{lat:number,lng:number}} p
  */
 function nearbyAlreadyAdded(p) {
-  return locations.some(l => Math.abs(l.lat - p.lat) < 1e-6 && Math.abs(l.lng - p.lng) < 1e-6);
+  return realLocations().some(l => Math.abs(l.lat - p.lat) < 1e-6 && Math.abs(l.lng - p.lng) < 1e-6);
 }
 
 /**
@@ -539,8 +539,8 @@ function renderNearbyCenterPicker() {
   if (!sel) return;
   const previous = sel.value;
 
-  const sites = locations.filter(l => l.type === 'site');
-  const others = locations.filter(l => l.type !== 'site');
+  const sites = realLocations().filter(l => l.type === 'site');
+  const others = realLocations().filter(l => l.type !== 'site');
   const opt = (value, label) => `<option value="${esc(value)}">${esc(label)}</option>`;
 
   sel.innerHTML = opt('__view__', '📍 Map centre (current view)')

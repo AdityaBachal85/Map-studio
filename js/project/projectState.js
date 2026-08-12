@@ -41,6 +41,10 @@ function serialiseLocation(l) {
     iconBorder: l.iconBorder, iconBorderColor: l.iconBorderColor,
     iconShadow: l.iconShadow, iconGlow: l.iconGlow,
     hideMarker: l.hideMarker,
+    // undefined rather than false so an ordinary location's JSON does not grow
+    // a key — which keeps old projects byte-comparable to new ones, and the
+    // history fingerprint stable.
+    routeAnchor: l.routeAnchor || undefined,
     rings: l.rings,
     // `photo` was missing from the original serialiser, so a location's photo
     // survived only until the tab closed — it was dropped by Save and never
@@ -57,6 +61,9 @@ function serialiseRoute(r) {
   const alt = r.alts && r.alts[r.altIndex];
   return {
     id: r.id, fromId: r.fromId, toId: r.toId, mode: r.mode, color: r.color,
+    // The road class, so a project reopens with its legend intact and the
+    // standard can restyle it if the palette is ever revised.
+    cls: r.cls || undefined, proposed: r.proposed || undefined,
     weight: r.weight, dash: r.dash, offsetPx: r.offsetPx, labelText: r.labelText,
     showLabel: r.showLabel, labelOffset: r.labelOffset, labelBg: r.labelBg,
     labelPos: r.labelPos, labelScale: r.labelScale,
@@ -86,6 +93,9 @@ function serialiseProject() {
     legendTitle: $('legendTitle').textContent,
     view: { c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() },
     basemap: activeKey,
+    // Which kind of map this is — connectivity or satellite. Saved with the
+    // project because it is a property of the map, not of whoever opens it.
+    layout: (typeof mapLayout === 'function') ? mapLayout() : undefined,
     imageryLook: getImageryLook(),
     roadLook: getRoadLook(),
     tilt: tiltDeg,
@@ -203,6 +213,16 @@ function applyProject(proj, opts) {
     legendExtras = Array.isArray(proj.legendExtras) ? proj.legendExtras : [];
     // Keep new hand-added rows from colliding with restored ones.
     legendExtraSeq = legendExtras.reduce((n, x) => Math.max(n, (+x.id || 0) + 1), 1);
+  }
+
+  // The layout before the contents: it decides the ground and whether the
+  // standard is on, and both of those want to be settled before routes and
+  // shapes arrive asking what colour they are. keepBasemap because the project
+  // saved its own basemap above — the layout's default must not overrule a
+  // deliberate choice somebody saved.
+  if (typeof setMapLayout === 'function') {
+    setMapLayout(proj.layout || (typeof MAP_LAYOUT_DEFAULT !== 'undefined' ? MAP_LAYOUT_DEFAULT : 'satellite'),
+      { silent: true, keepBasemap: true });
   }
 
   (proj.locations || []).forEach(l => addLocation(l));

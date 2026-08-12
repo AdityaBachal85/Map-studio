@@ -1,0 +1,115 @@
+/**
+ * map/layouts.js — the two kinds of map this tool makes.
+ *
+ * A **Connectivity** map is a line diagram: roads, rail, metro and water, on a
+ * plain street ground, in fixed colours so every one of them reads the same
+ * way. A **Satellite** map is a photograph of a place with things marked on it.
+ * They want opposite grounds — a line diagram on satellite imagery is a mess of
+ * colours competing with the picture underneath, and a site photo on a flat
+ * street map has thrown away the thing it was for.
+ *
+ * So the layout is a named starting point: which ground, and whether the
+ * connectivity standard applies. Picking one is a decision about what this map
+ * IS, made once, rather than eight separate settings remembered by hand.
+ *
+ * IT SETS, IT DOES NOT POLICE. Switching the basemap afterwards is allowed and
+ * does not kick you out of the layout. The requirement was that a connectivity
+ * map *defaults* to OpenStreetMap, not that satellite becomes unreachable —
+ * and a mode that fights you when you deviate gets turned off entirely, taking
+ * the standard with it.
+ *
+ * REMEMBERED TWICE, ON PURPOSE. In the project, so a map opens as whatever it
+ * was saved as and a colleague sees what you saw. And as a preference, so new
+ * maps start in whichever layout this office mostly makes. Those are different
+ * questions and one value cannot answer both.
+ */
+
+const MAP_LAYOUTS = {
+  connectivity: {
+    label: 'Connectivity',
+    hint: 'Street ground, standard road colours',
+    basemap: 'osm',
+    standard: true,
+  },
+  satellite: {
+    label: 'Satellite',
+    hint: 'Imagery ground, free colours',
+    basemap: 'hybrid',
+    standard: false,
+  },
+};
+
+const MAP_LAYOUT_DEFAULT = 'satellite';
+
+/** The active layout id. Not the basemap — you may change that within a layout. */
+let mapLayoutId = MAP_LAYOUT_DEFAULT;
+
+/** @returns {string} the current layout id */
+function mapLayout() { return mapLayoutId; }
+
+/** @returns {boolean} whether classed objects should take their class colours */
+function connStandardOn() {
+  const spec = MAP_LAYOUTS[mapLayoutId];
+  return !!(spec && spec.standard);
+}
+
+/**
+ * Switch layout.
+ *
+ * @param {string} id one of MAP_LAYOUTS
+ * @param {object} [opts] `{silent}` no status line, `{keepBasemap}` don't touch
+ *   the ground (used when restoring a project that saved its own basemap)
+ */
+function setMapLayout(id, opts) {
+  opts = opts || {};
+  const spec = MAP_LAYOUTS[id];
+  if (!spec) return;
+  const changed = mapLayoutId !== id;
+  mapLayoutId = id;
+
+  if (!opts.keepBasemap && typeof setBasemap === 'function') {
+    // Only when it is not already right: setBasemap tears down and rebuilds the
+    // tile layers, which is a visible flash for no reason if nothing moved.
+    if (typeof activeKey === 'undefined' || activeKey !== spec.basemap) {
+      const sel = document.getElementById('basemapSel');
+      if (sel) sel.value = spec.basemap;
+      try { setBasemap(spec.basemap); } catch (e) { /* provider gone; keep the old ground */ }
+    }
+  }
+
+  // Entering the standard restyles what is already there. Leaving it does NOT
+  // restyle anything back: the colours on the map are what somebody handed to a
+  // client, and silently repainting them because a mode changed would be the
+  // worst kind of surprise.
+  if (spec.standard && typeof connApplyAll === 'function') connApplyAll();
+
+  document.querySelectorAll('[data-layout-btn]').forEach(b => {
+    const on = b.dataset.layoutBtn === id;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  document.body.classList.toggle('layout-connectivity', !!spec.standard);
+
+  try { setPref('layout', id); } catch (e) { /* prefs unavailable */ }
+
+  if (changed && !opts.silent && typeof status === 'function') {
+    status(spec.standard
+      ? 'Connectivity layout. Roads, rail and water take their standard colours; the ground is OpenStreetMap.'
+      : 'Satellite layout. Colours are yours to choose.');
+  }
+}
+
+(function wireMapLayouts() {
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-layout-btn]');
+    if (b) setMapLayout(b.dataset.layoutBtn);
+  });
+
+  // The saved preference is the default for a *new* map. A project that
+  // carries its own layout overrides this when it loads — see applyProject.
+  let saved = MAP_LAYOUT_DEFAULT;
+  try { saved = getPref('layout') || MAP_LAYOUT_DEFAULT; } catch (e) { /* ignore */ }
+  // Deferred a beat: setBasemap needs the basemap registry built, and the
+  // registry is assembled after this file's top-level runs.
+  setTimeout(() => setMapLayout(saved, { silent: true, keepBasemap: saved === MAP_LAYOUT_DEFAULT }), 300);
+})();

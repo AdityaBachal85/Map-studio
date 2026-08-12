@@ -505,7 +505,9 @@ function currentMapAsSheetRows() {
     if (!outgoing[r.fromId]) outgoing[r.fromId] = r;
   });
 
-  return (typeof locations !== 'undefined' ? locations : []).map(l => {
+  // realLocations(), not locations: routing anchors are scaffolding and must
+  // never reach a spreadsheet somebody sends to a client.
+  return (typeof realLocations === 'function' ? realLocations() : []).map(l => {
     const rt = outgoing[l.id];
     return [
       l.name,

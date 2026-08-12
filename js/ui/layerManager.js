@@ -12,7 +12,7 @@ const lpCollapsed = new Set(); // group keys currently collapsed
 
 /** Build the current group model from live app state. @returns {Array} */
 function layerGroups() {
-  const locItems = locations.map(loc => ({
+  const locItems = realLocations().map(loc => ({
     name: loc.name || 'Location', color: loc.color,
     icon: loc.type === 'site' ? '★' : (loc.type === 'badge' ? '▮' : '📍'),
     hidden: !!loc._hidden,

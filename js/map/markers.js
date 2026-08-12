@@ -130,6 +130,9 @@
           iconShadow: opts.iconShadow !== undefined ? opts.iconShadow : 6,
           iconGlow: !!opts.iconGlow,
           hideMarker: !!opts.hideMarker,
+          // Scaffolding for a traced road, not a place somebody marked. Kept out
+          // of every list and count via realLocations(); see map/roadDraw.js.
+          routeAnchor: !!opts.routeAnchor,
           rings: rings || [], photo: opts.photo || null,
           _pinEl: null, _labelEl: null, _el: null, _ringLabelEls: [], ringLayers: [], ringLabels: [], anchor: null, card: null
         };

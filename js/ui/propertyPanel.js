@@ -124,7 +124,10 @@ function locCardMarkup(loc) {
       <span class="grow"></span>
       <button class="mini-btn bnd" title="Draw this place's real boundary from OpenStreetMap">⬡ Boundary</button>
       <button class="mini-btn dup" title="Duplicate this location">⧉</button>
-      <button class="mini-btn ctr" title="Center map here">⌖</button>
+      <!-- Labelled, not a bare ⌖. This button was reported missing when it was
+           present the whole time — clipped off the row, and unrecognisable even
+           when visible. The row wraps now, which pays for the word. -->
+      <button class="mini-btn ctr" title="Center the map on this location">⌖ Centre</button>
     </div>`;
         card.querySelector('.tp').value = loc.type;
         card.querySelector('.bt-row').style.display = loc.type === 'badge' ? '' : 'none';
@@ -312,10 +315,26 @@ function wireLocCard(card, loc) {
       function buildLocCard(loc) {
         const card = locCardMarkup(loc);
         wireLocCard(card, loc);
+        // A routing anchor gets a card like everything else, and then that card
+        // is hidden. Building it and hiding it, rather than skipping it, keeps
+        // every `loc.card.querySelector(…)` in the codebase valid — markers.js,
+        // toolbar.js and layerManager.js all dereference it without checking,
+        // and one hidden node per traced road is cheaper than auditing them all
+        // and hoping nobody adds a fourth.
+        if (loc.routeAnchor && loc.card) {
+          loc.card.style.display = 'none';
+          loc.card.dataset.routeAnchor = '1';
+        }
       }
 
       function locOptions(sel) {
-        return locations.map(l => `<option value="${l.id}" ${sel === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+        // Anchors are hidden, EXCEPT the one this select currently holds. Drop
+        // that too and the browser silently selects the first remaining option
+        // — so a traced road's dropdown would show an unrelated location, and
+        // the next `change` event would quietly repoint the road to it.
+        return locations
+          .filter(l => !l.routeAnchor || l.id === sel)
+          .map(l => `<option value="${l.id}" ${sel === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
       }
       function refreshRouteSelects() {
         routes.forEach(rt => {
@@ -344,6 +363,12 @@ function wireLocCard(card, loc) {
       <input type="text" class="lt grow" value="${esc(rt.labelText)}" placeholder="Custom label (empty = auto km/min)">
     </div>
     <div class="r">
+      <span class="sub">Type</span>
+      <select class="cls grow" title="What kind of road this is. Under the Connectivity layout the type decides the colour, so the same road is the same colour in every report."></select>
+      <span class="rt-deviates" style="display:none;">custom colour</span>
+      <button class="mini-btn rstd" title="Put this route back to its type's standard colour" style="display:none;">↺</button>
+    </div>
+    <div class="r">
       <span class="sub">Width</span><input type="range" class="wt" min="2" max="10" step="1" value="${rt.weight}" style="width:52px;flex:none;">
       <span class="sub">Shift</span><input type="range" class="of" min="-18" max="18" step="1" value="${rt.offsetPx}" title="Sideways shift so overlapping routes stay visible" style="width:52px;flex:none;">
       <label class="chk"><input type="checkbox" class="ds" ${rt.dash ? 'checked' : ''}> Dash</label>
@@ -369,7 +394,45 @@ function wireLocCard(card, loc) {
       <span class="sub via-count" style="font-family:var(--mono);"></span>
     </div>`;
         card.querySelector('.md').value = rt.mode;
-        card.querySelector('.clr').addEventListener('input', e => { rt.color = e.target.value; drawRoute(rt); rebuildLegend(); });
+
+        /* ---- road class: the colour standard's handle on this route ---- */
+        const clsSel = card.querySelector('.cls');
+        if (clsSel && typeof connLineClasses === 'function') {
+          clsSel.innerHTML = '<option value="">— No type (free colour) —</option>'
+            + connLineClasses().map(([id, label]) =>
+              `<option value="${id}" ${rt.cls === id ? 'selected' : ''}>${esc(label)}</option>`).join('');
+        }
+        /** Show or hide the "custom colour" note and its reset button. */
+        function syncRtStandard() {
+          const dev = typeof connRouteDeviates === 'function' && connRouteDeviates(rt);
+          const note = card.querySelector('.rt-deviates');
+          const rst = card.querySelector('.rstd');
+          if (note) note.style.display = dev ? '' : 'none';
+          if (rst) rst.style.display = dev ? '' : 'none';
+        }
+        if (clsSel) {
+          clsSel.addEventListener('change', e => {
+            rt.cls = e.target.value || null;
+            // Picking a type always restyles: choosing "Metro" and staying the
+            // old colour would make the control look broken.
+            if (typeof connApplyToRoute === 'function') connApplyToRoute(rt, { force: true });
+            drawRoute(rt); rebuildLegend(); syncRtStandard();
+          });
+        }
+        const rstBtn = card.querySelector('.rstd');
+        if (rstBtn) {
+          rstBtn.addEventListener('click', () => {
+            if (typeof connApplyToRoute === 'function') connApplyToRoute(rt, { force: true });
+            const c = card.querySelector('.clr');
+            if (c) c.value = rt.color;
+            drawRoute(rt); rebuildLegend(); syncRtStandard();
+          });
+        }
+        setTimeout(syncRtStandard, 0);
+
+        card.querySelector('.clr').addEventListener('input', e => {
+          rt.color = e.target.value; drawRoute(rt); rebuildLegend(); syncRtStandard();
+        });
         card.querySelector('.from').addEventListener('change', e => { rt.fromId = parseInt(e.target.value, 10); rt.altIndex = 0; computeRoute(rt); });
         card.querySelector('.to').addEventListener('change', e => { rt.toId = parseInt(e.target.value, 10); rt.altIndex = 0; computeRoute(rt); });
         card.querySelector('.md').addEventListener('change', e => { rt.mode = e.target.value; rt.altIndex = 0; computeRoute(rt); });
@@ -431,11 +494,23 @@ function wireLocCard(card, loc) {
         // location's own, which already restores these).
         card.querySelector('.x-btn').addEventListener('click', () => {
           const snapshot = serialiseRoute(rt);
+          // A traced road's endpoints go with it, because deleteRoute sweeps
+          // them. Without this the undo restores a route whose fromId/toId
+          // point at nothing: the line still draws from its saved geometry, so
+          // it *looks* restored, while computeRoute bails, ↻ does nothing, and
+          // the row disappears from Key Distances. Anchors first, then the
+          // route — ids are restored, not regenerated, which is the same
+          // ordering deleteLocation's undo relies on.
+          const anchors = [rt.fromId, rt.toId]
+            .map(id => locById(id))
+            .filter(l => l && l.routeAnchor)
+            .map(serialiseLocation);
           const label = rt.labelText || routeLabelText(rt) || 'route';
           deleteRoute(rt);
           status(`Deleted ${label}.`, false, {
             label: 'Undo',
             onClick: () => {
+              anchors.forEach(a => { if (!locById(a.id)) addLocation(a); });
               addRoute(snapshot);
               rebuildLegend(); syncEmpties(); scheduleRepaint();
               if (typeof refreshLayers === 'function') refreshLayers();
@@ -468,7 +543,7 @@ function wireLocCard(card, loc) {
          them. */
 
       function syncEmpties() {
-        $('locEmpty').style.display = locations.length ? 'none' : '';
+        $('locEmpty').style.display = realLocations().length ? 'none' : '';
         $('rtEmpty').style.display = routes.length ? 'none' : '';
       }
       /** Wire the legend card's drag handle so it can be repositioned. */

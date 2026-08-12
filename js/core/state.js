@@ -12,6 +12,23 @@ let nextId = 1;
 /** Find a location by id. @param {number} id @returns {object|undefined} */
 const locById = id => locations.find(l => l.id === id);
 
+/**
+ * The locations a person put on the map, excluding routing scaffolding.
+ *
+ * `routeAnchor` locations are the two invisible endpoints the road tool creates
+ * to hold a traced road (a route is `{fromId, toId}` and cannot exist without
+ * them — see map/roadDraw.js). They are real locations so that routing,
+ * serialisation, undo and cascade-delete all keep working unchanged, but they
+ * are not *yours* and must never appear in a list, a count or an export.
+ *
+ * This exists as one helper rather than a `.filter()` repeated at each call
+ * site because the failure is silent: a missed one puts two junk rows per road
+ * into whatever it feeds, and the worst of those feeds a client's spreadsheet.
+ *
+ * @returns {object[]}
+ */
+const realLocations = () => locations.filter(l => !l.routeAnchor);
+
 /** Allocate the next unique object id. @returns {number} */
 const newId = () => nextId++;
 

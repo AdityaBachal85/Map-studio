@@ -3832,3 +3832,61 @@ input[type=checkbox]:disabled {
 #legendCard .legend-down:disabled { opacity: .25; cursor: default; }
 
 #legendCard.editing { max-width: 392px; }
+
+/* ---------------------------------------------------------------------------
+   Map layout switcher, road-draw tool and connectivity class picker
+   ------------------------------------------------------------------------ */
+
+/* Two stacked cards rather than a pill row: each option carries a second line
+   explaining what it does to the map, and that does not fit in a segment. */
+.layout-seg { display: flex; flex-direction: column; gap: 6px; }
+
+.layout-seg button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid var(--stroke2);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .25);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.layout-seg button:hover { border-color: var(--orange); }
+.layout-seg button.on {
+  border-color: var(--orange);
+  background: var(--accent-soft);
+}
+.layout-seg b { display: block; font-size: 12.5px; font-weight: 700; }
+.layout-seg i {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+/* The crosshair says "the next click is a point on a road", the same way the
+   boundary picker and the measure tool already do. */
+.map-wrap.road-drawing { cursor: crosshair; }
+.map-wrap.road-drawing .leaflet-container { cursor: crosshair; }
+
+.road-draw-dot i {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--orange);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+}
+
+/* A route whose colour has been taken off its class. Stated rather than
+   silently allowed: the standard exists so reports match, and a deviation
+   somebody forgot they made is how they stop matching. */
+.rt-deviates {
+  font-size: 10px;
+  color: var(--orange);
+  white-space: nowrap;
+}

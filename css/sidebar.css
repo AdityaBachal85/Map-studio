@@ -428,10 +428,25 @@
       background: rgba(255, 255, 255, .06);
     }
 
+    /* Wraps. Without this the row is a single unbreakable line of controls —
+       .mini-btn is flex:none and the sliders have fixed widths — so a card row
+       with one control too many pushes its last buttons off the right edge.
+       They are not clipped away: .panes is overflow-y:auto, which computes
+       overflow-x to auto, so they sit in a horizontal scroll nobody discovers.
+       That is how the location card's "⌖ Center map here" button spent months
+       looking deleted while being present and wired the whole time. */
     .item-card .r {
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       align-items: center;
+    }
+
+    /* The label-size slider is the widest optional thing in that row, so it is
+       the one allowed to give ground before anything wraps. */
+    .item-card .r .lsz {
+      flex: 0 1 56px;
+      min-width: 40px;
     }
 
     .item-card .grow {
