@@ -106,6 +106,16 @@ function ringScanGroups(features) {
 }
 
 /**
+ * Areas here span six orders of magnitude — a shed and a reserve forest — so
+ * one unit cannot serve them. @param {number} km2
+ */
+function fmtScanArea(km2) {
+  if (km2 >= 1) return km2.toFixed(1) + ' km²';
+  if (km2 >= 0.01) return (km2 * 100).toFixed(1) + ' ha';
+  return Math.round(km2 * 1e6).toLocaleString() + ' m²';
+}
+
+/**
  * One row in the found list.
  *
  * `parts` is how many OSM ways were chained into this line. Shown as a tooltip
@@ -122,6 +132,7 @@ function ringScanItemRow(it, on) {
   return '<label class="chk"' + tip + '><input type="checkbox" data-scan-i="' + it._i + '"'
     + (on ? ' checked' : '') + '> ' + esc(label)
     + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '')
+    + (it.areaKm2 > 0.005 ? ' <i>' + fmtScanArea(it.areaKm2) + '</i>' : '')
     + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + '</label>';
 }
 
@@ -212,35 +223,52 @@ function keepRingScanSelection() {
   if (!ringScanState || !ringScanState.result) return;
   const s = ringScanState;
   let n = 0;
+  const added = [];
+
+  // Classes flagged `merge` become one shape instead of hundreds. Buildings
+  // are the case this exists for: a square kilometre of a city is thousands of
+  // footprints, and as separate shapes that is thousands of sidebar cards and
+  // thousands of objects the undo system re-serialises twice a second. Leaflet
+  // takes them all as one multipolygon, so the map looks identical and the app
+  // stays usable.
+  const mergePolys = new Map();
 
   s.result.forEach((f, i) => {
     if (!s.picked.has(i)) return;
     const fc = ringFeatureClass(f.classId);
+    if (fc && fc.merge && f.kind === 'area' && f.polys) {
+      if (!mergePolys.has(f.classId)) mergePolys.set(f.classId, []);
+      const bag = mergePolys.get(f.classId);
+      f.polys.forEach(p => bag.push(p));
+      n++;
+      return;
+    }
+
     const clsId = fc ? fc.cls : null;
-    const cc = typeof connClass === 'function' ? connClass(clsId) : null;
     const name = f.name || (fc ? fc.label : 'Feature');
-
     let layer = null, shape = null;
-    if (f.kind === 'point') {
-      layer = L.circleMarker([f.lat, f.lng], { radius: 7 });
-      shape = 'CircleMarker';
-    } else if (f.kind === 'area') {
-      layer = L.polygon(f.pts);
-      shape = 'Polygon';
-    } else {
-      layer = L.polyline(f.pts);
-      shape = 'Line';
-    }
+    if (f.kind === 'point') { layer = L.circleMarker([f.lat, f.lng], { radius: 7 }); shape = 'CircleMarker'; }
+    else if (f.kind === 'area' && f.polys) { layer = L.polygon(f.polys); shape = 'Polygon'; }
+    else if (f.pts) { layer = L.polyline(f.pts); shape = 'Line'; }
+    if (!layer) return;
 
-    const meta = { name, cls: clsId, fromRing: true };
-    if (cc) {
-      meta.borderColor = cc.color;
-      meta.borderWidth = cc.weight;
-      meta.lineStyle = cc.dash ? 'dashed' : 'solid';
-      if (shape !== 'Line') { meta.fillColor = cc.color; meta.fillOpacity = 0.18; }
-    }
-    registerGeom(layer, shape, meta);
+    added.push(registerGeom(layer, shape, ringScanMeta(name, clsId, shape)));
     n++;
+  });
+
+  mergePolys.forEach((polys, classId) => {
+    const fc = ringFeatureClass(classId);
+    const label = (fc ? fc.label : 'Features') + ' (' + polys.length + ')';
+    added.push(registerGeom(L.polygon(polys), 'Polygon',
+      ringScanMeta(label, fc ? fc.cls : null, 'Polygon')));
+  });
+
+  // Ground cover goes underneath. Added last, an area covers the roads and
+  // rail it was fetched to give context to — the exact opposite of why anyone
+  // fetched it.
+  added.forEach(g => {
+    const c = typeof connClass === 'function' ? connClass(g.cls) : null;
+    if (c && c.kind === 'area' && g.layer && g.layer.bringToBack) g.layer.bringToBack();
   });
 
   closeRingScan();
@@ -248,6 +276,26 @@ function keepRingScanSelection() {
   if (typeof pushHistory === 'function') pushHistory();
   status(n + ' feature' + (n === 1 ? '' : 's') + ' added to Draw — restyle, rename or delete'
     + ' any of them like anything else you drew.');
+}
+
+/**
+ * The style a scanned feature starts with.
+ * @param {string} name @param {string|null} clsId @param {string} shape
+ * @returns {object}
+ */
+function ringScanMeta(name, clsId, shape) {
+  const cc = typeof connClass === 'function' ? connClass(clsId) : null;
+  const meta = { name, cls: clsId, fromRing: true };
+  if (cc) {
+    meta.borderColor = cc.color;
+    meta.borderWidth = cc.weight;
+    meta.lineStyle = cc.dash ? 'dashed' : 'solid';
+    if (shape !== 'Line') {
+      meta.fillColor = cc.color;
+      meta.fillOpacity = cc.fill == null ? 0.18 : cc.fill;
+    }
+  }
+  return meta;
 }
 
 (function wireRingScan() {

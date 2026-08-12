@@ -51,6 +51,44 @@ const CONNECTIVITY_CLASSES = [
   { id: 'station', label: 'Railway station', color: '#3D4451', weight: 4, dash: false, kind: 'mark' },
   { id: 'metroStation', label: 'Metro station', color: '#C9971F', weight: 4, dash: false, kind: 'mark' },
   { id: 'hub', label: 'Employment hub', color: '#0E7490', weight: 4, dash: false, kind: 'mark' },
+
+  /* ---- power ------------------------------------------------------------
+   * An HT line is not an amenity, it is a constraint. It carries a statutory
+   * right-of-way that cannot be built in, and the corridor's width depends on
+   * the line's voltage — so a transmission line across a plot changes what the
+   * plot is worth and what can go on it.
+   *
+   * Coloured as a warning rather than fitted into the road palette, because it
+   * is the one thing on the map that says "you cannot build here", and a
+   * reader must never mistake it for another road. Towers share the line's
+   * colour: they are the same object.
+   */
+  { id: 'powerLine', label: 'HT / transmission line', color: '#D62246', weight: 3, dash: false, kind: 'line' },
+  { id: 'powerMinor', label: 'LT / distribution line', color: '#E08A9B', weight: 2, dash: true, kind: 'line' },
+  { id: 'powerTower', label: 'Transmission tower', color: '#D62246', weight: 3, dash: false, kind: 'mark' },
+  { id: 'substation', label: 'Substation', color: '#A4243B', weight: 2, dash: false, kind: 'area', fill: 0.3 },
+
+  /* ---- ground cover ----------------------------------------------------
+   * The land itself, not what crosses it: where the built-up area ends, where
+   * the industrial belt is, what is still farmland. On a property map that is
+   * half the argument — a site is worth what its surroundings are.
+   *
+   * Deliberately muted where the line classes are saturated. These are washes
+   * covering large parts of the sheet, and a road has to stay readable *over*
+   * them; an area that competes with the lines drawn on top of it is an area
+   * that has buried the drawing. They also read as ground rather than as
+   * something drawn, which is what they are.
+   *
+   * `fill` is the fill opacity. Buildings get more because they are small and
+   * would otherwise vanish; farmland gets less because it can cover the whole
+   * sheet.
+   */
+  { id: 'builtUp', label: 'Built-up / residential', color: '#B0736A', weight: 1, dash: false, kind: 'area', fill: 0.22 },
+  { id: 'industrial', label: 'Industrial / warehousing', color: '#8D7B9C', weight: 1, dash: false, kind: 'area', fill: 0.24 },
+  { id: 'commercial', label: 'Commercial / retail', color: '#C97B4A', weight: 1, dash: false, kind: 'area', fill: 0.22 },
+  { id: 'green', label: 'Park / green cover', color: '#5C9A5C', weight: 1, dash: false, kind: 'area', fill: 0.24 },
+  { id: 'farmland', label: 'Farmland / open land', color: '#B5A34C', weight: 1, dash: false, kind: 'area', fill: 0.16 },
+  { id: 'building', label: 'Buildings', color: '#7A6E66', weight: 1, dash: false, kind: 'area', fill: 0.42 },
 ];
 
 /** What a classed line gets when nobody has said which class it is. */
@@ -122,7 +160,13 @@ function connApplyToGeom(g, opts) {
   const area = g.shape === 'Polygon' || g.shape === 'Rectangle' || g.shape === 'Circle';
   const before = g.borderColor + '|' + g.fillColor + '|' + g.borderWidth + '|' + g.lineStyle;
   g.borderColor = c.color;
-  if (area) { g.fillColor = c.color; g.fillOpacity = g.fillOpacity == null ? 0.18 : g.fillOpacity; }
+  // The class's own fill opacity when it has one. A building at farmland's
+  // opacity is invisible; farmland at a building's opacity is a solid slab
+  // over the whole map. One number for every area class cannot serve both.
+  if (area) {
+    g.fillColor = c.color;
+    if (g.fillOpacity == null) g.fillOpacity = c.fill == null ? 0.18 : c.fill;
+  }
   g.borderWidth = c.weight;
   g.lineStyle = (c.dash || g.proposed) ? 'dashed' : 'solid';
   if (!(opts && opts.silent) && typeof applyGeomStyle === 'function') applyGeomStyle(g);

@@ -9,9 +9,9 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0063" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0063">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0063">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0064" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0064">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0064">
   <!-- Listed individually rather than behind main.css's @import list, because
        an @import carries its own ?v= that has to be bumped in a second place,
        and when it isn't, index.html busts while the sheets it pulls in keep
@@ -21,14 +21,14 @@
        there is one version per file and the release bump covers them.
        Order is load-bearing — later sheets override earlier ones, and refine
        must stay last. Do not reorder. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0063">
-  <link rel="stylesheet" href="./css/style.css?v=6.0063">
-  <link rel="stylesheet" href="./css/map.css?v=6.0063">
-  <link rel="stylesheet" href="./css/sidebar.css?v=6.0063">
-  <link rel="stylesheet" href="./css/components.css?v=6.0063">
-  <link rel="stylesheet" href="./css/layout.css?v=6.0063">
-  <link rel="stylesheet" href="./css/dashboard.css?v=6.0063">
-  <link rel="stylesheet" href="./css/refine.css?v=6.0063">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0064">
+  <link rel="stylesheet" href="./css/style.css?v=6.0064">
+  <link rel="stylesheet" href="./css/map.css?v=6.0064">
+  <link rel="stylesheet" href="./css/sidebar.css?v=6.0064">
+  <link rel="stylesheet" href="./css/components.css?v=6.0064">
+  <link rel="stylesheet" href="./css/layout.css?v=6.0064">
+  <link rel="stylesheet" href="./css/dashboard.css?v=6.0064">
+  <link rel="stylesheet" href="./css/refine.css?v=6.0064">
 </head>
 
 <!-- no-brand matches the DBOT-logo toggle, which starts off. A saved project
@@ -170,6 +170,23 @@
           <label class="chk"><input type="checkbox" id="legendTimeTgl" checked> Time</label>
           <span style="flex:1"></span>
           <button id="legendResetAll" type="button" title="Drop every override and show the measured table again">Reset</button>
+        </div>
+      </div>
+      <!-- What the colours mean. Separate card from KEY DISTANCES: "how far is
+           it" and "what am I looking at" are two questions, and one table with
+           two half-filled columns answers neither. -->
+      <div id="colorKeyCard" style="display:none;">
+        <div class="hd"><span class="grip" id="colorKeyDrag">⠿</span><button id="colorKeyEditBtn" type="button"
+            class="legend-edit" title="Rename rows, change colours, add your own" aria-label="Edit the colour key" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button><span class="ttl" id="colorKeyTitle"
+            contenteditable="true" spellcheck="false">LEGEND</span></div>
+        <div id="colorKeyBody"></div>
+        <div id="colorKeyFoot" style="display:none;">
+          <button id="colorKeyAdd" type="button">+ Add a row</button>
+          <span style="flex:1"></span>
+          <button id="colorKeyReset" type="button" title="Drop every rename and show what is actually on the map">Reset</button>
         </div>
       </div>
       <div id="clickHint">Click anywhere to drop a location · Esc to finish</div>
@@ -577,6 +594,7 @@
                   edit)</label>
                 <label class="chk"><input type="checkbox" id="legendTgl" checked> Key-distances panel (drag ⠿, click text
                   to edit)</label>
+                <label class="chk"><input type="checkbox" id="colorKeyTgl" checked> Legend — what the colours mean (drag ⠿, click the pencil to rename rows)</label>
                 <label class="chk"><input type="checkbox" id="brandTgl"> DBOT logo on map &amp; exports</label>
                 <label class="chk"><input type="checkbox" id="northTgl" checked> North arrow</label>
                 <label class="chk"><input type="checkbox" id="scaleTgl"> Scale bar</label>
@@ -977,123 +995,124 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0063"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0063"></script>
-  <script src="./vendor/html2canvas.js?v=6.0063"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0063"></script>
-  <script src="./vendor/jszip.js?v=6.0063"></script>
-  <script src="./vendor/anime.min.js?v=6.0063"></script>
+  <script src="./vendor/leaflet.js?v=6.0064"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0064"></script>
+  <script src="./vendor/html2canvas.js?v=6.0064"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0064"></script>
+  <script src="./vendor/jszip.js?v=6.0064"></script>
+  <script src="./vendor/anime.min.js?v=6.0064"></script>
 
-  <script src="./js/core/prefs.js?v=6.0063"></script>
-  <script src="./js/constants.js?v=6.0063"></script>
+  <script src="./js/core/prefs.js?v=6.0064"></script>
+  <script src="./js/constants.js?v=6.0064"></script>
   <!-- The class→colour standard. Before routes.js, which asks it what colour
        a new road is. -->
-  <script src="./js/map/connectivityStandard.js?v=6.0063"></script>
-  <script src="./js/core/freshness.js?v=6.0063"></script>
-  <script src="./js/utils/dom.js?v=6.0063"></script>
-  <script src="./js/utils/color.js?v=6.0063"></script>
-  <script src="./js/export/exportPDF.js?v=6.0063"></script>
-  <script src="./js/export/captureMap.js?v=6.0063"></script>
-  <script src="./js/core/state.js?v=6.0063"></script>
-  <script src="./js/map/icons.js?v=6.0063"></script>
-  <script src="./js/config.js?v=6.0063"></script>
-  <script src="./js/ui/notifications.js?v=6.0063"></script>
-  <script src="./js/utils/math.js?v=6.0063"></script>
-  <script src="./js/map/billboard.js?v=6.0063"></script>
+  <script src="./js/map/connectivityStandard.js?v=6.0064"></script>
+  <script src="./js/core/freshness.js?v=6.0064"></script>
+  <script src="./js/utils/dom.js?v=6.0064"></script>
+  <script src="./js/utils/color.js?v=6.0064"></script>
+  <script src="./js/export/exportPDF.js?v=6.0064"></script>
+  <script src="./js/export/captureMap.js?v=6.0064"></script>
+  <script src="./js/core/state.js?v=6.0064"></script>
+  <script src="./js/map/icons.js?v=6.0064"></script>
+  <script src="./js/config.js?v=6.0064"></script>
+  <script src="./js/ui/notifications.js?v=6.0064"></script>
+  <script src="./js/utils/math.js?v=6.0064"></script>
+  <script src="./js/map/billboard.js?v=6.0064"></script>
   <!-- Both define helpers propertyPanel.js calls when a card is built, so they
        load ahead of it. -->
-  <script src="./js/ui/colorPresets.js?v=6.0063"></script>
-  <script src="./js/ui/iconPicker.js?v=6.0063"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0063"></script>
-  <script src="./js/ui/legendTable.js?v=6.0063"></script>
-  <script src="./js/ui/dashCharts.js?v=6.0063"></script>
-  <script src="./js/ui/dashLayout.js?v=6.0063"></script>
-  <script src="./js/ui/dashCards.js?v=6.0063"></script>
-  <script src="./js/ui/dashFormat.js?v=6.0063"></script>
-  <script src="./js/export/dashExport.js?v=6.0063"></script>
-  <script src="./js/ui/reportSheet.js?v=6.0063"></script>
-  <script src="./js/ui/appMode.js?v=6.0063"></script>
-  <script src="./js/ui/dialogs.js?v=6.0063"></script>
-  <script src="./js/utils/colors.js?v=6.0063"></script>
-  <script src="./js/utils/animate.js?v=6.0063"></script>
-  <script src="./js/map/routes.js?v=6.0063"></script>
-  <script src="./js/map/markers.js?v=6.0063"></script>
-  <script src="./js/map/snapping.js?v=6.0063"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0063"></script>
-  <script src="./js/map/providerKeys.js?v=6.0063"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0063"></script>
-  <script src="./js/map/googleTiles.js?v=6.0063"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0063"></script>
-  <script src="./js/map/mapEngine.js?v=6.0063"></script>
-  <script src="./js/export/hiResRender.js?v=6.0063"></script>
-  <script src="./js/export/exportPNG.js?v=6.0063"></script>
-  <script src="./js/export/pptUtils.js?v=6.0063"></script>
-  <script src="./js/export/pptValidation.js?v=6.0063"></script>
-  <script src="./js/export/pptShapes.js?v=6.0063"></script>
-  <script src="./js/export/pptImages.js?v=6.0063"></script>
-  <script src="./js/export/pptLabels.js?v=6.0063"></script>
-  <script src="./js/export/pptTables.js?v=6.0063"></script>
-  <script src="./js/export/exportPPT.js?v=6.0063"></script>
-  <script src="./js/services/places.js?v=6.0063"></script>
-  <script src="./js/services/google.js?v=6.0063"></script>
-  <script src="./js/services/placeCache.js?v=6.0063"></script>
-  <script src="./js/services/geoapify.js?v=6.0063"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0063"></script>
-  <script src="./js/services/geocoder.js?v=6.0063"></script>
-  <script src="./js/services/boundaries.js?v=6.0063"></script>
+  <script src="./js/ui/colorPresets.js?v=6.0064"></script>
+  <script src="./js/ui/iconPicker.js?v=6.0064"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0064"></script>
+  <script src="./js/ui/legendTable.js?v=6.0064"></script>
+  <script src="./js/ui/dashCharts.js?v=6.0064"></script>
+  <script src="./js/ui/dashLayout.js?v=6.0064"></script>
+  <script src="./js/ui/dashCards.js?v=6.0064"></script>
+  <script src="./js/ui/dashFormat.js?v=6.0064"></script>
+  <script src="./js/export/dashExport.js?v=6.0064"></script>
+  <script src="./js/ui/reportSheet.js?v=6.0064"></script>
+  <script src="./js/ui/appMode.js?v=6.0064"></script>
+  <script src="./js/ui/dialogs.js?v=6.0064"></script>
+  <script src="./js/utils/colors.js?v=6.0064"></script>
+  <script src="./js/utils/animate.js?v=6.0064"></script>
+  <script src="./js/map/routes.js?v=6.0064"></script>
+  <script src="./js/map/markers.js?v=6.0064"></script>
+  <script src="./js/map/snapping.js?v=6.0064"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0064"></script>
+  <script src="./js/map/providerKeys.js?v=6.0064"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0064"></script>
+  <script src="./js/map/googleTiles.js?v=6.0064"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0064"></script>
+  <script src="./js/map/mapEngine.js?v=6.0064"></script>
+  <script src="./js/export/hiResRender.js?v=6.0064"></script>
+  <script src="./js/export/exportPNG.js?v=6.0064"></script>
+  <script src="./js/export/pptUtils.js?v=6.0064"></script>
+  <script src="./js/export/pptValidation.js?v=6.0064"></script>
+  <script src="./js/export/pptShapes.js?v=6.0064"></script>
+  <script src="./js/export/pptImages.js?v=6.0064"></script>
+  <script src="./js/export/pptLabels.js?v=6.0064"></script>
+  <script src="./js/export/pptTables.js?v=6.0064"></script>
+  <script src="./js/export/exportPPT.js?v=6.0064"></script>
+  <script src="./js/services/places.js?v=6.0064"></script>
+  <script src="./js/services/google.js?v=6.0064"></script>
+  <script src="./js/services/placeCache.js?v=6.0064"></script>
+  <script src="./js/services/geoapify.js?v=6.0064"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0064"></script>
+  <script src="./js/services/geocoder.js?v=6.0064"></script>
+  <script src="./js/services/boundaries.js?v=6.0064"></script>
   <!-- Line geometry for metro, rail and water — the only source that has it.
        Built on boundaries.js's shape: mirrors, cache, rate gate, honest failure. -->
-  <script src="./js/services/ringFeatures.js?v=6.0063"></script>
-  <script src="./js/services/aiReports.js?v=6.0063"></script>
-  <script src="./js/services/aiReportLog.js?v=6.0063"></script>
-  <script src="./js/ui/searchBox.js?v=6.0063"></script>
-  <script src="./js/ui/sliders.js?v=6.0063"></script>
-  <script src="./js/ui/tooltips.js?v=6.0063"></script>
-  <script src="./js/ui/toolbar.js?v=6.0063"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0063"></script>
+  <script src="./js/services/ringFeatures.js?v=6.0064"></script>
+  <script src="./js/services/aiReports.js?v=6.0064"></script>
+  <script src="./js/services/aiReportLog.js?v=6.0064"></script>
+  <script src="./js/ui/searchBox.js?v=6.0064"></script>
+  <script src="./js/ui/sliders.js?v=6.0064"></script>
+  <script src="./js/ui/tooltips.js?v=6.0064"></script>
+  <script src="./js/ui/toolbar.js?v=6.0064"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0064"></script>
   <!-- Two-click road tracing. After aerialDistance.js, whose mode-stand-down
        pattern it follows and whose globals it calls. -->
-  <script src="./js/map/roadDraw.js?v=6.0063"></script>
-  <script src="./js/map/fillPatterns.js?v=6.0063"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0063"></script>
-  <script src="./js/ui/geomGroups.js?v=6.0063"></script>
-  <script src="./js/map/drawing.js?v=6.0063"></script>
-  <script src="./js/map/textLabels.js?v=6.0063"></script>
-  <script src="./js/map/markerCluster.js?v=6.0063"></script>
-  <script src="./js/map/nearby.js?v=6.0063"></script>
+  <script src="./js/map/roadDraw.js?v=6.0064"></script>
+  <script src="./js/map/fillPatterns.js?v=6.0064"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0064"></script>
+  <script src="./js/ui/geomGroups.js?v=6.0064"></script>
+  <script src="./js/map/drawing.js?v=6.0064"></script>
+  <script src="./js/map/textLabels.js?v=6.0064"></script>
+  <script src="./js/map/markerCluster.js?v=6.0064"></script>
+  <script src="./js/map/nearby.js?v=6.0064"></script>
   <!-- Layouts last of the map modules: applying one calls setBasemap, which
        needs the basemap registry built. Its own startup is deferred anyway. -->
-  <script src="./js/map/layouts.js?v=6.0063"></script>
-  <script src="./js/ui/ringScanPanel.js?v=6.0063"></script>
-  <script src="./js/project/geojson.js?v=6.0063"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0063"></script>
-  <script src="./js/project/xlsx.js?v=6.0063"></script>
-  <script src="./js/project/importSheet.js?v=6.0063"></script>
-  <script src="./js/project/kml.js?v=6.0063"></script>
+  <script src="./js/map/layouts.js?v=6.0064"></script>
+  <script src="./js/ui/ringScanPanel.js?v=6.0064"></script>
+  <script src="./js/ui/colorKey.js?v=6.0064"></script>
+  <script src="./js/project/geojson.js?v=6.0064"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0064"></script>
+  <script src="./js/project/xlsx.js?v=6.0064"></script>
+  <script src="./js/project/importSheet.js?v=6.0064"></script>
+  <script src="./js/project/kml.js?v=6.0064"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0063"></script>
-  <script src="./js/project/history.js?v=6.0063"></script>
-  <script src="./js/project/autosave.js?v=6.0063"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0063"></script>
-  <script src="./js/project/importFiles.js?v=6.0063"></script>
-  <script src="./js/project/openProject.js?v=6.0063"></script>
+  <script src="./js/project/projectState.js?v=6.0064"></script>
+  <script src="./js/project/history.js?v=6.0064"></script>
+  <script src="./js/project/autosave.js?v=6.0064"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0064"></script>
+  <script src="./js/project/importFiles.js?v=6.0064"></script>
+  <script src="./js/project/openProject.js?v=6.0064"></script>
   <!-- After autosave.js: the bridge wraps autosaveNow(), so that function has
        to exist by the time this runs. -->
-  <script src="./vendor/supabase.js?v=6.0063"></script>
-  <script src="./js/auth/session.js?v=6.0063"></script>
-  <script src="./js/projects/projectStore.js?v=6.0063"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0063"></script>
-  <script src="./js/projects/projectBridge.js?v=6.0063"></script>
-  <script src="./js/project/saveProject.js?v=6.0063"></script>
-  <script src="./js/ui/sidebar.js?v=6.0063"></script>
-  <script src="./js/ui/aiTab.js?v=6.0063"></script>
-  <script src="./js/ui/layerManager.js?v=6.0063"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0063"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0063"></script>
-  <script src="./js/ui/importDialog.js?v=6.0063"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0063"></script>
-  <script src="./js/app.js?v=6.0063"></script>
+  <script src="./vendor/supabase.js?v=6.0064"></script>
+  <script src="./js/auth/session.js?v=6.0064"></script>
+  <script src="./js/projects/projectStore.js?v=6.0064"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0064"></script>
+  <script src="./js/projects/projectBridge.js?v=6.0064"></script>
+  <script src="./js/project/saveProject.js?v=6.0064"></script>
+  <script src="./js/ui/sidebar.js?v=6.0064"></script>
+  <script src="./js/ui/aiTab.js?v=6.0064"></script>
+  <script src="./js/ui/layerManager.js?v=6.0064"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0064"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0064"></script>
+  <script src="./js/ui/importDialog.js?v=6.0064"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0064"></script>
+  <script src="./js/app.js?v=6.0064"></script>
 </body>
 
 </html>

@@ -253,9 +253,22 @@ function extractGeomCoords(shape, layer) {
   if (shape === 'Marker' || shape === 'CircleMarker' || shape === 'Label') { const ll = layer.getLatLng(); return { lat: ll.lat, lng: ll.lng }; }
   if (shape === 'Circle') { const ll = layer.getLatLng(); return { lat: ll.lat, lng: ll.lng, radius: layer.getRadius() }; }
   if (shape === 'Rectangle') { const b = layer.getBounds(); return { bounds: [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]] }; }
-  let ring = layer.getLatLngs();
-  if (Array.isArray(ring[0])) ring = ring[0];
-  return { latlngs: ring.map(p => [p.lat, p.lng]) };
+  // Nesting is preserved rather than flattened to the first ring. Leaflet's
+  // getLatLngs is [pt..] for a line, [[ring]] for a polygon, [[outer],[hole]]
+  // with holes, and [[[outer]],[[outer2]]] for a multipolygon — and
+  // `ring = ring[0]` threw away every hole and every part but the first, so
+  // one undo turned a forest with a lake into a forest, and 24 merged
+  // buildings into 1. L.polygon accepts all four depths, so round-tripping the
+  // real structure needs nothing else.
+  return { latlngs: latLngsToArrays(layer.getLatLngs()) };
+}
+
+/**
+ * LatLng objects to plain [lat,lng] arrays, at whatever nesting depth.
+ * @param {*} v @returns {*}
+ */
+function latLngsToArrays(v) {
+  return Array.isArray(v) ? v.map(latLngsToArrays) : [v.lat, v.lng];
 }
 
 /** Build a fresh, unattached Leaflet layer from extractGeomCoords() output. @param {string} shape @param {object} geom */
@@ -288,6 +301,10 @@ function snapshotGeom(g) {
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
     showLabel: g.showLabel, glow: g.glow,
+    // Same reason as the GeoJSON properties: restore the look without the
+    // class and an undone shape is unclassed, so it drops out of the colour key
+    // and the standard stops owning it.
+    cls: g.cls, proposed: g.proposed, fromRing: g.fromRing,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }

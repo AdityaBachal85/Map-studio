@@ -250,6 +250,11 @@ function rebuildLegend() {
   });
   legendRebuilding = false;
 
+  // The colour key is driven by the same events: anything that changes what is
+  // on the map changes what the key should say. Hooking it here rather than at
+  // every call site means a new feature cannot forget to update it.
+  if (typeof rebuildColorKey === 'function') rebuildColorKey();
+
   const card = $('legendCard');
   const tgl = $('legendTgl');
   // In edit mode the card stays up even with nothing in it — otherwise adding

@@ -93,10 +93,44 @@ const RING_FEATURE_CLASSES = [
     q: ['node["amenity"="bus_station"]', 'way["amenity"="bus_station"]'] },
   { id: 'port', label: 'Ports & ferry terminals', cls: 'hub', max: 40,
     q: ['node["amenity"="ferry_terminal"]', 'way["landuse"="port"]'] },
+
+  /* ---- power: a constraint on the land, not a service to it ---- */
+  { id: 'powerLine', label: 'HT / transmission lines', cls: 'powerLine', max: 25,
+    q: ['way["power"="line"]'] },
+  { id: 'powerMinor', label: 'LT / distribution lines', cls: 'powerMinor', max: 3,
+    q: ['way["power"="minor_line"]'] },
+  { id: 'powerTower', label: 'Transmission towers', cls: 'powerTower', max: 8,
+    q: ['node["power"="tower"]'] },
+  { id: 'substation', label: 'Substations', cls: 'substation', max: 15,
+    q: ['way["power"="substation"]', 'node["power"="substation"]'] },
+
+  /* ---- ground cover: what the land around the site actually is ---- */
+  { id: 'builtUp', label: 'Built-up / residential land', cls: 'builtUp', max: 8,
+    q: ['way["landuse"="residential"]', 'relation["landuse"="residential"]'] },
+  { id: 'industrial', label: 'Industrial land', cls: 'industrial', max: 12,
+    q: ['way["landuse"="industrial"]', 'relation["landuse"="industrial"]'] },
+  { id: 'commercial', label: 'Commercial / retail land', cls: 'commercial', max: 8,
+    q: ['way["landuse"~"^(commercial|retail)$"]'] },
+  { id: 'green', label: 'Parks, forest & green cover', cls: 'green', max: 10,
+    q: ['way["leisure"="park"]', 'way["landuse"="forest"]', 'way["natural"="wood"]',
+      'relation["landuse"="forest"]', 'relation["natural"="wood"]'] },
+  { id: 'waterBody', label: 'Lakes & reservoirs', cls: 'water', max: 15,
+    q: ['way["natural"="water"]', 'relation["natural"="water"]'] },
+  { id: 'farmland', label: 'Farmland & open land', cls: 'farmland', max: 5,
+    q: ['way["landuse"~"^(farmland|meadow|orchard)$"]'] },
+  // 1 km, and merged into one shape. A single km² of a city holds thousands of
+  // footprints; as separate shapes that is thousands of cards in the Draw list
+  // and thousands of objects the undo system re-serialises twice a second.
+  { id: 'building', label: 'Building footprints', cls: 'building', max: 1, merge: true,
+    q: ['way["building"]'] },
+
+  { id: 'settlement', label: 'Towns & villages (names)', cls: 'hub', max: 25,
+    q: ['node["place"~"^(city|town|village|suburb)$"]'] },
 ];
 
 /** What a fresh install looks for. */
-const RING_FEATURE_DEFAULTS = ['expressway', 'highway', 'metro', 'rail', 'station', 'airport', 'river'];
+const RING_FEATURE_DEFAULTS = ['expressway', 'highway', 'metro', 'rail', 'station',
+  'airport', 'river', 'powerLine'];
 
 /** @param {string} id @returns {object|null} */
 function ringFeatureClass(id) { return RING_FEATURE_CLASSES.find(c => c.id === id) || null; }
@@ -168,7 +202,49 @@ function overpassClassOf(el, ids) {
   if (t.highway === 'secondary' && has('arterial')) return 'arterial';
   if (t.amenity === 'bus_station' && has('busTerminal')) return 'busTerminal';
   if ((t.amenity === 'ferry_terminal' || t.landuse === 'port') && has('port')) return 'port';
+
+  if (t.power === 'line' && has('powerLine')) return 'powerLine';
+  if (t.power === 'minor_line' && has('powerMinor')) return 'powerMinor';
+  if (t.power === 'tower' && has('powerTower')) return 'powerTower';
+  if (t.power === 'substation' && has('substation')) return 'substation';
+
+  if (t.landuse === 'residential' && has('builtUp')) return 'builtUp';
+  if (t.landuse === 'industrial' && has('industrial')) return 'industrial';
+  if (/^(commercial|retail)$/.test(t.landuse || '') && has('commercial')) return 'commercial';
+  if ((t.leisure === 'park' || t.landuse === 'forest' || t.natural === 'wood') && has('green')) return 'green';
+  if (t.natural === 'water' && has('waterBody')) return 'waterBody';
+  if (/^(farmland|meadow|orchard)$/.test(t.landuse || '') && has('farmland')) return 'farmland';
+  if (t.place && has('settlement')) return 'settlement';
+  // Last, and only if nothing above claimed it: almost every building also
+  // carries other tags, and a school building must not outrank the school.
+  if (t.building && has('building')) return 'building';
   return null;
+}
+
+/**
+ * What to call a power line.
+ *
+ * Voltage is the whole point. "HT line" tells you a corridor exists; "220 kV"
+ * tells you roughly how wide it is and what it is worth arguing about, and it
+ * is the number a plot's buildable area actually turns on. OSM stores it in
+ * volts, often as "220000" or "220000;110000" for a shared tower.
+ *
+ * The corridor width itself is deliberately NOT computed here. It is set by
+ * statute and varies by jurisdiction, and a number invented by this app and
+ * pasted into a client report would be worse than no number at all.
+ *
+ * @param {object} t tags @returns {string|null}
+ */
+function powerLineName(t) {
+  const kv = String(t.voltage || '').split(';')
+    .map(v => parseInt(v, 10)).filter(v => v > 0)
+    .map(v => (v >= 1000 ? Math.round(v / 1000) + ' kV' : v + ' V'));
+  const bits = [];
+  if (t.name) bits.push(t.name);
+  if (kv.length) bits.push(kv.join(' / '));
+  if (t.ref && !t.name) bits.push(t.ref);
+  if (t.operator && !t.name) bits.push(t.operator);
+  return bits.length ? bits.join(' — ') : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -352,7 +428,9 @@ function joinRingFeatures(features) {
  */
 function overpassToFeature(el, classId) {
   const t = el.tags || {};
-  const name = t.name || t['name:en'] || null;
+  const name = (classId === 'powerLine' || classId === 'powerMinor')
+    ? powerLineName(t)
+    : (t.name || t['name:en'] || null);
   const ref = t.ref || null;
 
   if (el.type === 'node') {
@@ -360,24 +438,147 @@ function overpassToFeature(el, classId) {
     return { kind: 'point', classId, name: name || ref, ref, lat: el.lat, lng: el.lon, km: 0 };
   }
 
-  const geom = el.geometry || (el.members || []).reduce((a, m) => a.concat(m.geometry || []), []);
-  if (!geom.length) return null;
+  /* ---- relations: real multipolygons, with holes ----
+   * A forest with a lake in it is one relation whose `inner` members are the
+   * lake. The old code concatenated every member's coordinates into a single
+   * list, which drew one nonsense line zig-zagging between unrelated rings —
+   * fine while only airports were fetched as relations and each had one ring,
+   * and wrong the moment forests and water arrived. */
+  if (el.type === 'relation') {
+    const outerWays = [], innerWays = [];
+    (el.members || []).forEach(m => {
+      if (!m.geometry || m.geometry.length < 2) return;
+      const pts = m.geometry.filter(g => g && isFinite(g.lat) && isFinite(g.lon)).map(g => [g.lat, g.lon]);
+      if (pts.length < 2) return;
+      (m.role === 'inner' ? innerWays : outerWays).push(pts);
+    });
+    const outers = chainRings(outerWays).filter(r => r.length >= 4);
+    const inners = chainRings(innerWays).filter(r => r.length >= 4);
+    if (!outers.length) return null;
+
+    const polys = outers.map(o => [simplifyLatLngs(o, OVERPASS_SIMPLIFY_DEG)]);
+    inners.forEach(h => {
+      // Which outer contains this hole. With a single outer the test is
+      // skipped: that is the overwhelmingly common case and the test is the
+      // only part of this that can get it wrong.
+      let idx = 0;
+      if (outers.length > 1) {
+        idx = outers.findIndex(o => pointInRing(h[0], o));
+        if (idx < 0) return;                       // an orphan inner: not a hole
+      }
+      polys[idx].push(simplifyLatLngs(h, OVERPASS_SIMPLIFY_DEG));
+    });
+    return { kind: 'area', classId, name, ref, polys, km: 0, areaKm2: polysAreaKm2(polys) };
+  }
+
+  const geom = el.geometry || [];
   let pts = geom.filter(g => g && isFinite(g.lat) && isFinite(g.lon)).map(g => [g.lat, g.lon]);
   if (pts.length < 2) return null;
   pts = simplifyLatLngs(pts, OVERPASS_SIMPLIFY_DEG);
 
-  // A way whose ends meet is an area — an airport perimeter, a lake, a port.
   const first = pts[0], last = pts[pts.length - 1];
-  const closed = Math.abs(first[0] - last[0]) < 1e-7 && Math.abs(first[1] - last[1]) < 1e-7;
-  const area = closed && (t.aeroway === 'aerodrome' || t.natural === 'water' || t.landuse === 'port'
-    || t.amenity === 'bus_station');
+  const closed = pts.length >= 4
+    && Math.abs(first[0] - last[0]) < 1e-7 && Math.abs(first[1] - last[1]) < 1e-7;
+  if (closed && isAreaTagged(t)) {
+    return { kind: 'area', classId, name, ref, polys: [[pts]], km: 0, areaKm2: polysAreaKm2([[pts]]) };
+  }
 
-  return {
-    kind: area ? 'area' : 'line',
-    classId, name, ref,
-    pts,
-    km: area ? 0 : ringPathKm(pts),
+  return { kind: 'line', classId, name, ref, pts, km: ringPathKm(pts) };
+}
+
+/**
+ * Is this closed way an area rather than a loop of road?
+ *
+ * A closed way is not automatically an area — a ring road and a roundabout are
+ * closed lines, and filling them would paint a solid disc over the middle of
+ * the map. OSM's rule is that the *tags* decide, so this asks the tags.
+ *
+ * @param {object} t tags @returns {boolean}
+ */
+function isAreaTagged(t) {
+  return !!(t.landuse || t.building || t.leisure || t.aeroway === 'aerodrome'
+    || t.natural === 'water' || t.natural === 'wood' || t.amenity === 'bus_station'
+    || t.power === 'substation' || t.area === 'yes');
+}
+
+/**
+ * Chain open ways into closed rings.
+ *
+ * A relation's outer boundary arrives as a bag of unordered, arbitrarily
+ * directed ways that have to be walked end to end. Same algorithm the road
+ * joiner uses, kept separate because this one must *close* its output — a ring
+ * that does not meet itself is not a ring, and Leaflet will silently close it
+ * across whatever gap is left, cutting the corner off a forest.
+ *
+ * @param {Array<Array<[number,number]>>} ways @returns {Array<Array<[number,number]>>}
+ */
+function chainRings(ways) {
+  const segs = ways.map(w => ({ pts: w, used: false }));
+  const near = (a, b) =>
+    Math.abs(a[0] - b[0]) <= JOIN_TOL_DEG && Math.abs(a[1] - b[1]) <= JOIN_TOL_DEG;
+  const rings = [];
+
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i].used) continue;
+    segs[i].used = true;
+    let pts = segs[i].pts.slice();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (let j = 0; j < segs.length; j++) {
+        if (segs[j].used) continue;
+        const o = segs[j].pts;
+        const head = pts[0], tail = pts[pts.length - 1];
+        if (near(tail, o[0])) pts = pts.concat(o.slice(1));
+        else if (near(tail, o[o.length - 1])) pts = pts.concat(o.slice(0, -1).reverse());
+        else if (near(head, o[o.length - 1])) pts = o.slice(0, -1).concat(pts);
+        else if (near(head, o[0])) pts = o.slice(1).reverse().concat(pts);
+        else continue;
+        segs[j].used = true; grew = true;
+      }
+    }
+    if (pts.length >= 4) rings.push(pts);
+  }
+  return rings;
+}
+
+/**
+ * Is a point inside a ring? Ray casting.
+ * @param {[number,number]} pt @param {Array<[number,number]>} ring @returns {boolean}
+ */
+function pointInRing(pt, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const yi = ring[i][0], xi = ring[i][1], yj = ring[j][0], xj = ring[j][1];
+    if ((xi > pt[1]) !== (xj > pt[1])
+      && pt[0] < (yj - yi) * (pt[1] - xi) / (xj - xi) + yi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Area of a multipolygon in km², holes subtracted.
+ *
+ * Shoelace on an equirectangular projection about the shape's own latitude.
+ * Not the geodesic answer, but the error is well under a percent at the sizes
+ * this reports, and it is only ever shown as "1.4 km²" next to a tick box.
+ *
+ * @param {Array<Array<Array<[number,number]>>>} polys @returns {number}
+ */
+function polysAreaKm2(polys) {
+  const ringArea = ring => {
+    if (!ring || ring.length < 3) return 0;
+    const lat0 = ring.reduce((a, p) => a + p[0], 0) / ring.length;
+    const k = Math.cos(lat0 * Math.PI / 180);
+    let a = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      a += (ring[j][1] * k * 111.32) * (ring[i][0] * 111.32)
+         - (ring[i][1] * k * 111.32) * (ring[j][0] * 111.32);
+    }
+    return Math.abs(a / 2);
   };
+  return (polys || []).reduce((sum, poly) =>
+    sum + poly.reduce((s, ring, i) => s + (i === 0 ? ringArea(ring) : -ringArea(ring)), 0), 0);
 }
 
 /* ---------------------------------------------------------------------------

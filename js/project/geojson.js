@@ -17,6 +17,12 @@ function geomToGeoJSONFeature(g) {
       labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
       showLabel: g.showLabel, glow: g.glow,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
+      // The connectivity class. Without it a reopened project has shapes that
+      // still LOOK right — the colours are saved separately — but belong to no
+      // class, so the standard cannot restyle them and the colour key silently
+      // loses its rows. The look survives and the meaning does not, which is
+      // the worst of the two to lose.
+      cls: g.cls || undefined, proposed: g.proposed || undefined, fromRing: g.fromRing || undefined,
       radius: g.shape === 'Circle' ? g.layer.getRadius() : undefined,
     },
     geometry,
@@ -27,6 +33,11 @@ function geoJSONTypeToShape(t) {
   if (t === 'Point') return 'Marker';
   if (t === 'LineString') return 'Line';
   if (t === 'Polygon') return 'Polygon';
+  // Merged buildings and any forest with detached parts are MultiPolygons.
+  // Unmapped, every one of them failed the shape check and vanished on load
+  // without a word.
+  if (t === 'MultiPolygon') return 'Polygon';
+  if (t === 'MultiLineString') return 'Line';
   return null;
 }
 
@@ -75,6 +86,9 @@ function importGeoJSONFeature(feat) {
     showLabel: props.showLabel != null ? !!props.showLabel : undefined,
     glow: props.glow != null ? !!props.glow : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,
+    cls: props.cls || undefined,
+    proposed: props.proposed != null ? !!props.proposed : undefined,
+    fromRing: props.fromRing != null ? !!props.fromRing : undefined,
   });
   return true;
 }

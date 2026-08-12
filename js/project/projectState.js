@@ -118,6 +118,11 @@ function serialiseProject() {
     legendExtras: (typeof legendExtras !== 'undefined' && Array.isArray(legendExtras)) ? legendExtras : [],
     legendShowTime: (typeof legendShowTime === 'undefined') ? true : !!legendShowTime,
     legendOrder: (typeof legendOrder !== 'undefined' && Array.isArray(legendOrder)) ? legendOrder : [],
+    // The colour key's captions. Keyed by class id, not row position, so a
+    // rename survives drawing one more road and reordering the rows.
+    colorKeyTitle: (document.getElementById('colorKeyTitle') || {}).textContent || undefined,
+    colorKeyEdits: (typeof colorKeyEdits === 'object' && colorKeyEdits) ? colorKeyEdits : {},
+    colorKeyExtras: (typeof colorKeyExtras !== 'undefined' && Array.isArray(colorKeyExtras)) ? colorKeyExtras : [],
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
@@ -207,6 +212,12 @@ function applyProject(proj, opts) {
   if (typeof renderReportSheet === 'function' && appMode() === 'report') renderReportSheet();
 
   if (typeof legendShowTime !== 'undefined') legendShowTime = proj.legendShowTime !== false;
+  if (typeof colorKeyEdits !== 'undefined') {
+    colorKeyEdits = (proj.colorKeyEdits && typeof proj.colorKeyEdits === 'object') ? proj.colorKeyEdits : {};
+    colorKeyExtras = Array.isArray(proj.colorKeyExtras) ? proj.colorKeyExtras : [];
+    const t = document.getElementById('colorKeyTitle');
+    if (t && proj.colorKeyTitle) t.textContent = proj.colorKeyTitle;
+  }
   if (typeof legendOrder !== 'undefined') legendOrder = Array.isArray(proj.legendOrder) ? proj.legendOrder : [];
   if (typeof legendEdits !== 'undefined') legendEdits = (proj.legendEdits && typeof proj.legendEdits === 'object') ? proj.legendEdits : {};
   if (typeof legendExtras !== 'undefined') {
@@ -229,8 +240,16 @@ function applyProject(proj, opts) {
   (proj.routes || []).forEach(r => addRoute(r));
   (proj.geometries || []).forEach(f => importGeoJSONFeature(f));
 
+  // Rebuild the legends now that everything is in. Nothing else does it after
+  // a load: routes trigger a rebuild when their measurements come back, but
+  // shapes do not recompute, so a project whose key is driven by shape classes
+  // reopened with a key describing the *previous* project — every row that came
+  // from a shape simply missing. The data was on disk and correct; only the
+  // card was stale, which is the kind of bug that reads as data loss.
   if (proj.view) map.setView(proj.view.c, proj.view.z);
   else if (typeof fitAll === 'function') fitAll();
+
+  if (typeof rebuildLegend === 'function') rebuildLegend();
 
   if (!silent) status('Project loaded.');
   return true;
