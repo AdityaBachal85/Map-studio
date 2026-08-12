@@ -136,6 +136,15 @@ function syncBasemapSwitcher(key) {
 /** Switch basemap, sync the hidden <select> + prefs, and collapse the panel. @param {string} key */
 function chooseBasemap(key) {
   if (!BASEMAPS[key]) return;
+  // Checked here as well as on the button. Disabling a control hides it from
+  // the mouse, not from a keyboard, a saved project, or anything else that
+  // calls this directly — and a rule enforced only in the UI is not a rule.
+  if (typeof basemapLocked === 'function' && basemapLocked()) {
+    if (typeof status === 'function') {
+      status('Connectivity is pinned to OpenStreetMap. Switch to the Satellite layout to change the ground.');
+    }
+    return;
+  }
   $('basemapSel').value = key;
   // The choice is persisted by mapEngine's rememberBasemapWorks() once a tile
   // actually renders — not here. Saving it eagerly meant a basemap that could

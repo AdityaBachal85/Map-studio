@@ -115,6 +115,7 @@
     .map-wrap.pptx-capture .pin-icon,
     .map-wrap.pptx-capture .hwy-shield,
     .map-wrap.pptx-capture #legendCard,
+    .map-wrap.pptx-capture #colorKeyCard,
     .map-wrap.pptx-capture #brandMark,
     .map-wrap.pptx-capture #titleCard {
       visibility: hidden !important;

@@ -78,6 +78,7 @@ function buildSlide(slide, s, ctx, log) {
 
   if (s.title && s.title.visible && String(s.title.text || '').trim()) addTitle(slide, s.title, ctx, log);
   if (s.legend && s.legend.visible && (s.legend.rows || []).length) addLegend(slide, s.legend, ctx, log);
+  if (s.colorKey && s.colorKey.visible && (s.colorKey.rows || []).length) addColorKey(slide, s.colorKey, ctx, log);
   if (s.logo && s.logo.visible && s.logo.data) {
     addLogo(slide, logoPlacement(s.logo, ctx.slideW, DEFAULT_SLIDE.slideH), log, hex);
   }

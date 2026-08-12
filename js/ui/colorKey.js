@@ -60,7 +60,63 @@ function colorKeyRows() {
   const extra = colorKeyExtras.map((x, i) => ({
     key: 'x' + i, color: x.color, label: x.label, kind: x.kind || 'area', hidden: false, extra: true,
   }));
-  return auto.concat(extra).filter(r => colorKeyEditing || !r.hidden);
+  return auto.concat(colorKeyUnclassedRows(), extra)
+    .filter(r => colorKeyEditing || !r.hidden);
+}
+
+/**
+ * Rows for everything drawn that never went through a class.
+ *
+ * Without these the key describes only *classed* objects — so a project made
+ * before the standard existed, or anything drawn under the Satellite layout
+ * where colours are free, produces zero rows and the card hides itself. The
+ * map is covered in meaningful colour and the legend says nothing, which reads
+ * as the legend being broken rather than as it having nothing to say.
+ *
+ * Grouped by colour, because that is the question a legend answers: not "what
+ * objects exist" but "what does this colour mean". Ten roads sharing an orange
+ * are one row, and the row is editable like any other.
+ *
+ * @returns {Array<object>}
+ */
+function colorKeyUnclassedRows() {
+  const byColor = new Map();
+
+  const note = (color, kind, name) => {
+    if (!color) return;
+    const k = String(color).toUpperCase();
+    if (!byColor.has(k)) byColor.set(k, { color, kind, names: [] });
+    const e = byColor.get(k);
+    if (name && e.names.indexOf(name) < 0) e.names.push(name);
+    // A colour used by both a line and an area is shown as a line: the stroke
+    // is what carries the colour in that pairing.
+    if (kind === 'line') e.kind = 'line';
+  };
+
+  if (typeof routes !== 'undefined') {
+    routes.forEach(r => { if (!r.cls) note(r.color, 'line', r.labelText || ''); });
+  }
+  if (typeof geometries !== 'undefined') {
+    geometries.forEach(g => {
+      if (g.cls || g._hidden) return;
+      const area = g.shape === 'Polygon' || g.shape === 'Rectangle' || g.shape === 'Circle';
+      const point = g.shape === 'Marker' || g.shape === 'CircleMarker' || g.shape === 'Label';
+      note(area ? (g.fillColor || g.borderColor) : g.borderColor,
+        point ? 'mark' : (area ? 'area' : 'line'), g.name || '');
+    });
+  }
+
+  return [...byColor.entries()].map(([k, e]) => {
+    const edit = colorKeyEdits[k] || {};
+    // Named after what carries it when they agree on a name, else by shape.
+    const auto = e.names.length === 1 ? e.names[0]
+      : (e.kind === 'line' ? 'Road / line' : e.kind === 'mark' ? 'Marked point' : 'Area');
+    return {
+      key: k, color: e.color, kind: e.kind,
+      label: edit.label != null ? edit.label : auto,
+      hidden: !!edit.hidden, extra: false,
+    };
+  });
 }
 
 /**
@@ -110,6 +166,8 @@ function rebuildColorKey() {
   card.style.display = wanted ? '' : 'none';
   card.classList.toggle('editing', colorKeyEditing);
 
+  if (wanted) positionColorKey();
+
   const foot = document.getElementById('colorKeyFoot');
   if (foot) foot.style.display = colorKeyEditing ? '' : 'none';
   const btn = document.getElementById('colorKeyEditBtn');
@@ -118,6 +176,35 @@ function rebuildColorKey() {
     btn.setAttribute('aria-pressed', String(colorKeyEditing));
     btn.title = colorKeyEditing ? 'Done editing' : 'Rename rows, change colours, add your own';
   }
+}
+
+/**
+ * Sit the key below the key-distances card instead of at a fixed offset.
+ *
+ * Both cards are top-right and the distances card grows a row at a time, so any
+ * constant top lands underneath it on exactly the maps that have enough content
+ * to need a legend. Recomputed on every rebuild, and abandoned the moment the
+ * card is dragged — once somebody has placed it, moving it is the app being
+ * wrong, not helpful.
+ */
+function positionColorKey() {
+  const card = colorKeyCard();
+  if (!card || card._moved) return;
+  const above = document.getElementById('legendCard');
+  const wrap = document.getElementById('mapWrap');
+  if (!wrap) return;
+  const wr = wrap.getBoundingClientRect();
+  let top = 70;
+  let right = 58;
+  if (above && above.style.display !== 'none' && above.offsetHeight) {
+    const ar = above.getBoundingClientRect();
+    top = (ar.bottom - wr.top) + 10;
+    right = Math.round(wr.right - ar.right);
+  }
+  card.style.left = 'auto';
+  card.style.bottom = 'auto';
+  card.style.top = top + 'px';
+  card.style.right = right + 'px';
 }
 
 /**
@@ -225,6 +312,7 @@ function resetColorKey() {
     let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
     hd.addEventListener('pointerdown', e => {
       dragging = true;
+      card._moved = true;          // stop auto-placing it from here on
       const r = card.getBoundingClientRect(), w = wrap.getBoundingClientRect();
       ox = r.left - w.left; oy = r.top - w.top; sx = e.clientX; sy = e.clientY;
       card.style.right = 'auto'; card.style.bottom = 'auto';

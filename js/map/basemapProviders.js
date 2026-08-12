@@ -35,10 +35,12 @@
  *   - needs a (free) ArcGIS Location Platform API key. Set it in config.js and
  *     the entries below light up automatically.
  *
- * Esri World Imagery (Clarity) (`clarity.maptiles.arcgis.com`) — deep zoom.
- *   Same archive, selected for clarity rather than recency, published to z22.
- *   Often noticeably sharper past z19; the imagery may be older. Offered as its
- *   own basemap rather than as the default so the trade-off stays explicit.
+ * Esri World Imagery (Clarity) — REMOVED. It published to z22 and was often
+ *   sharper past z19, but the imagery behind it is selected for clarity rather
+ *   than recency, so the sharpest-looking ground in the picker was frequently
+ *   the most out of date. On a property map that is the wrong trade to offer:
+ *   somebody zooms in until it looks best and reports what they see, and what
+ *   they see may be years old. The remaining imagery is the current archive.
  *
  * Mappls / MapmyIndia — India-specific, opt-in, EXPORT-UNSAFE.
  *   Best-in-class Indian road network, house numbers and local names. Two
@@ -58,7 +60,6 @@
  * ------------------------------------------------------------------------- */
 
 const ESRI_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
-const ESRI_CLARITY_TILES = 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/';
 const ESRI_STATIC_TILES = 'https://static-map-tiles-api.arcgis.com/arcgis/rest/services/static-basemap-tiles-service/v1/';
 const CARTO_TILES = 'https://{s}.basemaps.cartocdn.com/';
 
@@ -171,27 +172,7 @@ const BASEMAP_CATALOGUE = {
     ],
   },
 
-  clarity: {
-    id: 'clarity', label: 'Satellite — deep zoom (Clarity)', group: 'Satellite',
-    provider: 'esri-clarity', imagery: true, corsSafe: true,
-    credit: 'Imagery © Esri World Imagery (Clarity) · Vantor · Airbus DS · USGS · NGA · NASA',
-    thumb: 'linear-gradient(150deg,#22401f,#5c7a3e 45%,#94a468)',
-    layers: [
-      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true, role: 'imagery' },
-    ],
-  },
 
-  clarityHybrid: {
-    id: 'clarityHybrid', label: 'Deep zoom + labels', group: 'Satellite',
-    provider: 'esri-clarity', imagery: true, corsSafe: true,
-    credit: 'Imagery © Esri World Imagery (Clarity) · Labels © Esri · TomTom · Garmin · © OpenStreetMap contributors',
-    thumb: 'linear-gradient(150deg,#22401f,#5c7a3e 45%,#a8b47c)',
-    layers: [
-      { url: esri('World_Imagery', ESRI_CLARITY_TILES), zIndex: 1, maxNative: 22, retina: true, adaptive: true, role: 'imagery' },
-      { url: esri('Reference/World_Transportation'), zIndex: 3, maxNative: 19, retina: true, role: 'reference' },
-      { url: esri('Reference/World_Boundaries_and_Places'), zIndex: 4, maxNative: 19, retina: true, role: 'reference' },
-    ],
-  },
 
   /* ---- Premium (ArcGIS Location Platform key) --------------------------- */
 

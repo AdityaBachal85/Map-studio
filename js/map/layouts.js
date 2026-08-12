@@ -12,9 +12,22 @@
  * connectivity standard applies. Picking one is a decision about what this map
  * IS, made once, rather than eight separate settings remembered by hand.
  *
- * IT SETS, IT DOES NOT POLICE. Switching the basemap afterwards is allowed and
- * does not kick you out of the layout. The requirement was that a connectivity
- * map *defaults* to OpenStreetMap, not that satellite becomes unreachable —
+ * CONNECTIVITY HOLDS ITS GROUND; SATELLITE DOES NOT CARE.
+ *
+ * Connectivity is pinned to OpenStreetMap and the basemap picker is disabled
+ * while it is on. I originally built this as a default you could talk out of,
+ * and argued that a mode which fights you gets switched off. That was wrong for
+ * the same reason the free colour picker was wrong: the whole value is that
+ * every connectivity map in the company looks like every other one, and a
+ * ground that drifts per map costs exactly what a colour that drifts per map
+ * costs. Satellite is the escape hatch and it is one click away, which is what
+ * keeps the lock from being a trap.
+ *
+ * Satellite is deliberately the opposite — any ground, any colour — because
+ * imagery maps are one-offs by nature. Its ground is remembered between
+ * sessions; Connectivity's needs no memory because it has no choice.
+ *
+ * The historical note, since the code reads oddly without it: this used to be —
  * and a mode that fights you when you deviate gets turned off entirely, taking
  * the standard with it.
  *
@@ -30,6 +43,7 @@ const MAP_LAYOUTS = {
     hint: 'Street ground, standard road colours',
     basemap: 'osm',
     standard: true,
+    lockBasemap: true,
   },
   satellite: {
     label: 'Satellite',
@@ -61,6 +75,10 @@ function mapLayout() { return mapLayoutId; }
  */
 function layoutBasemap(id) {
   const spec = MAP_LAYOUTS[id];
+  // A pinned layout has one ground and no memory of anything else. Consulting a
+  // remembered value here would let a ground chosen before the pin existed
+  // outlive it, which is the bug this whole area keeps producing.
+  if (spec && spec.lockBasemap) return spec.basemap;
   let byLayout = null;
   try { byLayout = getPref('basemapByLayout'); } catch (e) { /* ignore */ }
   const saved = byLayout && byLayout[id];
@@ -84,6 +102,35 @@ function rememberLayoutBasemap(key) {
     next[mapLayoutId] = key;
     setPref('basemapByLayout', next);
   } catch (e) { /* prefs unavailable */ }
+}
+
+/** @returns {boolean} whether the active layout pins its ground */
+function basemapLocked() {
+  const spec = MAP_LAYOUTS[mapLayoutId];
+  return !!(spec && spec.lockBasemap);
+}
+
+/**
+ * Disable the basemap picker while the layout pins its ground.
+ *
+ * Disabled and explained, not hidden. A control that vanishes reads as a broken
+ * build; one that is greyed with "Connectivity is pinned to OpenStreetMap —
+ * switch to Satellite to change the ground" tells you both the rule and the way
+ * out in the place you went looking for it.
+ */
+function syncBasemapLock() {
+  const locked = basemapLocked();
+  const why = locked
+    ? 'Connectivity is pinned to OpenStreetMap so every map reads the same.'
+      + ' Switch to Satellite to choose a ground.'
+    : 'Basemap';
+  document.body.classList.toggle('basemap-locked', locked);
+  const tgl = document.getElementById('bmToggle');
+  if (tgl) { tgl.disabled = locked; tgl.title = why; }
+  const sel = document.getElementById('basemapSel');
+  if (sel) { sel.disabled = locked; sel.title = why; }
+  const panel = document.getElementById('bmPanel');
+  if (locked && panel) panel.hidden = true;
 }
 
 /** @returns {boolean} whether classed objects should take their class colours */
@@ -139,6 +186,7 @@ function setMapLayout(id, opts) {
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   document.body.classList.toggle('layout-connectivity', !!spec.standard);
+  syncBasemapLock();
 
   try { setPref('layout', id); } catch (e) { /* prefs unavailable */ }
 

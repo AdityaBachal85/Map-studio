@@ -99,6 +99,12 @@
         const legendRect = legendVisible ? $('legendCard').getBoundingClientRect() : null;
         const legendTitle = $('legendTitle').textContent.trim() || 'KEY DISTANCES';
         const lgRows = legendRows();
+        const ckEl = $('colorKeyCard');
+        const ckVisible = !!ckEl && ckEl.style.display !== 'none';
+        const ckRect = ckVisible ? ckEl.getBoundingClientRect() : null;
+        const ckTitle = ($('colorKeyTitle') || {}).textContent;
+        const ckRows = (typeof colorKeyRows === 'function' ? colorKeyRows() : [])
+          .filter(r => !r.hidden);
         const brandOn = $('brandTgl').checked;
 
         // Native, editable geometry for everything that used to be flattened
@@ -158,6 +164,13 @@
               badges: widgets.badges,
               rings: widgets.rings,
               title: { visible: titleVisible, text: titleText },
+              colorKey: (ckRect && ckRows.length) ? {
+                visible: ckVisible, title: (ckTitle || 'LEGEND').trim(),
+                pxLeft: ckRect.left - wrapRect.left,
+                pxTop: ckRect.top - wrapRect.top,
+                pxWidth: ckRect.width,
+                rows: ckRows.map(r => ({ color: r.color, label: r.label })),
+              } : null,
               legend: (legendRect && lgRows.length) ? {
                 visible: legendVisible, title: legendTitle,
                 pxLeft: legendRect.left - wrapRect.left,

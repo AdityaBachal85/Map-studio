@@ -250,11 +250,6 @@ function rebuildLegend() {
   });
   legendRebuilding = false;
 
-  // The colour key is driven by the same events: anything that changes what is
-  // on the map changes what the key should say. Hooking it here rather than at
-  // every call site means a new feature cannot forget to update it.
-  if (typeof rebuildColorKey === 'function') rebuildColorKey();
-
   const card = $('legendCard');
   const tgl = $('legendTgl');
   // In edit mode the card stays up even with nothing in it — otherwise adding
@@ -283,6 +278,20 @@ function rebuildLegend() {
   }
   if (typeof rsRefreshDistances === 'function' && typeof appMode === 'function' && appMode() === 'report') {
     rsRefreshDistances();
+  }
+  // The colour key last, not first. It sits itself below this card, so it has
+  // to measure a card whose rows and display have already been written for this
+  // rebuild — measuring the previous state put the two on top of each other on
+  // exactly the busy maps that need both.
+  if (typeof rebuildColorKey === 'function') rebuildColorKey();
+
+  // The sheet's colour legend follows the map for the same reason the key does.
+  // Kept out of the mode check above: the sheet's data has to be right when the
+  // report is *exported*, which happens without ever opening report mode.
+  if (typeof reportSheet === 'object' && reportSheet && typeof syncSheetLegend === 'function') {
+    syncSheetLegend(reportSheet);
+    if (typeof appMode === 'function' && appMode() === 'report'
+      && typeof renderReportSheet === 'function') renderReportSheet();
   }
 }
 

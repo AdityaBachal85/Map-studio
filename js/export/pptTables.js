@@ -43,3 +43,51 @@ function addLegend(slide, legend, ctx, log) {
   });
   return true;
 }
+
+/**
+ * Add the colour key: what each colour on the map means.
+ *
+ * A table like the distances legend rather than free shapes, so the swatch
+ * column stays aligned with its labels when somebody drags the whole thing
+ * around in PowerPoint — which is the point of exporting it natively instead of
+ * baking it into the background picture.
+ *
+ * The swatch is a filled cell in every case. Reproducing the on-screen
+ * distinction between a line, a block and a dot would need three shapes
+ * floating over a table, and floating shapes come adrift the moment the table
+ * is moved or the row heights reflow — the colour is what the key is for, and a
+ * key that survives being repositioned beats one that is prettier until touched.
+ *
+ * @param {object} slide pptxgenjs slide.
+ * @param {{title:string, rows:Array<{color:string,label:string}>,
+ *   pxLeft:number, pxTop:number, pxWidth:number}} key
+ * @param {{tf:{X:Function,Y:Function,rr:number}, hex:Function}} ctx
+ * @param {object} log Logger.
+ * @returns {boolean} true when it was added.
+ */
+function addColorKey(slide, key, ctx, log) {
+  const { tf, hex } = ctx;
+  if (!key || !key.rows || !key.rows.length) return false;
+  const lx = tf.X(key.pxLeft), ly = tf.Y(key.pxTop);
+  const lw = Math.max(1.7, key.pxWidth * tf.rr);
+  const colW = [0.22, lw - 0.22];
+
+  if (!validateTable({ x: lx, y: ly + 0.3, w: lw, colW, rows: key.rows }, log, 'colorKey')) return false;
+
+  slide.addText(String(key.title || 'LEGEND'), {
+    x: lx, y: ly, w: lw, h: 0.3,
+    fill: { color: '0A1E3C' }, color: 'FFFFFF', bold: true, fontSize: 9.5,
+    fontFace: 'Arial', align: 'left', valign: 'middle', charSpacing: 2, margin: 0.06,
+  });
+
+  slide.addTable(key.rows.map(r => ([
+    { text: '', options: { fill: { color: hex(r.color) } } },
+    { text: String(r.label ?? ''), options: { align: 'left' } },
+  ])), {
+    x: lx, y: ly + 0.3, w: lw, colW,
+    fontFace: 'Arial', fontSize: 8.5, color: '17202B',
+    fill: { color: 'FFFFFF' }, border: { pt: 0.5, color: 'E5EAF1' },
+    rowH: 0.22, valign: 'middle', margin: 0.04,
+  });
+  return true;
+}

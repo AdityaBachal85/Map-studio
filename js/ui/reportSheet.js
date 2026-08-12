@@ -24,25 +24,67 @@
 /** Everything on the sheet that is not the map or the distances table. */
 let reportSheet = null;
 
+/**
+ * The sheet's line legend, from the classes actually on the map.
+ * @returns {Array<{color:string,label:string,cls:string}>}
+ */
+function sheetLegendLines() {
+  if (typeof connLegendRows !== 'function') return [];
+  return connLegendRows().filter(r => r.kind === 'line')
+    .map(r => ({ color: r.color, label: r.label, cls: r.cls }));
+}
+
+/**
+ * The sheet's mark legend, same source.
+ *
+ * `iconKey` is mapped from the class so the drawn glyph matches the class —
+ * an airport row with a generic pin is the same failure in a smaller way.
+ * @returns {Array<{iconKey:string,color:string,label:string,cls:string}>}
+ */
+function sheetLegendMarks() {
+  if (typeof connLegendRows !== 'function') return [];
+  const icons = { site: 'pin', airport: 'airport', station: 'train', metroStation: 'train',
+    hub: 'building', powerTower: 'pin' };
+  return connLegendRows().filter(r => r.kind === 'mark')
+    .map(r => ({ iconKey: icons[r.cls] || 'pin', color: r.color, label: r.label, cls: r.cls }));
+}
+
+/**
+ * Re-read the legend from the map, keeping any label the user retyped.
+ *
+ * The sheet is editable, so a rebuild cannot simply overwrite it — somebody's
+ * "MIDC Phase II" must survive drawing one more road. Matched on class id
+ * rather than row position, for the same reason the colour key is.
+ *
+ * @param {object} d the sheet
+ */
+function syncSheetLegend(d) {
+  const keepLabel = (fresh, old) => fresh.map(f => {
+    const prev = (old || []).find(o => o.cls && o.cls === f.cls);
+    // `_auto` records what the class said when the row was built. If the label
+    // still equals it, nobody has touched the row and it follows the class; if
+    // it differs, somebody retyped it and their words win.
+    const edited = prev && prev._auto && prev.label !== prev._auto;
+    return Object.assign({}, f, { label: edited ? prev.label : f.label, _auto: f.label });
+  });
+  d.lines = keepLabel(sheetLegendLines(), d.lines);
+  d.marks = keepLabel(sheetLegendMarks(), d.marks);
+}
+
 /** @returns {object} a blank sheet */
 function reportSheetDefaults() {
   return {
     title: 'CONNECTIVITY MAP',
     subA: 'Project Location: —',
     subB: 'Locality, City',
-    lines: [
-      { color: '#1E7A4A', label: 'Outer Ring Road' },
-      { color: '#7C3AED', label: 'Expressway' },
-      { color: '#F59E0B', label: 'Major Roads' },
-      { color: '#64748B', label: 'Railway Line' },
-    ],
-    marks: [
-      { iconKey: 'building', color: '#0E7490', label: 'IT / Employment Hubs' },
-      { iconKey: 'airport', color: '#0369A1', label: 'Airport' },
-      { iconKey: 'train', color: '#1E7A4A', label: 'Railway Station' },
-      { iconKey: 'hospital', color: '#B91C1C', label: 'Hospital' },
-      { iconKey: 'school', color: '#7C3AED', label: 'Educational Institutions' },
-    ],
+    // Read off the map, never typed here. The hardcoded list this replaces
+    // said #7C3AED purple meant "Expressway" while the app drew expressways in
+    // #0073C6 blue, and called #1E7A4A green a "Railway Line" against the
+    // standard's #3D4451 — four colours that appear nowhere in the app, on the
+    // one page a client actually reads. A legend that contradicts its own map
+    // is worse than no legend.
+    lines: sheetLegendLines(),
+    marks: sheetLegendMarks(),
     highlights: [
       'Type a connectivity highlight here.',
     ],
@@ -222,7 +264,12 @@ function rsRemove(root, path) {
     const add = e.target.closest('[data-rs-add]');
     if (add) {
       const k = add.dataset.rsAdd;
-      if (k === 'lines') d.lines.push({ color: '#1E7A4A', label: 'New line' });
+      // The default class's colour, not an invented green that matches nothing.
+      if (k === 'lines') {
+        const c = (typeof connClass === 'function' && typeof CONNECTIVITY_DEFAULT_CLASS === 'string')
+          ? connClass(CONNECTIVITY_DEFAULT_CLASS) : null;
+        d.lines.push({ color: c ? c.color : '#FF7A1A', label: 'New line' });
+      }
       if (k === 'marks') d.marks.push({ iconKey: 'pin', color: '#0E7490', label: 'New mark' });
       if (k === 'highlights') d.highlights.push('New highlight');
       if (k === 'hubs') d.hubs.push({ name: 'Hub', meta: '—' });

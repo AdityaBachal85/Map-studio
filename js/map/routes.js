@@ -290,8 +290,30 @@
         return !!(c && typeof connStandardOn === 'function' && connStandardOn() && c.dash);
       }
 
+      /**
+       * The class a new route starts on.
+       *
+       * Under the standard a route with no class falls through to
+       * `PALETTE[routes.length % n]` — the exact rotating-palette behaviour the
+       * standard exists to kill, and reached by "+ Add route", which is how
+       * most routes get made. So it starts on the default class and the Type
+       * dropdown changes it. Outside the standard the palette is the right
+       * answer for "N unrelated destinations" and is left alone.
+       *
+       * @param {object} opts @returns {string|null}
+       */
+      function routeInitialClass(opts) {
+        if (opts.cls) return opts.cls;
+        const on = typeof connStandardOn === 'function' && connStandardOn();
+        return (on && typeof CONNECTIVITY_DEFAULT_CLASS === 'string') ? CONNECTIVITY_DEFAULT_CLASS : null;
+      }
+
       function addRoute(opts) {
         opts = opts || {};
+        // Resolved before the literal, because routeInitialColor/Weight/Dash all
+        // read `opts.cls` — setting it only on the record would leave the three
+        // style fields still taking the palette branch.
+        opts = Object.assign({}, opts, { cls: routeInitialClass(opts) });
         const rt = {
           id: opts.id || newId(),
           fromId: opts.fromId || (locations[0] && locations[0].id) || null,

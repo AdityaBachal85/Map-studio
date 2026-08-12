@@ -4023,7 +4023,10 @@ div.sub {
 
 #colorKeyCard {
   position: absolute;
-  right: 12px;
+  /* A starting point only — positionColorKey() sits it under the key-distances
+     card on every rebuild, because that card grows with its rows and any fixed
+     offset ends up behind it on exactly the maps busy enough to want a legend. */
+  right: 58px;
   top: 260px;
   z-index: 620;
   min-width: 178px;
@@ -4120,3 +4123,11 @@ div.sub {
   cursor: pointer;
 }
 #colorKeyFoot button:hover { color: var(--text); border-color: var(--accent); }
+
+/* The basemap picker while a layout pins its ground. Greyed rather than
+   removed: a control that disappears reads as a broken build, and the tooltip
+   is where somebody who wants to change the ground will actually look. */
+body.basemap-locked #bmToggle {
+  opacity: .45;
+  cursor: not-allowed;
+}
