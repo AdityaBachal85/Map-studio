@@ -13,10 +13,13 @@ const PREF_DEFAULTS = {
   reduceMotion: false,    // minimise animations
   unitDistance: 'auto',   // 'auto' | 'km' | 'm' | 'mi'
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'
-  basemap: 'hybrid',      // last-selected basemap key (remembered by the switcher)
+  // OpenStreetMap, not imagery. This app's output is overwhelmingly connectivity
+  // diagrams — roads, rail, distances — and a line drawing needs a plain ground
+  // to be read against. Imagery is the deliberate choice, not the default.
+  basemap: 'osm',         // last-selected basemap key (remembered by the switcher)
   imageryLook: 'natural', // satellite colour grading (map/imageryEnhance.js)
   roadLook: 'subtle',     // roads/labels overlay treatment (map/imageryEnhance.js)
-  layout: 'satellite',    // 'satellite' | 'connectivity' — the default for a NEW map
+  layout: 'connectivity', // 'satellite' | 'connectivity' — the default for a NEW map
   // Which feature types a ring scan looks for. Declared here rather than left
   // to fall back inside the panel, so the whole set of remembered settings is
   // readable in one place.

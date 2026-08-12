@@ -105,6 +105,26 @@ function ringScanGroups(features) {
   return g;
 }
 
+/**
+ * One row in the found list.
+ *
+ * `parts` is how many OSM ways were chained into this line. Shown as a tooltip
+ * rather than on the row: it explains why a road that OSM stores in nine pieces
+ * appears once, but it is not what anybody is reading the list for.
+ *
+ * @param {object} it @param {boolean} on @returns {string}
+ */
+function ringScanItemRow(it, on) {
+  let label = it.name || (it.kind === 'point' ? 'Unnamed' : 'Unnamed section');
+  if (it.ref && it.name && it.ref !== it.name) label += ' (' + it.ref + ')';
+  if (it.ofParts > 1) label += ' — ' + it.part + ' of ' + it.ofParts;
+  const tip = it.parts > 1 ? ' title="' + it.parts + ' OpenStreetMap segments joined into one line"' : '';
+  return '<label class="chk"' + tip + '><input type="checkbox" data-scan-i="' + it._i + '"'
+    + (on ? ' checked' : '') + '> ' + esc(label)
+    + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '')
+    + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + '</label>';
+}
+
 /** Draw the dialog from `ringScanState`. */
 function renderRingScan() {
   const body = document.getElementById('ringScanBody');
@@ -146,15 +166,12 @@ function renderRingScan() {
             + (allOn ? ' checked' : '') + '> <b>' + esc(fc ? fc.label : cid) + '</b></label>'
           + '<span class="rs-scan-sw" style="background:' + esc(cc ? cc.color : '#888') + '"></span>'
           + '<span class="rs-scan-count">' + items.length + '</span></div>'
+          // Every one of them, always. A truncated list with "…and 106 more"
+          // is the one thing a scan must not do: the whole point is knowing
+          // what is there, and a hidden remainder that the group tick silently
+          // includes means ticking a group adds things you were never shown.
           + '<div class="rs-scan-items">'
-          + items.slice(0, 40).map(it =>
-            '<label class="chk"><input type="checkbox" data-scan-i="' + it._i + '"'
-            + (s.picked.has(it._i) ? ' checked' : '') + '> '
-            + esc(it.name || (it.kind === 'point' ? 'Unnamed' : 'Unnamed section'))
-            + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '') + '</label>').join('')
-          + (items.length > 40
-            ? '<div class="rs-scan-note">…and ' + (items.length - 40) + ' more, included by the group tick.</div>'
-            : '')
+          + items.map(it => ringScanItemRow(it, s.picked.has(it._i))).join('')
           + '</div></div>';
       }).join('');
     }

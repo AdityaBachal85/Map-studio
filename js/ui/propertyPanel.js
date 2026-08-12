@@ -409,13 +409,35 @@ function wireLocCard(card, loc) {
             + connLineClasses().map(([id, label]) =>
               `<option value="${id}" ${rt.cls === id ? 'selected' : ''}>${esc(label)}</option>`).join('');
         }
-        /** Show or hide the "custom colour" note and its reset button. */
+        /**
+         * Keep the colour control honest about who owns the colour.
+         *
+         * Under the Connectivity layout a typed road's colour is the type's,
+         * full stop — the picker is disabled and shows it. A standard that can
+         * be nudged with a colour drag is not a standard; it is a default, and
+         * defaults are exactly what produced "the same road is a different
+         * colour in every report".
+         *
+         * The escape is the Type dropdown's "No type (free colour)", not a
+         * hidden override: coming off the standard should be a decision you can
+         * see on the card and in the legend, not a colour that drifted.
+         */
         function syncRtStandard() {
           const dev = typeof connRouteDeviates === 'function' && connRouteDeviates(rt);
           const note = card.querySelector('.rt-deviates');
           const rst = card.querySelector('.rstd');
-          if (note) note.style.display = dev ? '' : 'none';
-          if (rst) rst.style.display = dev ? '' : 'none';
+          const clr = card.querySelector('.clr');
+          const locked = typeof connStandardOn === 'function' && connStandardOn() && !!rt.cls;
+          if (clr && typeof setColorInputLocked === 'function') {
+            setColorInputLocked(clr, locked, locked
+              ? 'Set by the road type under the Connectivity layout. To choose a colour freely,'
+                + ' set Type to "No type".'
+              : 'Route colour');
+          }
+          // A locked route cannot deviate, so the note and its reset are only
+          // ever for free-colour routes and for the Satellite layout.
+          if (note) note.style.display = dev && !locked ? '' : 'none';
+          if (rst) rst.style.display = dev && !locked ? '' : 'none';
         }
         if (clsSel) {
           clsSel.addEventListener('change', e => {
@@ -435,6 +457,11 @@ function wireLocCard(card, loc) {
             drawRoute(rt); rebuildLegend(); syncRtStandard();
           });
         }
+        // Hung off the card so a layout change can re-sync every route's lock
+        // without rebuilding the list — the cards hold live listeners and
+        // in-progress edits, and throwing them away to flip one disabled flag
+        // would discard a half-typed label.
+        card._syncStandard = syncRtStandard;
         setTimeout(syncRtStandard, 0);
 
         card.querySelector('.clr').addEventListener('input', e => {

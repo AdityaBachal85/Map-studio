@@ -163,6 +163,33 @@ function enhanceColorInputs(root) {
 }
 
 /**
+ * Lock or unlock a colour control.
+ *
+ * The visible control is the `.clrBtn` the enhancer injects, not the
+ * `input[type=color]` behind it — so setting `input.disabled` alone leaves a
+ * fully clickable swatch that still opens the picker. Both have to be told,
+ * which is exactly the kind of thing that only bites once the enhancer has run.
+ *
+ * @param {HTMLInputElement} input
+ * @param {boolean} locked
+ * @param {string} [title] tooltip explaining who owns the colour
+ */
+function setColorInputLocked(input, locked, title) {
+  if (!input) return;
+  input.disabled = !!locked;
+  const wrap = input.parentNode;
+  const btn = wrap && wrap.classList && wrap.classList.contains('clrWrap')
+    ? wrap.querySelector('.clrBtn') : null;
+  if (btn) {
+    btn.disabled = !!locked;
+    btn.classList.toggle('locked', !!locked);
+    if (title) btn.title = title;
+  }
+  input.classList.toggle('locked', !!locked);
+  if (title) input.title = title;
+}
+
+/**
  * Repaint a swatch after its input's value was set in code.
  *
  * Assigning to `.value` fires no event, so the enhancer's own listeners never

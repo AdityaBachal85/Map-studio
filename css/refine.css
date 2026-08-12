@@ -3973,3 +3973,30 @@ input[type=checkbox]:disabled {
 
 #ringScanFoot { display: flex; align-items: center; gap: 8px; }
 #ringScanFoot .grow { flex: 1; }
+
+/* The draw-a-road control: a full-width type select above a full-width button.
+   Side by side, the long class names squashed the button to "Dr a ro". */
+.rd-class {
+  width: 100%;
+  margin-bottom: var(--sp-2);
+}
+
+.rd-go { margin-bottom: 6px; }
+
+/* A colour the road type owns. Shown as disabled rather than hidden — a missing
+   picker reads as a bug, a greyed one with a tooltip reads as a rule. */
+input[type="color"].locked,
+.clrBtn.locked {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* `.sub` is nowrap because its main use is an inline row label ("Width",
+   "Shift") that must not break mid-word. Used as a block it is explanatory
+   prose, and prose has to wrap — a 662px line in a 362px pane is simply cut
+   off. Every div.sub in index.html already carried `white-space:normal` as an
+   inline style; this is that workaround, written once. */
+div.sub {
+  white-space: normal;
+  line-height: 1.5;
+}

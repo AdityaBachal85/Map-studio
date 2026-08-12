@@ -226,17 +226,138 @@ function ringPathKm(pts) {
   return m;
 }
 
+/* ---------------------------------------------------------------------------
+ * Joining the pieces back together
+ *
+ * OSM does not store "Swami Vivekanand Road" as one line. It stores it as a
+ * dozen `way`s, split at every point where a tag changes — a bridge, a change
+ * in lane count, a different surface, a speed-limit sign. That is correct for a
+ * database and useless on a map: a scan comes back with the same road listed
+ * nine times at 0.2 km each, and ticking it draws nine stubs instead of one
+ * road.
+ *
+ * So the pieces are chained back into continuous lines before anyone sees them.
+ * This is what turns a list of 146 fragments into a list of the twenty roads
+ * that are actually there.
+ * ------------------------------------------------------------------------ */
+
+/** ~1 m. Contiguous ways share an exact node; this only absorbs float drift. */
+const JOIN_TOL_DEG = 0.00001;
+
+/**
+ * Can these two pieces be the same road?
+ *
+ * Equal names obviously. But an unnamed piece is joinable with a named one,
+ * and that case matters more than it sounds: a flyover is usually tagged
+ * without a name, so a road reads as "Santa Cruz Flyover / Unnamed section /
+ * Santa Cruz Flyover" — three rows for one continuous stretch. Refusing to join
+ * across a missing name is what produces that.
+ *
+ * @param {string} a @param {string} b @returns {boolean}
+ */
+function joinableNames(a, b) { return !a || !b || a === b; }
+
+/**
+ * Chain touching pieces of the same class into continuous lines.
+ *
+ * Grouped by class rather than by name, because the unnamed connector between
+ * two named stretches has to be able to join either of them.
+ *
+ * @param {object[]} features @returns {object[]}
+ */
+function joinRingFeatures(features) {
+  const out = [];
+  const byClass = new Map();
+  features.forEach(f => {
+    if (f.kind !== 'line') { out.push(f); return; }   // points and areas pass through
+    if (!byClass.has(f.classId)) byClass.set(f.classId, []);
+    byClass.get(f.classId).push(f);
+  });
+
+  const near = (a, b) =>
+    Math.abs(a[0] - b[0]) <= JOIN_TOL_DEG && Math.abs(a[1] - b[1]) <= JOIN_TOL_DEG;
+
+  byClass.forEach(group => {
+    const segs = group.map(f => ({ f, pts: f.pts, used: false }));
+    const chains = [];
+
+    for (let i = 0; i < segs.length; i++) {
+      if (segs[i].used) continue;
+      segs[i].used = true;
+      let pts = segs[i].pts.slice();
+      let name = segs[i].f.name || '';
+      let ref = segs[i].f.ref || '';
+      let parts = 1;
+
+      // Re-scan after every join: absorbing a piece gives the chain two new
+      // ends, and a piece that did not fit a moment ago may fit one of them.
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (let j = 0; j < segs.length; j++) {
+          if (segs[j].used) continue;
+          const o = segs[j].pts, on = segs[j].f.name || '';
+          if (!joinableNames(name, on)) continue;
+
+          const head = pts[0], tail = pts[pts.length - 1];
+          if (near(tail, o[0])) pts = pts.concat(o.slice(1));
+          else if (near(tail, o[o.length - 1])) pts = pts.concat(o.slice(0, -1).reverse());
+          else if (near(head, o[o.length - 1])) pts = o.slice(0, -1).concat(pts);
+          else if (near(head, o[0])) pts = o.slice(1).reverse().concat(pts);
+          else continue;
+
+          segs[j].used = true;
+          grew = true;
+          parts++;
+          if (!name && on) name = on;                       // the chain inherits a name
+          if (!ref && segs[j].f.ref) ref = segs[j].f.ref;
+        }
+      }
+      chains.push(Object.assign({}, segs[i].f, {
+        pts, parts, name: name || null, ref: ref || null, km: ringPathKm(pts),
+      }));
+    }
+
+    // A dual carriageway is two ways that never touch, so one road can still
+    // end up as two chains. Numbering them says "these are halves of one thing"
+    // rather than leaving two identical rows looking like a duplicate bug.
+    const byName = new Map();
+    chains.forEach(c => {
+      const k = c.name || '';
+      if (!k) return;
+      byName.set(k, (byName.get(k) || 0) + 1);
+    });
+    const seen = new Map();
+    chains.forEach(c => {
+      const k = c.name || '';
+      if (k && byName.get(k) > 1) {
+        const n = (seen.get(k) || 0) + 1;
+        seen.set(k, n);
+        c.part = n;
+        c.ofParts = byName.get(k);
+      }
+      out.push(c);
+    });
+  });
+
+  // Longest first. The 12 km expressway is what somebody scanned for; a 90 m
+  // slip road is not, and it should not be what they see at the top of a list.
+  out.sort((a, b) => (b.km || 0) - (a.km || 0));
+  return out;
+}
+
 /**
  * Turn one Overpass element into something registerGeom can take.
  * @param {object} el @param {string} classId @returns {object|null}
  */
 function overpassToFeature(el, classId) {
   const t = el.tags || {};
-  const name = t.name || t['name:en'] || t.ref || null;
+  const name = t.name || t['name:en'] || null;
+  const ref = t.ref || null;
 
   if (el.type === 'node') {
     if (!isFinite(el.lat) || !isFinite(el.lon)) return null;
-    return { kind: 'point', classId, name, lat: el.lat, lng: el.lon, km: 0 };
+    return { kind: 'point', classId, name: name || ref, ref, lat: el.lat, lng: el.lon, km: 0 };
   }
 
   const geom = el.geometry || (el.members || []).reduce((a, m) => a.concat(m.geometry || []), []);
@@ -253,7 +374,7 @@ function overpassToFeature(el, classId) {
 
   return {
     kind: area ? 'area' : 'line',
-    classId, name,
+    classId, name, ref,
     pts,
     km: area ? 0 : ringPathKm(pts),
   };
@@ -367,12 +488,13 @@ async function fetchRingFeatures(lat, lng, radiusM, ids) {
         if (f) features.push(f);
       });
 
+      const joined = joinRingFeatures(features);
       const truncated = els.length >= OVERPASS_CAP;
-      const out = { ok: true, features, skipped, truncated };
+      const out = { ok: true, features: joined, skipped, truncated };
       // Cache a definite answer, including an empty one — "nothing is mapped
       // here" is still true tomorrow. Never cache a transport failure: one
       // blip must not look permanent for a week.
-      all[key] = { at: Date.now(), f: features, tr: truncated };
+      all[key] = { at: Date.now(), f: joined, tr: truncated };
       overpassCacheWrite(all);
       return out;
     }

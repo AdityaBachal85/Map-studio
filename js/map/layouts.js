@@ -39,7 +39,14 @@ const MAP_LAYOUTS = {
   },
 };
 
-const MAP_LAYOUT_DEFAULT = 'satellite';
+/**
+ * A new map starts as a connectivity diagram on the OpenStreetMap ground.
+ *
+ * Read from prefs rather than hardcoded, so the Preferences dialog genuinely
+ * sets the default for new maps instead of being overridden on load — and
+ * falls back to the same value prefs declares, so the two cannot drift apart.
+ */
+const MAP_LAYOUT_DEFAULT = (typeof getPref === 'function' && getPref('layout')) || 'connectivity';
 
 /** The active layout id. Not the basemap — you may change that within a layout. */
 let mapLayoutId = MAP_LAYOUT_DEFAULT;
@@ -82,6 +89,14 @@ function setMapLayout(id, opts) {
   // client, and silently repainting them because a mode changed would be the
   // worst kind of surprise.
   if (spec.standard && typeof connApplyAll === 'function') connApplyAll();
+
+  // The route cards carry the colour lock, so they have to be rebuilt when the
+  // layout changes — otherwise the pickers keep whatever enabled state they had
+  // when they were drawn, and a locked route sits there with a live colour
+  // picker on it.
+  if (changed && typeof routes !== 'undefined') {
+    routes.forEach(rt => { if (rt.card && rt.card._syncStandard) rt.card._syncStandard(); });
+  }
 
   document.querySelectorAll('[data-layout-btn]').forEach(b => {
     const on = b.dataset.layoutBtn === id;
