@@ -74,8 +74,13 @@
       transition: transform .18s cubic-bezier(.34, 1.56, .64, 1);
     }
 
-    .pin-icon svg,
-    .pin-icon img {
+    /* Direct children only. As a descendant selector this also hit the glyph
+       nested inside the teardrop's SVG, overriding its x/y/width/height and
+       stretching the symbol across the whole pin instead of seating it in the
+       head. Every other frame has a single top-level svg, so `>` is equivalent
+       for them. */
+    .pin-icon>svg,
+    .pin-icon>img {
       width: 100%;
       height: 100%;
       display: block;
@@ -93,32 +98,32 @@
       border-radius: 6%;
     }
 
-    /* The classic map-pin teardrop: a square with three rounded corners and one
-       sharp one, turned 45deg so the sharp corner points straight down. This is
-       the standard CSS construction for the shape — a real teardrop needs curves
-       meeting at a point, which border-radius alone cannot express and
-       clip-path polygons cannot curve.
+    /* A real teardrop, drawn as an SVG path, not a rotated square.
 
-       Because the box itself is rotated, everything inside it has to be turned
-       back the other way, and `overflow` has to be visible or the rotated
-       corners get clipped off. */
+       The rotated-square trick renders a shape but gets three things wrong that
+       only show up on a real map: the visual point ends up below the box, so the
+       pin no longer sits on its own coordinate; the border and the drop shadow
+       rotate with the box, so the outline thickens on two sides and the shadow
+       falls sideways; and the rotated bounding box is sqrt(2) times wider, so
+       zoomed out the pins collide and overlap their labels. A path has its point
+       exactly where the geometry says, and its stroke and shadow stay upright.
+
+       No transform is needed to place the tip. The billboard wrapper already
+       puts the bottom edge of the icon box on the coordinate, so a teardrop
+       whose point is at the bottom of its viewBox lands correctly with no
+       nudging — measured, after an assumed translateY(-50%) put every pin
+       exactly half a box-height too high. */
     .pin-icon.pin {
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
       overflow: visible;
     }
 
-    .pin-icon.pin>svg,
-    .pin-icon.pin>img {
-      transform: rotate(45deg);
-      width: 58%;
-      height: 58%;
-    }
-
-    /* The hover lift is a transform too, and would otherwise replace the
-       rotation and drop the pin back to a square mid-animation. */
-    .pin-icon.pin:hover {
-      transform: rotate(-45deg) scale(1.06);
+    .pin-icon.pin>svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
     }
 
     .pin-icon.none {

@@ -301,6 +301,38 @@
         });
       }
 
+
+/**
+ * The teardrop, with the chosen symbol sitting in its head.
+ *
+ * The glyph is nested as a child `<svg>` rather than parsed apart: a nested svg
+ * is valid and gets its own coordinate system from x/y/width/height, so the
+ * icon library's own viewBox — whatever it happens to be — is preserved without
+ * this function needing to know anything about it.
+ *
+ * The white stroke is on the path, so it follows the silhouette. That edge is
+ * what keeps a pin legible against a dark satellite ground or a busy street
+ * map, and it is exactly what a rotated div could not give: a CSS border there
+ * traces the box, not the shape.
+ *
+ * @param {object} loc @param {string} glyph an `<svg>…</svg>` string
+ * @returns {string}
+ */
+function pinTeardropSvg(loc, glyph) {
+  const body = (loc.iconBg && loc.iconBg !== '#FFFFFF') ? loc.iconBg : (loc.color || '#FF7A1A');
+  const ring = (loc.iconBorderColor && loc.iconBorderColor !== loc.color)
+    ? loc.iconBorderColor : '#FFFFFF';
+  const w = loc.iconBorder == null ? 1.6 : Math.max(0, loc.iconBorder * 0.8);
+  // A circle of r=11 about (12,11), drawn down to a point at (12,31).
+  const path = 'M12 .8a11 11 0 0 0-11 11c0 3.1 1.5 6.3 3.7 9.3 2.2 3 4.9 5.6 6.4 7.7'
+    + '.5.7 1.3.7 1.8 0 1.5-2.1 4.2-4.7 6.4-7.7 2.2-3 3.7-6.2 3.7-9.3a11 11 0 0 0-11-11z';
+  return '<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">'
+    + '<path d="' + path + '" fill="' + esc(body) + '"'
+    + (w ? ' stroke="' + esc(ring) + '" stroke-width="' + w + '"' : '') + '/>'
+    + '<svg x="5.4" y="5.2" width="13.2" height="13.2">' + glyph + '</svg>'
+    + '</svg>';
+}
+
       /** Undo {@link flattenBillboardForCapture}. Safe to call when not flattened. */
       function restoreBillboardAfterCapture() {
         bbCaptureLock = false;
@@ -337,7 +369,8 @@
           const box = document.createElement('div');
           box.className = 'pin-icon ' + (loc.iconFrame || 'circle') + (loc.iconGlow ? ' glow' : '');
           box.style.width = s + 'px';
-          box.style.height = s + 'px';
+          // The teardrop is taller than it is wide; every other frame is square.
+          box.style.height = (loc.iconFrame === 'pin' ? Math.round(s * 1.32) : s) + 'px';
           const frameless = loc.iconFrame === 'none';
           // The teardrop is a coloured body with a white symbol in it, not a
           // white box with a coloured symbol — the shape IS the marker, so the
@@ -359,10 +392,16 @@
             const depth = loc.iconShadow || 6;
             box.style.filter =
               `drop-shadow(0 ${1 + depth * 0.35}px ${1.5 + depth * 0.4}px rgba(0,0,0,${.25 + depth * 0.025}))`;
+          } else if (isPin) {
+            // Everything visible is inside the SVG, so the box carries only the
+            // shadow — a CSS border here would trace the rectangle, not the pin.
+            const depth = loc.iconShadow == null ? 6 : loc.iconShadow;
+            box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
+            box.style.filter = depth
+              ? `drop-shadow(0 ${1 + depth * 0.3}px ${1.5 + depth * 0.35}px rgba(0,0,0,${.22 + depth * 0.02}))`
+              : 'none';
           } else {
-            box.style.background = isPin
-              ? (loc.iconBg && loc.iconBg !== '#FFFFFF' ? loc.iconBg : (loc.color || '#FF7A1A'))
-              : (loc.iconBg || '#FFFFFF');
+            box.style.background = loc.iconBg || '#FFFFFF';
             box.style.border = (loc.iconBorder || 2) + 'px solid ' + (loc.iconBorderColor || '#FFFFFF');
             box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
             box.style.boxShadow = `0 ${4 + (loc.iconShadow || 6)}px ${(loc.iconShadow || 6) * 3}px rgba(0,0,0,${.15 + (loc.iconShadow || 6) * 0.03}), 0 1px 2px rgba(0,0,0,.14)`;
@@ -390,13 +429,18 @@
             // the same colour as the fill and therefore invisible. It also
             // styles the *frame's* border, and the frame's controls are hidden
             // in frameless mode — so it is the wrong field twice over.
-            box.innerHTML = svgForKey(
+            const glyph = svgForKey(
               loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
               loc.color,
               (frameless || isPin) ? '#FFFFFF' : null
             );
-            const svg = box.querySelector('svg');
-            if (svg) svg.style.cssText = `width:${svgPct};height:${svgPct};`;
+            if (isPin) {
+              box.innerHTML = pinTeardropSvg(loc, glyph);
+            } else {
+              box.innerHTML = glyph;
+              const svg = box.querySelector('svg');
+              if (svg) svg.style.cssText = `width:${svgPct};height:${svgPct};`;
+            }
           }
           wrap.appendChild(box);
         }
