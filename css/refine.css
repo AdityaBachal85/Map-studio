@@ -4249,3 +4249,54 @@ body.identify-on .leaflet-container {
   font-size: 9.5px;
   color: #93A1B5;
 }
+
+/* ---------------------------------------------------------------------------
+   Ground overlays, inside the basemap panel
+   ------------------------------------------------------------------------ */
+
+#bmOverlays {
+  border-top: 1px solid var(--stroke);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.bm-ov-hd {
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+
+.bm-ov {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2.5px 0;
+  font-size: 11.5px;
+}
+
+.bm-ov-note {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  margin-top: 7px;
+}
+
+/* The permanent caveat is quieter than the actionable one: it is true forever
+   and does not need reading twice, where the ground clash has a button. */
+.bm-ov-limit { opacity: .72; }
+
+#bmPlainGround {
+  display: inline-block;
+  margin-top: 4px;
+  border: 1px solid var(--orange);
+  background: none;
+  color: var(--orange);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+#bmPlainGround:hover { background: rgba(255, 122, 26, .12); }

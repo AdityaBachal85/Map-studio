@@ -151,6 +151,10 @@ function chooseBasemap(key) {
   // not draw was remembered and re-applied on the next visit, so one bad
   // provider left the app opening on a blank map every time.
   setBasemap(key);                          // updates the map + credit + (via hook) the switcher
+  // setBasemap rebuilds the tile pane from scratch, which drops the overlays
+  // with it — they are tile layers too. Without this, changing ground silently
+  // turns off every layer the user had ticked.
+  if (typeof reapplyMapOverlays === 'function') reapplyMapOverlays();
   $('bmPanel').hidden = true;
   $('bmToggle').classList.remove('open');
 }

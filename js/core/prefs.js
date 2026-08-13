@@ -29,6 +29,8 @@ const PREF_DEFAULTS = {
   // grounds by design, so one slot means whichever you touched last overwrites
   // the other and the layout stops meaning anything.
   basemapByLayout: null,
+  // Transparent tile layers added on top of the ground (map/mapOverlays.js).
+  mapOverlays: null,      // null = none
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

@@ -123,6 +123,7 @@ function serialiseProject() {
     colorKeyTitle: (document.getElementById('colorKeyTitle') || {}).textContent || undefined,
     colorKeyEdits: (typeof colorKeyEdits === 'object' && colorKeyEdits) ? colorKeyEdits : {},
     colorKeyExtras: (typeof colorKeyExtras !== 'undefined' && Array.isArray(colorKeyExtras)) ? colorKeyExtras : [],
+    mapOverlays: (typeof activeOverlays === 'function') ? activeOverlays() : [],
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
@@ -250,6 +251,10 @@ function applyProject(proj, opts) {
   else if (typeof fitAll === 'function') fitAll();
 
   if (typeof rebuildLegend === 'function') rebuildLegend();
+  if (typeof reapplyMapOverlays === 'function') {
+    try { setPref('mapOverlays', Array.isArray(proj.mapOverlays) ? proj.mapOverlays : []); } catch (e) { }
+    reapplyMapOverlays();
+  }
 
   if (!silent) status('Project loaded.');
   return true;
