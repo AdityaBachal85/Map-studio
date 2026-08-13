@@ -190,21 +190,34 @@ function rebuildColorKey() {
 function positionColorKey() {
   const card = colorKeyCard();
   if (!card || card._moved) return;
-  const above = document.getElementById('legendCard');
   const wrap = document.getElementById('mapWrap');
   if (!wrap) return;
+
+  // Hand the card back to the stylesheet first, and only override if stacking
+  // genuinely improves on it. Setting `top`/`right` inline unconditionally beat
+  // the responsive rules, which bottom-anchor the distances card on short
+  // viewports — so "10px below it" was 10px below the bottom of the map and the
+  // legend left the screen entirely.
+  card.style.left = '';
+  card.style.top = '';
+  card.style.right = '';
+  card.style.bottom = '';
+
+  const above = document.getElementById('legendCard');
+  if (!above || above.style.display === 'none' || !above.offsetHeight) return;
+
   const wr = wrap.getBoundingClientRect();
-  let top = 70;
-  let right = 58;
-  if (above && above.style.display !== 'none' && above.offsetHeight) {
-    const ar = above.getBoundingClientRect();
-    top = (ar.bottom - wr.top) + 10;
-    right = Math.round(wr.right - ar.right);
-  }
+  const ar = above.getBoundingClientRect();
+  const top = (ar.bottom - wr.top) + 10;
+
+  // Only stack when the whole card fits below with room to spare. Otherwise the
+  // stylesheet's own placement is the better answer, and it is already applied.
+  if (top < 0 || top + card.offsetHeight + 12 > wr.height) return;
+
   card.style.left = 'auto';
   card.style.bottom = 'auto';
   card.style.top = top + 'px';
-  card.style.right = right + 'px';
+  card.style.right = Math.max(0, Math.round(wr.right - ar.right)) + 'px';
 }
 
 /**
@@ -304,6 +317,10 @@ function resetColorKey() {
 
   const tgl = document.getElementById('colorKeyTgl');
   if (tgl) tgl.addEventListener('change', rebuildColorKey);
+
+  // The stacking decision depends on the viewport, and the breakpoint that
+  // bottom-anchors the card above can be crossed by a resize alone.
+  window.addEventListener('resize', () => { if (!card._moved) positionColorKey(); });
 
   /* The drag handle, same behaviour as the key-distances card. */
   const hd = document.getElementById('colorKeyDrag');
