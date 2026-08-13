@@ -41,7 +41,19 @@ const MAP_LAYOUTS = {
   connectivity: {
     label: 'Connectivity',
     hint: 'Street ground, standard road colours',
-    basemap: 'osm',
+    // Positron, not the standard OSM tile set. Both are OpenStreetMap data;
+    // the difference is what the renderer paints. Standard OSM carto draws every
+    // pharmacy, clinic and doctor as a red cross, and in an Indian city that is
+    // one icon per block — a wall of clutter under the roads the map is actually
+    // about. Positron is the same data with the POI icons left off.
+    //
+    // This was a trap of my own making: pinning Connectivity to `osm` meant the
+    // layout somebody wants forced the one ground they cannot clean up.
+    basemap: 'positron',
+    // Streets and place names come back as overlays, which is the whole point
+    // of them being separate layers — the detail a connectivity map needs,
+    // without the detail it does not.
+    overlays: ['labels', 'roads'],
     standard: true,
     lockBasemap: true,
   },
@@ -164,6 +176,18 @@ function setMapLayout(id, opts) {
       if (sel) sel.value = ground;
       try { setBasemap(ground); } catch (e) { /* provider gone; keep the old ground */ }
     }
+  }
+
+  // A layout can ask for ground overlays. Applied only when the user has not
+  // made their own choice — once they have ticked something, that is theirs and
+  // switching layout must not silently retick it.
+  if (spec.overlays && typeof reapplyMapOverlays === 'function') {
+    let chosen = null;
+    try { chosen = getPref('mapOverlays'); } catch (e) { /* ignore */ }
+    if (chosen == null) {
+      try { setPref('mapOverlays', spec.overlays.slice()); } catch (e) { /* ignore */ }
+    }
+    setTimeout(() => { try { reapplyMapOverlays(); } catch (e) { } }, 60);
   }
 
   // Entering the standard restyles what is already there. Leaving it does NOT
