@@ -4139,3 +4139,113 @@ body.basemap-locked #bmToggle {
   opacity: .45;
   cursor: not-allowed;
 }
+
+/* ---------------------------------------------------------------------------
+   Identify popup — what OpenStreetMap knows about the thing you clicked
+   ------------------------------------------------------------------------ */
+
+/* Absolutely positioned like every other button on this rail. `.frost` styles
+   the surface and nothing else, so a new button here defaults to
+   `position: static` and lands at the top-left of .map-wrap, under the
+   sidebar's brand block — invisible and unclickable. components.css already
+   carries a comment about this happening to #centerBtn and to the undo
+   buttons; I made it a third time. 196px continues the rail below #centerBtn. */
+#identifyBtn {
+  position: absolute;
+  top: 196px;
+  right: 12px;
+  z-index: 1000;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  transition: color .15s, box-shadow .15s;
+}
+
+#identifyBtn.on {
+  color: var(--orange);
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+}
+
+/* The crosshair says a click means something different right now. Without it
+   the only signal that the mode is on is a highlighted button off to the side. */
+body.identify-on .leaflet-container {
+  cursor: crosshair;
+}
+
+.identify-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.identify-popup .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+}
+
+.identify-pop {
+  font-size: 11.5px;
+  color: #17202B;
+  min-width: 170px;
+}
+
+.identify-pop .idt {
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 8px 11px;
+  line-height: 1.3;
+}
+
+.identify-pop .idr {
+  display: flex;
+  gap: 10px;
+  padding: 4px 11px;
+  line-height: 1.45;
+}
+
+.identify-pop .idr span {
+  color: #6B7A90;
+  flex: none;
+  min-width: 62px;
+}
+
+.identify-pop .idr b {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.identify-pop .idf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px 9px;
+  border-top: 1px solid rgba(10, 30, 60, .12);
+  margin-top: 3px;
+}
+
+.identify-pop .id-add {
+  border: 1px solid var(--orange);
+  background: none;
+  color: var(--orange);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.identify-pop .id-add:hover { background: rgba(255, 122, 26, .1); }
+
+.identify-pop .idsrc {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: #93A1B5;
+}
