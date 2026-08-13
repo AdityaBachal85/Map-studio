@@ -111,6 +111,24 @@
       background: transparent !important;
     }
 
+    /* The cards' own controls, on every capture path.
+       `capturing` is set by hiResRender for PNG and PDF, where the cards ARE
+       photographed rather than redrawn — so the pencil, the drag grip and the
+       edit-mode row buttons went into the picture with them. A pencil icon in a
+       client's exported map is the app leaking its interface into the
+       deliverable. The pptx path hides the whole card instead, but listing both
+       classes here means a new export route cannot quietly reintroduce it. */
+    .map-wrap.capturing .legend-edit,
+    .map-wrap.capturing .grip,
+    .map-wrap.capturing .legend-x,
+    .map-wrap.capturing .ck-x,
+    .map-wrap.capturing #legendFoot,
+    .map-wrap.capturing #colorKeyFoot,
+    .map-wrap.pptx-capture .legend-edit,
+    .map-wrap.pptx-capture .grip {
+      display: none !important;
+    }
+
     /* Editing furniture. Via-point handles and Geoman's vertex markers are
        controls, not map content — they exist so you can drag a route about. They
        were never in this list, so every export carried the little circles and
