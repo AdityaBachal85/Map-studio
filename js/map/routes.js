@@ -308,16 +308,52 @@
         return (on && typeof CONNECTIVITY_DEFAULT_CLASS === 'string') ? CONNECTIVITY_DEFAULT_CLASS : null;
       }
 
+      /**
+       * The pair a new route should start on.
+       *
+       * "+ Add route" used to hand back `locations[0] -> locations[1]` every
+       * time, so clicking it three times built the same route three times and
+       * each one had to be repointed by hand. The natural reading of the button
+       * is "connect the next one", so that is what it now does: hold the origin
+       * (the site, or the first location) and walk down the list to the first
+       * place that origin does not already reach.
+       *
+       * Anchors are skipped — they are the invisible ends of traced roads, not
+       * destinations anybody means. When every destination is already routed it
+       * falls back to the first one rather than refusing: adding a deliberate
+       * second route to the same place is a real thing to want, and by then the
+       * duplicate is a choice rather than the default.
+       *
+       * @returns {{fromId:(number|null), toId:(number|null)}}
+       */
+      function nextRoutePair() {
+        const real = typeof realLocations === 'function' ? realLocations() : locations;
+        if (real.length < 2) return { fromId: null, toId: null };
+
+        // The site is the origin when there is one — a connectivity map is
+        // almost always "from the property to everything else".
+        const origin = real.find(l => l.type === 'site') || real[0];
+        const taken = new Set(routes
+          .filter(r => r.fromId === origin.id)
+          .map(r => r.toId));
+        const next = real.find(l => l.id !== origin.id && !taken.has(l.id))
+          || real.find(l => l.id !== origin.id);
+        return { fromId: origin.id, toId: next ? next.id : null };
+      }
+
       function addRoute(opts) {
         opts = opts || {};
         // Resolved before the literal, because routeInitialColor/Weight/Dash all
         // read `opts.cls` — setting it only on the record would leave the three
         // style fields still taking the palette branch.
         opts = Object.assign({}, opts, { cls: routeInitialClass(opts) });
+        // Only consulted when the caller named neither end. A project load and
+        // the road-draw tool both pass both ids, and must not be second-guessed.
+        const pair = (opts.fromId || opts.toId) ? null : nextRoutePair();
         const rt = {
           id: opts.id || newId(),
-          fromId: opts.fromId || (locations[0] && locations[0].id) || null,
-          toId: opts.toId || (locations[1] && locations[1].id) || null,
+          fromId: opts.fromId || (pair && pair.fromId) || (locations[0] && locations[0].id) || null,
+          toId: opts.toId || (pair && pair.toId) || (locations[1] && locations[1].id) || null,
           mode: opts.mode || 'car',
           // What kind of road this is. Only meaningful under the connectivity
           // standard, but carried always so switching layouts does not lose it.

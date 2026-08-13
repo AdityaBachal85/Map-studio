@@ -57,8 +57,17 @@
         status('Location added at map center — drag the pin or edit its coordinates.');
       });
       $('addRtBtn').addEventListener('click', () => {
-        if (locations.length < 2) { status('Add at least two locations first — a route connects two of them.'); return; }
-        addRoute();
+        // realLocations, not locations: two traced-road anchors are not two
+        // places you can route between, and counting them let the button fire
+        // with nothing real to connect.
+        const real = typeof realLocations === 'function' ? realLocations() : locations;
+        if (real.length < 2) { status('Add at least two locations first — a route connects two of them.'); return; }
+        const rt = addRoute();
+        // Say which one it picked. The button now chooses a different
+        // destination each time, and a silent choice is one the user has to go
+        // and read off the card to discover.
+        const to = rt && locations.find(l => l.id === rt.toId);
+        if (to && typeof status === 'function') status('Route added to ' + to.name + '.');
       });
       // ---------- overlays / appearance ----------
       $('titleTgl').addEventListener('change', e => { $('titleCard').style.display = e.target.checked ? '' : 'none'; });
