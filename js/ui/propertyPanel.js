@@ -642,23 +642,50 @@ function wireLocCard(card, loc) {
         $('rtEmpty').style.display = routes.length ? 'none' : '';
       }
       /** Wire the legend card's drag handle so it can be repositioned. */
+      /**
+       * The key-distances card's drag, from its whole header bar.
+       *
+       * Same treatment the colour key got, and for the same reason: the grip is
+       * a 12px target and the map's search button floats over that corner with a
+       * higher z-index, so parking the card there made it unmovable with nothing
+       * on screen to explain why. A 4px movement threshold means a click still
+       * places the caret in the editable title while any real drag moves the
+       * card.
+       */
       function initLegendDrag() {
-        const cardEl = $('legendCard'), hd = $('legendDrag'), wrap = $('mapWrap');
-        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+        const cardEl = $('legendCard');
+        const hd = cardEl && cardEl.querySelector('.hd');
+        const wrap = $('mapWrap');
+        if (!cardEl || !hd || !wrap) return;
+        hd.style.cursor = 'move';
+        let sx = 0, sy = 0, ox = 0, oy = 0, armed = false, dragging = false;
+
         hd.addEventListener('pointerdown', e => {
-          dragging = true;
+          if (e.target.closest('#legendEditBtn')) return;   // a button, not a bar
           const r = cardEl.getBoundingClientRect(), w = wrap.getBoundingClientRect();
           ox = r.left - w.left; oy = r.top - w.top; sx = e.clientX; sy = e.clientY;
-          cardEl.style.right = 'auto'; cardEl.style.bottom = 'auto';
-          hd.setPointerCapture(e.pointerId);
-          e.preventDefault();
+          armed = true; dragging = false;
         });
+
         hd.addEventListener('pointermove', e => {
-          if (!dragging) return;
+          if (!armed) return;
+          if (!dragging) {
+            if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 4) return;
+            dragging = true;
+            cardEl.style.right = 'auto';
+            cardEl.style.bottom = 'auto';
+            // Or the browser selects the title text as the pointer crosses it.
+            if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+            try { hd.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+          }
           cardEl.style.left = (ox + e.clientX - sx) + 'px';
           cardEl.style.top = (oy + e.clientY - sy) + 'px';
+          e.preventDefault();
         });
-        hd.addEventListener('pointerup', () => { dragging = false; });
+
+        const stop = () => { armed = false; dragging = false; };
+        hd.addEventListener('pointerup', stop);
+        hd.addEventListener('pointercancel', stop);
       }
 
       function setProjectLogo(dataUrl) {

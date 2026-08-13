@@ -4319,3 +4319,6 @@ body.identify-on .leaflet-container {
    They had drifted into two lookalikes — one pale blue on navy, one white on a
    light chip — which reads as two different features rather than the same one
    twice. */
+
+#legendCard .hd { cursor: move; }
+#legendCard:active { z-index: 1200; }
