@@ -323,24 +323,52 @@ function resetColorKey() {
   window.addEventListener('resize', () => { if (!card._moved) positionColorKey(); });
 
   /* The drag handle, same behaviour as the key-distances card. */
-  const hd = document.getElementById('colorKeyDrag');
+  // The whole header, not just the ⠿ glyph. The grip is a 12px target, and the
+  // map's search button floats at the top-left with a higher z-index — park the
+  // card anywhere near it and the button swallows the pointerdown, so the card
+  // becomes unmovable with no sign of why. Dragging from the bar sidesteps the
+  // problem entirely and is a bigger target besides.
+  const hd = document.querySelector('#colorKeyCard .hd');
   const wrap = document.getElementById('mapWrap');
+  // Raised while dragging so the card comes out from under the map controls it
+  // may have been parked beneath.
   if (hd && wrap) {
-    let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+    hd.style.cursor = 'move';
+    let sx = 0, sy = 0, ox = 0, oy = 0, armed = false, dragging = false;
+
+    // A movement threshold rather than a reserved handle. The title fills most
+    // of the header, so excluding it — as the first version did — left only a
+    // 12px grip to aim at, and the map's search button floats over that corner
+    // and swallows the pointerdown. Arming on press and only starting the drag
+    // after 4px means a click still places the caret in the title, while any
+    // actual drag from anywhere on the bar moves the card.
     hd.addEventListener('pointerdown', e => {
-      dragging = true;
-      card._moved = true;          // stop auto-placing it from here on
+      if (e.target.closest('#colorKeyEditBtn')) return;   // a button, not a bar
       const r = card.getBoundingClientRect(), w = wrap.getBoundingClientRect();
       ox = r.left - w.left; oy = r.top - w.top; sx = e.clientX; sy = e.clientY;
-      card.style.right = 'auto'; card.style.bottom = 'auto';
-      hd.setPointerCapture(e.pointerId);
-      e.preventDefault();
+      armed = true; dragging = false;
     });
+
     hd.addEventListener('pointermove', e => {
-      if (!dragging) return;
+      if (!armed) return;
+      if (!dragging) {
+        if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 4) return;
+        dragging = true;
+        card._moved = true;              // stop auto-placing it from here on
+        card.style.right = 'auto';
+        card.style.bottom = 'auto';
+        // Let go of the caret, or the browser selects the title text as the
+        // pointer travels across it.
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        try { hd.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+      }
       card.style.left = (ox + e.clientX - sx) + 'px';
       card.style.top = (oy + e.clientY - sy) + 'px';
+      e.preventDefault();
     });
-    hd.addEventListener('pointerup', () => { dragging = false; });
+
+    const stop = () => { armed = false; dragging = false; };
+    hd.addEventListener('pointerup', stop);
+    hd.addEventListener('pointercancel', stop);
   }
 })();

@@ -4300,3 +4300,11 @@ body.identify-on .leaflet-container {
 }
 
 #bmPlainGround:hover { background: rgba(255, 122, 26, .12); }
+
+
+/* The colour key while it is being dragged, and its header as a drag target.
+   The map's floating controls sit at z-index 1000; the card at 900 could be
+   parked underneath one and then refuse to move, because the control above it
+   was taking the pointer. */
+#colorKeyCard .hd { cursor: move; }
+#colorKeyCard:active { z-index: 1200; }
