@@ -318,24 +318,37 @@
  * @param {object} loc @param {string} glyph an `<svg>…</svg>` string
  * @returns {string}
  */
-function pinTeardropSvg(loc, glyph) {
-  // Body from the Fill control, white by default; the symbol keeps the
-  // location's own colour. The Fill and Border controls therefore mean the same
-  // thing on this frame as on the circle and the square, instead of this one
-  // frame quietly reversing them.
-  const body = loc.iconBg || '#FFFFFF';
+function pinTeardropSvg(loc) {
+  // Coloured body, white symbol. Built that way first, flipped to a white body
+  // in 6.0071 on a reference image, and flipped back here after seeing both on
+  // a real map: a coloured teardrop reads as a marker at a glance, where a
+  // white one competes with the white roads and buildings underneath it.
+  //
+  // Fill still wins when it has been set to something other than the default
+  // white, or the control would do nothing at all on this frame.
+  const body = (loc.iconBg && loc.iconBg !== '#FFFFFF') ? loc.iconBg : (loc.color || '#FF7A1A');
   const ring = (loc.iconBorderColor && loc.iconBorderColor !== loc.color)
-    ? loc.iconBorderColor : body;
-  const w = loc.iconBorder == null ? 0 : Math.max(0, loc.iconBorder * 0.8);
+    ? loc.iconBorderColor : '#FFFFFF';
+  const w = loc.iconBorder == null ? 1.6 : Math.max(0, loc.iconBorder * 0.8);
   // A circle of r=11 about (12,11), drawn down to a point at (12,31).
   const path = 'M12 .8a11 11 0 0 0-11 11c0 3.1 1.5 6.3 3.7 9.3 2.2 3 4.9 5.6 6.4 7.7'
     + '.5.7 1.3.7 1.8 0 1.5-2.1 4.2-4.7 6.4-7.7 2.2-3 3.7-6.2 3.7-9.3a11 11 0 0 0-11-11z';
-  return '<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">'
+  return '<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"'
+    + ' style="position:absolute;inset:0;width:100%;height:100%">'
     + '<path d="' + path + '" fill="' + esc(body) + '"'
     + (w ? ' stroke="' + esc(ring) + '" stroke-width="' + w + '"' : '') + '/>'
-    + '<svg x="5.4" y="5.2" width="13.2" height="13.2">' + glyph + '</svg>'
     + '</svg>';
 }
+
+/**
+ * Where the symbol sits inside the teardrop's head.
+ *
+ * The head is a circle of r=11 about (12, 11) in a 24x32 viewBox, so a 13.2
+ * square centred on it is 22.5% from the left, 13.75% down, 55% wide and 41.25%
+ * tall. Expressed in percentages so it holds at every icon size.
+ */
+const PIN_HEAD_BOX = 'position:absolute;left:22.5%;top:13.75%;width:55%;height:41.25%;'
+  + 'display:flex;align-items:center;justify-content:center;';
 
       /** Undo {@link flattenBillboardForCapture}. Safe to call when not flattened. */
       function restoreBillboardAfterCapture() {
@@ -399,6 +412,10 @@ function pinTeardropSvg(loc, glyph) {
           } else if (isPin) {
             // Everything visible is inside the SVG, so the box carries only the
             // shadow — a CSS border here would trace the rectangle, not the pin.
+            // The teardrop is written first and absolutely positioned, so any
+            // content appended after it lands on top rather than beside it.
+            box.style.position = 'relative';
+            box.innerHTML = pinTeardropSvg(loc);
             const depth = loc.iconShadow == null ? 6 : loc.iconShadow;
             box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
             box.style.filter = depth
@@ -413,15 +430,21 @@ function pinTeardropSvg(loc, glyph) {
           // Content: uploaded image, or SVG from library
           const contentPct = frameless ? '100%' : '78%';
           const svgPct = frameless ? '100%' : '66%';
+          // An uploaded logo used to be appended straight into the box, which
+          // for a pin meant the image alone with no teardrop behind it at all —
+          // the frame silently did nothing for anyone using their own icon.
+          const imgCss = isPin
+            ? PIN_HEAD_BOX + 'object-fit:contain;'
+            : `width:${contentPct};height:${contentPct};object-fit:contain;`;
           if (loc.iconImage) {
             const img = document.createElement('img');
             img.src = loc.iconImage;
-            img.style.cssText = `width:${contentPct};height:${contentPct};object-fit:contain;`;
+            img.style.cssText = imgCss;
             box.appendChild(img);
           } else if (loc.iconUseProjectLogo && brand.projectLogo) {
             const img = document.createElement('img');
             img.src = brand.projectLogo;
-            img.style.cssText = `width:${contentPct};height:${contentPct};object-fit:contain;`;
+            img.style.cssText = imgCss;
             box.appendChild(img);
           } else {
             // A frameless pin is the marker itself, so it carries the white
@@ -436,10 +459,17 @@ function pinTeardropSvg(loc, glyph) {
             const glyph = svgForKey(
               loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
               loc.color,
-              frameless ? '#FFFFFF' : null
+              (frameless || isPin) ? '#FFFFFF' : null
             );
             if (isPin) {
-              box.innerHTML = pinTeardropSvg(loc, glyph);
+              // Appended, never assigned: innerHTML would replace the teardrop
+              // that was just written into this box.
+              const holder = document.createElement('span');
+              holder.style.cssText = PIN_HEAD_BOX;
+              holder.innerHTML = glyph;
+              const g = holder.querySelector('svg');
+              if (g) g.style.cssText = 'width:100%;height:100%;';
+              box.appendChild(holder);
             } else {
               box.innerHTML = glyph;
               const svg = box.querySelector('svg');
