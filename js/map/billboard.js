@@ -319,10 +319,14 @@
  * @returns {string}
  */
 function pinTeardropSvg(loc, glyph) {
-  const body = (loc.iconBg && loc.iconBg !== '#FFFFFF') ? loc.iconBg : (loc.color || '#FF7A1A');
+  // Body from the Fill control, white by default; the symbol keeps the
+  // location's own colour. The Fill and Border controls therefore mean the same
+  // thing on this frame as on the circle and the square, instead of this one
+  // frame quietly reversing them.
+  const body = loc.iconBg || '#FFFFFF';
   const ring = (loc.iconBorderColor && loc.iconBorderColor !== loc.color)
-    ? loc.iconBorderColor : '#FFFFFF';
-  const w = loc.iconBorder == null ? 1.6 : Math.max(0, loc.iconBorder * 0.8);
+    ? loc.iconBorderColor : body;
+  const w = loc.iconBorder == null ? 0 : Math.max(0, loc.iconBorder * 0.8);
   // A circle of r=11 about (12,11), drawn down to a point at (12,31).
   const path = 'M12 .8a11 11 0 0 0-11 11c0 3.1 1.5 6.3 3.7 9.3 2.2 3 4.9 5.6 6.4 7.7'
     + '.5.7 1.3.7 1.8 0 1.5-2.1 4.2-4.7 6.4-7.7 2.2-3 3.7-6.2 3.7-9.3a11 11 0 0 0-11-11z';
@@ -372,10 +376,10 @@ function pinTeardropSvg(loc, glyph) {
           // The teardrop is taller than it is wide; every other frame is square.
           box.style.height = (loc.iconFrame === 'pin' ? Math.round(s * 1.32) : s) + 'px';
           const frameless = loc.iconFrame === 'none';
-          // The teardrop is a coloured body with a white symbol in it, not a
-          // white box with a coloured symbol — the shape IS the marker, so the
-          // location's colour belongs to the shape and the glyph has to read
-          // against it.
+          // The teardrop is a white body with the location's colour on the
+          // symbol — the same way round as every other frame here. I built it
+          // inverted first (coloured body, white glyph); it is the shape that
+          // changes, not the colour scheme.
           const isPin = loc.iconFrame === 'pin';
           if (frameless) {
             // Bare icon: no box at all, so the pin silhouette is the marker.
@@ -432,7 +436,7 @@ function pinTeardropSvg(loc, glyph) {
             const glyph = svgForKey(
               loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
               loc.color,
-              (frameless || isPin) ? '#FFFFFF' : null
+              frameless ? '#FFFFFF' : null
             );
             if (isPin) {
               box.innerHTML = pinTeardropSvg(loc, glyph);
