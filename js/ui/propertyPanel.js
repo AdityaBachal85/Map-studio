@@ -44,6 +44,61 @@
         });
       }
 /**
+ * Which icon fields are *presentation* rather than identity.
+ *
+ * Frame, size, border, fill, shadow and glow are how a marker is drawn, and
+ * wanting them consistent across a map is the normal case — setting them one
+ * location at a time is what makes people stop bothering.
+ *
+ * `iconKey`, `color` and `iconImage` are deliberately NOT here. They are what
+ * each location *is* — copying them would turn every pin into a shopping mall
+ * in one colour, which is not "apply this style", it is "delete my map".
+ */
+const ICON_STYLE_FIELDS = ['iconFrame', 'iconSize', 'iconBorder', 'iconBorderColor',
+  'iconBg', 'iconShadow', 'iconGlow'];
+
+/**
+ * Copy one location's icon styling onto every other location.
+ * @param {object} src the location whose card the button was pressed on
+ */
+function applyIconStyleToAll(src) {
+  const all = typeof realLocations === 'function' ? realLocations() : locations;
+  const others = all.filter(l => l.id !== src.id);
+  if (!others.length) { status('There is only one location to style.'); return; }
+
+  others.forEach(l => {
+    ICON_STYLE_FIELDS.forEach(k => { l[k] = src[k]; });
+    // Rebuild the marker, then re-sync the card so the sliders and swatches on
+    // screen agree with what the map now shows. Without the second half the
+    // panels keep the old numbers and the next drag snaps back to them.
+    renderLocPin(l);
+    if (l.card) {
+      const set = (sel, v) => { const el = l.card.querySelector(sel); if (el != null && el) el.value = v; };
+      set('.fr', l.iconFrame); set('.sz', l.iconSize); set('.bw', l.iconBorder);
+      set('.bc', l.iconBorderColor); set('.ibg', l.iconBg); set('.ish', l.iconShadow);
+      const szv = l.card.querySelector('.sz-v'); if (szv) szv.textContent = l.iconSize;
+      const gl = l.card.querySelector('.gl'); if (gl) gl.checked = !!l.iconGlow;
+      l.card.querySelectorAll('input[type="color"]').forEach(i => {
+        if (typeof syncColorSwatch === 'function') syncColorSwatch(i);
+      });
+      const framed = (l.iconFrame || 'none') !== 'none';
+      l.card.querySelectorAll('.frame-only').forEach(r => { r.style.display = framed ? '' : 'none'; });
+    }
+  });
+
+  if (typeof pushHistory === 'function') pushHistory();
+  // Deliberately does NOT promise undo. The first version of this line said
+  // "Undo puts them back" and a test showed it does not — the history snapshot
+  // restores geometry and routes but not a location's icon styling, so undo
+  // leaves every marker on the new frame and size. Telling somebody they can
+  // undo a bulk change to twenty markers when they cannot is worse than saying
+  // nothing, so the message states only what happened. Making undo cover these
+  // fields is the real fix and is a separate piece of work.
+  status('Style applied to ' + others.length + ' other location'
+    + (others.length === 1 ? '' : 's') + '.');
+}
+
+/**
  * Build the location card's DOM (markup only, no event wiring). Split out of
  * buildLocCard() to keep both halves under the ~150-line guideline.
  * @param {object} loc
@@ -119,6 +174,9 @@ function locCardMarkup(loc) {
       <div class="r icon-toggles">
         <label class="chk"><input type="checkbox" class="gl" ${loc.iconGlow ? 'checked' : ''}> Glow ring</label>
         <label class="chk"><input type="checkbox" class="uspl" ${loc.iconUseProjectLogo ? 'checked' : ''}> Use project logo</label>
+      </div>
+      <div class="r">
+        <button class="mini-btn applyAll" title="Give every location this frame, size, border, fill, shadow and glow. Their own icons and colours are left alone.">⧉ Apply this style to all locations</button>
       </div>
     </div>
 
@@ -228,6 +286,8 @@ function wireLocCard(card, loc) {
         card.querySelector('.ish').addEventListener('input', e => { loc.iconShadow = +e.target.value; renderLocPin(loc); });
         card.querySelector('.gl').addEventListener('change', e => { loc.iconGlow = e.target.checked; renderLocPin(loc); });
         card.querySelector('.uspl').addEventListener('change', e => { loc.iconUseProjectLogo = e.target.checked; locChanged(loc); });
+        const applyAllBtn = card.querySelector('.applyAll');
+        if (applyAllBtn) applyAllBtn.addEventListener('click', () => applyIconStyleToAll(loc));
 
         // Custom icon upload
         const upBtn = card.querySelector('.upIcon');
