@@ -456,11 +456,20 @@ const PIN_HEAD_BOX = 'position:absolute;left:22.5%;top:13.75%;width:55%;height:4
             // the same colour as the fill and therefore invisible. It also
             // styles the *frame's* border, and the frame's controls are hidden
             // in frameless mode — so it is the wrong field twice over.
-            const glyph = svgForKey(
-              loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
-              loc.color,
-              (frameless || isPin) ? '#FFFFFF' : null
-            );
+            // svgForKey's third argument is the *outline* colour, not the
+            // fill. Passing white there filled the glyph with the location's
+            // own colour and merely edged it in white — which on a coloured pin
+            // body means the fill vanishes into the body and only the outline
+            // survives, so the symbol reads as a thin wireframe.
+            //
+            // On a pin the body already carries the colour, so the symbol is a
+            // solid white fill with no stroke. Frameless keeps the old pairing:
+            // there the glyph IS the marker, so it needs the colour and needs
+            // the keyline to hold its edge against the map.
+            const iconKey = loc.iconKey || (loc.type === 'site' ? 'star' : 'pin');
+            const glyph = isPin
+              ? svgForKey(iconKey, '#FFFFFF')
+              : svgForKey(iconKey, loc.color, frameless ? '#FFFFFF' : null);
             if (isPin) {
               // Appended, never assigned: innerHTML would replace the teardrop
               // that was just written into this box.
