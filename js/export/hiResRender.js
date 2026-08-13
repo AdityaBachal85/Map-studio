@@ -292,6 +292,12 @@ async function renderGroundPass(o) {
     // export is the same picture on different imagery. See exportBasemapId().
     const exportKey = typeof exportBasemapId === 'function' ? exportBasemapId(activeKey) : activeKey;
     const entry = BASEMAPS[exportKey] || BASEMAPS[activeKey] || BASEMAPS[preferredBasemapId()];
+    // The ground is rendered `log2(scale)` levels deeper than the screen for
+    // pixel density alone. Tell the scrub, so its "only while zoomed out"
+    // threshold is measured against the scale the reader sees rather than the
+    // zoom this offscreen map happens to use — otherwise every export keeps the
+    // red crosses the screen had just dropped.
+    if (typeof setScrubZoomBias === 'function') setScrubZoomBias(Math.log2(scale));
     const tileLayers = entry.build($('hdTgl').checked);
     tileLayers.forEach(l => { l.options.maxZoom = 30; l.addTo(exportMap); });
     if ($('hillTgl').checked) {
@@ -384,6 +390,10 @@ async function renderGroundPass(o) {
 
     return { canvas: tiles, reference, vectors, complete };
   } finally {
+    // Cleared here, not only after the furniture pass: if the ground pass
+    // throws, a leaked bias would follow the *live* map and start scrubbing
+    // two zoom levels further in than intended, with nothing to explain it.
+    if (typeof setScrubZoomBias === 'function') setScrubZoomBias(0);
     if (exportMap) exportMap.remove();
     host.remove();
   }
@@ -551,6 +561,7 @@ async function renderFurniturePass(o) {
     if (creditEl && savedCredit !== null) creditEl.textContent = savedCredit;
     if (typeof restoreBillboardAfterCapture === 'function') restoreBillboardAfterCapture();
     if (typeof setLeaderRenderScale === 'function') setLeaderRenderScale(0);
+    if (typeof setScrubZoomBias === 'function') setScrubZoomBias(0);
     wrap.classList.remove('capturing', 'hires-overlay-pass');
     if (o.extraClass) wrap.classList.remove(o.extraClass);
     stage.style.transform = savedTransform;

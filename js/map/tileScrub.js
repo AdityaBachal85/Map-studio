@@ -62,6 +62,24 @@
 const PLACE_ICON_MIN_TILE_Z = 16;
 
 /**
+ * Zoom levels to subtract before applying that threshold.
+ *
+ * The export renders the ground at a deeper zoom than the screen purely for
+ * pixel density — a 4x export asks for tiles two levels down and paints them
+ * small. The *displayed* scale is unchanged, so a map showing a 500 m bar on
+ * screen exported its tiles at z17, sailed over the z16 threshold and kept
+ * every red cross. The picture the client opened had the clutter the app had
+ * just removed from the screen.
+ *
+ * hiResRender sets this to the export's zoom boost while it builds its ground,
+ * so the decision is made against the zoom the reader will perceive.
+ */
+let scrubZoomBias = 0;
+
+/** @param {number} n */
+function setScrubZoomBias(n) { scrubZoomBias = Number(n) || 0; }
+
+/**
  * Is this pixel OSM Carto healthcare red (or its anti-aliased fringe)?
  * @param {number} r @param {number} g @param {number} b
  * @param {boolean} loose widened test for edge pixels next to a core match
@@ -181,7 +199,7 @@ const ScrubbedTileLayer = L.TileLayer.extend({
     // keeps tiles from other levels around during a zoom animation and reuses
     // cached ones, so a decision made from map.getZoom() would scrub or spare
     // the wrong level whenever those disagree.
-    const keepIcons = coords.z >= PLACE_ICON_MIN_TILE_Z;
+    const keepIcons = (coords.z - scrubZoomBias) >= PLACE_ICON_MIN_TILE_Z;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
