@@ -42,7 +42,10 @@ const CONNECTIVITY_CLASSES = [
   { id: 'site', label: 'Site / subject property', color: '#002166', weight: 5, dash: false, kind: 'mark' },
   { id: 'expressway', label: 'Expressway / National Highway', color: '#0073C6', weight: 6, dash: false, kind: 'line' },
   { id: 'ring', label: 'Outer Ring Road / arterial', color: '#4E9E1F', weight: 5, dash: false, kind: 'line' },
-  { id: 'major', label: 'Major road', color: '#FF7A1A', weight: 4, dash: false, kind: 'line' },
+  // Deep navy, set by the operator. Note it sits close to `site` #002166 —
+  // distinguishable on the map, where one is a 4px line and the other a pin,
+  // but nearly identical as two swatches side by side in the legend.
+  { id: 'major', label: 'Major road', color: '#011A49', weight: 4, dash: false, kind: 'line' },
   { id: 'airportRoad', label: 'Airport road', color: '#B5179E', weight: 4, dash: false, kind: 'line' },
   { id: 'metro', label: 'Metro', color: '#C9971F', weight: 4, dash: false, kind: 'line' },
   { id: 'railway', label: 'Railway', color: '#3D4451', weight: 3, dash: true, kind: 'line' },

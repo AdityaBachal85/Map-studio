@@ -268,7 +268,7 @@ function rsRemove(root, path) {
       if (k === 'lines') {
         const c = (typeof connClass === 'function' && typeof CONNECTIVITY_DEFAULT_CLASS === 'string')
           ? connClass(CONNECTIVITY_DEFAULT_CLASS) : null;
-        d.lines.push({ color: c ? c.color : '#FF7A1A', label: 'New line' });
+        d.lines.push({ color: c ? c.color : '#011A49', label: 'New line' });
       }
       if (k === 'marks') d.marks.push({ iconKey: 'pin', color: '#0E7490', label: 'New mark' });
       if (k === 'highlights') d.highlights.push('New highlight');
