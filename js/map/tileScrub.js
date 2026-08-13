@@ -15,14 +15,22 @@
  * already depends on that — so the canvas stays readable and exportable.
  *
  * WHY THE COLOUR TEST IS SO NARROW. OSM Carto draws healthcare (hospitals,
- * clinics, pharmacies, doctors, dentists) in one dedicated red, #BF0000, used
- * for both the icon and its name text. True red has green ≈ blue, both far
- * below red. That inequality is what separates it from everything else warm on
- * the map: the amenity brown #734A08 and food orange #C77400 have g and b far
- * apart, road yellows have g near r, shop purples have b high. So the mask is
- * hue-shaped, not "reddish": r dominant AND g≈b. The known cost: the rare
- * level-crossing marker and other pure-red glyphs go too. They are accepted
- * losses on a property map.
+ * clinics, pharmacies, doctors, dentists) in one dedicated red, #BF0000 —
+ * (191, 0, 0) — used for both the icon and its name text. Green and blue are
+ * not merely lower than red there, they are near *zero*, and that absolute
+ * floor is the whole test.
+ *
+ * Relative dominance alone is not enough, and shipping it that way ate a road:
+ * OSM Carto draws under-construction and proposed highways as pink dashes,
+ * around (230, 145, 160). Red dominates there too — r-g is 85, r-b is 70, and
+ * g≈b — so a "red is much higher than green and blue" rule matches the pink
+ * dash of the Thane–Borivali Twin Tunnel exactly as readily as a hospital
+ * cross, and quietly deleted an upcoming road from a property map. The ceilings
+ * below are what separate them: healthcare has g,b under ~90; construction pink
+ * has both over 130. Nothing else on the map lives in the gap.
+ *
+ * The known cost: the rare level-crossing marker and other near-black-red
+ * glyphs go too. They are accepted losses on a property map; a road is not.
  *
  * WHY INPAINTING, NOT TRANSPARENCY. Punching the pixels to transparent leaves
  * white confetti holes over buildings. Filling each hole by repeatedly
@@ -37,9 +45,19 @@
  * @param {boolean} loose widened test for edge pixels next to a core match
  * @returns {boolean}
  */
-function isMedicalRed(r, g, b, loose) {
-  if (loose) return r - g >= 18 && r - b >= 18 && Math.abs(g - b) <= 60;
-  return r >= 100 && r - g >= 45 && r - b >= 45 && Math.abs(g - b) <= 50;
+function isMedicalRed(r, g, b, tier) {
+  // Tier 2 is the faintest ring: 9px red text anti-aliases almost all the way
+  // to the beige ground, and pixels at (240, 220, 218) are barely red at all.
+  // Left behind they read as a grey smudge in the shape of the words — quieter
+  // than red, and still obviously a scar. Every tier keeps the ceilings, and
+  // every tier can only be reached by growing outward from a tier-0 pixel, so
+  // the pink of a construction dash is never a starting point.
+  if (tier === 2) return r >= 150 && g <= 245 && b <= 245 && r - g >= 12 && r - b >= 12
+    && Math.abs(g - b) <= 30;
+  if (tier === 1) return r >= 110 && g <= 150 && b <= 150 && r - g >= 30 && r - b >= 30
+    && Math.abs(g - b) <= 55;
+  return r >= 120 && g <= 90 && b <= 90 && r - g >= 70 && r - b >= 70
+    && Math.abs(g - b) <= 45;
 }
 
 /**
@@ -63,21 +81,28 @@ function scrubMedicalRed(ctx, w, h) {
   }
   if (!queue.length) return false;
 
-  // One ring of anti-aliased fringe: pixels beside a core match that lean red.
-  // Without this every icon leaves a pink halo the exact shape of itself.
-  const fringe = [];
-  for (const i of queue) {
-    const x = i % w, y = (i / w) | 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const nx = x + dx, ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
-      if (mask[j]) continue;
-      const q = j * 4;
-      if (isMedicalRed(px[q], px[q + 1], px[q + 2], true)) { mask[j] = 1; fringe.push(j); }
+  // Two rings of anti-aliased fringe, each looser than the last. Without them
+  // an icon leaves a halo the exact shape of itself, and text leaves legible
+  // grey words. Growth is strictly outward from the previous ring, so the reach
+  // is bounded at two pixels from a confirmed healthcare pixel — which is what
+  // keeps a nearby construction dash out of it even where they touch.
+  let ring = queue;
+  for (let tier = 1; tier <= 2; tier++) {
+    const next = [];
+    for (const i of ring) {
+      const x = i % w, y = (i / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (mask[j]) continue;
+        const q = j * 4;
+        if (isMedicalRed(px[q], px[q + 1], px[q + 2], tier)) { mask[j] = 1; next.push(j); }
+      }
     }
+    queue = queue.concat(next);
+    ring = next;
   }
-  queue = queue.concat(fringe);
 
   // Inpaint: sweep the still-masked set, filling any pixel that has at least
   // one clean neighbour with the average of its clean neighbours. Each sweep
