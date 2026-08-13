@@ -339,6 +339,11 @@
           box.style.width = s + 'px';
           box.style.height = s + 'px';
           const frameless = loc.iconFrame === 'none';
+          // The teardrop is a coloured body with a white symbol in it, not a
+          // white box with a coloured symbol — the shape IS the marker, so the
+          // location's colour belongs to the shape and the glyph has to read
+          // against it.
+          const isPin = loc.iconFrame === 'pin';
           if (frameless) {
             // Bare icon: no box at all, so the pin silhouette is the marker.
             box.style.background = 'transparent';
@@ -355,7 +360,9 @@
             box.style.filter =
               `drop-shadow(0 ${1 + depth * 0.35}px ${1.5 + depth * 0.4}px rgba(0,0,0,${.25 + depth * 0.025}))`;
           } else {
-            box.style.background = loc.iconBg || '#FFFFFF';
+            box.style.background = isPin
+              ? (loc.iconBg && loc.iconBg !== '#FFFFFF' ? loc.iconBg : (loc.color || '#FF7A1A'))
+              : (loc.iconBg || '#FFFFFF');
             box.style.border = (loc.iconBorder || 2) + 'px solid ' + (loc.iconBorderColor || '#FFFFFF');
             box.style.setProperty('--glowCol', (loc.color || '#FF7A1A') + '99');
             box.style.boxShadow = `0 ${4 + (loc.iconShadow || 6)}px ${(loc.iconShadow || 6) * 3}px rgba(0,0,0,${.15 + (loc.iconShadow || 6) * 0.03}), 0 1px 2px rgba(0,0,0,.14)`;
@@ -386,7 +393,7 @@
             box.innerHTML = svgForKey(
               loc.iconKey || (loc.type === 'site' ? 'star' : 'pin'),
               loc.color,
-              frameless ? '#FFFFFF' : null
+              (frameless || isPin) ? '#FFFFFF' : null
             );
             const svg = box.querySelector('svg');
             if (svg) svg.style.cssText = `width:${svgPct};height:${svgPct};`;

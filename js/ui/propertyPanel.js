@@ -92,6 +92,7 @@ function locCardMarkup(loc) {
       </div>
       <div class="r"><span class="sub" style="width:52px;">Frame</span>
         <select class="fr grow">
+          <option value="pin" ${loc.iconFrame === 'pin' ? 'selected' : ''}>Map pin — symbol inside</option>
           <option value="circle" ${loc.iconFrame === 'circle' ? 'selected' : ''}>Circle</option>
           <option value="rounded" ${loc.iconFrame === 'rounded' ? 'selected' : ''}>Rounded square</option>
           <option value="square" ${loc.iconFrame === 'square' ? 'selected' : ''}>Square</option>
