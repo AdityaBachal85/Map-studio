@@ -76,13 +76,11 @@ const MAP_OVERLAYS = [
 const PLAIN_GROUNDS = ['positron', 'lightgray', 'darkgray'];
 
 /**
- * The clean twin of a ground that paints POI icons into its tiles.
- *
- * Standard OSM carto draws every pharmacy, clinic and doctor as a red cross,
- * and in an Indian city that is one icon per block. They cannot be filtered —
- * they are pixels in the tile — so "hide the place icons" has to mean "fetch
- * the same data from a renderer that does not draw them". Each pair here is the
- * same OpenStreetMap data, differing only in what the style chooses to paint.
+ * The plain twin of each detailed ground — used only by the overlay panel's
+ * "use a plain ground" offer. It briefly also powered a forced swap that
+ * answered "hide the icons" by changing the whole cartography; that was wrong
+ * (the user wants THIS map without the red, not another map) and the swap now
+ * lives in map/tileScrub.js as a pixel clean of the genuine OSM tiles.
  */
 const CLEAN_GROUND_TWIN = {
   osm: 'positron',
@@ -110,29 +108,22 @@ function placeIconsOn() {
  * @returns {boolean} whether the ground was changed
  */
 function enforcePlaceIcons() {
-  if (typeof activeKey === 'undefined' || typeof setBasemap !== 'function') return false;
-  if (placeIconsOn()) return false;
-  const twin = CLEAN_GROUND_TWIN[activeKey];
-  if (!twin || typeof BASEMAPS === 'undefined' || !BASEMAPS[twin]) return false;
-  const sel = document.getElementById('basemapSel');
-  if (sel) sel.value = twin;
-  try { setBasemap(twin); } catch (e) { return false; }
-  return true;
+  // Retained for its call sites; the swap it used to do is gone. The scrub is
+  // decided where the tile layers are built, so any path that rebuilds the
+  // basemap — startup, swap, layout, project load — applies it by construction.
+  return false;
 }
 
 /** Turn place icons on or off. @param {boolean} on */
 function setPlaceIcons(on) {
   try { setPref('placeIcons', !!on); } catch (e) { /* ignore */ }
-  if (on) {
-    // Going back to the icon-bearing twin of the clean ground you are on.
-    const back = Object.keys(CLEAN_GROUND_TWIN).find(k => CLEAN_GROUND_TWIN[k] === activeKey);
-    if (back && typeof BASEMAPS !== 'undefined' && BASEMAPS[back]) {
-      const sel = document.getElementById('basemapSel');
-      if (sel) sel.value = back;
-      try { setBasemap(back); } catch (e) { /* keep the clean one */ }
-    }
-  } else {
-    enforcePlaceIcons();
+  // Not a ground swap. 6.0075 answered "hide the icons" by moving to a
+  // different cartography, and the user's objection was exact: they want THIS
+  // map without the red, not another map. The scrub happens at tile-layer
+  // construction, so flipping the pref just needs the same ground rebuilt.
+  if (typeof setBasemap === 'function' && typeof activeKey !== 'undefined') {
+    try { setBasemap(activeKey); } catch (e) { /* keep what is up */ }
+    if (typeof reapplyMapOverlays === 'function') reapplyMapOverlays();
   }
   renderOverlayPanel();
   if (typeof markDirty === 'function') markDirty();
@@ -164,6 +155,11 @@ function setMapOverlay(id, on) {
   const spec = mapOverlay(id);
   if (!spec || typeof map === 'undefined') return;
 
+  // A needsPlain overlay over a ground that already bakes that detail in
+  // paints every name twice, slightly offset. Kept ticked but not added; it
+  // resumes the moment the ground is plain. This also un-breaks installs that
+  // 6.0074 seeded with labels+roads before Connectivity moved back to osm.
+  if (on && spec.needsPlain && !groundIsPlain()) { renderOverlayPanel(); return; }
   if (on && !_overlayLayers[id]) {
     _overlayLayers[id] = L.tileLayer(spec.url, {
       subdomains: spec.subdomains || 'abc',
@@ -193,6 +189,7 @@ function reapplyMapOverlays() {
   const want = activeOverlays();
   MAP_OVERLAYS.forEach(o => {
     const on = want.indexOf(o.id) >= 0;
+    if (on && o.needsPlain && !groundIsPlain()) return;
     if (on && !_overlayLayers[o.id]) {
       _overlayLayers[o.id] = L.tileLayer(o.url, {
         subdomains: o.subdomains || 'abc',
@@ -238,8 +235,9 @@ function renderOverlayPanel() {
   const clash = !plain && on.some(id => (mapOverlay(id) || {}).needsPlain);
 
   box.innerHTML = '<div class="bm-ov-hd">Show on the ground</div>'
-    + '<label class="chk bm-ov" title="Pharmacies, clinics, shops and other POI symbols drawn'
-      + ' into the basemap. Off by default — in a dense city there is one every block.">'
+    + '<label class="chk bm-ov" title="The red hospital, clinic and pharmacy symbols the'
+      + ' OpenStreetMap style paints into its tiles. Off cleans them out of the tile pixels —'
+      + ' same map, same roads and buildings, without the red.">'
       + '<input type="checkbox" data-place-icons' + (placeIconsOn() ? ' checked' : '') + '> '
       + 'Place icons (shops, clinics)</label>'
     + MAP_OVERLAYS.map(o =>
@@ -269,7 +267,19 @@ function renderOverlayPanel() {
   // top level runs, and an overlay added before the ground exists is an overlay
   // Leaflet stacks underneath it.
   setTimeout(() => {
-    try { enforcePlaceIcons(); } catch (e) { /* no map yet */ }
+    // Boot-order belt and braces. The scrub is decided when the tile layers are
+    // built, and the engine builds its first ones during parse — so if the
+    // pref and the DOM disagree (a scrub-ground showing the wrong tile kind),
+    // one rebuild squares them. Tile *elements* exist synchronously on layer
+    // add, so the check does not race the network.
+    try {
+      const entry = typeof BASEMAPS !== 'undefined' && BASEMAPS[activeKey];
+      const scrubbable = entry && entry.spec.layers.some(l => l.scrub);
+      if (scrubbable) {
+        const showingScrubbed = !!document.querySelector('.leaflet-tile-pane canvas.leaflet-tile');
+        if (showingScrubbed === placeIconsOn()) setBasemap(activeKey);
+      }
+    } catch (e) { /* no map yet */ }
     try { reapplyMapOverlays(); } catch (e) { /* no map yet */ }
   }, 700);
 })();

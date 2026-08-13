@@ -41,19 +41,13 @@ const MAP_LAYOUTS = {
   connectivity: {
     label: 'Connectivity',
     hint: 'Street ground, standard road colours',
-    // Positron, not the standard OSM tile set. Both are OpenStreetMap data;
-    // the difference is what the renderer paints. Standard OSM carto draws every
-    // pharmacy, clinic and doctor as a red cross, and in an Indian city that is
-    // one icon per block — a wall of clutter under the roads the map is actually
-    // about. Positron is the same data with the POI icons left off.
-    //
-    // This was a trap of my own making: pinning Connectivity to `osm` meant the
-    // layout somebody wants forced the one ground they cannot clean up.
-    basemap: 'positron',
-    // Streets and place names come back as overlays, which is the whole point
-    // of them being separate layers — the detail a connectivity map needs,
-    // without the detail it does not.
-    overlays: ['labels', 'roads'],
+    // The real OSM map, scrubbed. Positron was tried here (6.0074) and
+    // rejected by the user for the right reason: it removes the crosses by
+    // replacing the whole cartography, and the beige buildings, yellow roads
+    // and green parks ARE the map they asked for. tileScrub.js cleans the
+    // medical red out of the genuine OSM tiles instead, so this pin now means
+    // exactly what its caption says: OpenStreetMap ground, standard colours.
+    basemap: 'osm',
     standard: true,
     lockBasemap: true,
   },

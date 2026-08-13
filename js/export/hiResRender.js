@@ -455,10 +455,13 @@ function rasteriseTileLayers(host, W, H, pick, background) {
 
   layers.forEach(layer => {
     ctx.globalAlpha = elOpacity(layer);
-    layer.querySelectorAll('img.leaflet-tile').forEach(img => {
+    // Both kinds: a scrubbed basemap's tiles are <canvas> elements, and an
+    // img-only selector here exported a blank ground the first time one was on.
+    layer.querySelectorAll('img.leaflet-tile, canvas.leaflet-tile').forEach(img => {
       // A tile that errored or has not decoded draws as nothing — and would
       // throw on some browsers rather than being skipped politely.
-      if (!img.complete || !img.naturalWidth) { missing++; return; }
+      const ready = img.tagName === 'CANVAS' ? img.width > 0 : (img.complete && img.naturalWidth);
+      if (!ready) { missing++; return; }
       const r = img.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) { missing++; return; }
       try {

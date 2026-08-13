@@ -162,7 +162,16 @@
         if (lyr.role) opts.className = 'basemap-' + lyr.role;
         if (lyr.retinaSuffix) opts.r = (retina && L.Browser.retina) ? lyr.retinaSuffix : '';
         else if (detectRetina) opts.detectRetina = true;
-        const layer = L.tileLayer(basemapUrl(lyr.url, spec), opts);
+        // A layer flagged `scrub` is cleaned pixel-by-pixel unless place icons
+        // are on. Decided here, in the one place every tile layer is built, so
+        // the on-screen map and the export ground (renderGroundPass builds its
+        // layers through this same entry.build) can never disagree about it.
+        const wantScrub = lyr.scrub
+          && !(typeof placeIconsOn === 'function' && placeIconsOn())
+          && typeof ScrubbedTileLayer !== 'undefined';
+        const layer = wantScrub
+          ? new ScrubbedTileLayer(basemapUrl(lyr.url, spec), opts)
+          : L.tileLayer(basemapUrl(lyr.url, spec), opts);
         // Back-reference so a failure handler can find which LayerSpec it came
         // from, and therefore which alternative templates it may try.
         layer._lyrSpec = lyr;

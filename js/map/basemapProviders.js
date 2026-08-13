@@ -222,7 +222,12 @@ const BASEMAP_CATALOGUE = {
     id: 'osm', label: 'Streets — OpenStreetMap', group: 'Streets',
     provider: 'osm', credit: '© OpenStreetMap contributors', corsSafe: true,
     thumb: 'linear-gradient(150deg,#f2efe9,#e3ded2 60%,#cfd8c2)',
-    layers: [{ url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', zIndex: 1, maxNative: 19 }],
+    // `scrub`: OSM Carto paints hospitals, clinics and pharmacies as red
+    // crosses with red names, one per block in a dense city. They are pixels
+    // in the tile, so the only way to have this exact cartography without them
+    // is to clean the pixels — map/tileScrub.js. Applied when place icons are
+    // off, which is the default.
+    layers: [{ url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', zIndex: 1, maxNative: 19, scrub: true }],
   },
 
   voyager: {
