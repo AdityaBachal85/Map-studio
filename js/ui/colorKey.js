@@ -298,10 +298,18 @@ function resetColorKey() {
       const cur = isExtra ? colorKeyExtras[+key.slice(1)].color
         : (colorKeyRows().find(r => r.key === key) || {}).color;
       if (typeof openColorPresets === 'function') {
-        openColorPresets(e.target.closest('.ck-sw'), cur, hex => {
+        const swBtn = e.target.closest('.ck-sw');
+        openColorPresets(swBtn, cur, hex => {
           if (isExtra) colorKeyExtras[+key.slice(1)].color = hex;
           else colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key], { color: hex });
-          rebuildColorKey();
+          // Repaint this one mark, do NOT rebuild the card. The picker commits
+          // live as you drag, and rebuilding replaces body.innerHTML — which
+          // destroys the very button the popover is anchored to. The popover
+          // then loses its anchor mid-drag and the colour appears to snap back
+          // to what it was, which is exactly what "cannot change the colour of
+          // an added row" looks like from the outside.
+          const mk = swBtn.querySelector('.ck-mark');
+          if (mk) mk.style.background = hex;
           if (typeof markDirty === 'function') markDirty();
         });
       }

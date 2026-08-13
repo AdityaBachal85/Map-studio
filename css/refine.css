@@ -3688,7 +3688,8 @@ input[type=checkbox]:disabled {
 
 /* ---- edit mode ---- */
 
-#legendCard .legend-edit {
+#legendCard .legend-edit,
+#colorKeyCard .legend-edit {
   border: 0;
   background: none;
   color: #8FA5C6;
@@ -3699,9 +3700,12 @@ input[type=checkbox]:disabled {
   transition: color .15s, background .15s;
 }
 
-#legendCard .legend-edit:hover { color: #fff; }
-#legendCard .legend-edit.on { color: var(--orange2); background: rgba(255, 255, 255, .12); }
-#legendCard .legend-edit:focus-visible { outline: 2px solid var(--orange2); outline-offset: 1px; }
+#legendCard .legend-edit:hover,
+#colorKeyCard .legend-edit:hover { color: #fff; }
+#legendCard .legend-edit.on,
+#colorKeyCard .legend-edit.on { color: var(--orange2); background: rgba(255, 255, 255, .12); }
+#legendCard .legend-edit:focus-visible,
+#colorKeyCard .legend-edit:focus-visible { outline: 2px solid var(--orange2); outline-offset: 1px; }
 
 /* Editable cells are shown to be editable. Without the hint people read the
    card as output and never try — the feature exists and stays undiscovered. */
@@ -3776,7 +3780,8 @@ input[type=checkbox]:disabled {
    header is underneath the Layers button — #legendCard is z-index 900 and the
    map-control stack is 1000 — so a button there was visible and unclickable.
    Found by a test that timed out with "layerBtn intercepts pointer events". */
-#legendCard .hd .legend-edit { order: -1; margin-right: -2px; }
+#legendCard .hd .legend-edit,
+#colorKeyCard .hd .legend-edit { order: -1; margin-right: -2px; }
 
 /* Room for the per-row buttons edit mode adds. Without it the last column is
    clipped by the card's max-width and the × sits half off the edge. */
@@ -4308,3 +4313,9 @@ body.identify-on .leaflet-container {
    was taking the pointer. */
 #colorKeyCard .hd { cursor: move; }
 #colorKeyCard:active { z-index: 1200; }
+
+
+/* Both cards' pencils are the same control and now share one rule set above.
+   They had drifted into two lookalikes — one pale blue on navy, one white on a
+   light chip — which reads as two different features rather than the same one
+   twice. */

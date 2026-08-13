@@ -417,6 +417,24 @@ function legendResetAll() {
   // 'input' so the swatch previews live while the OS colour picker is open;
   // one committed colour per pick is what the history watcher records, since it
   // only commits once the value stops changing.
+  // The app's own picker, not the browser's. This row used a bare
+  // `input[type=color]` because enhanceColorInputs' swatch is built for sidebar
+  // cards and would tower over a 22px table row — true, but the consequence was
+  // two different colour pickers in one app: the OS dialog here and the presets
+  // popover everywhere else. Opening the popover directly keeps the small
+  // swatch and drops the inconsistency.
+  body.addEventListener('mousedown', e => {
+    const inp = e.target.closest && e.target.closest('.legend-color');
+    if (!inp || !legendEditing || typeof openColorPresets !== 'function') return;
+    e.preventDefault();                       // stop the native dialog opening
+    const st = legendRowStore(inp);
+    if (!st) return;
+    openColorPresets(inp, st.color, hex => {
+      st.color = hex;
+      rebuildLegend();
+    });
+  });
+
   body.addEventListener('input', e => {
     const inp = e.target.closest && e.target.closest('.legend-color');
     if (!inp || !legendEditing) return;
