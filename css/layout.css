@@ -111,6 +111,16 @@
       background: transparent !important;
     }
 
+    /* Editing furniture. Via-point handles and Geoman's vertex markers are
+       controls, not map content — they exist so you can drag a route about. They
+       were never in this list, so every export carried the little circles and
+       the drag dots straight into the client's deck, which is what a reader sees
+       as stray marks on the roads. */
+    .map-wrap.pptx-capture .via-dot,
+    .map-wrap.pptx-capture .leaflet-pm-draggable,
+    .map-wrap.pptx-capture .marker-icon,
+    .map-wrap.pptx-capture .leaflet-vertex-icon,
+    .map-wrap.pptx-capture .leaflet-middle-icon,
     .map-wrap.pptx-capture .label-badge,
     .map-wrap.pptx-capture .pin-icon,
     .map-wrap.pptx-capture .hwy-shield,
