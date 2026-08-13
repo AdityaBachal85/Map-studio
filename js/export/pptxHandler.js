@@ -169,7 +169,9 @@
                 pxLeft: ckRect.left - wrapRect.left,
                 pxTop: ckRect.top - wrapRect.top,
                 pxWidth: ckRect.width,
-                rows: ckRows.map(r => ({ color: r.color, label: r.label })),
+                // `kind` too: without it every row exported as the same mark,
+                // and a line class and a point class became indistinguishable.
+                rows: ckRows.map(r => ({ color: r.color, label: r.label, kind: r.kind })),
               } : null,
               legend: (legendRect && lgRows.length) ? {
                 visible: legendVisible, title: legendTitle,

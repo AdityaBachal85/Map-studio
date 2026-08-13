@@ -28,8 +28,13 @@ function addLegend(slide, legend, ctx, log) {
     fontFace: 'Arial', align: 'left', valign: 'middle', charSpacing: 2, margin: 0.06,
   });
 
+  // A coloured bullet, not a filled cell. On screen this column is a round dot;
+  // as a fill it became a solid block the height of the row, which is the single
+  // biggest reason the exported card did not look like the card. A glyph also
+  // travels inside the table, so it cannot come adrift when the table is moved
+  // in PowerPoint — which is what a floating shape would do.
   const rows = legend.rows.map(r => ([
-    { text: '', options: { fill: { color: hex(r.color) } } },
+    { text: '●', options: { color: hex(r.color), fontSize: 11, align: 'center' } },
     { text: String(r.name ?? ''), options: { align: 'left' } },
     { text: String(r.km ?? ''), options: { align: 'right' } },
     { text: String(r.min ?? ''), options: { align: 'right' } },
@@ -38,7 +43,9 @@ function addLegend(slide, legend, ctx, log) {
   slide.addTable(rows, {
     x: lx, y: ly + 0.3, w: lw, colW,
     fontFace: 'Arial', fontSize: 8.5, color: '17202B',
-    fill: { color: 'FFFFFF' }, border: { pt: 0.5, color: 'E5EAF1' },
+    // No grid. The card on screen separates rows with white space, and the
+    // ruled lines were what made the export read as a spreadsheet.
+    fill: { color: 'FFFFFF' }, border: { type: 'none' },
     rowH: 0.22, valign: 'middle', margin: 0.04,
   });
   return true;
@@ -80,13 +87,19 @@ function addColorKey(slide, key, ctx, log) {
     fontFace: 'Arial', align: 'left', valign: 'middle', charSpacing: 2, margin: 0.06,
   });
 
+  // The mark carries the same distinction the card does: a bar for a line
+  // class, a dot for a point, a square for an area. "The red line" and "the red
+  // block" are different things on the map, and a legend that renders both as
+  // the same filled cell throws that away.
+  const mark = kind => (kind === 'line' ? '▬' : kind === 'mark' ? '●' : '■');
+
   slide.addTable(key.rows.map(r => ([
-    { text: '', options: { fill: { color: hex(r.color) } } },
+    { text: mark(r.kind), options: { color: hex(r.color), fontSize: 11, align: 'center' } },
     { text: String(r.label ?? ''), options: { align: 'left' } },
   ])), {
     x: lx, y: ly + 0.3, w: lw, colW,
     fontFace: 'Arial', fontSize: 8.5, color: '17202B',
-    fill: { color: 'FFFFFF' }, border: { pt: 0.5, color: 'E5EAF1' },
+    fill: { color: 'FFFFFF' }, border: { type: 'none' },
     rowH: 0.22, valign: 'middle', margin: 0.04,
   });
   return true;
