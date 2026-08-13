@@ -14,6 +14,11 @@
  * are served with `Access-Control-Allow-Origin: *` — the export pipeline
  * already depends on that — so the canvas stays readable and exportable.
  *
+ * ONLY WHILE ZOOMED OUT. See PLACE_ICON_MIN_TILE_Z: past a ~300 m scale the
+ * tiles are left alone. A wall of crosses across a locality overview is
+ * clutter; the same crosses when you have zoomed into one street are the answer
+ * to "what is next door".
+ *
  * WHY THE COLOUR TEST IS SO NARROW. OSM Carto draws healthcare (hospitals,
  * clinics, pharmacies, doctors, dentists) in one dedicated red, #BF0000 —
  * (191, 0, 0) — used for both the icon and its name text. Green and blue are
@@ -38,6 +43,23 @@
  * an icon sits on building-beige or road-white, so the smudge left behind is
  * the background it was printed on, invisible at map scale.
  */
+
+/**
+ * The shallowest tile zoom that keeps its place icons.
+ *
+ * OSM Carto starts drawing healthcare icons at z15, which is why they appear
+ * at all around a 500 m scale bar and not at 600 m — the threshold is the
+ * style's, not ours. Scrubbing every zoom hid them even when you had deliberately
+ * zoomed in to look at a specific building, which is the one moment they are
+ * worth having.
+ *
+ * So the scrub stops at z16. Metres per pixel is 156543 * cos(lat) / 2^z, so
+ * near Mumbai (lat 19.2, cos 0.944) that is 4.5 m/px at z15 and 2.3 m/px at
+ * z16 — a scale bar around 300 m and below. Above that the map is a locality
+ * overview and the crosses are clutter; below it you are looking at individual
+ * plots and they are information.
+ */
+const PLACE_ICON_MIN_TILE_Z = 16;
 
 /**
  * Is this pixel OSM Carto healthcare red (or its anti-aliased fringe)?
@@ -155,13 +177,19 @@ const ScrubbedTileLayer = L.TileLayer.extend({
     tile.width = size.x;
     tile.height = size.y;
 
+    // Per tile, from its own zoom — not from the map's current zoom. Leaflet
+    // keeps tiles from other levels around during a zoom animation and reuses
+    // cached ones, so a decision made from map.getZoom() would scrub or spare
+    // the wrong level whenever those disagree.
+    const keepIcons = coords.z >= PLACE_ICON_MIN_TILE_Z;
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const ctx = tile.getContext('2d');
         ctx.drawImage(img, 0, 0, size.x, size.y);
-        scrubMedicalRed(ctx, size.x, size.y);
+        if (!keepIcons) scrubMedicalRed(ctx, size.x, size.y);
         done(null, tile);
       } catch (e) {
         done(null, tile);       // shown unscrubbed rather than not at all

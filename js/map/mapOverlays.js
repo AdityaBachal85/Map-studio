@@ -236,10 +236,11 @@ function renderOverlayPanel() {
 
   box.innerHTML = '<div class="bm-ov-hd">Show on the ground</div>'
     + '<label class="chk bm-ov" title="The red hospital, clinic and pharmacy symbols the'
-      + ' OpenStreetMap style paints into its tiles. Off cleans them out of the tile pixels —'
-      + ' same map, same roads and buildings, without the red.">'
+      + ' OpenStreetMap style paints into its tiles. Left off they are cleaned out of the tile'
+      + ' pixels while you are zoomed out, and come back on their own once you are closer than'
+      + ' about a 300 m scale. Tick to show them at every zoom.">'
       + '<input type="checkbox" data-place-icons' + (placeIconsOn() ? ' checked' : '') + '> '
-      + 'Place icons (shops, clinics)</label>'
+      + 'Place icons at every zoom</label>'
     + MAP_OVERLAYS.map(o =>
       '<label class="chk bm-ov" title="' + esc(o.hint) + '">'
       + '<input type="checkbox" data-overlay="' + o.id + '"' + (on.indexOf(o.id) >= 0 ? ' checked' : '') + '> '
