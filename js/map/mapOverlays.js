@@ -75,6 +75,69 @@ const MAP_OVERLAYS = [
 /** The label-free grounds this feature is designed around. */
 const PLAIN_GROUNDS = ['positron', 'lightgray', 'darkgray'];
 
+/**
+ * The clean twin of a ground that paints POI icons into its tiles.
+ *
+ * Standard OSM carto draws every pharmacy, clinic and doctor as a red cross,
+ * and in an Indian city that is one icon per block. They cannot be filtered —
+ * they are pixels in the tile — so "hide the place icons" has to mean "fetch
+ * the same data from a renderer that does not draw them". Each pair here is the
+ * same OpenStreetMap data, differing only in what the style chooses to paint.
+ */
+const CLEAN_GROUND_TWIN = {
+  osm: 'positron',
+  voyager: 'positron',
+  esristreet: 'lightgray',
+  topo: 'lightgray',
+  natgeo: 'lightgray',
+  opentopo: 'lightgray',
+  dark: 'darkgray',
+};
+
+/** Whether the ground is allowed to paint shop and clinic icons. Off by default. */
+function placeIconsOn() {
+  try { return getPref('placeIcons') === true; } catch (e) { return false; }
+}
+
+/**
+ * Enforce the place-icon setting on whatever ground is active.
+ *
+ * Called after anything that can change the ground — startup, a basemap swap, a
+ * layout switch, a project load. A project saves its own basemap, so opening an
+ * older file is one of the ways an icon-heavy ground comes back; without this,
+ * the setting held until the first time you opened your own work.
+ *
+ * @returns {boolean} whether the ground was changed
+ */
+function enforcePlaceIcons() {
+  if (typeof activeKey === 'undefined' || typeof setBasemap !== 'function') return false;
+  if (placeIconsOn()) return false;
+  const twin = CLEAN_GROUND_TWIN[activeKey];
+  if (!twin || typeof BASEMAPS === 'undefined' || !BASEMAPS[twin]) return false;
+  const sel = document.getElementById('basemapSel');
+  if (sel) sel.value = twin;
+  try { setBasemap(twin); } catch (e) { return false; }
+  return true;
+}
+
+/** Turn place icons on or off. @param {boolean} on */
+function setPlaceIcons(on) {
+  try { setPref('placeIcons', !!on); } catch (e) { /* ignore */ }
+  if (on) {
+    // Going back to the icon-bearing twin of the clean ground you are on.
+    const back = Object.keys(CLEAN_GROUND_TWIN).find(k => CLEAN_GROUND_TWIN[k] === activeKey);
+    if (back && typeof BASEMAPS !== 'undefined' && BASEMAPS[back]) {
+      const sel = document.getElementById('basemapSel');
+      if (sel) sel.value = back;
+      try { setBasemap(back); } catch (e) { /* keep the clean one */ }
+    }
+  } else {
+    enforcePlaceIcons();
+  }
+  renderOverlayPanel();
+  if (typeof markDirty === 'function') markDirty();
+}
+
 /** Live layers, by overlay id. */
 const _overlayLayers = {};
 
@@ -175,6 +238,10 @@ function renderOverlayPanel() {
   const clash = !plain && on.some(id => (mapOverlay(id) || {}).needsPlain);
 
   box.innerHTML = '<div class="bm-ov-hd">Show on the ground</div>'
+    + '<label class="chk bm-ov" title="Pharmacies, clinics, shops and other POI symbols drawn'
+      + ' into the basemap. Off by default — in a dense city there is one every block.">'
+      + '<input type="checkbox" data-place-icons' + (placeIconsOn() ? ' checked' : '') + '> '
+      + 'Place icons (shops, clinics)</label>'
     + MAP_OVERLAYS.map(o =>
       '<label class="chk bm-ov" title="' + esc(o.hint) + '">'
       + '<input type="checkbox" data-overlay="' + o.id + '"' + (on.indexOf(o.id) >= 0 ? ' checked' : '') + '> '
@@ -190,7 +257,9 @@ function renderOverlayPanel() {
 (function wireMapOverlays() {
   document.addEventListener('change', e => {
     const cb = e.target.closest && e.target.closest('[data-overlay]');
-    if (cb) setMapOverlay(cb.dataset.overlay, cb.checked);
+    if (cb) { setMapOverlay(cb.dataset.overlay, cb.checked); return; }
+    const pi = e.target.closest && e.target.closest('[data-place-icons]');
+    if (pi) setPlaceIcons(pi.checked);
   });
   document.addEventListener('click', e => {
     if (e.target.closest && e.target.closest('#bmPlainGround')) useGroundForOverlays();
@@ -199,5 +268,8 @@ function renderOverlayPanel() {
   // Deferred: the basemap registry and the map are both built after this file's
   // top level runs, and an overlay added before the ground exists is an overlay
   // Leaflet stacks underneath it.
-  setTimeout(() => { try { reapplyMapOverlays(); } catch (e) { /* no map yet */ } }, 700);
+  setTimeout(() => {
+    try { enforcePlaceIcons(); } catch (e) { /* no map yet */ }
+    try { reapplyMapOverlays(); } catch (e) { /* no map yet */ }
+  }, 700);
 })();

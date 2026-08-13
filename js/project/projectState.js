@@ -251,6 +251,10 @@ function applyProject(proj, opts) {
   else if (typeof fitAll === 'function') fitAll();
 
   if (typeof rebuildLegend === 'function') rebuildLegend();
+  // A project stores the ground it was saved with, so opening an older file is
+  // one of the ways an icon-heavy basemap returns. The setting has to outrank
+  // the file, or it holds until the first time you open your own work.
+  if (typeof enforcePlaceIcons === 'function') { try { enforcePlaceIcons(); } catch (e) { } }
   if (typeof reapplyMapOverlays === 'function') {
     try { setPref('mapOverlays', Array.isArray(proj.mapOverlays) ? proj.mapOverlays : []); } catch (e) { }
     reapplyMapOverlays();

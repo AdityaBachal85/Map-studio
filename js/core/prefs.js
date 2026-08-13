@@ -31,6 +31,9 @@ const PREF_DEFAULTS = {
   basemapByLayout: null,
   // Transparent tile layers added on top of the ground (map/mapOverlays.js).
   mapOverlays: null,      // null = none
+  // Whether the basemap may paint shop/clinic/pharmacy symbols. Off: in a dense
+  // city that is one icon per block, over the roads the map is about.
+  placeIcons: false,
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);
