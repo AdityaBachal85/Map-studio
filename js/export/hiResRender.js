@@ -292,13 +292,26 @@ async function renderGroundPass(o) {
     // export is the same picture on different imagery. See exportBasemapId().
     const exportKey = typeof exportBasemapId === 'function' ? exportBasemapId(activeKey) : activeKey;
     const entry = BASEMAPS[exportKey] || BASEMAPS[activeKey] || BASEMAPS[preferredBasemapId()];
+
+    // A vector ground has no tile layers to build and no scrub to bias — it is
+    // rendered separately, below, straight off a GL canvas. Everything else in
+    // this function still applies to it: the offscreen Leaflet map is what the
+    // routes and shapes are cloned onto, and they need it whichever ground is
+    // underneath.
+    const vectorGround = typeof isVectorSpec === 'function' && isVectorSpec(entry.spec);
+
     // The ground is rendered `log2(scale)` levels deeper than the screen for
     // pixel density alone. Tell the scrub, so its "only while zoomed out"
     // threshold is measured against the scale the reader sees rather than the
     // zoom this offscreen map happens to use — otherwise every export keeps the
     // red crosses the screen had just dropped.
-    if (typeof setScrubZoomBias === 'function') setScrubZoomBias(Math.log2(scale));
-    const tileLayers = entry.build($('hdTgl').checked);
+    //
+    // Raster only. tileScrub.js cleans tile pixels, and a vector ground has
+    // none: its equivalent is a style filter, already applied to the export map
+    // by renderVectorGroundCanvas(). Setting the bias here anyway would leave it
+    // pointing at a scrub that is not running.
+    if (!vectorGround && typeof setScrubZoomBias === 'function') setScrubZoomBias(Math.log2(scale));
+    const tileLayers = vectorGround ? [] : entry.build($('hdTgl').checked);
     tileLayers.forEach(l => { l.options.maxZoom = 30; l.addTo(exportMap); });
     if ($('hillTgl').checked) {
       const hs = L.tileLayer(HILLSHADE_LAYER.url, {
@@ -312,12 +325,28 @@ async function renderGroundPass(o) {
     // sixteen. Thirty seconds was a screen-sized budget applied to an
     // export-sized job, so a large or slow render ran out of time and shipped
     // whatever had arrived. Scale the allowance with the work.
-    const complete = await whenTilesSettled(tileLayers, 30000 + scale * scale * 15000);
+    let complete = await whenTilesSettled(tileLayers, 30000 + scale * scale * 15000);
     exportMap.invalidateSize({ animate: false });
     // invalidateSize can pull in a further ring of tiles at the edges; without
     // a second wait those arrive after the capture and are simply missing.
     await whenTilesSettled(tileLayers, 8000);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    // The vector ground, rendered off its own GL canvas at the same view and
+    // `scale` times the device pixel ratio. Composited under whatever raster
+    // layers the Leaflet host did draw — hillshade is the one that can still be
+    // on — so the stacking order matches the screen.
+    let vectorCanvas = null;
+    if (vectorGround) {
+      const vg = await renderVectorGroundCanvas(entry.spec, {
+        W, H, scale,
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        budgetMs: 30000 + scale * scale * 15000,
+      });
+      vectorCanvas = vg.canvas;
+      if (!vg.complete) complete = false;
+    }
 
     const shot = extra => html2canvas(host, Object.assign({
       useCORS: true, allowTaint: false, logging: false,
@@ -337,7 +366,10 @@ async function renderGroundPass(o) {
     // Each is now cut straight out of the DOM rather than re-rendered. See the
     // note above rasteriseTileLayers() for what that was costing.
     const isReference = el => el.classList.contains('basemap-reference');
-    const ground = rasteriseTileLayers(host, W, H, el => !isReference(el), '#0d1522');
+    // No opaque backdrop when a vector ground is going underneath — filling
+    // #0d1522 here would paint over the very thing this pass just rendered.
+    const ground = rasteriseTileLayers(host, W, H, el => !isReference(el),
+      vectorCanvas ? null : '#0d1522');
 
     let reference = null;
     const roadOpacity = (typeof roadExportStyle === 'function') ? roadExportStyle().opacity : 1;
@@ -380,12 +412,31 @@ async function renderGroundPass(o) {
     // dark canvas. The distinction is "we found no tile layers at all" versus
     // "we found them and the network did not deliver".
     let tiles = ground.canvas;
-    const domChanged = !ground.drawn && !ground.missing && host.querySelector('img.leaflet-tile');
+    // Vector grounds are exempt: there are no tile layers to find, so "we found
+    // no tile layers at all" is the expected state rather than a broken one —
+    // and html2canvas cannot photograph a WebGL canvas anyway, so the fallback
+    // would trade a correct ground for a blank one.
+    const domChanged = !vectorCanvas && !ground.drawn && !ground.missing
+      && host.querySelector('img.leaflet-tile');
     if (domChanged) {
       console.warn('Export: tile panes are not the expected shape; falling back to html2canvas.');
       host.classList.add('hires-imagery-only');
       tiles = await shot({ backgroundColor: '#0d1522' });
       host.classList.remove('hires-imagery-only');
+    }
+
+    // The GL ground goes down first, then whatever raster survived above it.
+    if (vectorCanvas) {
+      const composed = document.createElement('canvas');
+      composed.width = W; composed.height = H;
+      const cx = composed.getContext('2d');
+      cx.fillStyle = '#0d1522';
+      cx.fillRect(0, 0, W, H);
+      // Explicit destination size — the GL canvas is sized in device pixels and
+      // need not be exactly W × H. See renderVectorGroundCanvas().
+      cx.drawImage(vectorCanvas, 0, 0, W, H);
+      if (ground.drawn) cx.drawImage(ground.canvas, 0, 0);
+      tiles = composed;
     }
 
     return { canvas: tiles, reference, vectors, complete };

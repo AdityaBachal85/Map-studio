@@ -704,10 +704,74 @@
         if (spec) refreshDynamicCredit(spec);
       });
 
+      /**
+       * Put up a vector ground: load the renderer if needed, then mount it.
+       *
+       * Shaped like the `prepare` path below it rather than like the tile path,
+       * because it has the same problem — something has to arrive over the
+       * network before a single pixel can be drawn. So it parks the ground,
+       * says so, and re-enters setBasemap() when the renderer lands. The
+       * alternative was an 803 KB <script> tag on every page load for a feature
+       * that is off by default; see the note in map/vectorBasemap.js.
+       *
+       * @param {{spec:object, credit:string}} entry
+       */
+      function setVectorBasemap(entry) {
+        const spec = entry.spec;
+        activeBase = [];
+        $('mapCredit').textContent = entry.credit;
+
+        if (!maplibreReady()) {
+          if (typeof status === 'function') status('Starting ' + spec.label + '…', true);
+          loadMapLibre().then(ok => {
+            if (activeKey !== spec.id) return;               // switched away while loading
+            if (!ok) { revertBasemap(spec.id, 'The vector map renderer could not be loaded.'); return; }
+            if (typeof status === 'function') status('');
+            setBasemap(spec.id);
+          });
+          if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
+          return;
+        }
+
+        const gl = mountVectorGround(spec, map);
+        if (!gl) { revertBasemap(spec.id, 'The vector ground could not be started on this device.'); return; }
+
+        // The vector equivalent of the raster path's first `tileload`: a style
+        // that 403s never fires `load`, so a ground that cannot draw is never
+        // written to prefs and cannot come back on the next visit.
+        gl.once('load', () => { if (activeKey === spec.id) rememberBasemapWorks(spec.id); });
+
+        // Designed cartography, not photography: pale ground, dark ink for the
+        // labels this app draws over it, and no imagery grading.
+        $('mapWrap').classList.toggle('basemap-substituted', exportSubstitutes(activeKey));
+        $('mapWrap').classList.toggle('basemap-unsafe',
+          !basemapExportSafe(activeKey) && !exportSubstitutes(activeKey));
+        $('mapWrap').classList.toggle('np-light', !(spec.imagery || spec.dark));
+        applyImageryLook(getImageryLook(), !!spec.imagery);
+        if (typeof syncImageryLookControl === 'function') syncImageryLookControl();
+        if (typeof syncRoadLookControl === 'function') syncRoadLookControl();
+        if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
+      }
+
       function setBasemap(key) {
         const entry = BASEMAPS[key] || BASEMAPS[preferredBasemapId()];
         activeKey = entry.spec.id;
         activeBase.forEach(l => map.removeLayer(l));
+
+        // A vector ground has no tile templates at all, so it returns before
+        // anything below touches `layers[0]` — which on a vector spec is
+        // undefined and would throw on the very next line.
+        //
+        // Every ground change comes through here, so this is also the one place
+        // a *previous* vector ground can be guaranteed to come down. Without
+        // that, switching vector → raster leaves a dead GL canvas painted under
+        // the live tiles and switching back leaves two.
+        if (typeof isVectorSpec === 'function' && isVectorSpec(entry.spec)) {
+          setVectorBasemap(entry);
+          return;
+        }
+        if (typeof unmountVectorGround === 'function') unmountVectorGround(map);
+
         // Providers with an undetermined tile template resolve it once, then
         // re-enter here with a usable URL. Until then nothing is added, so the
         // map shows its background rather than a grid of broken tiles.

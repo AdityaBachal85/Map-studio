@@ -21,6 +21,13 @@
  * three-quarters of that job at a fraction of the cost, and it does not pretend
  * to be the rest.
  *
+ * THE REST NOW EXISTS, on one ground only. map/vectorBasemap.js renders the
+ * OpenFreeMap style in the browser, so on that ground this panel grows a second
+ * section — vectorOverlaySection() below — where each toggle is a filter on a
+ * style layer rather than a swap of one picture for another. It is opt-in and
+ * off by default, so everything above remains the answer for every other
+ * ground, which is all of them.
+ *
  * TILE PANE, NOT OVERLAY PANE. These are `L.tileLayer`s, so Leaflet puts them
  * in the tile pane, underneath every vector the app draws. Nothing here can
  * ever cover a route, a shape or a marker.
@@ -226,6 +233,46 @@ function useGroundForOverlays() {
   chooseBasemap('positron');
 }
 
+/**
+ * The part of the panel that only a vector ground can offer.
+ *
+ * Built from the layers the loaded style actually has — vectorStyleGroups()
+ * classifies the live style rather than reciting names from memory — so a group
+ * with nothing in it never appears, and the panel cannot promise a toggle that
+ * does nothing.
+ *
+ * @returns {string} HTML, or '' when the ground is not vector.
+ */
+function vectorOverlaySection() {
+  if (typeof vectorGroundActive !== 'function' || !vectorGroundActive()) return '';
+  const groups = (typeof vectorStyleGroups === 'function') ? vectorStyleGroups() : [];
+  if (!groups.length) {
+    return '<div class="bm-ov-note">The vector style has not finished loading.</div>';
+  }
+
+  const hasPoi = groups.some(g => g.id === 'poi');
+
+  return '<div class="bm-ov-hd">Hide from this ground</div>'
+    + groups.map(g =>
+      '<label class="chk bm-ov" title="' + esc(g.hint) + '">'
+      + '<input type="checkbox" data-vector-group="' + esc(g.id) + '"'
+      + (vectorGroupOn(g.id) ? ' checked' : '') + '> '
+      + esc(g.label) + '</label>').join('')
+    // Each of these is one class of POI rather than a whole layer, which is the
+    // thing a scrubbed raster tile cannot offer: on OSM's own cartography a
+    // pharmacy and a hospital are the same red, so removing one removes both.
+    + (hasPoi
+      ? VECTOR_POI_CLASS_TOGGLES.map(t =>
+        '<label class="chk bm-ov bm-ov-sub" title="' + esc(t.hint) + '">'
+        + '<input type="checkbox" data-vector-poi="' + esc(t.id) + '"'
+        + (vectorPoiClassOn(t.id) ? ' checked' : '') + '> '
+        + esc(t.label) + '</label>').join('')
+      : '')
+    + '<div class="bm-ov-note bm-ov-limit">This ground is drawn in your browser from the'
+      + ' features themselves, so each of these is switched off exactly rather than painted'
+      + ' over.</div>';
+}
+
 /** Draw the overlay checklist inside the basemap panel. */
 function renderOverlayPanel() {
   const box = document.getElementById('bmOverlays');
@@ -233,14 +280,19 @@ function renderOverlayPanel() {
   const on = activeOverlays();
   const plain = groundIsPlain();
   const clash = !plain && on.some(id => (mapOverlay(id) || {}).needsPlain);
+  // On a vector ground the scrub is not in play at all — it is a raster tile
+  // cleaner and there are no raster tiles — so offering its toggle would be
+  // offering a control that does nothing.
+  const vector = typeof vectorGroundActive === 'function' && vectorGroundActive();
 
   box.innerHTML = '<div class="bm-ov-hd">Show on the ground</div>'
-    + '<label class="chk bm-ov" title="The red hospital, clinic and pharmacy symbols the'
+    + (vector ? '' :
+      '<label class="chk bm-ov" title="The red hospital, clinic and pharmacy symbols the'
       + ' OpenStreetMap style paints into its tiles. Left off they are cleaned out of the tile'
       + ' pixels while you are zoomed out, and come back on their own once you are closer than'
       + ' about a 300 m scale. Tick to show them at every zoom.">'
       + '<input type="checkbox" data-place-icons' + (placeIconsOn() ? ' checked' : '') + '> '
-      + 'Place icons at every zoom</label>'
+      + 'Place icons at every zoom</label>')
     + MAP_OVERLAYS.map(o =>
       '<label class="chk bm-ov" title="' + esc(o.hint) + '">'
       + '<input type="checkbox" data-overlay="' + o.id + '"' + (on.indexOf(o.id) >= 0 ? ' checked' : '') + '> '
@@ -249,8 +301,10 @@ function renderOverlayPanel() {
       ? '<div class="bm-ov-note">This ground already has names and icons painted into it, so they'
         + ' appear twice. <button type="button" id="bmPlainGround">Use a plain ground</button></div>'
       : '')
-    + '<div class="bm-ov-note bm-ov-limit">Names and icons are part of the basemap image, so they'
-      + ' can be swapped for these layers but not filtered one by one.</div>';
+    + (vector ? '' :
+      '<div class="bm-ov-note bm-ov-limit">Names and icons are part of the basemap image, so they'
+      + ' can be swapped for these layers but not filtered one by one.</div>')
+    + vectorOverlaySection();
 }
 
 (function wireMapOverlays() {
@@ -258,7 +312,11 @@ function renderOverlayPanel() {
     const cb = e.target.closest && e.target.closest('[data-overlay]');
     if (cb) { setMapOverlay(cb.dataset.overlay, cb.checked); return; }
     const pi = e.target.closest && e.target.closest('[data-place-icons]');
-    if (pi) setPlaceIcons(pi.checked);
+    if (pi) { setPlaceIcons(pi.checked); return; }
+    const vg = e.target.closest && e.target.closest('[data-vector-group]');
+    if (vg) { setVectorLayerGroup(vg.dataset.vectorGroup, vg.checked); return; }
+    const vp = e.target.closest && e.target.closest('[data-vector-poi]');
+    if (vp) setVectorPoiClass(vp.dataset.vectorPoi, vp.checked);
   });
   document.addEventListener('click', e => {
     if (e.target.closest && e.target.closest('#bmPlainGround')) useGroundForOverlays();

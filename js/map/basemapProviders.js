@@ -133,6 +133,11 @@ const ARCGIS_STYLES = Object.freeze({
  * @property {LayerSpec[]} layers
  * @property {boolean} corsSafe   False when tiles taint the export canvas.
  * @property {string}  [needsKey] Provider key that must be present to offer it.
+ * @property {string}  [needsPref] Preference that must be truthy to offer it.
+ * @property {boolean} [vector]   True for a MapLibre style rendered in the
+ *                                browser rather than a stack of raster tiles.
+ *                                `layers` is empty; `styleUrl` is the source.
+ * @property {string}  [styleUrl] The MapLibre style JSON, for `vector` entries.
  * @property {boolean} [imagery]  True for photographic basemaps.
  * @property {boolean} [dark]     True when the basemap reads as a dark surface,
  *                                so overlaid text needs light ink. Imagery is
@@ -228,6 +233,36 @@ const BASEMAP_CATALOGUE = {
     // is to clean the pixels — map/tileScrub.js. Applied when place icons are
     // off, which is the default.
     layers: [{ url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', zIndex: 1, maxNative: 19, scrub: true }],
+  },
+
+  /**
+   * The vector ground. The only entry here that is not a stack of tile
+   * templates: it carries a *style* URL, and map/vectorBasemap.js renders it in
+   * the browser with MapLibre instead of downloading pictures of it.
+   *
+   * `layers: []` rather than omitted. setBasemap() reads layers[0] to decide
+   * whether a provider still has to resolve a template, and while it now
+   * branches on `vector` before reaching that, an absent `layers` would still
+   * break isBasemapAvailable(), rebuildBasemapRegistry() and anything else that
+   * walks the catalogue expecting the key to exist.
+   *
+   * `corsSafe: true` is accurate — OpenFreeMap serves permissive headers — but
+   * it is not what makes the export work. The export reads back the GL
+   * *canvas*, not the tiles, so the constraint that actually matters is
+   * `preserveDrawingBuffer`. See renderGroundPass().
+   *
+   * The style URL is deliberately the only place OpenFreeMap is named. It is
+   * run by one person on donations with no SLA published, so the day it has to
+   * become a tile server of our own, this constant is the change.
+   */
+  openfreemap: {
+    id: 'openfreemap', label: 'Streets — vector', group: 'Streets',
+    provider: 'openfreemap', corsSafe: true, vector: true,
+    needsPref: 'vectorBasemap',
+    credit: '© OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors',
+    styleUrl: 'https://tiles.openfreemap.org/styles/liberty',
+    thumb: 'linear-gradient(150deg,#f2efe9,#e3ded2 60%,#cfd8c2)',
+    layers: [],
   },
 
   voyager: {
@@ -429,6 +464,15 @@ function basemapKey(provider) {
  */
 function isBasemapAvailable(spec) {
   if (!spec) return false;
+  // Gated on a preference rather than on a key. The vector ground is opt-in
+  // until it has proven itself over real use — see the note on `vectorBasemap`
+  // in core/prefs.js — and gating it here means one flag governs the switcher,
+  // the registry and the export in one place instead of three.
+  if (spec.needsPref && !(typeof getPref === 'function' && getPref(spec.needsPref))) return false;
+  // A vector basemap carries a style URL instead of tile templates, so the
+  // "has it got somewhere to fetch from" test below is asking about the wrong
+  // thing entirely. Its equivalent is: is there a style to load?
+  if (spec.vector) return !!spec.styleUrl;
   // A basemap with no tile template and nothing to try is unusable. Hiding it
   // is the whole point: a basemap the user can select but that cannot draw
   // leaves them staring at an empty map wondering what broke.

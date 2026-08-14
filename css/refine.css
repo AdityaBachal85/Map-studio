@@ -4292,6 +4292,17 @@ body.identify-on .leaflet-container {
    and does not need reading twice, where the ground clash has a button. */
 .bm-ov-limit { opacity: .72; }
 
+/* A POI class sits *inside* the POI toggle above it: unticking "Places & POI
+   symbols" takes the lot, and these pick out one kind from what is left. The
+   indent and the rule say that relationship without a sentence explaining it,
+   and matter more here than usual because "Pharmacies" on its own reads like a
+   peer of "Buildings" rather than a subdivision of the symbols. */
+.bm-ov-sub {
+  margin-left: 10px;
+  padding-left: 9px;
+  border-left: 1px solid var(--stroke);
+}
+
 #bmPlainGround {
   display: inline-block;
   margin-top: 4px;

@@ -96,7 +96,12 @@
     }
 
     .map-wrap.hires-overlay-pass .leaflet-tile-pane,
-    .map-wrap.hires-overlay-pass .leaflet-overlay-pane {
+    .map-wrap.hires-overlay-pass .leaflet-overlay-pane,
+    /* The vector ground is a third kind of ground and neither of the two panes
+       above, so it needs naming here or the furniture pass photographs it into
+       the transparent layer and composites the whole basemap back over the
+       high-resolution one underneath. */
+    .map-wrap.hires-overlay-pass .vector-basemap-host {
       display: none !important;
     }
 

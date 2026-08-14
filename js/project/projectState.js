@@ -124,6 +124,11 @@ function serialiseProject() {
     colorKeyEdits: (typeof colorKeyEdits === 'object' && colorKeyEdits) ? colorKeyEdits : {},
     colorKeyExtras: (typeof colorKeyExtras !== 'undefined' && Array.isArray(colorKeyExtras)) ? colorKeyExtras : [],
     mapOverlays: (typeof activeOverlays === 'function') ? activeOverlays() : [],
+    // Which groups of the vector style are switched off. A property of the map
+    // somebody composed, not of the browser they composed it in — a project
+    // saved with the medical symbols hidden has to reopen with them hidden, or
+    // the deliverable changes behind their back.
+    vectorLayers: (typeof vectorLayerPrefs === 'function') ? vectorLayerPrefs() : undefined,
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
@@ -172,6 +177,12 @@ function applyProject(proj, opts) {
   if (proj.basemap && BASEMAPS[proj.basemap]) $('basemapSel').value = proj.basemap;
   if (proj.imageryLook) setImageryLook(proj.imageryLook);
   if (proj.roadLook) setRoadLook(proj.roadLook);
+  // Before setBasemap, not after: mounting a vector ground applies these as its
+  // style loads, so a pref written afterwards would arrive to a ground that had
+  // already drawn itself with the previous project's filters.
+  if (proj.vectorLayers && typeof proj.vectorLayers === 'object') {
+    try { setPref('vectorLayers', proj.vectorLayers); } catch (e) { /* ignore */ }
+  }
   setBasemap($('basemapSel').value);
   if (proj.tilt !== undefined) { setTiltDeg(+proj.tilt || 0); $('tiltRange').value = tiltDeg; applyTilt(); }
   if (proj.hill) { $('hillTgl').checked = true; hillshade.addTo(map); }

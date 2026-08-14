@@ -1,9 +1,86 @@
 # OpenFreeMap vector basemap — what has to get done
 
-**Status:** specification only. No code has been written for this.
-**Repo:** `Map-studio`, branch `Map-Studio_V5`, app version at time of writing `6.0090`.
-**Written for:** a fresh session that will implement it. Everything below is
-checked against the tree as it stands; line numbers are from `6.0090`.
+**Status: BUILT.** Shipped behind the `vectorBasemap` preference, off by
+default. The specification below is kept as written, because the reasoning in it
+is still the reasoning — but it was wrong about one thing, and §0 says where.
+
+**Repo:** `Map-studio`, branch `Map-Studio_V5`. Specified at `6.0090`, built at
+`6.0091`. Line numbers below are from `6.0090` and have moved.
+
+---
+
+## 0. What was built, and where this document is wrong
+
+**The files.** `js/map/vectorBasemap.js` is new and owns everything MapLibre:
+loading the vendored renderer on demand, mounting the GL host under Leaflet's
+panes, the view sync, the style-layer classification and filters, and the
+offscreen export render. `vendor/maplibre-gl.js` + `.css` are vendored at 4.7.1.
+`mapEngine.js`, `mapOverlays.js`, `hiResRender.js`, `basemapProviders.js`,
+`prefs.js`, `projectState.js`, `layout.css` and `refine.css` carry the branches
+that reach it. `diagnostics/vector-basemap/` holds the checks.
+
+### ✗ §4.3 is wrong: the zoom levels do NOT match
+
+> "Leaflet zoom `z` and MapLibre zoom `z` use the same scale"
+
+They do not. Leaflet's world at zoom `z` is `256 · 2^z` pixels around;
+MapLibre's transform uses a 512-pixel tile, so its world is `512 · 2^z` —
+**twice the scale at the same numeric zoom**. `VECTOR_ZOOM_OFFSET = -1` is the
+correction.
+
+This is worth reading twice, because the failure is silent in exactly the way
+this document warns about elsewhere. `glMap.getCenter()` matches
+`map.getCenter()` **exactly, at every zoom**, while the ground renders at double
+size — so the obvious assertion (the one §5.3 proposes) passes and goes on
+passing. What caught it was projecting one latitude and longitude through both
+maps and comparing the screen points: 204 px apart at z12, 1631 px at z15,
+growing as `2^Δz` because the error is a scale factor, not an offset. That
+comparison is what `diagnostics/vector-basemap/check.cjs` now asserts.
+
+### ✗ §4.5 step 2 is wrong for the same family of reasons
+
+The export does **not** render `log2(scale)` levels deeper. That is the raster
+reflex — more pixels can only come from more tiles — and applied to a vector
+renderer it produces a *different picture*: at zoom+2 the style draws the label
+sizes of zoom+2, so a 4× export would carry four times the labels at a quarter
+of their relative size. What a vector renderer wants is the same view at a
+higher device pixel ratio. So: same centre, same zoom, `pixelRatio = scale`.
+Verified — the 2× and 4× exports are the on-screen composition at 3200×2000 and
+6400×4000.
+
+### ~ §4.1 was not followed: the renderer is not a `<script>` tag
+
+803 KB on every page load, for a feature that is off by default, is not a trade
+worth making. It is fetched from `vendor/` the first time a vector ground is
+chosen, through the same park-and-re-enter door `setBasemap()` already uses for
+Google's session-token handshake. `js/map/vectorBasemap.js` *is* a plain script
+tag, before `mapEngine.js`, for the parse-time reason §4.1 gives.
+
+### + Beyond the spec: the payoff is two toggles, not one
+
+§4.4 names "hide pharmacies while keeping hospitals" as the thing raster cannot
+do, so **Hospitals & clinics** and **Pharmacies** are separate switches that
+compose into one filter, rather than a single "medical symbols" toggle that
+would have reproduced the raster limitation in a vector renderer.
+
+### What was verified, and what was not
+
+Verified, with a real MapLibre renderer drawing real features against an
+OpenMapTiles-shaped local fixture (47 assertions, all passing): the renderer
+loads on demand and not before; the ground mounts, draws non-uniform pixels, and
+projects to within 1 px of Leaflet at three zooms including a fractional one;
+groups are classified from the live style; toggles reach `setLayoutProperty`;
+**pharmacies hide while hospitals keep drawing**; vector→raster→vector twice
+leaves exactly one canvas and a correct `activeKey`; exports at 2× and 4× are
+the right size and not blank; filters survive a reload and a project
+round-trip; raster OSM still scrubs and Leaflet gets its zoom animation back.
+
+**Not verified — `tiles.openfreemap.org` is 403 from this sandbox.** Nobody has
+watched OpenFreeMap's Liberty style draw. Whether its real layer names classify
+usefully into `VECTOR_LAYER_GROUPS`, and whether its POI data uses the class
+values in `VECTOR_POI_CLASS_TOGGLES`, are open questions that need a machine
+with network. Both fail harmlessly — an unmatched group is not offered, and an
+unmatched class filter hides nothing — which is why this ships behind a flag.
 
 ---
 

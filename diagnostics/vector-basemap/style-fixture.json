@@ -1,0 +1,60 @@
+{
+  "version": 8,
+  "name": "Test fixture — OpenMapTiles-shaped",
+  "sources": {
+    "fx": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          { "type": "Feature", "properties": { "kind": "water" },
+            "geometry": { "type": "Polygon", "coordinates": [[[72.80,19.05],[72.86,19.05],[72.86,19.09],[72.80,19.09],[72.80,19.05]]] } },
+          { "type": "Feature", "properties": { "kind": "park" },
+            "geometry": { "type": "Polygon", "coordinates": [[[72.87,19.10],[72.93,19.10],[72.93,19.14],[72.87,19.14],[72.87,19.10]]] } },
+          { "type": "Feature", "properties": { "kind": "building" },
+            "geometry": { "type": "Polygon", "coordinates": [[[72.875,19.06],[72.895,19.06],[72.895,19.075],[72.875,19.075],[72.875,19.06]]] } },
+          { "type": "Feature", "properties": { "kind": "building" },
+            "geometry": { "type": "Polygon", "coordinates": [[[72.905,19.085],[72.925,19.085],[72.925,19.10],[72.905,19.10],[72.905,19.085]]] } },
+          { "type": "Feature", "properties": { "kind": "road" },
+            "geometry": { "type": "LineString", "coordinates": [[72.78,19.02],[72.88,19.08],[72.98,19.16]] } },
+          { "type": "Feature", "properties": { "kind": "road" },
+            "geometry": { "type": "LineString", "coordinates": [[72.78,19.16],[72.88,19.10],[72.98,19.03]] } },
+          { "type": "Feature", "properties": { "kind": "rail" },
+            "geometry": { "type": "LineString", "coordinates": [[72.80,19.12],[72.96,19.06]] } },
+          { "type": "Feature", "properties": { "kind": "boundary" },
+            "geometry": { "type": "LineString", "coordinates": [[72.84,19.00],[72.84,19.20]] } },
+          { "type": "Feature", "properties": { "class": "pharmacy", "name": "Chemist" },
+            "geometry": { "type": "Point", "coordinates": [72.86, 19.09] } },
+          { "type": "Feature", "properties": { "class": "pharmacy", "name": "Chemist 2" },
+            "geometry": { "type": "Point", "coordinates": [72.90, 19.07] } },
+          { "type": "Feature", "properties": { "class": "hospital", "name": "General Hospital" },
+            "geometry": { "type": "Point", "coordinates": [72.88, 19.11] } },
+          { "type": "Feature", "properties": { "class": "restaurant", "name": "Cafe" },
+            "geometry": { "type": "Point", "coordinates": [72.92, 19.12] } },
+          { "type": "Feature", "properties": { "class": "bank", "name": "Bank" },
+            "geometry": { "type": "Point", "coordinates": [72.83, 19.13] } }
+        ]
+      }
+    }
+  },
+  "layers": [
+    { "id": "background", "type": "background", "paint": { "background-color": "#f2efe9" } },
+    { "id": "water", "type": "fill", "source": "fx", "filter": ["==", ["get", "kind"], "water"],
+      "paint": { "fill-color": "#a0c8f0" } },
+    { "id": "landuse-park", "type": "fill", "source": "fx", "filter": ["==", ["get", "kind"], "park"],
+      "paint": { "fill-color": "#c8e6a0" } },
+    { "id": "building", "type": "fill", "source": "fx", "filter": ["==", ["get", "kind"], "building"],
+      "paint": { "fill-color": "#d9d0c9" } },
+    { "id": "road-secondary", "type": "line", "source": "fx", "filter": ["==", ["get", "kind"], "road"],
+      "paint": { "line-color": "#f7c948", "line-width": 6 } },
+    { "id": "railway-transit", "type": "line", "source": "fx", "filter": ["==", ["get", "kind"], "rail"],
+      "paint": { "line-color": "#8f8f8f", "line-width": 3, "line-dasharray": [3, 2] } },
+    { "id": "boundary-admin-2", "type": "line", "source": "fx", "filter": ["==", ["get", "kind"], "boundary"],
+      "paint": { "line-color": "#9e9cab", "line-width": 2 } },
+    { "id": "poi-level-1", "type": "circle", "source": "fx", "filter": ["has", "class"],
+      "paint": { "circle-radius": 7, "circle-color": "#bf0000" } },
+    { "id": "place-city", "type": "symbol", "source": "fx" },
+    { "id": "place-suburb", "type": "symbol", "source": "fx" },
+    { "id": "road-label", "type": "symbol", "source": "fx" }
+  ]
+}
