@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0027-blue)
+![Version](https://img.shields.io/badge/version-v6.0091-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,116 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0027 (latest)
+## 🆕 New in v6.0091 (latest)
+
+### A vector basemap — the ground can finally be told what not to draw
+
+Every basemap in this app has been **raster**: the browser receives a picture,
+not features. A picture cannot be asked to leave something out, which is why
+removing OpenStreetMap's red hospital and pharmacy crosses needed
+`js/map/tileScrub.js` — a pixel scrubber that masks the healthcare red out of
+each tile and inpaints the hole from the surrounding colour.
+
+**Streets — vector** renders [OpenFreeMap](https://openfreemap.org/)'s style in
+the browser with [MapLibre GL](https://maplibre.org/), mounted as a canvas
+*under* Leaflet's panes. Leaflet keeps the DOM, the projection, the interaction
+model and every route, shape, marker and ring the app draws; MapLibre only
+paints the ground and is told where to look.
+
+Because the browser now holds the features and the styling, the basemap panel
+grows a **Hide from this ground** section built from the layers the loaded style
+actually has — places and POI symbols, place names, road names, roads,
+buildings, land use, water, rail and transit, boundaries. Each toggle is a
+filter applied instantly and exactly, with no pixels touched.
+
+The one that matters most is a pair: **Hospitals & clinics** and **Pharmacies**
+are *separate* switches. On raster OpenStreetMap they are the same shade of red,
+so a scrubber removing one removes both; here they are different values of one
+attribute. Hiding the chemists while the hospitals keep drawing is the thing
+this whole feature was built for.
+
+Settings survive a reload and travel inside a saved project, so a map reopens
+showing exactly what it was composed with. Exports go through the same style:
+the PNG/PDF/PPTX ground is rendered off its own GL canvas at the export's pixel
+ratio, carrying whatever was switched off.
+
+**It is off by default, deliberately.** OpenFreeMap publishes no SLA — it is
+donation-funded and run by one person — so raster OpenStreetMap stays the
+Connectivity ground, and the Connectivity layout still pins it. Turn the vector
+ground on with `setPref('vectorBasemap', true)` and pick it from the basemap
+switcher in the Satellite layout.
+
+**Known limitation, stated plainly:** this was built in a sandbox where
+`tiles.openfreemap.org` is unreachable, so nobody has watched OpenFreeMap's own
+cartography draw. The renderer, the mount, the view sync, the filters, the
+exports and the project round-trip are all verified against a local style
+fixture (`diagnostics/vector-basemap/`, 47 assertions). Whether OpenFreeMap's
+real layer names group usefully, and whether its POI data uses the class values
+assumed here, needs a machine with network. Both fail harmlessly — an unmatched
+group is not offered, an unmatched filter hides nothing — which is why it ships
+behind a flag. See `docs/OPENFREEMAP-VECTOR-BASEMAP.md`.
+
+---
+
+## 🆕 Earlier in v6 (6.0028 → 6.0090)
+
+A run of work that landed between the AI Reports release below and the vector
+ground above.
+
+### One colour standard for connectivity maps
+
+Route colours used to come from a rotating palette keyed on how many routes
+happened to exist, so the same road was a different colour in every report.
+`js/map/connectivityStandard.js` is now one table: a route or shape carries a
+class, and the class decides colour, weight and dash. Change it there and every
+map changes with it. The palette is derived from the DBOT logo. The legend is
+generated from the classes actually in use, so the key cannot contradict the
+drawing.
+
+### Two layouts
+
+**Connectivity** (OpenStreetMap ground, standard colours, basemap pinned) and
+**Satellite** (imagery ground, free colour choice). The ground is remembered
+*per layout*, because one setting cannot express two layouts that want
+different grounds by design.
+
+### Ring scan — ask the map what is inside a catchment
+
+Draw a distance ring, press **⊙ Scan**, and OpenStreetMap is queried for what
+falls inside it: metro, rail, water, airports, roads, power lines, land cover,
+buildings and settlements. Results are listed with counts and lengths, and
+**nothing lands on the map unasked** — you tick what to keep, and what lands is
+an ordinary shape you can restyle, rename, hide or delete.
+
+OSM returns roads in fragments rather than as whole named routes, so the scan
+chains them end to end, grouped by class rather than by name — the unnamed
+connector between two named stretches has to be able to join either.
+
+### The red medical symbols, on raster OSM
+
+`js/map/tileScrub.js` cleans OSM Carto's healthcare red out of the tile pixels
+and inpaints the holes from surrounding colour, so an icon over a beige building
+leaves beige rather than a white hole. Kept below a ~300 m scale, where a wall
+of crosses across a locality is clutter; past that they come back on their own.
+The export applies the same treatment at the same apparent scale.
+
+### An editable legend
+
+A LEGEND card on the map, generated from the classes in use, with per-row label
+and colour editing, hiding, reordering and custom added rows. The Key Distances
+card got the same treatment. Both drag from their whole header.
+
+### Identify, overlays, pins
+
+Click anything to see what OpenStreetMap knows about it, with the most specific
+feature winning. Transparent overlay layers (place names, roads, railways,
+hillshade) can be added over a plain ground. Location pins are Google-Maps-style
+teardrops: coloured body, white keyline, white symbol — and one location's icon
+style can be pushed to all of them.
+
+---
+
+## 🆕 New in v6.0027
 
 ### AI Reports — a research pipeline behind the map, not inside the browser
 
@@ -455,8 +564,12 @@ Works on:
 - HTML5, CSS3, plain JavaScript (no build step, no bundler)
 - [Leaflet](https://leafletjs.com/), [Leaflet-Geoman](https://geoman.io/leaflet-geoman)
   (drawing/editing), [html2canvas](https://html2canvas.hertzen.com/),
-  [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/)
+  [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/),
+  [anime.js](https://animejs.com/), [supabase-js](https://supabase.com/)
   — vendored directly under `vendor/`, loaded as plain `<script>` tags
+- [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) for the optional vector
+  ground — also vendored, but fetched on first use rather than on every page
+  load, since it is 803 KB for a feature that is off by default
 - [Geist](https://vercel.com/font) and Geist Mono (SIL OFL 1.1), self-hosted
   under `vendor/fonts/` — one variable file per family, no third-party request
 - OpenStreetMap / Esri / CARTO tiles; [Google Maps Platform](https://developers.google.com/maps)
@@ -482,9 +595,11 @@ Map-studio/
                       new / open / rename / copy / download / delete
   vendor/fonts/   — Geist + Geist Mono variable woff2 + OFL licence
   vendor/         — third-party libraries, vendored as plain files (leaflet.js/.css,
-                       leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js, jszip.js)
+                       leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js,
+                       jszip.js, anime.min.js, supabase.js, maplibre-gl.js/.css)
   css/
     shell.css       — login.html + projects.html only (the pages outside the map)
+    dashboard.css   — the board view
     themes.css, style.css, map.css, sidebar.css, components.css, layout.css,
       refine.css    — linked individually from index.html, in that order. Do not
                         reorder: later sheets override earlier ones and refine
@@ -492,42 +607,86 @@ Map-studio/
                         @import list so the release's ?v= bump reaches every
                         sheet — an @import needs its own, and a stale one serves
                         cached CSS while the markup updates around it.
+                      themes.css is the ONLY place CSS custom properties are
+                        defined. An undefined one resolves to nothing, silently.
   js/
     app.js          — runs last: wires everything together, prints the boot message
-    constants.js, config.js   (config.js holds ROUTERS + the Geoapify API key)
-    auth/session.js  — who is using this browser. A profile, NOT security — a
-                         static site cannot gate itself with client-side JS, and
-                         the file says so at length. It is also the seam a real
-                         account server slots into without touching the pages.
+    constants.js    — APP_VERSION lives here; tools/stamp-assets.js reads it
+    config.js       — ROUTERS, provider API keys, Supabase URL + anon key
+    auth/session.js  — who is using this browser. Degrades to a local profile
+                         when Supabase is not configured; the rest of the app
+                         cannot tell which mode is running.
     projects/       — projectStore (many named projects in IndexedDB, metadata
                         split from payload so the list stays fast), projectsPage
                         (drives projects.html), projectBridge (loads the opened
-                        project into the studio and writes it back by wrapping
-                        autosaveNow, leaving autosave.js itself untouched)
-    core/state.js    — locations[], routes[], brand{}, uiState{} — the single
-                         source of truth every other file reads/writes
-    map/            — mapEngine, billboard (pin/label overlay), snapping,
-                        markers, routes, icons, aerialDistance (straight-line
-                        measure), drawing (shape tools + undo/redo), nearby
-                        (Nearby-places markers)
+                        project into the studio and writes it back), cloudProjects
+    core/           — state.js (locations[], routes[], brand{}, uiState{} — the
+                        single source of truth), prefs.js (localStorage settings),
+                        freshness.js
+    map/            — mapEngine (Leaflet map, basemap switching, HD, tilt),
+                        basemapProviders (the basemap catalogue — pure data),
+                        connectivityStandard (class → colour/weight/dash),
+                        layouts (Connectivity vs Satellite), tileScrub (the
+                        medical-red pixel cleaner for raster OSM), vectorBasemap
+                        (the MapLibre ground + its style filters), mapOverlays,
+                        billboard (pin/label overlay), markers, routes, roadDraw,
+                        drawing (shape tools + undo/redo), snapping, icons,
+                        fillPatterns, textLabels, aerialDistance, markerCluster,
+                        imageryEnhance, googleTiles, customBasemaps, providerKeys,
+                        nearby
     ui/             — sidebar, toolbar, propertyPanel, geometryPanel (shape cards),
-                        searchBox (collapse UI), dialogs, notifications
-    services/       — geocoder (search box), geoapify (Geoapify-first geocoding +
-                        Nominatim fallback), nearbyPlaces (Places API), places
-                        (icon inference)
+                        colorKey (the editable LEGEND card), legendTable (Key
+                        Distances), basemapSwitcher, ringScanPanel, layerManager,
+                        settingsDialog, exportCenter, importDialog, iconPicker,
+                        colorPresets, searchBox, dialogs, notifications, aiTab,
+                        reportSheet, dash* (the board view)
+    services/       — geocoder (search box), geoapify, google (Places + Routes),
+                        nearbyPlaces, boundaries, ringFeatures (the Overpass ring
+                        scan + the way-joining that turns road fragments into
+                        whole routes), mapIdentify, aiReports, placeCache, places
     export/         — the PPTX engine (exportPPT + pptShapes/pptImages/pptLabels/
                         pptTables/pptValidation/pptUtils) + pptxHandler,
-                        captureMap, exportPNG, exportPDF
-    project/        — saveProject, openProject, geojson (shape import/export)
-    utils/          — dom, math (geodesic length/area), colors
+                        hiResRender (the supersampled ground/vector/furniture
+                        compositor behind PNG and PDF), captureMap, exportPNG,
+                        exportPDF, dashExport
+    project/        — saveProject, openProject, projectState (serialise/apply),
+                        autosave, history (undo/redo), geojson, kml, importSheet,
+                        importFiles, xlsx
+    utils/          — dom, math (geodesic length/area), color, colors, animate
+  tools/            — stamp-assets.js (version bump + ?v= stamping),
+                        build-single-file.js (legacy/ snapshots)
+  diagnostics/      — standalone probe pages and check harnesses, incl.
+                        vector-basemap/ (Playwright checks for the MapLibre ground)
   legacy/           — pristine single-file rollbacks of earlier versions
-  docs/             — PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root cause),
-                        PHASE3-FEATURE-INVENTORY.md (feature checklist)
+  server/, sql/     — the optional accounts/cloud backend (Supabase schema + RLS)
+  docs/             — OPENFREEMAP-VECTOR-BASEMAP.md (the vector ground: spec,
+                        what shipped, and where the spec was wrong),
+                        PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root
+                        cause), ACCOUNTS-SETUP.md, AI-REPORTS-SETUP.md,
+                        DEPLOY-NOTES.md, PHASE3-FEATURE-INVENTORY.md,
+                        PHASE5-PRODUCTION-POLISH.md, SESSION-HANDOFF-6.0090.md
 ```
 
 Every file in `js/` is a plain script — no `import`/`export`. `index.html`
 loads them in the exact order each one needs its dependencies to already
-exist; don't reorder those `<script>` tags.
+exist; don't reorder those `<script>` tags. The order is load-bearing in at
+least two places: `mapEngine.js` builds its first tile layers *during parse*, so
+`tileScrub.js` and `vectorBasemap.js` must both be above it.
+
+## Versioning — run this after every edit
+
+Every asset URL carries `?v=<APP_VERSION>`, so a deploy is all-or-nothing rather
+than leaving a returning browser running some new files against some old ones.
+After touching any `.js` or `.css`:
+
+```bash
+node tools/stamp-assets.js --bump      # 6.0091 → 6.0092, then re-stamp
+node tools/stamp-assets.js --check     # exits 1 if anything is stale
+node tools/build-single-file.js        # optional: a legacy/ snapshot
+```
+
+Skipping this ships a half-updated app, which fails in stranger ways than being
+simply out of date.
 
 ---
 
@@ -546,6 +705,13 @@ Push to GitHub and set the repo's **Settings → Pages → Build and deployment
 using. GitHub serves the files as-is — no build, no GitHub Actions workflow
 needed. Pushing an edit updates the live site on the next deploy (usually
 under a minute).
+
+This repo deploys from **`Map-Studio_V6`**, not `main`.
+
+> ⚠️ **Renaming that branch unpublishes the site.** Pages points at a branch by
+> name, so a rename leaves it pointing at a branch that no longer exists and the
+> site goes dark until you re-select the new name here and press Save. The
+> commits are fine — only the Pages setting needs pointing again.
 
 The one thing no automated check can confirm is *"opens in desktop
 PowerPoint 365 with zero repair prompts"* — that needs a human with real

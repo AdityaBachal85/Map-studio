@@ -12,6 +12,7 @@ function reflectPrefs() {
   $('prefMotion').checked = !!getPref('reduceMotion');
   $('prefUnitDistance').value = getPref('unitDistance');
   $('prefUnitArea').value = getPref('unitArea');
+  $('prefVectorBasemap').checked = !!getPref('vectorBasemap');
 }
 
 /** Re-render any on-screen measurements after a unit change. */
@@ -36,6 +37,26 @@ $('prefGlass').addEventListener('change', e => {
 $('prefMotion').addEventListener('change', e => { setPref('reduceMotion', e.target.checked); applyMotion(); });
 $('prefUnitDistance').addEventListener('change', e => { setPref('unitDistance', e.target.value); refreshMeasurementsForUnits(); });
 $('prefUnitArea').addEventListener('change', e => { setPref('unitArea', e.target.value); refreshMeasurementsForUnits(); });
+/**
+ * The vector ground is gated in the basemap catalogue rather than in the
+ * switcher, so flipping this changes what availableBasemaps() returns — and the
+ * registry mapEngine built from it has to be rebuilt, or the picker goes on
+ * offering yesterday's answer. Turning it *off* while it is the active ground
+ * would leave the map on a basemap that no longer exists, so that case falls
+ * back to the layout's own ground first.
+ */
+$('prefVectorBasemap').addEventListener('change', e => {
+  setPref('vectorBasemap', e.target.checked);
+  if (typeof rebuildBasemapRegistry === 'function') rebuildBasemapRegistry();
+  if (!e.target.checked && typeof activeKey !== 'undefined' && activeKey === 'openfreemap') {
+    setBasemap(typeof layoutBasemap === 'function' ? layoutBasemap(mapLayout()) : 'osm');
+  }
+  if (typeof buildBasemapGrid === 'function') buildBasemapGrid();
+  if (typeof syncBasemapSwitcher === 'function') syncBasemapSwitcher(activeKey);
+  status(e.target.checked
+    ? 'Vector street map added to the basemap picker — choose “Streets — vector”.'
+    : 'Vector street map hidden from the basemap picker.');
+});
 $('prefReset').addEventListener('click', () => { resetPrefs(); reflectPrefs(); refreshMeasurementsForUnits(); status('Preferences reset to defaults.'); });
 
 // Apply persisted glass / motion once at startup. Preferences is the single

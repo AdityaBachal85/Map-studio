@@ -6,8 +6,9 @@ in `js/map/mapEngine.js`, `js/map/mapOverlays.js` and `js/export/hiResRender.js`
 ```
 python3 -m http.server 8000          # from the repo root
 npm i playwright                     # anywhere; or set CHROME=/path/to/chrome
-node diagnostics/vector-basemap/check.cjs
-node diagnostics/vector-basemap/check-export.cjs
+node diagnostics/vector-basemap/check.cjs          # mount, sync, filters, teardown
+node diagnostics/vector-basemap/check-export.cjs   # captureMapHiRes + project round-trip
+node diagnostics/vector-basemap/check-toggle.cjs   # the Preferences checkbox, clicked
 ```
 
 ## Why there is a fixture instead of the real style
