@@ -61,7 +61,14 @@ function buildBasemapGrid() {
     btn.type = 'button';
     btn.className = 'bm-tile';
     btn.dataset.key = spec.id;
-    btn.title = spec.credit;
+    // Credit alone answers "whose map is this", which is the only question most
+    // of these raise. One entry has to answer "what is this" first.
+    //
+    // Joined with a space rather than a break: ui/tooltips.js moves every
+    // `title` to `data-tip` and renders it as textContent in a box with no
+    // white-space rule, so a newline would collapse into a space anyway and
+    // only look deliberate in the source.
+    btn.title = spec.note ? spec.note + ' ' + spec.credit : spec.credit;
     const url = basemapPreviewUrl(spec.id);
     btn.innerHTML =
       `<span class="bm-tile-img" style="background:${spec.thumb}">` +

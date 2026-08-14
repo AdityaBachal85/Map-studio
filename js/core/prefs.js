@@ -34,15 +34,6 @@ const PREF_DEFAULTS = {
   // Whether the basemap may paint shop/clinic/pharmacy symbols. Off: in a dense
   // city that is one icon per block, over the roads the map is about.
   placeIcons: false,
-  // The OpenFreeMap vector ground (map/vectorBasemap.js), off until it has
-  // earned its place. Two reasons it is a flag rather than a basemap that is
-  // simply there. OpenFreeMap publishes no SLA — it is donation funded and run
-  // by one person, so a client map that opens on it goes blank the day it goes
-  // down, and raster OpenStreetMap has to stay the ground that Connectivity
-  // defaults to. And it could not be watched drawing from the environment it
-  // was built in, where every tile host is blocked; shipping it on by default
-  // would be shipping something unverified as the standard.
-  vectorBasemap: false,
   // Which groups of vector style layers are hidden, as {groupId: false}. Only
   // the hidden ones are stored, so a style that grows a new group shows it.
   vectorLayers: null,

@@ -1,6 +1,6 @@
 # Vector basemap — checks
 
-Two Playwright harnesses for `js/map/vectorBasemap.js` and the vector branches
+Three Playwright harnesses for `js/map/vectorBasemap.js` and the vector branches
 in `js/map/mapEngine.js`, `js/map/mapOverlays.js` and `js/export/hiResRender.js`.
 
 ```
@@ -8,7 +8,7 @@ python3 -m http.server 8000          # from the repo root
 npm i playwright                     # anywhere; or set CHROME=/path/to/chrome
 node diagnostics/vector-basemap/check.cjs          # mount, sync, filters, teardown
 node diagnostics/vector-basemap/check-export.cjs   # captureMapHiRes + project round-trip
-node diagnostics/vector-basemap/check-toggle.cjs   # the Preferences checkbox, clicked
+node diagnostics/vector-basemap/check-picker.cjs   # it is in the picker, and clickable
 ```
 
 ## Why there is a fixture instead of the real style

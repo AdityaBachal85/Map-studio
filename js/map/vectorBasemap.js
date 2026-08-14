@@ -40,7 +40,7 @@
  * ---------------------------------------------------------------------------
  *
  * vendor/maplibre-gl.js is 803 KB — a 29% increase on everything else this app
- * vendors put together, for a feature that is off by default. So it is not a
+ * vendors put together, for a ground most sessions never select. So it is not a
  * <script> tag in index.html; it is fetched the first time a vector ground is
  * actually asked for.
  *
@@ -857,5 +857,14 @@ function canvasLooksBlank(canvas) {
  * tiles: that OpenFreeMap's Liberty style draws, that VECTOR_LAYER_GROUPS
  * classifies its real layer names usefully, that VECTOR_MEDICAL_CLASSES matches
  * its POI data, and that the export ground comes back at the right resolution.
- * The feature is off by default for exactly this reason.
+ *
+ * It sits in the basemap picker like any other ground rather than behind a
+ * preference, because a basemap nobody can find is a basemap that does not
+ * exist. What actually contains the risk is not a flag but two things already
+ * in the engine: revertBasemap() drops back to a working ground and says why
+ * when a basemap cannot draw, and rememberBasemapWorks() only writes a basemap
+ * to prefs once it has rendered — so an OpenFreeMap outage costs one status
+ * line, and can never become the ground that reopens on the next visit. The
+ * Connectivity layout stays pinned to raster OpenStreetMap regardless, which is
+ * what keeps the client-facing standard from changing under anyone.
  * ------------------------------------------------------------------------- */

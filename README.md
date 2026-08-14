@@ -61,11 +61,14 @@ showing exactly what it was composed with. Exports go through the same style:
 the PNG/PDF/PPTX ground is rendered off its own GL canvas at the export's pixel
 ratio, carrying whatever was switched off.
 
-**It is off by default, deliberately.** OpenFreeMap publishes no SLA — it is
-donation-funded and run by one person — so raster OpenStreetMap stays the
-Connectivity ground, and the Connectivity layout still pins it. Turn the vector
-ground on with `setPref('vectorBasemap', true)` and pick it from the basemap
-switcher in the Satellite layout.
+**Where to find it:** the basemap picker, under **Streets**, in the **Satellite**
+layout. Connectivity stays pinned to raster OpenStreetMap so the client-facing
+standard cannot change under anyone.
+
+OpenFreeMap publishes no SLA — it is donation-funded and community-run — but the
+engine already handles a ground that will not draw: it falls back to a working
+basemap and says why, and a basemap is only remembered once it has actually
+rendered, so an outage costs one status line rather than the next session.
 
 **Known limitation, stated plainly:** this was built in a sandbox where
 `tiles.openfreemap.org` is unreachable, so nobody has watched OpenFreeMap's own
@@ -74,8 +77,8 @@ exports and the project round-trip are all verified against a local style
 fixture (`diagnostics/vector-basemap/`, 47 assertions). Whether OpenFreeMap's
 real layer names group usefully, and whether its POI data uses the class values
 assumed here, needs a machine with network. Both fail harmlessly — an unmatched
-group is not offered, an unmatched filter hides nothing — which is why it ships
-behind a flag. See `docs/OPENFREEMAP-VECTOR-BASEMAP.md`.
+group is not offered, an unmatched filter hides nothing. See
+`docs/OPENFREEMAP-VECTOR-BASEMAP.md`.
 
 ---
 
@@ -569,7 +572,7 @@ Works on:
   — vendored directly under `vendor/`, loaded as plain `<script>` tags
 - [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) for the optional vector
   ground — also vendored, but fetched on first use rather than on every page
-  load, since it is 803 KB for a feature that is off by default
+  load, since it is 803 KB for a ground most sessions never select
 - [Geist](https://vercel.com/font) and Geist Mono (SIL OFL 1.1), self-hosted
   under `vendor/fonts/` — one variable file per family, no third-party request
 - OpenStreetMap / Esri / CARTO tiles; [Google Maps Platform](https://developers.google.com/maps)

@@ -72,7 +72,7 @@ function check(name, pass, detail) {
     // would wipe the prefs the app itself wrote and make the reload test lie.
     if (!localStorage.getItem('dbotMapStudioPrefs.v1')) {
       localStorage.setItem('dbotMapStudioPrefs.v1', JSON.stringify({
-        vectorBasemap: true, layout: 'satellite', basemap: 'hybrid', theme: 'light',
+        layout: 'satellite', basemap: 'hybrid', theme: 'light',
       }));
     }
   });
@@ -89,7 +89,7 @@ function check(name, pass, detail) {
 
   const listed = await page.evaluate(() =>
     typeof availableBasemaps === 'function' && availableBasemaps().some(s => s.id === 'openfreemap'));
-  check('the vector basemap is offered when the flag is on', listed === true, 'listed=' + listed);
+  check('the vector basemap is offered in the picker', listed === true, 'listed=' + listed);
 
   // ---- 2. switching to it loads the renderer and mounts a ground -----------
   await page.evaluate(() => setBasemap('openfreemap'));

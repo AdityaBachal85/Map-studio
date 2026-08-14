@@ -59,7 +59,7 @@ function check(name, pass, detail) {
   await page.addInitScript(() => {
     if (!localStorage.getItem('dbotMapStudioPrefs.v1')) {
       localStorage.setItem('dbotMapStudioPrefs.v1', JSON.stringify({
-        vectorBasemap: true, layout: 'satellite', basemap: 'hybrid', theme: 'light',
+        layout: 'satellite', basemap: 'hybrid', theme: 'light',
       }));
     }
   });

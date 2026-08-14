@@ -133,7 +133,8 @@ const ARCGIS_STYLES = Object.freeze({
  * @property {LayerSpec[]} layers
  * @property {boolean} corsSafe   False when tiles taint the export canvas.
  * @property {string}  [needsKey] Provider key that must be present to offer it.
- * @property {string}  [needsPref] Preference that must be truthy to offer it.
+ * @property {string}  [note]     Extra sentence for the switcher tooltip, where
+ *                                what a basemap *is* needs saying beyond credit.
  * @property {boolean} [vector]   True for a MapLibre style rendered in the
  *                                browser rather than a stack of raster tiles.
  *                                `layers` is empty; `styleUrl` is the source.
@@ -258,10 +259,21 @@ const BASEMAP_CATALOGUE = {
   openfreemap: {
     id: 'openfreemap', label: 'Streets — vector', group: 'Streets',
     provider: 'openfreemap', corsSafe: true, vector: true,
-    needsPref: 'vectorBasemap',
     credit: '© OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors',
+    note: 'Drawn in your browser from the map data, so names, POI symbols, buildings and'
+      + ' roads can each be switched off — including hiding pharmacies while hospitals stay.',
     styleUrl: 'https://tiles.openfreemap.org/styles/liberty',
-    thumb: 'linear-gradient(150deg,#f2efe9,#e3ded2 60%,#cfd8c2)',
+    // Every other entry's thumbnail is a real tile fetched from its own
+    // template. A vector spec has no template, so this gradient is not the
+    // placeholder it is elsewhere — it is the whole picture, and a flat beige
+    // wash next to neighbours showing actual cartography reads as a tile that
+    // failed to load. Layered to suggest a street map at 64 px: water, a green
+    // patch, a white road and a yellow one over pale ground.
+    thumb: 'linear-gradient(64deg,transparent 47%,#f2c14e 47%,#f2c14e 53%,transparent 53%),'
+      + 'linear-gradient(-49deg,transparent 62%,#ffffff 62%,#ffffff 67%,transparent 67%),'
+      + 'radial-gradient(circle at 76% 24%,#cde3b0 0 26%,transparent 27%),'
+      + 'linear-gradient(180deg,#aed3ee 0 20%,transparent 20%),'
+      + 'linear-gradient(150deg,#f4f1ea,#e6e1d5)',
     layers: [],
   },
 
@@ -464,11 +476,6 @@ function basemapKey(provider) {
  */
 function isBasemapAvailable(spec) {
   if (!spec) return false;
-  // Gated on a preference rather than on a key. The vector ground is opt-in
-  // until it has proven itself over real use — see the note on `vectorBasemap`
-  // in core/prefs.js — and gating it here means one flag governs the switcher,
-  // the registry and the export in one place instead of three.
-  if (spec.needsPref && !(typeof getPref === 'function' && getPref(spec.needsPref))) return false;
   // A vector basemap carries a style URL instead of tile templates, so the
   // "has it got somewhere to fetch from" test below is asking about the wrong
   // thing entirely. Its equivalent is: is there a style to load?

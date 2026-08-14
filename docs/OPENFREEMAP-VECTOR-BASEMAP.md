@@ -1,11 +1,12 @@
 # OpenFreeMap vector basemap — what has to get done
 
-**Status: BUILT.** Shipped behind the `vectorBasemap` preference, off by
-default. The specification below is kept as written, because the reasoning in it
-is still the reasoning — but it was wrong about one thing, and §0 says where.
+**Status: BUILT.** In the basemap picker as **Streets — vector**. The
+specification below is kept as written, because the reasoning in it is still the
+reasoning — but it was wrong about one thing, and §0 says where.
 
-**Repo:** `Map-studio`, branch `Map-Studio_V5`. Specified at `6.0090`, built at
-`6.0091`. Line numbers below are from `6.0090` and have moved.
+**Repo:** `Map-studio`, branch `Map-Studio_V6` (renamed from `Map-Studio_V5`).
+Specified at `6.0090`, built at `6.0091`. Line numbers below are from `6.0090`
+and have moved.
 
 ---
 
@@ -50,11 +51,37 @@ Verified — the 2× and 4× exports are the on-screen composition at 3200×2000
 
 ### ~ §4.1 was not followed: the renderer is not a `<script>` tag
 
-803 KB on every page load, for a feature that is off by default, is not a trade
-worth making. It is fetched from `vendor/` the first time a vector ground is
-chosen, through the same park-and-re-enter door `setBasemap()` already uses for
-Google's session-token handshake. `js/map/vectorBasemap.js` *is* a plain script
-tag, before `mapEngine.js`, for the parse-time reason §4.1 gives.
+803 KB on every page load, for a ground most sessions never select, is not a
+trade worth making. It is fetched from `vendor/` the first time a vector ground
+is chosen, through the same park-and-re-enter door `setBasemap()` already uses
+for Google's session-token handshake. `js/map/vectorBasemap.js` *is* a plain
+script tag, before `mapEngine.js`, for the parse-time reason §4.1 gives.
+
+### ✗ §2 and §4.7: it is not behind a flag, and should not have been
+
+Shipped that way first, and reverted after one question from the operator:
+*"why in a toggle — directly add in this only, why in preferences?"* They were
+right. A basemap belongs in the basemap picker; putting it anywhere else means
+the one place a user looks for grounds is the one place it is not.
+
+The flag was never what contained the risk, either. §2's worry is OpenFreeMap
+going down and taking a client map with it — and `revertBasemap()` already falls
+back to a working ground and says why, while `rememberBasemapWorks()` only
+persists a basemap that has actually rendered, so an outage costs one status
+line and can never become the ground that reopens next visit. The real
+protection is `MAP_LAYOUTS.connectivity.lockBasemap`, which keeps the
+client-facing standard on raster OpenStreetMap no matter what is in the picker.
+That is unchanged and is doing the job §2 wanted a preference to do.
+
+`PREF_DEFAULTS.vectorBasemap` and the Preferences checkbox are both gone.
+`vectorLayers` stays — that is the saved filter state, not a gate.
+
+One thing the flag *was* hiding: with no tile template, the picker had nothing
+to fetch a preview from, so the entry showed as a blank white card next to
+neighbours displaying real cartography — indistinguishable from a tile that
+failed to load. Its `thumb` is now a layered gradient that reads as a street map
+at 64 px, and the switcher tooltip says what the ground *is* rather than only
+who owns it.
 
 ### + Beyond the spec: the payoff is two toggles, not one
 
@@ -79,8 +106,9 @@ round-trip; raster OSM still scrubs and Leaflet gets its zoom animation back.
 watched OpenFreeMap's Liberty style draw. Whether its real layer names classify
 usefully into `VECTOR_LAYER_GROUPS`, and whether its POI data uses the class
 values in `VECTOR_POI_CLASS_TOGGLES`, are open questions that need a machine
-with network. Both fail harmlessly — an unmatched group is not offered, and an
-unmatched class filter hides nothing — which is why this ships behind a flag.
+with network. Both fail harmlessly: an unmatched group is not offered, and an
+unmatched class filter hides nothing. Connectivity stays pinned to raster
+OpenStreetMap either way, so the client-facing standard is never at risk.
 
 ---
 
