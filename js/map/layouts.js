@@ -206,7 +206,20 @@ function setMapLayout(id, opts) {
   document.body.classList.toggle('layout-connectivity', !!spec.standard);
   syncBasemapLock();
 
-  try { setPref('layout', id); } catch (e) { /* prefs unavailable */ }
+  // NOT written to prefs. This used to do `setPref('layout', id)`, which made
+  // one slot mean two different things: prefs.js calls `layout` "the default for
+  // a NEW map", and this made it "the last layout I happened to be in". The
+  // second always wins, because it is written far more often — so opening
+  // Satellite once to check an aerial meant every map from then on opened in
+  // Satellite, and the default in Preferences never applied again.
+  //
+  // The same collision was already found and fixed once for the basemap: see
+  // `basemapByLayout` in prefs.js, and the note there about one key not being
+  // able to express two intentions.
+  //
+  // So the layout is now a per-session choice. Preferences owns the pref and is
+  // its only writer; a saved project carries its own layout and applyProject()
+  // restores it without changing what anyone else's maps open as.
 
   if (changed && !opts.silent && typeof status === 'function') {
     status(spec.standard
@@ -221,10 +234,11 @@ function setMapLayout(id, opts) {
     if (b) setMapLayout(b.dataset.layoutBtn);
   });
 
-  // The saved preference is the default for a *new* map. A project that
-  // carries its own layout overrides this when it loads — see applyProject.
-  let saved = MAP_LAYOUT_DEFAULT;
-  try { saved = getPref('layout') || MAP_LAYOUT_DEFAULT; } catch (e) { /* ignore */ }
+  // The preference, which is now only ever what somebody chose in the
+  // Preferences dialog — nothing else writes it. A project that carries its own
+  // layout overrides this when it loads; see applyProject.
+  let wanted = MAP_LAYOUT_DEFAULT;
+  try { wanted = getPref('layout') || MAP_LAYOUT_DEFAULT; } catch (e) { /* ignore */ }
   // Deferred a beat: setBasemap needs the basemap registry built, and the
   // registry is assembled after this file's top-level runs.
   // No keepBasemap here. It used to skip applying the ground whenever the saved
@@ -233,5 +247,5 @@ function setMapLayout(id, opts) {
   // opened in the Connectivity layout on last year's satellite ground: the
   // layout said one thing and the map showed another. Deliberate deviations are
   // now remembered per layout instead, which is what that guard was reaching for.
-  setTimeout(() => setMapLayout(saved, { silent: true }), 300);
+  setTimeout(() => setMapLayout(wanted, { silent: true }), 300);
 })();

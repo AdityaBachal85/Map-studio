@@ -10,6 +10,7 @@ function reflectPrefs() {
   $('prefTheme').querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === getPref('theme')));
   $('prefGlass').checked = !!getPref('glass');
   $('prefMotion').checked = !!getPref('reduceMotion');
+  $('prefLayout').querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === getPref('layout')));
   $('prefUnitDistance').value = getPref('unitDistance');
   $('prefUnitArea').value = getPref('unitArea');
 }
@@ -29,6 +30,21 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('prefsO
 
 $('prefTheme').querySelectorAll('.seg-btn').forEach(btn => {
   btn.addEventListener('click', () => { setPref('theme', btn.dataset.v); applyTheme(); reflectPrefs(); });
+});
+/**
+ * The layout a *new* map opens as — and the only writer of that pref.
+ *
+ * map/layouts.js deliberately no longer writes it when you switch layout on the
+ * map, so this control is the setting rather than a record of the last thing
+ * you touched. Applied immediately as well as saved: setting the default and
+ * then watching the current map ignore it reads as the control not working.
+ */
+$('prefLayout').querySelectorAll('.seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setPref('layout', btn.dataset.v);
+    reflectPrefs();
+    if (typeof setMapLayout === 'function') setMapLayout(btn.dataset.v);
+  });
 });
 $('prefGlass').addEventListener('change', e => {
   setPref('glass', e.target.checked); applyGlass();

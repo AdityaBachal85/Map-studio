@@ -25,3 +25,9 @@ test/ppt-export/fixtures/ud/
 
 # browser-smoke unzip scratch
 test/ppt-export/fixtures/bs/
+
+# Screenshots the diagnostics harnesses write on each run. Evidence while you
+# are looking at them, stale the moment the UI moves — regenerate by re-running
+# the check rather than reading a committed copy of last month's layout.
+diagnostics/*.png
+diagnostics/**/*.png
