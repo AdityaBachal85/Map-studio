@@ -40,12 +40,18 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   await p.evaluate(() => map.setView([19.10, 72.88], 14, { animate: false }));
   await p.waitForTimeout(600);
 
-  // Exactly what ringScanPanel does for a `point` result.
+  // Exactly what ringScanPanel does for a `point` result, icon key included.
   const made = await p.evaluate(() => {
-    const meta = ringScanMeta('Ghatkopar', 'metroStation', 'Marker');
+    const fc = ringFeatureClass('metroStation');
+    const meta = ringScanMeta('Ghatkopar', fc.cls, 'Marker', fc.icon);
     const g = registerGeom(L.marker([19.10, 72.88]), 'Marker', meta);
-    return { pin: !!g.pin, showLabel: !!g.showLabel, fillOpacity: g.fillOpacity, shape: g.shape };
+    return {
+      pin: !!g.pin, showLabel: !!g.showLabel, fillOpacity: g.fillOpacity,
+      shape: g.shape, iconKey: g.iconKey,
+    };
   });
+  ck('the scan class supplies a symbol for the pin', made.iconKey === 'metro',
+    'iconKey=' + made.iconKey);
   ck('a scanned point is a labelled pin, not a circle',
     made.pin && made.showLabel && made.shape === 'Marker', JSON.stringify(made));
   ck('the pin body is solid, not a 0.18 ghost', made.fillOpacity === 1, 'fillOpacity=' + made.fillOpacity);
@@ -80,6 +86,40 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the label sits above the pin, not across its head',
     dom.labelAbovePin === true && dom.labelH > 0, JSON.stringify(dom));
 
+  // The symbol is inside the head, in white, and is the right one per class.
+  const glyphs = await p.evaluate(() => {
+    const out = {};
+    [['station', 'railway'], ['metroStation', 'metro'], ['airport', 'airport'],
+     ['busTerminal', 'bus'], ['powerTower', 'tower']].forEach(([cid, want], n) => {
+      const fc = ringFeatureClass(cid);
+      const g = registerGeom(L.marker([19.10 + (n + 1) * 0.004, 72.88]), 'Marker',
+        ringScanMeta(fc.label, fc.cls, 'Marker', fc.icon));
+      out[cid] = { want, got: g.iconKey };
+    });
+    const pins = [].map.call(document.querySelectorAll('.geom-marker-pin'), el => {
+      const svgs = el.querySelectorAll('svg');
+      const glyph = svgs[1];
+      return {
+        svgCount: svgs.length,
+        // The teardrop is drawn first, the symbol second and on top of it.
+        glyphFill: glyph ? (glyph.querySelector('[fill]') || {}).getAttribute
+          ? glyph.querySelector('[fill]').getAttribute('fill') : null : null,
+      };
+    });
+    out._pins = pins.slice(0, 6);
+    return out;
+  });
+  ck('every scan class maps to the symbol it should',
+    Object.keys(glyphs).filter(k => k[0] !== '_').every(k => glyphs[k].want === glyphs[k].got),
+    JSON.stringify(glyphs));
+  const withGlyph = (glyphs._pins || []).filter(x => x.svgCount >= 2);
+  ck('the pin carries a symbol as well as the teardrop',
+    withGlyph.length >= 5, JSON.stringify(glyphs._pins));
+  ck('the symbol is white, not a wireframe',
+    withGlyph.every(x => /#fff/i.test(x.glyphFill || '')), JSON.stringify(withGlyph.slice(0, 2)));
+
+  await p.evaluate(() => map.setView([19.115, 72.88], 14, { animate: false }));
+  await p.waitForTimeout(600);
   await p.screenshot({ path: path.join(__dirname, 'shot-scan-pin.png') });
 
   // The pin is anchored at its tip: the coordinate must be at the bottom point.
@@ -95,12 +135,23 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the pin points at its coordinate (anchored at the tip)',
     anchored.dx < 2 && anchored.dy < 3, JSON.stringify(anchored));
 
-  // Turning the pin off returns a plain dot.
-  await p.evaluate(() => { const g = geometries[geometries.length - 1]; g.pin = false; applyGeomStyle(g); });
-  await p.waitForTimeout(400);
-  ck('unticking Pin returns a plain dot',
-    await p.evaluate(() => !document.querySelector('.geom-marker-pin')
-      && !!document.querySelector('.geom-marker-dot')));
+  // Turning the pin off returns a plain dot. Scoped to this one geometry's own
+  // element — several other pins are on the map by now, so a document-wide
+  // "no pins exist" check would be asserting something else entirely.
+  const toDot = await p.evaluate(() => {
+    const g = geometries[geometries.length - 1];
+    const before = document.querySelectorAll('.geom-marker-pin').length;
+    g.pin = false; applyGeomStyle(g);
+    const el = g.layer.getElement();
+    return {
+      cls: el ? el.className : null,
+      pinsBefore: before,
+      pinsAfter: document.querySelectorAll('.geom-marker-pin').length,
+    };
+  });
+  ck('unticking Pin returns that marker to a plain dot',
+    /geom-marker-dot/.test(toDot.cls || '') && toDot.pinsAfter === toDot.pinsBefore - 1,
+    JSON.stringify(toDot));
 
   // Round-trip through GeoJSON. exportGeoJSON() triggers a download and returns
   // nothing, so the serialiser it uses is called directly — that is the thing a

@@ -92,10 +92,29 @@ function geomPinIcon(g) {
   const svg = (typeof pinTeardropSvg === 'function')
     ? pinTeardropSvg({ color: g.fillColor, iconBg: g.fillColor, iconBorderColor: g.borderColor, iconBorder: g.borderWidth })
     : '';
+
+  // The symbol inside the head — a train for a railway station, a metro glyph
+  // for a metro station. A ring scan knows exactly what it found, so a pin that
+  // says only "something is here" is throwing that away: on a map with a
+  // station, a bus terminal and a substation on it, identical teardrops make
+  // the reader consult the legend for every one of them.
+  //
+  // White, and only white. `svgForKey`'s second argument is the fill and its
+  // THIRD is an outline — passing a colour there gives a wireframe glyph, which
+  // is the trap this codebase has already fallen into once. White on the class
+  // colour is also what a location's pin does (billboard.js), so the two read
+  // as one family.
+  let glyph = '';
+  if (g.iconKey && typeof svgForKey === 'function') {
+    const box = (typeof PIN_HEAD_BOX !== 'undefined') ? PIN_HEAD_BOX
+      : 'position:absolute;left:22.5%;top:13.75%;width:55%;height:41.25%;';
+    glyph = '<span style="' + box + '">' + svgForKey(g.iconKey, '#FFFFFF') + '</span>';
+  }
+
   return L.divIcon({
     className: 'geom-marker-pin',
     html: '<span style="position:relative;display:block;width:100%;height:100%;'
-      + 'filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">' + svg + '</span>',
+      + 'filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">' + svg + glyph + '</span>',
     iconSize: [24, 32], iconAnchor: [12, 31],
   });
 }
@@ -337,7 +356,7 @@ function snapshotGeom(g) {
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
-    showLabel: g.showLabel, glow: g.glow, pin: g.pin,
+    showLabel: g.showLabel, glow: g.glow, pin: g.pin, iconKey: g.iconKey,
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
@@ -485,7 +504,7 @@ function recreateGeomFromSnapshot(snap) {
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
     labelSize: snap.labelSize, labelBold: snap.labelBold,
     labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
-    showLabel: snap.showLabel, glow: snap.glow, pin: snap.pin,
+    showLabel: snap.showLabel, glow: snap.glow, pin: snap.pin, iconKey: snap.iconKey,
     createdAt: snap.createdAt,
   });
 }
@@ -499,7 +518,7 @@ function restoreGeomSnapshot(id, snap) {
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
   g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
   g.labelStyle = snap.labelStyle; g.labelAngle = snap.labelAngle;
-  g.showLabel = snap.showLabel; g.glow = snap.glow; g.pin = snap.pin;
+  g.showLabel = snap.showLabel; g.glow = snap.glow; g.pin = snap.pin; g.iconKey = snap.iconKey;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);
   touchGeom(g);

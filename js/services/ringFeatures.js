@@ -58,6 +58,11 @@ const OVERPASS_CACHE_MAX_BYTES = 1.5e6;
 /**
  * What a ring can look for.
  *
+ * `icon` is the symbol a point of this class carries inside its map pin — a
+ * station gets a train, a metro station gets a metro glyph. Declared here
+ * beside the query that produces the feature, so adding a class means adding
+ * one row rather than editing a lookup table somewhere else that will drift.
+ *
  * `max` is a per-class radius ceiling in km. A 10 km ring over a city holds
  * thousands of secondary roads and streams; asking for them produces either a
  * refusal from Overpass or a wall of lines nobody wants. The class is skipped
@@ -77,11 +82,11 @@ const RING_FEATURE_CLASSES = [
     // Sidings, yards and spurs are the majority of railway=rail in a city and
     // are all noise on a connectivity map.
     q: ['way["railway"~"^(rail|narrow_gauge)$"]["service"!~"."]'] },
-  { id: 'station', label: 'Railway stations', cls: 'station', max: 25,
+  { id: 'station', label: 'Railway stations', cls: 'station', max: 25, icon: 'railway',
     q: ['node["railway"="station"]'] },
-  { id: 'metroStation', label: 'Metro stations', cls: 'metroStation', max: 25,
+  { id: 'metroStation', label: 'Metro stations', cls: 'metroStation', max: 25, icon: 'metro',
     q: ['node["railway"="station"]["station"="subway"]', 'node["station"="subway"]'] },
-  { id: 'airport', label: 'Airports', cls: 'airport', max: 40,
+  { id: 'airport', label: 'Airports', cls: 'airport', max: 40, icon: 'airport',
     q: ['way["aeroway"="aerodrome"]', 'relation["aeroway"="aerodrome"]'] },
   { id: 'river', label: 'Rivers', cls: 'water', max: 15,
     q: ['way["waterway"="river"]'] },
@@ -89,9 +94,9 @@ const RING_FEATURE_CLASSES = [
     // waterway=drain is excluded: municipal drains are dense and are not a
     // feature of a location.
     q: ['way["waterway"~"^(stream|canal)$"]'] },
-  { id: 'busTerminal', label: 'Bus terminals', cls: 'hub', max: 20,
+  { id: 'busTerminal', label: 'Bus terminals', cls: 'hub', max: 20, icon: 'bus',
     q: ['node["amenity"="bus_station"]', 'way["amenity"="bus_station"]'] },
-  { id: 'port', label: 'Ports & ferry terminals', cls: 'hub', max: 40,
+  { id: 'port', label: 'Ports & ferry terminals', cls: 'hub', max: 40, icon: 'port',
     q: ['node["amenity"="ferry_terminal"]', 'way["landuse"="port"]'] },
 
   /* ---- power: a constraint on the land, not a service to it ---- */
@@ -99,9 +104,9 @@ const RING_FEATURE_CLASSES = [
     q: ['way["power"="line"]'] },
   { id: 'powerMinor', label: 'LT / distribution lines', cls: 'powerMinor', max: 3,
     q: ['way["power"="minor_line"]'] },
-  { id: 'powerTower', label: 'Transmission towers', cls: 'powerTower', max: 8,
+  { id: 'powerTower', label: 'Transmission towers', cls: 'powerTower', max: 8, icon: 'tower',
     q: ['node["power"="tower"]'] },
-  { id: 'substation', label: 'Substations', cls: 'substation', max: 15,
+  { id: 'substation', label: 'Substations', cls: 'substation', max: 15, icon: 'power',
     q: ['way["power"="substation"]', 'node["power"="substation"]'] },
 
   /* ---- ground cover: what the land around the site actually is ---- */
@@ -124,7 +129,7 @@ const RING_FEATURE_CLASSES = [
   { id: 'building', label: 'Building footprints', cls: 'building', max: 1, merge: true,
     q: ['way["building"]'] },
 
-  { id: 'settlement', label: 'Towns & villages (names)', cls: 'hub', max: 25,
+  { id: 'settlement', label: 'Towns & villages (names)', cls: 'hub', max: 25, icon: 'building',
     q: ['node["place"~"^(city|town|village|suburb)$"]'] },
 ];
 
