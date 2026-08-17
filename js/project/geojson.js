@@ -16,6 +16,7 @@ function geomToGeoJSONFeature(g) {
       lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
       labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
       showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey,
+      captionSize: g.captionSize,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
       // The connectivity class. Without it a reopened project has shapes that
       // still LOOK right — the colours are saved separately — but belong to no
@@ -89,6 +90,7 @@ function importGeoJSONFeature(feat) {
     // needed; anything exported in that window still opens correctly.
     markerStyle: props.markerStyle || (props.pin ? 'pin' : undefined),
     iconKey: props.iconKey || undefined,
+    captionSize: props.captionSize != null ? +props.captionSize : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,
     cls: props.cls || undefined,
     proposed: props.proposed != null ? !!props.proposed : undefined,

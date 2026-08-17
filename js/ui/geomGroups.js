@@ -281,6 +281,26 @@ function renderGeomGroups() {
     const fillable = members.some(g => g.shape !== 'Line' && g.shape !== 'Marker' && g.shape !== 'Label');
     const noFill = fillable ? '' : ' disabled';
 
+    // Marker controls only appear when the group actually holds markers. A
+    // group of polygons offered a "Symbol" button would be offering something
+    // that cannot do anything, which is worse than not offering it.
+    const markers = members.filter(g => g.shape === 'Marker');
+    const hasMarkers = markers.length > 0;
+    // Read through geomMarkerStyle(), not the raw field: a marker saved before
+    // the field existed has no `markerStyle` at all, and comparing raw
+    // undefineds would report a uniform group of dots as having no common
+    // value — then default the control to Pin and offer to change something
+    // that was never in that state.
+    const mkStyles = markers.map(g => geomMarkerStyle(g));
+    const mkCommon = mkStyles.length && mkStyles.every(v => v === mkStyles[0]) ? mkStyles[0] : null;
+    const anyPin = mkStyles.indexOf('pin') >= 0;
+    const shownIcon = geomGroupCommon(markers, 'iconKey');
+    const labelOn = geomGroupCommon(members, 'showLabel');
+    // Same again for the caption size: an unset one draws at 11, so a group
+    // that has never been touched agrees at 11 rather than reading "Mixed".
+    const capSizes = members.map(g => (+g.captionSize > 0 ? +g.captionSize : 11));
+    const capSize = capSizes.length && capSizes.every(v => v === capSizes[0]) ? capSizes[0] : null;
+
     // A mixed value shows as "Mixed" rather than a made-up number. The old "–"
     // in a slider's readout looked like a broken control; this says the group
     // disagrees, and moving the slider is what makes them agree.
@@ -320,6 +340,18 @@ function renderGeomGroups() {
         <div class="r">
           <span class="sub gg-lbl">Line</span>
           <select class="gg-linestyle grow" title="Line style for every shape in this group" aria-label="Line style for every shape in this group">${optionList(LINE_STYLE_OPTS, ls || 'solid')}</select>
+        </div>
+${hasMarkers ? `
+        <div class="r">
+          <span class="sub gg-lbl">Marker</span>
+          <select class="gg-marker" style="flex:1;min-width:0" title="How every marker in this group is drawn" aria-label="Marker style for every marker in this group">${optionList(MARKER_STYLE_OPTS, mkCommon || mkStyles[0] || 'dot')}</select>
+          <button type="button" class="mini-btn gg-icon"${anyPin ? '' : ' disabled'} title="${anyPin ? 'Pick one symbol for every pin in this group' : 'Only a pin carries a symbol — switch the group to Pin first'}" aria-label="Symbol for every pin in this group">${shownIcon ? '◈ Symbol' : '◇ Symbol'}</button>
+        </div>` : ''}
+
+        <div class="r">
+          <label class="chk gg-lbl"><input type="checkbox" class="gg-showlabel" ${labelOn ? 'checked' : ''}> Label</label>
+          <input type="range" class="gg-capsize" min="8" max="22" step="1" value="${capSize == null ? 11 : capSize}" style="flex:1;" title="Caption text size for every shape in this group" aria-label="Caption text size for every shape in this group">
+          <span class="pct gg-capsize-v${mixed(capSize) ? ' is-mixed' : ''}">${mixed(capSize) ? 'Mixed' : capSize + 'px'}</span>
         </div>
       </div>`;
   }
@@ -417,6 +449,40 @@ function wireGeomGroups(host) {
   q('.gg-linestyle').addEventListener('change', e => {
     const v = e.target.value;
     geomGroupApply(key, g => { g.lineStyle = v; }, 'Set the line style');
+  });
+
+  const marker = q('.gg-marker');
+  if (marker) {
+    marker.addEventListener('change', e => {
+      const v = e.target.value;
+      geomGroupApply(key, g => { if (g.shape === 'Marker') g.markerStyle = v; }, 'Set the marker style');
+    });
+  }
+
+  const iconBtn = q('.gg-icon');
+  if (iconBtn && !iconBtn.disabled) {
+    iconBtn.addEventListener('click', () => {
+      const members = geomsInGroup(key);
+      const first = members.find(g => g.shape === 'Marker');
+      // openIconPicker wants something shaped like a location — it reads the
+      // current key and colour to show what is already chosen. A plain object
+      // is enough and keeps this from pretending a shape is a location.
+      openIconPicker({ iconKey: first ? first.iconKey : null, color: key },
+        iconKey => geomGroupApply(key,
+          g => { if (g.shape === 'Marker') g.iconKey = iconKey; }, 'Set the symbol'));
+    });
+  }
+
+  q('.gg-showlabel').addEventListener('change', e => {
+    const on = e.target.checked;
+    geomGroupApply(key, g => { g.showLabel = on; }, on ? 'Captions on' : 'Captions off');
+  });
+
+  q('.gg-capsize').addEventListener('input', e => {
+    const v = +e.target.value;
+    const out = q('.gg-capsize-v');
+    if (out) { out.textContent = v + 'px'; out.classList.remove('is-mixed'); }
+    geomGroupApply(key, g => { g.captionSize = v; }, 'Set the caption size');
   });
 
   q('.gg-zoom').addEventListener('click', () => {

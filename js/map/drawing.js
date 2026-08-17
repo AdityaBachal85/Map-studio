@@ -28,7 +28,7 @@ let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false, markerStyle: 'dot' }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false, markerStyle: 'dot', captionSize: 11 }; }
 
 /** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
 function dashArrayFor(style, w) {
@@ -241,9 +241,15 @@ function geomLabelIcon(g) {
   // the same coordinate lands across the pin's head and hides the thing it is
   // naming. `on-pin` lifts it clear.
   const onPin = (g.shape === 'Marker' && geomMarkerStyle(g) === 'pin') ? ' on-pin' : '';
+  // Its own field, not `labelSize`: that one belongs to Text shapes, where it
+  // sizes the words that ARE the shape. This sizes a caption attached to
+  // something else, and the two want different defaults — reusing one field
+  // would have made every existing caption jump from 11px to 15px the moment
+  // this control shipped.
+  const size = +g.captionSize > 0 ? +g.captionSize : 11;
   return L.divIcon({
     className: 'geom-label-wrap',
-    html: `<span class="geom-label${onPin}" style="border-color:${g.borderColor}">${esc(g.name)}</span>`,
+    html: `<span class="geom-label${onPin}" style="border-color:${g.borderColor};font-size:${size}px">${esc(g.name)}</span>`,
     iconSize: [0, 0],
   });
 }
@@ -405,7 +411,7 @@ function snapshotGeom(g) {
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
-    showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey,
+    showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey, captionSize: g.captionSize,
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
@@ -553,7 +559,7 @@ function recreateGeomFromSnapshot(snap) {
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
     labelSize: snap.labelSize, labelBold: snap.labelBold,
     labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
-    showLabel: snap.showLabel, glow: snap.glow, markerStyle: snap.markerStyle, iconKey: snap.iconKey,
+    showLabel: snap.showLabel, glow: snap.glow, markerStyle: snap.markerStyle, iconKey: snap.iconKey, captionSize: snap.captionSize,
     createdAt: snap.createdAt,
   });
 }
@@ -567,7 +573,8 @@ function restoreGeomSnapshot(id, snap) {
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
   g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
   g.labelStyle = snap.labelStyle; g.labelAngle = snap.labelAngle;
-  g.showLabel = snap.showLabel; g.glow = snap.glow; g.markerStyle = snap.markerStyle; g.iconKey = snap.iconKey;
+  g.showLabel = snap.showLabel; g.glow = snap.glow; g.markerStyle = snap.markerStyle;
+  g.iconKey = snap.iconKey; g.captionSize = snap.captionSize;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);
   touchGeom(g);
