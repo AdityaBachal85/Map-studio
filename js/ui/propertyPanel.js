@@ -58,6 +58,36 @@ const ICON_STYLE_FIELDS = ['iconFrame', 'iconSize', 'iconBorder', 'iconBorderCol
   'iconBg', 'iconShadow', 'iconGlow'];
 
 /**
+ * Push a location's current style back onto its own card's controls.
+ *
+ * Anything that changes a location from outside its card has to do this, or the
+ * panel keeps the old numbers and the next drag of a slider snaps the map back
+ * to them — a bug that reads as "the control does not work" rather than as a
+ * stale readout. Extracted so the bulk paths and this one cannot drift: it is
+ * used by applyIconStyleToAll() below and by ui/locGroups.js.
+ *
+ * @param {object} l
+ */
+function syncLocCardStyle(l) {
+  if (!l || !l.card) return;
+  const set = (sel, v) => { const el = l.card.querySelector(sel); if (el) el.value = v; };
+  set('.fr', l.iconFrame); set('.sz', l.iconSize); set('.bw', l.iconBorder);
+  set('.bc', l.iconBorderColor); set('.ibg', l.iconBg); set('.ish', l.iconShadow);
+  set('.lbg', l.labelBg);
+  set('.lsz', l.labelScale == null ? 100 : l.labelScale);
+  const szv = l.card.querySelector('.sz-v'); if (szv) szv.textContent = l.iconSize;
+  const lszv = l.card.querySelector('.lsz-v');
+  if (lszv) lszv.textContent = (l.labelScale == null ? 100 : l.labelScale) + '%';
+  const gl = l.card.querySelector('.gl'); if (gl) gl.checked = !!l.iconGlow;
+  const sl = l.card.querySelector('.sl'); if (sl) sl.checked = !!l.showLabel;
+  l.card.querySelectorAll('input[type="color"]').forEach(i => {
+    if (typeof syncColorSwatch === 'function') syncColorSwatch(i);
+  });
+  const framed = (l.iconFrame || 'none') !== 'none';
+  l.card.querySelectorAll('.frame-only').forEach(r => { r.style.display = framed ? '' : 'none'; });
+}
+
+/**
  * Copy one location's icon styling onto every other location.
  * @param {object} src the location whose card the button was pressed on
  */
@@ -72,18 +102,7 @@ function applyIconStyleToAll(src) {
     // screen agree with what the map now shows. Without the second half the
     // panels keep the old numbers and the next drag snaps back to them.
     renderLocPin(l);
-    if (l.card) {
-      const set = (sel, v) => { const el = l.card.querySelector(sel); if (el != null && el) el.value = v; };
-      set('.fr', l.iconFrame); set('.sz', l.iconSize); set('.bw', l.iconBorder);
-      set('.bc', l.iconBorderColor); set('.ibg', l.iconBg); set('.ish', l.iconShadow);
-      const szv = l.card.querySelector('.sz-v'); if (szv) szv.textContent = l.iconSize;
-      const gl = l.card.querySelector('.gl'); if (gl) gl.checked = !!l.iconGlow;
-      l.card.querySelectorAll('input[type="color"]').forEach(i => {
-        if (typeof syncColorSwatch === 'function') syncColorSwatch(i);
-      });
-      const framed = (l.iconFrame || 'none') !== 'none';
-      l.card.querySelectorAll('.frame-only').forEach(r => { r.style.display = framed ? '' : 'none'; });
-    }
+    syncLocCardStyle(l);
   });
 
   if (typeof pushHistory === 'function') pushHistory();
@@ -640,6 +659,10 @@ function wireLocCard(card, loc) {
       function syncEmpties() {
         $('locEmpty').style.display = realLocations().length ? 'none' : '';
         $('rtEmpty').style.display = routes.length ? 'none' : '';
+        // The one place every add and remove already funnels through, so the
+        // colour swatches cannot drift out of step with the locations they
+        // describe. Same hook syncGeomEmpty() uses for shapes.
+        if (typeof renderLocGroups === 'function') renderLocGroups();
       }
       /** Wire the legend card's drag handle so it can be repositioned. */
       /**
