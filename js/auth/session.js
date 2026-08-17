@@ -340,7 +340,22 @@ async function signUpWithPassword(details) {
   const { data, error } = await _sb.auth.signUp({
     email,
     password,
-    options: { data: { full_name: details.name || email.split('@')[0] } },
+    options: {
+      data: { full_name: details.name || email.split('@')[0] },
+      // Without this, Supabase builds the confirmation link from the project's
+      // Site URL — which is `http://localhost:3000` until somebody changes it in
+      // the dashboard. The link then arrives pointing at a port on the reader's
+      // own machine, and confirming an account ends at "localhost refused to
+      // connect". Every other flow in this file already sends an absolute URL
+      // built from where the page is actually being served; this one did not,
+      // which is why it was the only one that broke.
+      //
+      // Supabase still checks this against the project's Redirect URLs
+      // allow-list and silently falls back to the Site URL when it is not on
+      // it, so the dashboard has to list this origin too. See
+      // docs/ACCOUNTS-SETUP.md.
+      emailRedirectTo: authReturnUrl(),
+    },
   });
   if (error) {
     if (/signups? not allowed|disabled/i.test(error.message)) {
@@ -381,11 +396,28 @@ function signInLocally(who) {
   return user;
 }
 
+/**
+ * Where an emailed auth link should land: this deployment's own login page.
+ *
+ * login.html forwards an already-authenticated visitor straight on to
+ * `?next=` (projects.html by default), so a confirmed account arrives where it
+ * was going rather than at a sign-in form it no longer needs.
+ *
+ * Built from `location` rather than from a constant so the same file works on
+ * GitHub Pages, on a local `python3 -m http.server`, and from a file:// copy,
+ * without a build step to swap the value.
+ *
+ * @returns {string} absolute URL to login.html beside the current page
+ */
+function authReturnUrl() {
+  return location.origin + location.pathname.replace(/[^/]*$/, 'login.html');
+}
+
 /** Send a password-reset email. @param {string} email @returns {Promise<void>} */
 async function sendPasswordReset(email) {
   if (!supabaseConfigured()) throw new Error('Accounts are not configured yet.');
   const { error } = await _sb.auth.resetPasswordForEmail(String(email || '').trim().toLowerCase(), {
-    redirectTo: location.origin + location.pathname.replace(/[^/]*$/, 'login.html'),
+    redirectTo: authReturnUrl(),
   });
   if (error) throw new Error(error.message);
 }

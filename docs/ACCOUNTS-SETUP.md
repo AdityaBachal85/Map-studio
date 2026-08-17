@@ -176,10 +176,38 @@ untouched.
 | "Could not reach the sign-in service" | `SUPABASE_URL` wrong, project paused, or a network blocking it. Open the URL in a tab — a paused project says so |
 | `AADSTS50011: redirect URI mismatch` | Azure's redirect URI must be Supabase's `/auth/v1/callback`, not your site |
 | Returns to the app but still signed out | The return URL is not in Supabase's **Redirect URLs** list |
+| Confirmation link opens `localhost:3000` and "refused to connect" | **Site URL** is still Supabase's default. Set it as above. The app now sends its own `emailRedirectTo`, but Supabase ignores any value that is not covered by **Redirect URLs** and silently falls back to the Site URL — so both settings have to be right |
+| `error_code=otp_expired` — "Email link is invalid or has expired", clicked within minutes | Almost always **not** expiry. The link is single-use, and mail security that pre-scans messages — Microsoft Defender Safe Links in Outlook, and its equivalents — opens every link it finds, spending the token before the person clicks. See below |
 | "The map_projects table does not exist yet" | Step 2 was not run |
 | "The database refused that write" | Tables exist, policies do not. Re-run `sql/supabase-auth.sql` |
 | "Sign-up is limited to dbotrealty.com" | The domain trigger. Change the domain in the SQL, or drop the trigger |
 | Worked for weeks, then stopped | The Azure client secret expired. Issue a new one and update it in Supabase |
+
+## Email links that are dead on arrival
+
+Worth its own section because the error message actively misleads.
+
+Supabase's confirmation and reset links are **single use**. Corporate mail
+security opens links in incoming messages to scan them before delivery —
+Microsoft Defender for Office 365 "Safe Links" is the one this organisation
+will meet, since the mail is Outlook. The scanner's fetch spends the token. By
+the time a person clicks, the link is used, and Supabase reports the only thing
+it can tell from its side: `otp_expired`, "Email link is invalid or has
+expired". A link can therefore be dead seconds after it was sent, which reads
+like a broken app rather than a security product doing its job.
+
+`login.html` now explains this rather than showing an empty sign-in form, but
+the underlying fix is one of:
+
+- **Sign in with the password instead.** A password sign-up creates the account
+  immediately; the email only confirms the address. If confirmation is not
+  required for your project, the account already works.
+- **Turn off "Confirm email"** (Authentication → Providers → Email) and rely on
+  the `@dbotrealty.com` domain trigger, which already restricts who may
+  register. This is the simplest option for a single-domain internal tool.
+- **Use the Microsoft button**, which has no emailed link to intercept.
+- **Exclude the Supabase auth domain from Safe Links** in the Microsoft 365
+  admin centre, if IT will do it.
 
 ## What is not built yet
 
