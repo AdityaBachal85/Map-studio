@@ -175,7 +175,12 @@
         // Back-reference so a failure handler can find which LayerSpec it came
         // from, and therefore which alternative templates it may try.
         layer._lyrSpec = lyr;
-        if (lyr.adaptive && hd) attachAdaptiveDepth(layer, lyr);
+        // Not `&& hd`. HD off only lowers the starting depth by two levels — it
+        // does not guarantee the service has imagery there, and somewhere with
+        // shallow coverage runs out at z18 just as readily as at z20. Gating the
+        // recovery on a quality toggle meant the one setting most likely to be
+        // left off was the one with no way out of a screen of placeholders.
+        if (lyr.adaptive) attachAdaptiveDepth(layer, lyr);
         attachExportSafetyProbe(layer, spec);
         attachTileAuthDiagnostic(layer, spec);
         if (lyr.zIndex === 1) layer.once('tileload', () => rememberBasemapWorks(spec.id));

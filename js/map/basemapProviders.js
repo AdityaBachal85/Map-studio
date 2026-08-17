@@ -653,34 +653,57 @@ function exportSubstituteNote(msg) {
  * A false positive costs nothing beyond one upscaled zoom level (exactly what
  * the old hard cap did everywhere, all the time).
  *
+ * WHY THE TEST IS FLATNESS AND NOT GREYNESS — READ BEFORE TIGHTENING IT.
+ *
+ * This asked for a *neutral* grey: any sample whose channels spread more than
+ * 10 was rejected as real imagery. That is what Esri's placeholder used to be,
+ * and it stopped being true — the tile served now carries a distinct lavender
+ * cast, roughly (198,200,222), whose channels spread about 24. Every corner of
+ * a screenful of placeholders was therefore classified as photography, the
+ * strike count never reached two, the depth never backed off, and the map sat
+ * on "Map data not yet available" at a 34 m scale with nothing in the console
+ * to say why. It had been fixed once by widening the *brightness* band; this is
+ * the same failure a second time, from the other axis.
+ *
+ * So the primary signal is now what actually distinguishes the tile: it is
+ * FLAT. Every channel is within a few levels across all four corners. Aerial
+ * photography essentially never is — vegetation, rooftops, tarmac and shadow
+ * all move the corners apart — and that is true whatever hue the placeholder is
+ * painted next time.
+ *
+ * Saturation survives only as a loose guard against a genuinely uniform, richly
+ * coloured tile, set wide enough to admit a tinted grey. The brightness band
+ * still excludes deep water (far darker) and cloud or snow (far brighter),
+ * which are the realistic uniform-tile false positives.
+ *
  * @param {number[]} px RGBA samples, four corners + centre: `[r,g,b,a, …]`.
  * @returns {boolean} true when the sample looks like the placeholder tile.
  */
 function looksLikeNoDataTile(px) {
   if (!px || px.length < 16) return false;
-  const rgb = [];
+  const lo = [255, 255, 255], hi = [0, 0, 0];
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] < 250) return false;                        // translucent → not it
-    rgb.push([px[i], px[i + 1], px[i + 2]]);
+    for (let k = 0; k < 3; k++) {
+      const v = px[i + k];
+      if (v < lo[k]) lo[k] = v;
+      if (v > hi[k]) hi[k] = v;
+    }
   }
-  let lo = 255, hi = 0;
-  for (const [r, g, b] of rgb) {
-    // Desaturation is the strongest signal: aerial photography is never
-    // neutral grey across a whole tile — vegetation, water, rooftops and
-    // tarmac all carry a colour cast.
-    if (Math.max(r, g, b) - Math.min(r, g, b) > 10) return false;
-    const v = (r + g + b) / 3;
-    // Was 224–249, which missed the placeholder outright: Esri's is around
-    // 215–225, and averaging its white caption into a downsample drags the
-    // reading further about. The band is now wide enough to cover the tile as
-    // actually served while still excluding dark ground and white cloud.
-    if (v < 185 || v > 252) return false;
-    lo = Math.min(lo, v); hi = Math.max(hi, v);
-  }
-  // Was ≤3, which no sample containing any of the caption could satisfy.
-  // Callers sample the corners for that reason, but a little slack costs
-  // nothing and this has to survive JPEG noise too.
-  return hi - lo <= 10;
+
+  // Flat: each channel varies by only a few levels across the whole sample.
+  // 12 rather than a tighter number because this has to survive JPEG noise and
+  // the downsample that averages the caption's white edge into the background.
+  for (let k = 0; k < 3; k++) if (hi[k] - lo[k] > 12) return false;
+
+  const mid = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+  const v = (mid[0] + mid[1] + mid[2]) / 3;
+  // Light, but not white. Below this is ground or deep water; above it is cloud.
+  if (v < 185 || v > 252) return false;
+
+  // A tint is fine — the current placeholder has one. A saturated flat tile is
+  // something else, and is left alone.
+  return Math.max(mid[0], mid[1], mid[2]) - Math.min(mid[0], mid[1], mid[2]) <= 34;
 }
 
 /* Node/test interop — harmless in the browser. */
