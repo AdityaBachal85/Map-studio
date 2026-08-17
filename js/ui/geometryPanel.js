@@ -7,6 +7,8 @@
 
 const LINE_STYLE_OPTS = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
 const CORNER_OPTS = [['round', 'Round'], ['sharp', 'Sharp'], ['square', 'Square']];
+/** How a point shape is drawn. See geomMarkerIcon() in map/drawing.js. */
+const MARKER_STYLE_OPTS = [['dot', 'Dot'], ['pin', 'Pin'], ['square', 'Square']];
 
 function optionList(opts, sel) {
   return opts.map(([v, label]) => `<option value="${v}" ${sel === v ? 'selected' : ''}>${label}</option>`).join('');
@@ -53,8 +55,9 @@ function geomCardMarkup(g) {
       <label class="chk"><input type="checkbox" class="gglow" ${g.glow ? 'checked' : ''}> Glow</label>
     </div>
     ${g.shape === 'Marker' ? `<div class="r">
-      <label class="chk" title="A teardrop pin points at the place, like a location's marker.
-Unticked it is a plain dot, which suits a measured point rather than a named one."><input type="checkbox" class="gpin" ${g.pin ? 'checked' : ''}> Pin marker</label>
+      <span class="sub" style="width:52px;">Marker</span>
+      <select class="gmk grow" title="Dot marks a coordinate. Pin points at a place, like a location's marker.
+Square suits a structure that repeats along a line — a run of transmission towers reads as beads on the corridor rather than a wall of pins.">${optionList(MARKER_STYLE_OPTS, geomMarkerStyle(g))}</select>
     </div>` : ''}
     <div class="r"><textarea class="gdesc grow" rows="2" placeholder="Description">${esc(g.description)}</textarea></div>
     <div class="r"><textarea class="gnotes grow" rows="2" placeholder="Notes">${esc(g.notes)}</textarea></div>
@@ -88,8 +91,8 @@ function syncGeomCardStyleControls(g) {
   c.querySelector('.glbl').checked = !!g.showLabel;
   c.querySelector('.gglow').checked = !!g.glow;
   // Only Marker cards carry this one, so it may legitimately be absent.
-  const pinBox = c.querySelector('.gpin');
-  if (pinBox) pinBox.checked = !!g.pin;
+  const mk = c.querySelector('.gmk');
+  if (mk) mk.value = geomMarkerStyle(g);
 }
 
 /** Wire up every control in a geometry card built by geomCardMarkup(). @param {HTMLDivElement} card @param {object} g */
@@ -128,10 +131,10 @@ function wireGeomCard(card, g) {
   card.querySelector('.gcorner').addEventListener('change', e => { g.corner = e.target.value; applyGeomStyle(g); touchGeom(g); });
   card.querySelector('.glbl').addEventListener('change', e => { g.showLabel = e.target.checked; ensureGeomLabel(g); touchGeom(g); });
   card.querySelector('.gglow').addEventListener('change', e => { g.glow = e.target.checked; ensureGlow(g); touchGeom(g); });
-  const pinCb = card.querySelector('.gpin');
+  const mkSel = card.querySelector('.gmk');
   // applyGeomStyle rather than just setIcon: the label has to move too, since a
   // pin's chip sits above the head and a dot's sits on the point.
-  if (pinCb) pinCb.addEventListener('change', e => { g.pin = e.target.checked; applyGeomStyle(g); touchGeom(g); });
+  if (mkSel) mkSel.addEventListener('change', e => { g.markerStyle = e.target.value; applyGeomStyle(g); touchGeom(g); });
   card.querySelector('.gdesc').addEventListener('change', e => { g.description = e.target.value; touchGeom(g); });
   card.querySelector('.gnotes').addEventListener('change', e => { g.notes = e.target.value; touchGeom(g); });
   card.querySelector('.gedit').addEventListener('click', () => enableSingleShapeEdit(g));

@@ -43,10 +43,10 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   // Exactly what ringScanPanel does for a `point` result, icon key included.
   const made = await p.evaluate(() => {
     const fc = ringFeatureClass('metroStation');
-    const meta = ringScanMeta('Ghatkopar', fc.cls, 'Marker', fc.icon);
+    const meta = ringScanMeta('Ghatkopar', fc.cls, 'Marker', fc.icon, fc.marker || 'pin', !fc.label_off);
     const g = registerGeom(L.marker([19.10, 72.88]), 'Marker', meta);
     return {
-      pin: !!g.pin, showLabel: !!g.showLabel, fillOpacity: g.fillOpacity,
+      pin: geomMarkerStyle(g) === 'pin', showLabel: !!g.showLabel, fillOpacity: g.fillOpacity,
       shape: g.shape, iconKey: g.iconKey,
     };
   });
@@ -90,10 +90,10 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   const glyphs = await p.evaluate(() => {
     const out = {};
     [['station', 'railway'], ['metroStation', 'metro'], ['airport', 'airport'],
-     ['busTerminal', 'bus'], ['powerTower', 'tower']].forEach(([cid, want], n) => {
+     ['busTerminal', 'bus'], ['port', 'port']].forEach(([cid, want], n) => {
       const fc = ringFeatureClass(cid);
       const g = registerGeom(L.marker([19.10 + (n + 1) * 0.004, 72.88]), 'Marker',
-        ringScanMeta(fc.label, fc.cls, 'Marker', fc.icon));
+        ringScanMeta(fc.label, fc.cls, 'Marker', fc.icon, fc.marker || 'pin', !fc.label_off));
       out[cid] = { want, got: g.iconKey };
     });
     const pins = [].map.call(document.querySelectorAll('.geom-marker-pin'), el => {
@@ -141,7 +141,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   const toDot = await p.evaluate(() => {
     const g = geometries[geometries.length - 1];
     const before = document.querySelectorAll('.geom-marker-pin').length;
-    g.pin = false; applyGeomStyle(g);
+    g.markerStyle = 'dot'; applyGeomStyle(g);
     const el = g.layer.getElement();
     return {
       cls: el ? el.className : null,
@@ -158,15 +158,15 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   // saved file actually carries.
   const trip = await p.evaluate(() => {
     const g = geometries[geometries.length - 1];
-    g.pin = true; applyGeomStyle(g);
+    g.markerStyle = 'pin'; applyGeomStyle(g);
     const feat = geomToGeoJSONFeature(g);
     const before = geometries.length;
     importGeoJSONFeature(feat);
     const back = geometries[geometries.length - 1];
     return {
-      outPin: feat.properties.pin,
+      outPin: feat.properties.markerStyle === 'pin',
       imported: geometries.length === before + 1,
-      backPin: !!back.pin,
+      backPin: geomMarkerStyle(back) === 'pin',
       backLabel: !!back.showLabel,
       backIsPinEl: !!document.querySelectorAll('.geom-marker-pin').length,
     };
@@ -179,11 +179,44 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   const undo = await p.evaluate(() => {
     const g = geometries[geometries.length - 1];
     const snap = snapshotGeom(g);
-    g.pin = false; applyGeomStyle(g);
+    g.markerStyle = 'dot'; applyGeomStyle(g);
     restoreGeomSnapshot(g.id, snap);
-    return { pin: !!g.pin, el: !!document.querySelectorAll('.geom-marker-pin').length };
+    return { style: geomMarkerStyle(g), el: !!document.querySelectorAll('.geom-marker-pin').length };
   });
-  ck('pin survives an undo snapshot', undo.pin === true && undo.el === true, JSON.stringify(undo));
+  ck('the marker style survives an undo snapshot',
+    undo.style === 'pin' && undo.el === true, JSON.stringify(undo));
+
+  // ---- towers: a square, not a captioned pin ------------------------------
+  const towers = await p.evaluate(() => {
+    const fc = ringFeatureClass('powerTower');
+    const made = [];
+    for (let i = 0; i < 6; i++) {
+      made.push(registerGeom(L.marker([19.09 - i * 0.002, 72.87]), 'Marker',
+        ringScanMeta(fc.label, fc.cls, 'Marker', fc.icon, fc.marker || 'pin', !fc.label_off)));
+    }
+    const el = made[0].layer.getElement();
+    const r = el ? el.getBoundingClientRect() : null;
+    return {
+      declared: fc.marker,
+      style: geomMarkerStyle(made[0]),
+      labelled: made.filter(g => g.showLabel).length,
+      cls: el ? el.className : null,
+      w: r ? Math.round(r.width) : 0, h: r ? Math.round(r.height) : 0,
+      captionsOnMap: document.querySelectorAll('.geom-label').length,
+      pinsOnMap: document.querySelectorAll('.geom-marker-pin').length,
+      squaresOnMap: document.querySelectorAll('.geom-marker-square').length,
+    };
+  });
+  ck('the tower class asks for a square', towers.declared === 'square', JSON.stringify(towers));
+  ck('towers are drawn as small squares, not pins',
+    towers.style === 'square' && /geom-marker-square/.test(towers.cls || '')
+    && towers.w <= 12 && towers.h <= 12 && towers.squaresOnMap === 6, JSON.stringify(towers));
+  ck('and none of them is captioned',
+    towers.labelled === 0, towers.labelled + ' captioned of 6');
+
+  await p.evaluate(() => map.setView([19.088, 72.872], 15, { animate: false }));
+  await p.waitForTimeout(600);
+  await p.screenshot({ path: path.join(__dirname, 'shot-towers.png') });
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();

@@ -28,7 +28,7 @@ let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false, pin: false }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false, markerStyle: 'dot' }; }
 
 /** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
 function dashArrayFor(style, w) {
@@ -60,11 +60,54 @@ const geomByLayer = layer => geometries.find(g => g.layer === layer);
 
 /** Point-shaped divIcon used for Marker/CircleMarker so Fill/Border properties stay meaningful for point shapes too. @param {object} g */
 function geomMarkerIcon(g) {
-  if (g.pin) return geomPinIcon(g);
+  const style = geomMarkerStyle(g);
+  if (style === 'pin') return geomPinIcon(g);
+  if (style === 'square') return geomSquareIcon(g);
   return L.divIcon({
     className: 'geom-marker-dot',
     html: `<span style="display:block;width:100%;height:100%;border-radius:50%;background:${g.fillColor};opacity:${g.fillOpacity};border:${g.borderWidth}px solid ${g.borderColor};box-shadow:0 1px 4px rgba(0,0,0,.4);"></span>`,
     iconSize: [22, 22], iconAnchor: [11, 11],
+  });
+}
+
+/**
+ * How a point shape is drawn: 'dot', 'pin' or 'square'.
+ *
+ * `pin` was a boolean for about an hour before towers proved three kinds were
+ * needed. Read here rather than at each call site so the old field keeps
+ * working in anything already saved with it.
+ *
+ * @param {object} g @returns {string}
+ */
+function geomMarkerStyle(g) {
+  if (g.markerStyle) return g.markerStyle;
+  return g.pin ? 'pin' : 'dot';
+}
+
+/**
+ * A small square, for a structure that repeats along a line.
+ *
+ * A ring scan over a transmission corridor returns a tower every few hundred
+ * metres — hundreds of them — and a teardrop pin each, captioned "Transmission
+ * towers" each, buries the map completely: the thing the reader needs to see is
+ * the CORRIDOR, and the pins hide the very line they are strung along.
+ *
+ * A square says "a structure is here" without claiming to be a destination, and
+ * at 9px it reads as a row of beads following the line rather than as a wall of
+ * markers. This is the conventional treatment on a utility plan for the same
+ * reason. Centred on its coordinate rather than anchored at a tip, because a
+ * square marks a footprint and does not point at anything.
+ *
+ * @param {object} g @returns {L.DivIcon}
+ */
+function geomSquareIcon(g) {
+  const w = Math.max(1, Math.min(3, g.borderWidth == null ? 1.5 : g.borderWidth * 0.5));
+  return L.divIcon({
+    className: 'geom-marker-square',
+    html: '<span style="display:block;width:100%;height:100%;border-radius:2px;'
+      + 'background:' + g.fillColor + ';border:' + w + 'px solid ' + g.borderColor + ';'
+      + 'box-shadow:0 1px 3px rgba(0,0,0,.45)"></span>',
+    iconSize: [9, 9], iconAnchor: [4.5, 4.5],
   });
 }
 
@@ -197,7 +240,7 @@ function geomLabelIcon(g) {
   // A pin is anchored at its tip and stands 32px above it, so a chip centred on
   // the same coordinate lands across the pin's head and hides the thing it is
   // naming. `on-pin` lifts it clear.
-  const onPin = (g.shape === 'Marker' && g.pin) ? ' on-pin' : '';
+  const onPin = (g.shape === 'Marker' && geomMarkerStyle(g) === 'pin') ? ' on-pin' : '';
   return L.divIcon({
     className: 'geom-label-wrap',
     html: `<span class="geom-label${onPin}" style="border-color:${g.borderColor}">${esc(g.name)}</span>`,
@@ -362,7 +405,7 @@ function snapshotGeom(g) {
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
-    showLabel: g.showLabel, glow: g.glow, pin: g.pin, iconKey: g.iconKey,
+    showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey,
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
@@ -510,7 +553,7 @@ function recreateGeomFromSnapshot(snap) {
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
     labelSize: snap.labelSize, labelBold: snap.labelBold,
     labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
-    showLabel: snap.showLabel, glow: snap.glow, pin: snap.pin, iconKey: snap.iconKey,
+    showLabel: snap.showLabel, glow: snap.glow, markerStyle: snap.markerStyle, iconKey: snap.iconKey,
     createdAt: snap.createdAt,
   });
 }
@@ -524,7 +567,7 @@ function restoreGeomSnapshot(id, snap) {
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
   g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
   g.labelStyle = snap.labelStyle; g.labelAngle = snap.labelAngle;
-  g.showLabel = snap.showLabel; g.glow = snap.glow; g.pin = snap.pin; g.iconKey = snap.iconKey;
+  g.showLabel = snap.showLabel; g.glow = snap.glow; g.markerStyle = snap.markerStyle; g.iconKey = snap.iconKey;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);
   touchGeom(g);

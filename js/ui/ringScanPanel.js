@@ -247,6 +247,8 @@ function keepRingScanSelection() {
     const clsId = fc ? fc.cls : null;
     const name = f.name || (fc ? fc.label : 'Feature');
     const iconKey = fc ? fc.icon : null;
+    const markerStyle = (fc && fc.marker) || 'pin';
+    const wantLabel = !(fc && fc.label_off);
     let layer = null, shape = null;
     // A pin, not a circle. What comes back as a `point` from a scan is a
     // *place* — a metro station, an airport, a substation — and a 7px circle
@@ -260,7 +262,7 @@ function keepRingScanSelection() {
     else if (f.pts) { layer = L.polyline(f.pts); shape = 'Line'; }
     if (!layer) return;
 
-    added.push(registerGeom(layer, shape, ringScanMeta(name, clsId, shape, iconKey)));
+    added.push(registerGeom(layer, shape, ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel)));
     n++;
   });
 
@@ -290,9 +292,11 @@ function keepRingScanSelection() {
  * The style a scanned feature starts with.
  * @param {string} name @param {string|null} clsId @param {string} shape
  * @param {string|null} [iconKey] Symbol for the pin's head, from the scan class.
+ * @param {string} [markerStyle] 'pin' or 'square'.
+ * @param {boolean} [wantLabel] Whether to caption it on the map.
  * @returns {object}
  */
-function ringScanMeta(name, clsId, shape, iconKey) {
+function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel) {
   const cc = typeof connClass === 'function' ? connClass(clsId) : null;
   const meta = { name, cls: clsId, fromRing: true };
   if (cc) {
@@ -305,19 +309,20 @@ function ringScanMeta(name, clsId, shape, iconKey) {
     }
   }
   if (shape === 'Marker') {
-    meta.pin = true;
-    meta.showLabel = true;
+    const style = markerStyle || 'pin';
+    meta.markerStyle = style;
+    meta.showLabel = wantLabel !== false && style !== 'square';
     // What was found, drawn inside the pin. Without it every scanned place is
     // the same teardrop and the legend is the only way to tell a station from
-    // a substation.
-    if (iconKey) meta.iconKey = iconKey;
+    // a substation. A square is too small to carry one.
+    if (iconKey && style === 'pin') meta.iconKey = iconKey;
     // The teardrop is a solid body with a white keyline, like a location's pin.
     // The class colour is the body; a 0.18 fill opacity inherited from the area
     // styling above would render it as a ghost.
     meta.fillColor = cc ? cc.color : '#FF7A1A';
     meta.fillOpacity = 1;
     meta.borderColor = '#FFFFFF';
-    meta.borderWidth = 2;
+    meta.borderWidth = style === 'square' ? 1 : 2;
   }
   return meta;
 }

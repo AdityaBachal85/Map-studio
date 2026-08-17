@@ -59,7 +59,12 @@ const OVERPASS_CACHE_MAX_BYTES = 1.5e6;
  * What a ring can look for.
  *
  * `icon` is the symbol a point of this class carries inside its map pin — a
- * station gets a train, a metro station gets a metro glyph. Declared here
+ * station gets a train, a metro station gets a metro glyph.
+ *
+ * `marker` is how a point of this class is drawn: a teardrop pin by default,
+ * or `'square'` for something that repeats along a line rather than being a
+ * destination. `label_off` suppresses the on-map caption for the same reason —
+ * one name repeated two hundred times is not a label, it is a wall. Declared here
  * beside the query that produces the feature, so adding a class means adding
  * one row rather than editing a lookup table somewhere else that will drift.
  *
@@ -104,7 +109,12 @@ const RING_FEATURE_CLASSES = [
     q: ['way["power"="line"]'] },
   { id: 'powerMinor', label: 'LT / distribution lines', cls: 'powerMinor', max: 3,
     q: ['way["power"="minor_line"]'] },
+  // A tower every few hundred metres along a corridor: hundreds of them in one
+  // scan. A captioned pin each buries the map and hides the very line they are
+  // strung along, so they get a small square and no caption — the corridor is
+  // the thing being shown, and the towers describe its route.
   { id: 'powerTower', label: 'Transmission towers', cls: 'powerTower', max: 8, icon: 'tower',
+    marker: 'square', label_off: true,
     q: ['node["power"="tower"]'] },
   { id: 'substation', label: 'Substations', cls: 'substation', max: 15, icon: 'power',
     q: ['way["power"="substation"]', 'node["power"="substation"]'] },
