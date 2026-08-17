@@ -537,6 +537,15 @@ function applyHistoryEntry(entry, isUndo) {
     // where they were one click ago.
     entry.edits.forEach(e => restoreGeomSnapshot(e.id, isUndo ? e.before : e.after));
     if (typeof renderGeomGroups === 'function') renderGeomGroups();
+  } else if (entry.type === 'deleteMany') {
+    // Deleting a whole colour group is one action for the same reason
+    // restyling one is: somebody clicked once. Forty separate `delete` entries
+    // would mean forty presses of Undo to get back, each one repainting the
+    // map, and no way to tell where the group deletion started.
+    if (isUndo) entry.snaps.forEach(s => recreateGeomFromSnapshot(s));
+    else entry.snaps.forEach(s => removeGeomById(s.id));
+    if (typeof renderGeomGroups === 'function') renderGeomGroups();
+    if (typeof rebuildLegend === 'function') rebuildLegend();
   }
 }
 

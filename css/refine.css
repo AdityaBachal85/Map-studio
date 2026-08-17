@@ -3490,6 +3490,16 @@ input[type=checkbox]:disabled {
   margin-right: auto;
 }
 
+/* Deleting a colour group takes every shape using it, so the button says so
+   before it is pressed rather than only in the status line afterwards. Quiet
+   until hovered: it sits beside a zoom button that is entirely harmless, and a
+   permanently red control next to it reads as an error state on the panel. */
+.gg-del:hover,
+.gg-del:focus-visible {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 /* One column for every label in the block, so the controls line up down the
    left edge instead of each row starting wherever its own word ends. */
 .gg-lbl {

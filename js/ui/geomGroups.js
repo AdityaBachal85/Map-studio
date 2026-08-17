@@ -103,6 +103,51 @@ function geomGroupApply(key, mutate, what) {
 }
 
 /**
+ * Delete every shape in a colour group.
+ *
+ * The whole point of grouping by colour is that a colour means something —
+ * "purple is industry, red is residential" — so "get rid of the red ones" is a
+ * single intention, and doing it one card at a time is forty deletions of
+ * something that was one decision. A ring scan makes this sharper still: it can
+ * drop a hundred shapes in one go, and the only practical way back out is by
+ * the property they share.
+ *
+ * NOT GUARDED BY A CONFIRMATION, deliberately, and the reasoning is already
+ * written down in ui/notifications.js: a confirmation interrupts every delete
+ * including the ones that were meant, and people learn to dismiss it without
+ * reading. The whole group goes back with one Undo, and the status line offers
+ * that Undo where the eye already is.
+ *
+ * @param {string} key
+ */
+function geomGroupDelete(key) {
+  const members = geomsInGroup(key);
+  if (!members.length) return;
+
+  const name = geomColorLabel(key);
+  const n = members.length;
+  // Snapshot every member BEFORE removing any of them — removeGeomById drops
+  // the layer, and a snapshot taken afterwards has no coordinates to store.
+  const snaps = members.map(g => snapshotGeom(g));
+
+  members.forEach(g => {
+    if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
+    removeGeomById(g.id);
+  });
+
+  pushUndo({ type: 'deleteMany', snaps });
+
+  geomGroupSelected = null;
+  renderGeomGroups();
+  if (typeof rebuildLegend === 'function') rebuildLegend();
+
+  status(`${n} ${name.toLowerCase()} shape${n === 1 ? '' : 's'} deleted.`, false, {
+    label: 'Undo',
+    onClick: () => { if (typeof doUndo === 'function') doUndo(); },
+  });
+}
+
+/**
  * Flash the group on the map.
  *
  * Selecting a swatch has to answer "which ones are those?" before any control
@@ -243,6 +288,7 @@ function renderGeomGroups() {
           <span class="gg-head-name">${esc(geomColorLabel(geomGroupSelected))}</span>
           <span class="gg-head-count">${members.length} shape${members.length === 1 ? '' : 's'}</span>
           <button type="button" class="mini-btn gg-zoom" title="Zoom the map to fit this group" aria-label="Zoom to fit this group">⌖</button>
+          <button type="button" class="mini-btn gg-del" title="Delete all ${members.length} shape${members.length === 1 ? '' : 's'} in this group — one Undo brings them all back" aria-label="Delete all ${members.length} shapes in this group">&times;</button>
         </div>
 
         <div class="r">
@@ -380,4 +426,6 @@ function wireGeomGroups(host) {
     if (bounds) map.fitBounds(bounds, { padding: [60, 60] });
     geomGroupFlash(key);
   });
+
+  q('.gg-del').addEventListener('click', () => geomGroupDelete(key));
 }
