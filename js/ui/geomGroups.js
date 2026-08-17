@@ -98,6 +98,11 @@ function geomGroupApply(key, mutate, what) {
   const moved = geomVisibleColor(members[0]);
   geomGroupSelected = moved;
   renderGeomGroups();
+  // Restyling a group is the fastest way to make the legend wrong, so it is
+  // also the place that most needs to put it right. touchGeom() schedules this
+  // too, but the deferred path is per-shape bookkeeping and this is the whole
+  // group changing at once.
+  if (typeof rebuildLegend === 'function') rebuildLegend();
 
   status(`${what} for ${members.length} shape${members.length === 1 ? '' : 's'}.`);
 }

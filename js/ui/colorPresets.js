@@ -31,11 +31,27 @@ const COLOR_PRESETS = [
   { hex: '#748FFC', name: 'Light indigo' }, { hex: '#4DABF7', name: 'Light blue' },
   { hex: '#38D9A9', name: 'Light teal' }, { hex: '#69DB7C', name: 'Light green' },
   { hex: '#FFD43B', name: 'Light amber' }, { hex: '#FFA94D', name: 'Light orange' },
-  // Neutrals — greys for context, plus the two DBOT house colours at the end.
+  // Neutrals — greys for context, plus two browns for land and buildings.
   { hex: '#FFFFFF', name: 'White' }, { hex: '#E9ECEF', name: 'Off white' },
   { hex: '#CED4DA', name: 'Light grey' }, { hex: '#868E96', name: 'Grey' },
   { hex: '#495057', name: 'Dark grey' }, { hex: '#000000', name: 'Black' },
   { hex: '#4B342A', name: 'Dark brown' }, { hex: '#8D6E63', name: 'Brown' },
+  // DBOT — the four colours in the logo, each on its own swatch.
+  //
+  // These are the brand, so they are the ones somebody reaches for when a shape
+  // has to match the deck it is going into, and hunting for them in the OS
+  // picker every time is how a project ends up with four near-misses of the
+  // same navy. Taken from map/connectivityStandard.js, which decodes them from
+  // LOGO_B64 — NOT from the interface's `--navy` and `--orange`, which are the
+  // application's own colours and appear nowhere in the logo.
+  //
+  // The exact logo values, not the darkened variants the connectivity standard
+  // uses for lines: those were darkened because #7ED236 and #E2BD60 are too
+  // bright to read as a 4px stroke on a pale ground. As a fill behind something
+  // else — which is what these swatches are mostly for — the true brand colour
+  // is the right one, and the standard still owns the line case.
+  { hex: '#002166', name: 'DBOT navy' }, { hex: '#0073C6', name: 'DBOT blue' },
+  { hex: '#7ED236', name: 'DBOT green' }, { hex: '#E2BD60', name: 'DBOT gold' },
 ];
 
 /** Human name for a hex, when it is one of the presets. @param {string} hex */

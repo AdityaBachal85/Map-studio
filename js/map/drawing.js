@@ -284,6 +284,12 @@ function scheduleGeomGroups() {
   _geomGroupsTimer = setTimeout(() => {
     _geomGroupsTimer = null;
     if (typeof renderGeomGroups === 'function') renderGeomGroups();
+    // The legend describes the colours on the map, so recolouring a shape
+    // changes it. Rebuilt here rather than at every call site because this is
+    // already the one deferred point every restyle funnels through — and
+    // because a legend that still shows the colour a shape USED to be is worse
+    // than no legend: the reader trusts it and is told the wrong thing.
+    if (typeof rebuildLegend === 'function') rebuildLegend();
   }, 60);
 }
 

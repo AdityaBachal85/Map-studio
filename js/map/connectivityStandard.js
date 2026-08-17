@@ -189,22 +189,54 @@ function connApplyToGeom(g, opts) {
 function connLegendRows() {
   const used = new Map();
 
-  const note = (cls, proposed) => {
+  /**
+   * @param {string} cls @param {boolean} proposed
+   * @param {string} [shown] The colour this object is actually drawn in.
+   */
+  const note = (cls, proposed, shown) => {
     const c = connClass(cls);
     if (!c) return;
     const key = c.id + (proposed ? ':proposed' : '');
-    if (used.has(key)) return;
-    used.set(key, {
-      cls: c.id,
-      color: c.color,
-      label: proposed ? c.label + ' (proposed)' : c.label,
-      kind: c.kind,
-    });
+    let row = used.get(key);
+    if (!row) {
+      row = {
+        cls: c.id,
+        color: c.color,
+        label: proposed ? c.label + ' (proposed)' : c.label,
+        kind: c.kind,
+        seen: [],
+      };
+      used.set(key, row);
+    }
+    if (shown) row.seen.push(String(shown).toLowerCase());
   };
 
-  if (typeof routes !== 'undefined') routes.forEach(r => note(r.cls, r.proposed));
-  if (typeof geometries !== 'undefined') geometries.forEach(g => note(g.cls, g.proposed));
-  if (typeof locations !== 'undefined') locations.forEach(l => { if (l.type === 'site') note('site'); });
+  if (typeof routes !== 'undefined') routes.forEach(r => note(r.cls, r.proposed, r.color));
+  if (typeof geometries !== 'undefined') {
+    geometries.forEach(g => note(g.cls, g.proposed,
+      (g.shape === 'Line' || g.shape === 'Label') ? g.borderColor : g.fillColor));
+  }
+  if (typeof locations !== 'undefined') locations.forEach(l => { if (l.type === 'site') note('site', false, l.color); });
+
+  // THE SWATCH FOLLOWS THE MAP, NOT THE TABLE.
+  //
+  // This used to print the class's own colour always, which is right until
+  // somebody deviates — and deviating is a supported, deliberate act here: the
+  // picker allows it and the card says when a route has done it. Recolour
+  // nineteen built-up parcels to red and the legend went on showing the
+  // standard's dusty pink, so the key contradicted the drawing it was
+  // explaining. A key nobody can trust is worse than no key, because the reader
+  // does trust it.
+  //
+  // Only when they all agree. A class drawn in three different colours has no
+  // one swatch that is honest about it, and picking the commonest would tell
+  // the reader the other two do not exist — so that case keeps the standard's
+  // colour, which is at least what the label means.
+  used.forEach(row => {
+    const seen = row.seen.filter(Boolean);
+    if (seen.length && seen.every(c => c === seen[0])) row.color = seen[0];
+    delete row.seen;
+  });
 
   // Ordered by the table above, not by when each first appeared — a legend
   // whose order depends on drawing order is a different legend every time.
