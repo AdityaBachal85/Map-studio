@@ -247,7 +247,14 @@ function keepRingScanSelection() {
     const clsId = fc ? fc.cls : null;
     const name = f.name || (fc ? fc.label : 'Feature');
     let layer = null, shape = null;
-    if (f.kind === 'point') { layer = L.circleMarker([f.lat, f.lng], { radius: 7 }); shape = 'CircleMarker'; }
+    // A pin, not a circle. What comes back as a `point` from a scan is a
+    // *place* — a metro station, an airport, a substation — and a 7px circle
+    // says "this coordinate" where a pin says "this thing is here". On OSM's
+    // own cartography a small circle also reads as part of the basemap rather
+    // than as something the map's author put there, which is the opposite of
+    // what a scanned result is for. Named on the map too: a station nobody can
+    // read the name of has not really been marked.
+    if (f.kind === 'point') { layer = L.marker([f.lat, f.lng]); shape = 'Marker'; }
     else if (f.kind === 'area' && f.polys) { layer = L.polygon(f.polys); shape = 'Polygon'; }
     else if (f.pts) { layer = L.polyline(f.pts); shape = 'Line'; }
     if (!layer) return;
@@ -294,6 +301,17 @@ function ringScanMeta(name, clsId, shape) {
       meta.fillColor = cc.color;
       meta.fillOpacity = cc.fill == null ? 0.18 : cc.fill;
     }
+  }
+  if (shape === 'Marker') {
+    meta.pin = true;
+    meta.showLabel = true;
+    // The teardrop is a solid body with a white keyline, like a location's pin.
+    // The class colour is the body; a 0.18 fill opacity inherited from the area
+    // styling above would render it as a ghost.
+    meta.fillColor = cc ? cc.color : '#FF7A1A';
+    meta.fillOpacity = 1;
+    meta.borderColor = '#FFFFFF';
+    meta.borderWidth = 2;
   }
   return meta;
 }

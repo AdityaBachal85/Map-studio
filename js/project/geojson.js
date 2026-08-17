@@ -15,7 +15,7 @@ function geomToGeoJSONFeature(g) {
       fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
       lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
       labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
-      showLabel: g.showLabel, glow: g.glow,
+      showLabel: g.showLabel, glow: g.glow, pin: g.pin,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
       // The connectivity class. Without it a reopened project has shapes that
       // still LOOK right — the colours are saved separately — but belong to no
@@ -85,6 +85,7 @@ function importGeoJSONFeature(feat) {
     labelAngle: props.labelAngle != null ? +props.labelAngle : undefined,
     showLabel: props.showLabel != null ? !!props.showLabel : undefined,
     glow: props.glow != null ? !!props.glow : undefined,
+    pin: props.pin != null ? !!props.pin : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,
     cls: props.cls || undefined,
     proposed: props.proposed != null ? !!props.proposed : undefined,

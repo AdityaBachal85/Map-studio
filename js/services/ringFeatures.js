@@ -331,7 +331,37 @@ const JOIN_TOL_DEG = 0.00001;
  *
  * @param {string} a @param {string} b @returns {boolean}
  */
-function joinableNames(a, b) { return !a || !b || a === b; }
+function joinableNames(a, b) { return !a || !b || roadNameKey(a) === roadNameKey(b); }
+
+/**
+ * A road name reduced to what actually identifies it.
+ *
+ * OSM is written by many hands, so one road arrives spelled several ways in the
+ * same download: "L.B.S. Marg", "LBS Marg", "L B S  Marg". Compared literally
+ * those are three roads, and the joiner leaves three rows on the map where the
+ * reader can see one continuous road. Case, punctuation and repeated spaces are
+ * all noise for this comparison.
+ *
+ * What is deliberately NOT normalised is the descriptive word — Marg, Road,
+ * Marga, Path. "Station Road" and "Station Marg" may well be two different
+ * streets in the same suburb, and merging them would draw a road that does not
+ * exist. Silence is better than invention here.
+ *
+ * @param {string} s @returns {string}
+ */
+function roadNameKey(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[.,'’`()]/g, '')      // L.B.S. -> LBS
+    .replace(/[-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    // A run of single letters is an initialism however it was spaced, so
+    // "l b s marg" and "lbs marg" become the same key. Both spellings are
+    // common in the same download, and without this the second half of the
+    // road is a separate row for the sake of two space characters.
+    .replace(/\b(?:[a-z] )+[a-z]\b/g, m => m.replace(/ /g, ''));
+}
 
 /**
  * Chain touching pieces of the same class into continuous lines.
@@ -352,6 +382,8 @@ function joinRingFeatures(features) {
 
   const near = (a, b) =>
     Math.abs(a[0] - b[0]) <= JOIN_TOL_DEG && Math.abs(a[1] - b[1]) <= JOIN_TOL_DEG;
+
+  const allChains = [];
 
   byClass.forEach(group => {
     const segs = group.map(f => ({ f, pts: f.pts, used: false }));
@@ -394,31 +426,135 @@ function joinRingFeatures(features) {
       }));
     }
 
-    // A dual carriageway is two ways that never touch, so one road can still
-    // end up as two chains. Numbering them says "these are halves of one thing"
-    // rather than leaving two identical rows looking like a duplicate bug.
-    const byName = new Map();
-    chains.forEach(c => {
-      const k = c.name || '';
-      if (!k) return;
-      byName.set(k, (byName.get(k) || 0) + 1);
-    });
-    const seen = new Map();
-    chains.forEach(c => {
-      const k = c.name || '';
-      if (k && byName.get(k) > 1) {
-        const n = (seen.get(k) || 0) + 1;
-        seen.set(k, n);
-        c.part = n;
-        c.ofParts = byName.get(k);
-      }
-      out.push(c);
-    });
+    chains.forEach(c => allChains.push(c));
+  });
+
+  // SECOND PASS, ACROSS CLASSES. The grouping above is by class, and that is
+  // where a road most often survives as pieces despite every endpoint matching:
+  // OSM re-tags a road as its importance changes along its length, so one
+  // continuous street is `primary` for two kilometres and `secondary` after the
+  // junction. Those land in different classes here (`highway` and `arterial`),
+  // and a joiner that only ever looks inside one class cannot put them back
+  // together no matter how exactly they touch. That is the "why is the road
+  // still in pieces" case.
+  //
+  // A name is required on both sides for this pass — no bridging through an
+  // unnamed connector. Within a class an unnamed piece is almost certainly the
+  // same road; across classes it is just as likely to be a slip road joining
+  // two different ones, and inventing a road that does not exist is far worse
+  // than showing two rows.
+  //
+  // The merged chain keeps the class of its longest contributor, so a road
+  // that is mostly expressway reads as an expressway rather than taking the
+  // colour of whichever fragment happened to come first.
+  const merged = joinChainsByName(allChains, near);
+
+  // A dual carriageway is two ways that never touch, so one road can still end
+  // up as two chains. Numbering them says "these are halves of one thing"
+  // rather than leaving two identical rows looking like a duplicate bug.
+  // Counted after the cross-class merge, or the numbering describes a split
+  // that has since been repaired.
+  const byName = new Map();
+  merged.forEach(c => {
+    const k = roadNameKey(c.name || '');
+    if (!k) return;
+    byName.set(k, (byName.get(k) || 0) + 1);
+  });
+  const seen = new Map();
+  merged.forEach(c => {
+    const k = roadNameKey(c.name || '');
+    if (k && byName.get(k) > 1) {
+      const n = (seen.get(k) || 0) + 1;
+      seen.set(k, n);
+      c.part = n;
+      c.ofParts = byName.get(k);
+    }
+    out.push(c);
   });
 
   // Longest first. The 12 km expressway is what somebody scanned for; a 90 m
   // slip road is not, and it should not be what they see at the top of a list.
   out.sort((a, b) => (b.km || 0) - (a.km || 0));
+  return out;
+}
+
+/**
+ * Join chains that carry the same road name but were classed differently.
+ *
+ * The per-class pass cannot do this, and the reason is in the data rather than
+ * the code: OSM re-tags a road as its importance changes along its length, so
+ * one continuous street is `primary` for two kilometres and `secondary` after a
+ * junction. RING_FEATURE_CLASSES sorts those into `highway` and `arterial`, and
+ * a joiner that only ever compares pieces inside one class will leave them as
+ * two rows and two lines however exactly their endpoints meet — which is what
+ * "the road is still in pieces" looks like on the map.
+ *
+ * Only chains that both carry a name take part. Within one class an unnamed
+ * piece is almost certainly the same road and bridging through it is right;
+ * across classes it is just as likely to be a slip road tying two different
+ * roads together, and drawing a road that does not exist is a worse failure
+ * than showing two rows that do.
+ *
+ * @param {object[]} chains @param {function} near Endpoint equality test.
+ * @returns {object[]}
+ */
+function joinChainsByName(chains, near) {
+  const out = [];
+  const byKey = new Map();
+
+  chains.forEach(c => {
+    const k = roadNameKey(c.name || '');
+    if (!k) { out.push(c); return; }
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(c);
+  });
+
+  byKey.forEach(group => {
+    if (group.length === 1) { out.push(group[0]); return; }
+
+    const segs = group.map(c => ({ c, pts: c.pts, used: false }));
+    for (let i = 0; i < segs.length; i++) {
+      if (segs[i].used) continue;
+      segs[i].used = true;
+      let pts = segs[i].pts.slice();
+      const members = [segs[i].c];
+
+      // Re-scan after every join, for the same reason the first pass does:
+      // absorbing a piece gives the chain two new ends.
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (let j = 0; j < segs.length; j++) {
+          if (segs[j].used) continue;
+          const o = segs[j].pts;
+          const head = pts[0], tail = pts[pts.length - 1];
+          if (near(tail, o[0])) pts = pts.concat(o.slice(1));
+          else if (near(tail, o[o.length - 1])) pts = pts.concat(o.slice(0, -1).reverse());
+          else if (near(head, o[o.length - 1])) pts = o.slice(0, -1).concat(pts);
+          else if (near(head, o[0])) pts = o.slice(1).reverse().concat(pts);
+          else continue;
+          segs[j].used = true;
+          members.push(segs[j].c);
+          grew = true;
+        }
+      }
+
+      if (members.length === 1) { out.push(members[0]); continue; }
+
+      // The longest contributor decides the class, so a road that is mostly
+      // expressway is drawn as one rather than taking the colour of whichever
+      // fragment this loop happened to start from.
+      const lead = members.slice().sort((a, b) => (b.km || 0) - (a.km || 0))[0];
+      const withRef = members.find(m => m.ref);
+      out.push(Object.assign({}, lead, {
+        pts,
+        parts: members.reduce((n, m) => n + (m.parts || 1), 0),
+        km: ringPathKm(pts),
+        ref: withRef ? withRef.ref : null,
+      }));
+    }
+  });
+
   return out;
 }
 

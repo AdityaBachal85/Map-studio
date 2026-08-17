@@ -28,7 +28,7 @@ let activeShape = null;
 let activeEditMode = null;
 
 /** Default per-shape style, matching the app's orange/navy brand palette. */
-function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false }; }
+function defaultGeomStyle() { return { fillColor: '#FF7A1A', borderColor: '#0A1E3C', borderWidth: 3, fillOpacity: 0.25, lineStyle: 'solid', corner: 'round', fillPattern: 'none', labelSize: 15, labelBold: true, showLabel: false, glow: false, pin: false }; }
 
 /** dashArray for a line style + width; null = solid. @param {string} style @param {number} w */
 function dashArrayFor(style, w) {
@@ -60,10 +60,43 @@ const geomByLayer = layer => geometries.find(g => g.layer === layer);
 
 /** Point-shaped divIcon used for Marker/CircleMarker so Fill/Border properties stay meaningful for point shapes too. @param {object} g */
 function geomMarkerIcon(g) {
+  if (g.pin) return geomPinIcon(g);
   return L.divIcon({
     className: 'geom-marker-dot',
     html: `<span style="display:block;width:100%;height:100%;border-radius:50%;background:${g.fillColor};opacity:${g.fillOpacity};border:${g.borderWidth}px solid ${g.borderColor};box-shadow:0 1px 4px rgba(0,0,0,.4);"></span>`,
     iconSize: [22, 22], iconAnchor: [11, 11],
+  });
+}
+
+/**
+ * A teardrop pin, for a point that marks a *place* rather than a measurement.
+ *
+ * A dot says "this coordinate"; a pin says "this thing is here", which is what
+ * a scanned metro station or a nearby hospital actually is. The ring scan used
+ * to drop plain circles for them, and on a busy ground they read as part of the
+ * cartography rather than as something somebody put on the map.
+ *
+ * Deliberately the same silhouette as a location's own marker
+ * (map/billboard.js drives those, and `pinTeardropSvg` is shared with it), so a
+ * map does not have two unrelated visual languages for "a place". The
+ * difference is only what they are for: locations are the sites the map is
+ * about and carry routes and distances; these are context, and live in Draw
+ * where they can be restyled, renamed or deleted like anything else drawn.
+ *
+ * Anchored at the tip — a pin points at its coordinate, it does not sit
+ * centred on it, and getting that wrong puts every station half a block north.
+ *
+ * @param {object} g @returns {L.DivIcon}
+ */
+function geomPinIcon(g) {
+  const svg = (typeof pinTeardropSvg === 'function')
+    ? pinTeardropSvg({ color: g.fillColor, iconBg: g.fillColor, iconBorderColor: g.borderColor, iconBorder: g.borderWidth })
+    : '';
+  return L.divIcon({
+    className: 'geom-marker-pin',
+    html: '<span style="position:relative;display:block;width:100%;height:100%;'
+      + 'filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">' + svg + '</span>',
+    iconSize: [24, 32], iconAnchor: [12, 31],
   });
 }
 
@@ -142,9 +175,13 @@ function geomLabelLatLng(g) {
 }
 
 function geomLabelIcon(g) {
+  // A pin is anchored at its tip and stands 32px above it, so a chip centred on
+  // the same coordinate lands across the pin's head and hides the thing it is
+  // naming. `on-pin` lifts it clear.
+  const onPin = (g.shape === 'Marker' && g.pin) ? ' on-pin' : '';
   return L.divIcon({
     className: 'geom-label-wrap',
-    html: `<span class="geom-label" style="border-color:${g.borderColor}">${esc(g.name)}</span>`,
+    html: `<span class="geom-label${onPin}" style="border-color:${g.borderColor}">${esc(g.name)}</span>`,
     iconSize: [0, 0],
   });
 }
@@ -300,7 +337,7 @@ function snapshotGeom(g) {
     fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
-    showLabel: g.showLabel, glow: g.glow,
+    showLabel: g.showLabel, glow: g.glow, pin: g.pin,
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
@@ -448,7 +485,7 @@ function recreateGeomFromSnapshot(snap) {
     lineStyle: snap.lineStyle, corner: snap.corner, fillPattern: snap.fillPattern,
     labelSize: snap.labelSize, labelBold: snap.labelBold,
     labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
-    showLabel: snap.showLabel, glow: snap.glow,
+    showLabel: snap.showLabel, glow: snap.glow, pin: snap.pin,
     createdAt: snap.createdAt,
   });
 }
@@ -462,7 +499,7 @@ function restoreGeomSnapshot(id, snap) {
   g.lineStyle = snap.lineStyle; g.corner = snap.corner; g.fillPattern = snap.fillPattern;
   g.labelSize = snap.labelSize; g.labelBold = snap.labelBold;
   g.labelStyle = snap.labelStyle; g.labelAngle = snap.labelAngle;
-  g.showLabel = snap.showLabel; g.glow = snap.glow;
+  g.showLabel = snap.showLabel; g.glow = snap.glow; g.pin = snap.pin;
   if (g.card) syncGeomCardStyleControls(g);
   applyGeomStyle(g);
   touchGeom(g);
