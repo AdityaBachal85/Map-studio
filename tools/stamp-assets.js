@@ -47,6 +47,16 @@ const HTML_FILES = ['index.html', 'login.html', 'projects.html']
   .map(f => path.join(ROOT, f))
   .filter(fs.existsSync);
 const CONSTANTS = path.join(ROOT, 'js', 'constants.js');
+/**
+ * The README's version badge.
+ *
+ * Added because it had drifted to a release twenty-nine bumps old and somebody
+ * had to notice and retype it. A number that has to be kept in step by hand
+ * eventually is not, and a badge advertising the wrong version is worse than no
+ * badge: it is the first thing anyone reads about the project.
+ */
+const README = path.join(ROOT, 'README.md');
+const README_BADGE = /(!\[Version\]\(https:\/\/img\.shields\.io\/badge\/version-v)([^-)]+)(-)/;
 
 /** Matches src/href for local js/css assets, capturing any existing ?v=. */
 const ASSET = /((?:src|href)=")(\.\/(?:js|css|vendor)\/[^"?]+)(\?v=[^"]*)?(")/g;
@@ -85,6 +95,7 @@ function writeVersion(v) {
  */
 function stamp(version) {
   let count = 0;
+  stampReadmeBadge(version);
   HTML_FILES.forEach(file => {
     const html = fs.readFileSync(file, 'utf8');
     const out = html.replace(ASSET, (_, pre, asset, __, post) => {
@@ -94,6 +105,22 @@ function stamp(version) {
     if (out !== html) fs.writeFileSync(file, out);
   });
   return count;
+}
+
+/**
+ * Put the README's version badge in step. Silent when there is no badge to
+ * find — the README is documentation, and a missing badge is not a broken
+ * release.
+ * @param {string} version @returns {boolean} whether it changed
+ */
+function stampReadmeBadge(version) {
+  if (!fs.existsSync(README)) return false;
+  const md = fs.readFileSync(README, 'utf8');
+  if (!README_BADGE.test(md)) return false;
+  const out = md.replace(README_BADGE, `$1${version}$3`);
+  if (out === md) return false;
+  fs.writeFileSync(README, out);
+  return true;
 }
 
 /** Report anything unstamped or stamped at the wrong version. */

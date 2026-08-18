@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0128-blue)
+![Version](https://img.shields.io/badge/version-v6.0131-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,7 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0127 (latest)
+## 🆕 New in v6.0131 (latest)
 
 ### A 2D / 3D switch on the map — the whole map, on real terrain
 
