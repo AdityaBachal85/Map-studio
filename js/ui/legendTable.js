@@ -298,14 +298,37 @@ function rebuildLegend() {
 /**
  * Write one edited cell into its row's record.
  * @param {HTMLElement} cell a contenteditable td
+ * @returns {boolean} whether the value actually changed. Callers rebuild the
+ *   table on a commit, and a rebuild replaces every row — so a blur that
+ *   changed nothing must be able to say so and leave the table standing.
  */
 function legendCommitCell(cell) {
   const st = legendRowStore(cell);
-  if (!st) return;
+  if (!st) return false;
   const field = cell.classList.contains('legend-name') ? 'name'
     : cell.classList.contains('legend-km') ? 'km'
     : cell.classList.contains('legend-min') ? 'min' : null;
-  if (field) st[field] = cell.textContent.trim();
+  if (!field) return false;
+  const val = cell.textContent.trim();
+  if (st[field] === val) return false;
+  st[field] = val;
+  return true;
+}
+
+/**
+ * The live colour swatch for a row key, looked up fresh.
+ *
+ * Every rebuild replaces the whole table, so a swatch element held across one
+ * is a detached node that renders nowhere. Anything that survives a rebuild
+ * has to re-find its element by key rather than keep the reference.
+ *
+ * @param {string} key @returns {HTMLInputElement|null}
+ */
+function legendSwatchFor(key) {
+  const body = $('legendBody');
+  if (!body || !key) return null;
+  const tr = Array.from(body.children).find(row => row.dataset.key === key);
+  return tr ? tr.querySelector('.legend-color') : null;
 }
 
 /** @param {HTMLElement} el @returns {object|null} the row record a cell belongs to */
@@ -423,16 +446,59 @@ function legendResetAll() {
   // two different colour pickers in one app: the OS dialog here and the presets
   // popover everywhere else. Opening the popover directly keeps the small
   // swatch and drops the inconsistency.
+  // BOTH events, and the click one is the one that matters.
+  //
+  // preventDefault() on mousedown suppresses focus and text selection, and does
+  // NOT stop an <input type="color"> opening its picker: that is the element's
+  // *activation behaviour*, which runs on click. So the app's popover opened
+  // from mousedown and the operating system's dialog opened a moment later from
+  // the click, one on top of the other — two colour pickers stacked over a card
+  // the user was trying to edit.
   body.addEventListener('mousedown', e => {
-    const inp = e.target.closest && e.target.closest('.legend-color');
+    let inp = e.target.closest && e.target.closest('.legend-color');
     if (!inp || !legendEditing || typeof openColorPresets !== 'function') return;
-    e.preventDefault();                       // stop the native dialog opening
+    e.preventDefault();
     const st = legendRowStore(inp);
     if (!st) return;
+    const key = inp.closest('tr').dataset.key;
+
+    // Opening the popover moves focus into it, which blurs whatever cell the
+    // user was typing in — and that commits, which rebuilds the table. The
+    // rebuild lands in the middle of this handler, so by the time the popover
+    // is placed the swatch it was opened from has already been replaced: the
+    // picker ends up anchored to a detached node, writes to a row nobody can
+    // see, and the click carries on to the input's own activation behaviour
+    // because a detached input no longer bubbles to this table.
+    //
+    // So the pending edit is flushed here, deliberately and first, and the
+    // row's swatch is looked up again afterwards.
+    const active = document.activeElement;
+    if (active && active.isContentEditable && body.contains(active) && legendCommitCell(active)) {
+      rebuildLegend();
+      inp = legendSwatchFor(key) || inp;
+    }
+
     openColorPresets(inp, st.color, hex => {
       st.color = hex;
-      rebuildLegend();
+      // Repaint this one swatch; do NOT rebuild the table. The picker commits
+      // live as you drag, and rebuildLegend() replaces the body — which
+      // destroys the very input the popover is anchored to, so the colour
+      // appears to snap back mid-drag. ui/colorKey.js carries the same note for
+      // the same reason; the input IS the swatch here, so setting its value is
+      // the whole repaint.
+      // Lower-cased: an <input type="color"> only accepts a *lowercase* hex as
+      // a valid simple colour, and silently ignores anything else — so the
+      // presets, which are written in upper case, left the swatch showing the
+      // old colour while the row underneath had already changed.
+      inp.value = String(hex).toLowerCase();
+      if (typeof markDirty === 'function') markDirty();
     });
+  });
+
+  // The activation itself. Without this the native dialog still opens.
+  body.addEventListener('click', e => {
+    const inp = e.target.closest && e.target.closest('.legend-color');
+    if (inp && legendEditing) e.preventDefault();
   });
 
   body.addEventListener('input', e => {
@@ -451,8 +517,11 @@ function legendResetAll() {
     if (legendRebuilding) return;          // our own teardown, not the user leaving
     const cell = e.target.closest && e.target.closest('[contenteditable]');
     if (!cell || !legendEditing) return;
-    legendCommitCell(cell);
-    rebuildLegend();
+    // Only when the value really changed. Rebuilding on every blur meant that
+    // simply clicking out of a cell you had not edited tore the table down and
+    // built it again — taking the swatch you were on your way to clicking with
+    // it, and any picker already anchored to one.
+    if (legendCommitCell(cell)) rebuildLegend();
   }, true);
 
   // Enter commits rather than inserting a line break — this is a table cell,
