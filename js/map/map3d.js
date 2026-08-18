@@ -289,6 +289,17 @@ async function mountMap3d() {
 
   map3dAttachDrape();
   if (typeof map3dAddContent === 'function') map3dAddContent(_m3dMap);
+
+  // `render` rather than `move`: the camera also settles under inertia, and the
+  // ground itself shifts as terrain tiles arrive, both of which move where a
+  // pin belongs without a move event. scheduleRepaint coalesces to one repaint
+  // per frame, so subscribing to every frame costs nothing extra.
+  if (typeof scheduleRepaint === 'function') {
+    _m3dMap.on('render', scheduleRepaint);
+    _m3dMap.on('move', scheduleRepaint);
+    scheduleRepaint();
+  }
+
   map3dLockTiltSlider(true);
 
   _m3dHost.style.opacity = '1';
@@ -354,6 +365,8 @@ async function unmountMap3d() {
   const wrap = $('mapWrap');
   if (wrap) wrap.classList.remove('map-3d-on');
 
+  if (typeof scheduleRepaint === 'function') scheduleRepaint();
+
   if (typeof map !== 'undefined') {
     // Leaflet caches its container size and will have missed being hidden, so
     // the flat map comes back 0x0 without this.
@@ -410,6 +423,48 @@ function map3dFitBounds(b, padding) {
     _m3dMap.fitBounds([[b.west, b.south], [b.east, b.north]],
       { padding: padding == null ? 40 : padding, pitch: _m3dMap.getPitch(), duration: 0 });
   } catch (e) { /* degenerate box */ }
+}
+
+/* ---------------------------------------------------------------------------
+ * Where a coordinate lands on screen
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Project a coordinate through the 3D camera, for the billboard overlay.
+ *
+ * THE PINS AND LABELS ARE NOT REBUILT FOR 3D. map/billboard.js has always been
+ * a screen-space overlay: it asks one function where a coordinate landed and
+ * then positions DOM there — pins, label chips, their offsets, the leader lines
+ * between them, the drag handling, the hover link to the sidebar card. All of
+ * that is projection-independent. So rather than cloning several hundred lines
+ * of it into MapLibre markers and losing the leader lines on the way, the
+ * projection is swapped and the overlay carries on unchanged.
+ *
+ * Returns null when 3D is not up, so the caller falls through to Leaflet's own
+ * projection.
+ *
+ * @param {L.LatLng} latlng
+ * @returns {{x:number, y:number, s:number}|null}
+ */
+function map3dProjectPin(latlng) {
+  if (!_m3dMap) return null;
+  try {
+    const lat = latlng.lat, lng = latlng.lng;
+    // Behind the camera, `project` returns a point that is mirrored into view —
+    // a pin for somewhere behind you, drawn convincingly in front. The visible
+    // region is the cheap test that catches it; anything outside is pushed far
+    // enough off-screen that #billboardLayer's overflow clips it.
+    const b = _m3dMap.getBounds();
+    if (!b.contains([lng, lat])) return { x: -9999, y: -9999, s: 1 };
+    const p = _m3dMap.project([lng, lat]);
+    if (!isFinite(p.x) || !isFinite(p.y)) return { x: -9999, y: -9999, s: 1 };
+    // Scale stays 1: a placemark that shrinks with distance is a placemark you
+    // cannot read at the back of the view, which is why Google Earth keeps them
+    // screen-sized too.
+    return { x: p.x, y: p.y, s: 1 };
+  } catch (e) {
+    return null;
+  }
 }
 
 /* ---------------------------------------------------------------------------

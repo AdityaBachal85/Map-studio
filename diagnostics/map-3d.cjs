@@ -263,6 +263,92 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the tilt slider is handed back', after.tiltDisabled === false);
   ck('the 2D contour map is still there underneath', after.contoursStillThere === true);
 
+  /* -- the map's own contents come along ------------------------------------ */
+
+  const content = await p.evaluate(async () => {
+    await setMap3d(false);
+    await new Promise(r => setTimeout(r, 600));
+
+    // A location (pin + label, billboard DOM), a route-shaped line, a ring and
+    // a filled polygon — one of each kind that has to survive the trip.
+    addLocation({ lat: 19.240, lng: 72.930, name: 'North site' });
+    addLocation({ lat: 19.228, lng: 72.952, name: 'South site' });
+    registerGeom(L.polyline([[19.240, 72.930], [19.234, 72.941], [19.228, 72.952]]),
+      'Line', { name: '3D route', borderColor: '#E03131', borderWidth: 4 });
+    registerGeom(L.polygon([[19.244, 72.926], [19.244, 72.936], [19.238, 72.936], [19.238, 72.926]]),
+      'Polygon', { name: '3D plot', fillColor: '#7ED236', borderColor: '#002166' });
+    registerGeom(L.circle([19.232, 72.944], { radius: 700 }),
+      'Circle', { name: '3D ring', fillColor: '#0073C6', borderColor: '#0073C6' });
+    await new Promise(r => setTimeout(r, 700));
+
+    const flat = map3dPathFeatures();
+    const ok = await setMap3d(true);
+    await new Promise(r => setTimeout(r, 3500));
+
+    const gl = map3dGl();
+    const src = gl && gl.getSource('m3d-content');
+    const layers = ['m3d-fill', 'm3d-line-solid', 'm3d-line-dash', 'm3d-line-dot', 'm3d-point']
+      .filter(id => gl && gl.getLayer(id));
+    // The billboard is the pins and labels: it must be visible, and its
+    // elements must have moved to where the 3D camera puts them.
+    const bb = document.getElementById('billboardLayer');
+    const chips = [...bb.querySelectorAll('.bb')];
+    const placed = chips.filter(el => {
+      const t = el.style.transform || '';
+      const m = t.match(/translate\(\s*(-?[\d.]+)px[,\s]+(-?[\d.]+)px/);
+      return m && +m[1] > -5000 && +m[2] > -5000;
+    });
+    return {
+      ok,
+      flatFeatures: flat.features.length,
+      kinds: flat.features.map(f => f.geometry.type).sort(),
+      hasSource: !!src,
+      layers,
+      billboardVisible: !!bb.offsetParent && getComputedStyle(bb).visibility !== 'hidden',
+      chips: chips.length,
+      placed: placed.length,
+      leaderCanvas: !!bb.querySelector('canvas'),
+    };
+  });
+  ck('the flat map\'s paths flatten to GeoJSON',
+    content.flatFeatures >= 3, `${content.flatFeatures} features: ${content.kinds.join(', ')}`);
+  ck('a circle becomes a real ring rather than being dropped',
+    content.kinds.filter(k => k === 'Polygon').length >= 2, content.kinds.join(', '));
+  ck('the geometry is in the 3D scene',
+    content.hasSource === true && content.layers.length === 5,
+    JSON.stringify({ src: content.hasSource, layers: content.layers.length }));
+  ck('pins and labels stay on screen in 3D rather than being hidden',
+    content.billboardVisible === true && content.chips > 0,
+    JSON.stringify({ visible: content.billboardVisible, chips: content.chips }));
+  ck('and they are positioned by the 3D camera',
+    content.placed > 0, `${content.placed} of ${content.chips} placed on screen`);
+  ck('the leader-line canvas came too', content.leaderCanvas === true);
+
+  const moved = await p.evaluate(async () => {
+    const bb = document.getElementById('billboardLayer');
+    const before = [...bb.querySelectorAll('.bb')].map(el => el.style.transform);
+    map3dGl().easeTo({ bearing: 55, duration: 0 });
+    await new Promise(r => setTimeout(r, 700));
+    const after = [...bb.querySelectorAll('.bb')].map(el => el.style.transform);
+    return { changed: before.filter((t, i) => t !== after[i]).length, n: before.length };
+  });
+  ck('and they follow the camera when it is orbited',
+    moved.changed > 0, `${moved.changed} of ${moved.n} moved when the bearing changed`);
+
+  const liveAdd = await p.evaluate(async () => {
+    const gl = map3dGl();
+    const before = gl.getSource('m3d-content')._data.features.length;
+    registerGeom(L.polyline([[19.250, 72.920], [19.250, 72.960]]), 'Line',
+      { name: 'added while tilted', borderColor: '#E2BD60' });
+    historyCommit();
+    await new Promise(r => setTimeout(r, 400));
+    return { before, after: gl.getSource('m3d-content')._data.features.length };
+  });
+  ck('a shape added while 3D is up appears in it',
+    liveAdd.after === liveAdd.before + 1, `${liveAdd.before} -> ${liveAdd.after} features`);
+
+  await p.screenshot({ path: path.join(__dirname, 'shot-map-3d-content.png') });
+
   /* -- the vector ground ---------------------------------------------------- */
 
   // A raster ground gets a style synthesised around it; a vector ground brings

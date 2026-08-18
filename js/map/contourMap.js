@@ -473,6 +473,12 @@ function contoursToShapes(scope) {
   lines.forEach(ln => {
     const layer = L.polyline(ln.pts.map(p => L.latLng(p[0], p[1])));
     const g = registerGeom(layer, 'Line', {
+      // Tagged, because otherwise a converted contour is indistinguishable from
+      // a line somebody drew by hand — and then nothing can clean them up.
+      // Clearing the contour map used to leave every converted line behind,
+      // one sidebar card each, with no way to tell which were which.
+      fromContour: true,
+      contourLevel: ln.level,
       name: contourLabelFor(ln.level) + ' ' + contourState.unit,
       // Coloured by its own height, so a converted set still reads as terrain
       // once the rendered layer underneath is switched off.
@@ -540,6 +546,33 @@ function applyContourSettings(s) {
   } else {
     setContourEnabled(false);
   }
+}
+
+/** Every shape that came from a contour conversion. */
+function contourDerivedGeoms() {
+  if (typeof geometries === 'undefined') return [];
+  return geometries.filter(g => g && g.fromContour);
+}
+
+/**
+ * Remove the shapes a conversion created.
+ *
+ * Snapshotted before anything is removed — removeGeomById drops the layer, and
+ * a snapshot taken afterwards has no coordinates left to store. Same order, and
+ * same reason, as geomGroupDelete().
+ *
+ * @returns {Array<object>} snapshots, for the undo
+ */
+function removeContourGeoms() {
+  const doomed = contourDerivedGeoms();
+  if (!doomed.length) return [];
+  const snaps = doomed.map(g => (typeof snapshotGeom === 'function' ? snapshotGeom(g) : null)).filter(Boolean);
+  doomed.forEach(g => {
+    if (typeof map !== 'undefined' && map.hasLayer(g.layer)) map.removeLayer(g.layer);
+    if (typeof removeGeomById === 'function') removeGeomById(g.id);
+  });
+  if (typeof renderGeomGroups === 'function') renderGeomGroups();
+  return snaps;
 }
 
 /** Forget everything. Used when a project is closed or a new one opened. */

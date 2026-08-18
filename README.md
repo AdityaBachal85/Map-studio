@@ -28,7 +28,51 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0119 (latest)
+## 🆕 New in v6.0127 (latest)
+
+### A 2D / 3D switch on the map — the whole map, on real terrain
+
+A segmented **2D / 3D** control sits in the right-hand stack. Press 3D and the
+map you are looking at tilts back onto a real terrain mesh: hills stand up,
+valleys cut in, and you can orbit around them. Press 2D and it flattens again,
+leaving you where you were looking rather than where the flat map was last
+parked.
+
+It works with **every ground** — satellite, streets, OSM and the vector
+basemap — and with nothing on the map at all. It is a way of looking at the
+map, not a feature of the contour tool it started life in.
+
+**Everything on the map comes with you.** Pins, their labels and the leader
+lines between them; routes, rings, drawn shapes, measurements and boundaries;
+the Key Distances card, the Legend, the Elevation scale and the title card. The
+north arrow stays and *turns* with the camera, with a compass button beside the
+switch to put it back. The scale bar is the one thing that goes: a single scale
+is a lie on a tilted view, because the ground at the top of the frame is much
+further away than the ground at the bottom.
+
+Exports capture the tilted view exactly as aimed, with all the furniture on it.
+
+See **[docs/3D-MAP.md](docs/3D-MAP.md)**.
+
+### Clearing a contour map now clears the contours
+
+"To shapes" made ordinary geometries that nothing could tell apart from lines
+drawn by hand, so **Clear** left every converted contour behind with a sidebar
+card each. They are tagged now, Clear removes them, hand-drawn shapes are
+untouched, and Undo puts them back.
+
+That surfaced an older bug of the same shape: undoing a delete was dropping the
+shape's connectivity class, so it came back looking right and belonging to no
+class — falling silently out of the colour key.
+
+### The 3D contour drape is sharp
+
+It was rendered at the elevation grid's resolution and then magnified by the
+camera. The grid is the resolution of the *data*, not of the picture.
+
+---
+
+## 🆕 Earlier in v6 (6.0119)
 
 ### Contour maps — the shape of the ground, from real elevation data
 
@@ -689,9 +733,11 @@ Map-studio/
                         fillPatterns, textLabels, aerialDistance, markerCluster,
                         imageryEnhance, googleTiles, customBasemaps, providerKeys,
                         nearby, contourRamps + contourGen + contourLayer +
-                        contourMap + contour3d (the contour map: ramp table,
-                        pure maths, renderer, state and the 3D relief view)
-    ui/             — sidebar, toolbar, propertyPanel, geometryPanel (shape cards),
+                        contourMap (the contour map: ramp table, pure maths,
+                        renderer and state), map3d + map3dContent (the 3D map
+                        mode and the map's own geometry inside it)
+    ui/             — map3dControls (the 2D/3D switch and the compass),
+                        sidebar, toolbar, propertyPanel, geometryPanel (shape cards),
                         colorKey (the editable LEGEND card), legendTable (Key
                         Distances), basemapSwitcher, ringScanPanel, layerManager,
                         settingsDialog, exportCenter, importDialog, iconPicker,
@@ -724,6 +770,8 @@ Map-studio/
                         PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root
                         cause), CONTOUR-MAPS.md (elevation source, the
                         contour pipeline, and what its accuracy is and is not),
+                        3D-MAP.md (the terrain mode, what travels into it and
+                        what does not),
                         ACCOUNTS-SETUP.md, AI-REPORTS-SETUP.md,
                         DEPLOY-NOTES.md, PHASE3-FEATURE-INVENTORY.md,
                         PHASE5-PRODUCTION-POLISH.md, SESSION-HANDOFF-6.0090.md

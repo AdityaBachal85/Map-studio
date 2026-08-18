@@ -4619,9 +4619,27 @@ body.identify-on .leaflet-container {
    display:none container measures 0x0, so every pin would come back stacked in
    the corner when the view is turned off again. */
 .map-3d-on #tiltStage,
-.map-3d-on #billboardLayer,
-.map-3d-on #northArrow,
 .map-3d-on #scaleBar { visibility: hidden; }
+
+/* The billboard STAYS. It is a screen-space overlay driven by one projection
+   function, and map/map3d.js swaps that projection rather than rebuilding the
+   pins — so the labels, their leader lines and their drag handling all work in
+   3D untouched. It only has to come up above the GL host, which sits at 450. */
+.map-3d-on #billboardLayer { z-index: 460; }
+
+/* The scale bar goes because a single scale is a lie on a tilted view: the
+   ground at the top of the frame is much further away than the ground at the
+   bottom, so no one bar length is right for both. */
+
+/* The north arrow stays, and turns. It is the only thing on screen that says
+   which way the map is facing once the camera can be spun, so hiding it in the
+   one mode where north is not up would be exactly backwards. The angle is
+   written by ui/map3dControls.js as a custom property. */
+.map-3d-on #northArrow {
+  transform: rotate(var(--map-bearing, 0deg));
+  transform-origin: 50% 50%;
+  transition: transform 90ms linear;
+}
 
 /* The contour canvas itself. `will-change` because it is repainted on every
    zoom frame and is often the largest surface on the page. */

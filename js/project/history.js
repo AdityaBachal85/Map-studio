@@ -129,6 +129,11 @@ function historyCommit() {
   historyCommitted = now;
   historySeen = now;
   historyUpdateButtons();
+
+  // The 3D view holds its own copy of the map's geometry, because Leaflet is
+  // not running there to draw it. Every completed action passes through here,
+  // which makes this the one place that knows the copy is now stale.
+  if (typeof map3dRefreshContent === 'function') map3dRefreshContent();
 }
 
 /**

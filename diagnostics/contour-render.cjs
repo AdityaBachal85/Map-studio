@@ -319,18 +319,50 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     `${shaped.named} / ${shaped.coloured}`);
   ck('and gets a sidebar card like any other shape', shaped.hasCard === true);
 
-  /* -- clearing ------------------------------------------------------------ */
+  /* -- clearing takes the converted shapes with it -------------------------- */
+
+  // The gap this closes: a converted contour was an ordinary Line as far as the
+  // rest of the app was concerned, so clearing the contour map left every one
+  // of them on the map with a sidebar card each and no way to tell them from
+  // something drawn by hand.
+  const tagged = await p.evaluate(() => {
+    const mine = geometries.filter(g => g.fromContour);
+    return { tagged: mine.length, total: geometries.length, level: mine[0] ? mine[0].contourLevel : null };
+  });
+  ck('converted contours are tagged as such',
+    tagged.tagged > 0 && tagged.level != null, JSON.stringify(tagged));
 
   const cleared = await p.evaluate(() => {
-    clearContourMap();
+    const handDrawn = registerGeom(L.polyline([[19.20, 72.90], [19.21, 72.91]]), 'Line',
+      { name: 'drawn by hand' });
+    const before = geometries.length;
+    document.getElementById('contourClearBtn').click();
     return {
+      before,
+      after: geometries.length,
+      survivor: geometries.some(g => g.id === handDrawn.id),
+      leftovers: geometries.filter(g => g.fromContour).length,
       ready: contourModel.ready,
       onMap: !!document.querySelector('.leaflet-overlay-pane canvas.contour-canvas'),
       legend: !!document.getElementById('contourLegendCard').offsetParent,
+      msg: document.getElementById('statusMsg').textContent,
     };
   });
   ck('clearing takes the layer and the legend off the map',
-    !cleared.ready && !cleared.onMap && !cleared.legend, JSON.stringify(cleared));
+    !cleared.ready && !cleared.onMap && !cleared.legend, JSON.stringify({
+      ready: cleared.ready, onMap: cleared.onMap, legend: cleared.legend }));
+  ck('and the shapes the conversion created',
+    cleared.leftovers === 0 && cleared.after < cleared.before,
+    `${cleared.before} shapes -> ${cleared.after}, ${cleared.leftovers} contour shapes left`);
+  ck('but not the ones drawn by hand', cleared.survivor === true);
+  ck('and it says how many it removed', /converted shape/.test(cleared.msg), cleared.msg);
+
+  const undone = await p.evaluate(() => {
+    const btn = document.querySelector('#statusMsg .status-action');
+    if (btn) btn.click();
+    return { restored: geometries.filter(g => g.fromContour).length, on: contourState.on };
+  });
+  ck('and Undo puts them back', undone.restored > 0, JSON.stringify(undone));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();

@@ -428,11 +428,22 @@ function initContourPanel() {
   on('contourShapesBtn', 'click', () => contoursToShapes('auto'));
   on('contourClearBtn', 'click', () => {
     const kept = contourSettings();
+    // Shapes a conversion created go too. "Clear the contour map" has to mean
+    // every contour is gone, and leaving the converted ones behind — one
+    // sidebar card each, indistinguishable from hand-drawn lines — was the
+    // opposite of clearing it.
+    const snaps = removeContourGeoms();
     clearContourMap();
-    status('Contour map cleared.', false, {
-      label: 'Undo',
-      onClick: () => { applyContourSettings(kept); },
-    });
+
+    const n = snaps.length;
+    status('Contour map cleared.' + (n ? ` ${n} converted shape${n === 1 ? '' : 's'} removed too.` : ''),
+      false, {
+        label: 'Undo',
+        onClick: () => {
+          snaps.forEach(sn => { if (typeof recreateGeomFromSnapshot === 'function') recreateGeomFromSnapshot(sn); });
+          applyContourSettings(kept);
+        },
+      });
   });
 
   on('contourLegendTgl', 'change', renderContourLegend);

@@ -192,46 +192,27 @@ Two rules keep it honest:
 
 ## The 3D relief view
 
-Leaflet cannot tilt. The "3D tilt" already in the app is a CSS perspective
-transform on a flat map: convincing at a glance, and still a flat picture
-leaning backwards. Real relief needs a terrain mesh, so the view is handed to
-MapLibre — already vendored for the vector basemap.
+The contour map drapes over the terrain in the app's 3D mode as a `canvas`
+source pinned to the study area's four corners — a canvas rather than an image
+because the interval or the ramp can change while the view is up, and a canvas
+source re-reads its pixels without the map being rebuilt.
 
-- the same DEM, declared as a `raster-dem` source in terrarium encoding,
-  driving `setTerrain`
-- the active basemap underneath as ordinary raster tiles
-- the contour map draped over the top as a **`canvas` source** pinned to the
-  study area's four corners — a canvas rather than an image because the interval
-  or the ramp can change while the view is up, and a canvas source re-reads its
-  pixels without the map being rebuilt
-- `fitBounds` with the pitch applied, because a pitched camera looks *along* the
-  ground rather than down at it, and a centre that is correct on a flat map puts
-  the area in the bottom third of a tilted one
+The 3D mode itself is no longer part of this feature. See
+**[3D-MAP.md](3D-MAP.md)**.
 
-**Mounting is symmetric.** Everything it turns on is turned off again — the tilt
-slider it disables, the Leaflet container it hides, the terrain it sets. The
-flat map is hidden with `visibility`, never `display: none`: Leaflet caches its
-container size, and a `display: none` container measures 0×0, so every pin would
-come back stacked in the corner.
+**The drape is supersampled.** It used to be rendered at the elevation grid's
+own resolution, which is the resolution of the DATA and not of the picture: a
+3.8 km selection reads back as an 850-pixel grid, and draped over terrain and
+looked at from a low camera it covers well over two thousand screen pixels. The
+fill survived that — it is a smooth field and upscales cleanly — but every
+contour was magnified two and a half times into a soft, fat, stair-stepped
+line. The canvas is now scaled up to 2048 px and the lines are drawn at a fixed
+width in TEXTURE pixels, which makes them finer relative to the ground the
+larger the texture gets, exactly as a finer pen would be.
 
-### One trap worth writing down
-
-MapLibre's stylesheet is injected into `<head>` at load time, which puts it
-**after** `css/refine.css` in the cascade. Its `.maplibregl-map { position:
-relative }` beat a `.contour-3d-host` rule of equal specificity that arrived
-earlier. The host stopped being absolutely positioned, `inset: 0` no longer
-stretched it, its height collapsed to zero, and MapLibre sized its canvas to the
-300 px a `<canvas>` defaults to — **a view that rendered perfectly into a buffer
-nobody could see**, while every assertion that read the buffer passed.
-
-The host's geometry is therefore set inline, as `js/map/vectorBasemap.js`
-already does for the same reason. The diagnostic now measures the host against
-the map's box on the page rather than reading the canvas.
-
-In the `legacy/` single-file snapshots MapLibre is deliberately absent, so the
-view declines and says so, exactly as the vector ground does.
-
----
+**Labels are deliberately absent from the drape.** Text baked into a texture is
+stretched by whatever the terrain does underneath it, and a contour label that
+is legible on the flat and skewed on a slope is worse than no label at all.
 
 ## Persistence
 
@@ -244,6 +225,22 @@ check that actually fails if somebody later caches the lines into the save.
 
 A project with no contour map **clears** whatever the last one left on screen,
 rather than inheriting it.
+
+## Clearing
+
+"To shapes" creates ordinary geometries, and they were indistinguishable from
+lines drawn by hand — so clearing the contour map left every converted line
+behind, one sidebar card each, with nothing able to tell which were which.
+Converted contours now carry `fromContour` and their level, through the undo
+snapshot and through the project file, and **Clear removes them too** with an
+inline Undo that puts them back. Hand-drawn shapes are untouched.
+
+That change surfaced an older bug of the same shape: `snapshotGeom()` had
+stored `cls` since the colour key was built, with a comment explaining that a
+shape restored without its class still *looks* right but falls out of the
+colour key — and `recreateGeomFromSnapshot()` was quietly not passing it on. So
+every undone delete unclassed the shape it brought back. `fromRing` was lost
+the same way. All of it is carried through now.
 
 ---
 

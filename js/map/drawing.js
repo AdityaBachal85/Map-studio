@@ -416,6 +416,8 @@ function snapshotGeom(g) {
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
     cls: g.cls, proposed: g.proposed, fromRing: g.fromRing,
+    // Where a converted contour came from, so an undone delete is still one.
+    fromContour: g.fromContour, contourLevel: g.contourLevel,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -560,6 +562,16 @@ function recreateGeomFromSnapshot(snap) {
     labelSize: snap.labelSize, labelBold: snap.labelBold,
     labelStyle: snap.labelStyle, labelAngle: snap.labelAngle,
     showLabel: snap.showLabel, glow: snap.glow, markerStyle: snap.markerStyle, iconKey: snap.iconKey, captionSize: snap.captionSize,
+    // Provenance, not styling — and it was being dropped. snapshotGeom has
+    // stored `cls` since the colour key was built, with a comment saying why:
+    // a shape restored without its class still LOOKS right, because the colours
+    // are saved separately, but belongs to no class, so it falls out of the
+    // colour key and the connectivity standard stops owning it. The snapshot
+    // carried it and this function quietly did not pass it on, so every undone
+    // delete unclassed the shape it brought back. `fromRing` and `fromContour`
+    // are the same kind of fact and were lost the same way.
+    cls: snap.cls, proposed: snap.proposed, fromRing: snap.fromRing,
+    fromContour: snap.fromContour, contourLevel: snap.contourLevel,
     createdAt: snap.createdAt,
   });
 }

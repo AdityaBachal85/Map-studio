@@ -47,6 +47,14 @@
       // Project the tilted map's container point through the CSS 3D transform to the
       // user's viewport plane, so labels sit exactly on the imagery even when tilted.
       function projectPin(latlng) {
+        // In 3D the camera belongs to MapLibre, not to Leaflet, so ask the
+        // renderer that is actually drawing the ground where this landed. The
+        // rest of this overlay — offsets, leader lines, dragging, the hover
+        // link to the sidebar — is projection-independent and needs no changes.
+        if (typeof map3dProjectPin === 'function') {
+          const q = map3dProjectPin(latlng);
+          if (q) return q;
+        }
         const cp = map.latLngToContainerPoint(latlng);
         if (!tiltDeg) return { x: cp.x, y: cp.y, s: 1 };
         const t = tiltDeg * Math.PI / 180;
