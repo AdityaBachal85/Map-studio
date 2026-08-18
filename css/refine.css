@@ -4544,7 +4544,15 @@ body.identify-on .leaflet-container {
 
 /* Slot six in the right-hand stack, which steps 12 / 58 / 104 / 150 / 196 and
    so continues at 242. Two segments stacked rather than side by side, because
-   the column is 38px wide and the stack reads down. */
+   the column is 38px wide and the stack reads down.
+
+   Built from #modeSwitch's rules, not invented beside them. This app already
+   has a segmented control — Map / Dashboard / Report — and a second one in a
+   different visual language is a second language to learn. The first attempt
+   here filled the active half with solid --accent, edge to edge, in a mono
+   face: an orange brick hanging off a column of light frost buttons. The
+   established pattern is a frost tray with the items INSET, and the current
+   one marked by a soft tint and a hairline rather than a slab. */
 #dimSwitch {
   position: absolute;
   top: 242px;
@@ -4553,40 +4561,59 @@ body.identify-on .leaflet-container {
   width: 38px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 3px;
   border-radius: 12px;
-  overflow: hidden;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
 }
+
 #dimSwitch .dim-item {
-  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
   border: 0;
-  background: none;
-  color: var(--dim);
-  font: 800 10px/1 var(--mono), ui-monospace, monospace;
-  letter-spacing: .04em;
-  /* 36, not 30: the buttons above and below are 38 square, and a control that
-     is noticeably smaller than its neighbours reads as less important than
-     they are rather than as a different shape. */
-  height: 36px;
+  /* 9 inside 12: the tray's own curve stays visible around the item, which is
+     what makes it read as a tray with something in it rather than as one
+     two-tone block. */
+  border-radius: 9px;
+  background: transparent;
+  /* Same reasoning as .ms-item: --dim is borderline on a frost panel, and the
+     app's text colour at 72% is comfortably readable in both themes. */
+  color: var(--text);
+  opacity: .72;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1;
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  transition: background .16s, opacity .16s;
 }
-#dimSwitch .dim-item + .dim-item { border-top: 1px solid var(--glass-edge); }
-#dimSwitch .dim-item:hover:not(:disabled) { color: var(--text); }
+
+#dimSwitch .dim-item:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(127, 127, 127, .16);
+}
+
+/* Reads as pressed, not merely tinted — with two items of equal weight, colour
+   alone is too weak a signal for "you are here". */
 #dimSwitch .dim-item.on {
-  color: var(--accent-ink, #fff);
-  background: var(--accent);
+  opacity: 1;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
+
 #dimSwitch .dim-item:disabled { cursor: default; }
-#dimSwitch .dim-item:focus-visible { outline: 2px solid var(--orange2); outline-offset: -2px; }
+#dimSwitch .dim-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Mounting loads a renderer and a style; the button says so rather than
    looking dead for a second and a half. */
-#dimSwitch .dim-item.working { opacity: .6; }
+#dimSwitch .dim-item.working { opacity: .45; }
 
 /* Only present while 3D is, so it takes the slot below the switch. */
 #northUpBtn {
   position: absolute;
-  top: 322px;
+  top: 318px;
   right: 12px;
   z-index: 1000;
   width: 38px;
