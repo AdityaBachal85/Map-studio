@@ -97,10 +97,11 @@
 
     .map-wrap.hires-overlay-pass .leaflet-tile-pane,
     .map-wrap.hires-overlay-pass .leaflet-overlay-pane,
-    /* The vector ground is a third kind of ground and neither of the two panes
-       above, so it needs naming here or the furniture pass photographs it into
-       the transparent layer and composites the whole basemap back over the
-       high-resolution one underneath. */
+    /* The vector ground and the 3D relief view are grounds of their own and
+       neither of the two panes above, so each needs naming here or the
+       furniture pass photographs it into the transparent layer and composites
+       the whole basemap back over the high-resolution one underneath. */
+    .map-wrap.hires-overlay-pass .contour-3d-host,
     .map-wrap.hires-overlay-pass .vector-basemap-host {
       display: none !important;
     }

@@ -129,6 +129,11 @@ function serialiseProject() {
     // saved with the medical symbols hidden has to reopen with them hidden, or
     // the deliverable changes behind their back.
     vectorLayers: (typeof vectorLayerPrefs === 'function') ? vectorLayerPrefs() : undefined,
+    // Settings and the study area only — never the contours themselves. Half a
+    // million coordinates would dwarf everything else in the file, and they are
+    // derived: the same area at the same interval gives the same lines back for
+    // the cost of one DEM read on open.
+    contour: (typeof contourSettings === 'function') ? contourSettings() : undefined,
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
@@ -182,6 +187,12 @@ function applyProject(proj, opts) {
   // already drawn itself with the previous project's filters.
   if (proj.vectorLayers && typeof proj.vectorLayers === 'object') {
     try { setPref('vectorLayers', proj.vectorLayers); } catch (e) { /* ignore */ }
+  }
+  if (typeof applyContourSettings === 'function') {
+    // Always called, even with nothing saved: a project without a contour map
+    // has to CLEAR whatever the last one left on screen, not inherit it.
+    if (proj.contour && typeof proj.contour === 'object') applyContourSettings(proj.contour);
+    else if (typeof clearContourMap === 'function') clearContourMap();
   }
   setBasemap($('basemapSel').value);
   if (proj.tilt !== undefined) { setTiltDeg(+proj.tilt || 0); $('tiltRange').value = tiltDeg; applyTilt(); }

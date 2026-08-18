@@ -37,6 +37,11 @@ const PREF_DEFAULTS = {
   // Which groups of vector style layers are hidden, as {groupId: false}. Only
   // the hidden ones are stored, so a style that grows a new group shows it.
   vectorLayers: null,
+  // The contour map's last-used settings, so a new project opens with the
+  // interval and colours this operator actually works in rather than the
+  // factory ones. The study area is deliberately NOT kept here — it belongs
+  // to a project, not to a browser.
+  contour: null,
 };
 
 const _prefs = Object.assign({}, PREF_DEFAULTS);

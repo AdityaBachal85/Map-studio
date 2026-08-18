@@ -28,7 +28,59 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0091 (latest)
+## 🆕 New in v6.0119 (latest)
+
+### Contour maps — the shape of the ground, from real elevation data
+
+Pick an area on the map and the app reads a digital elevation model for it,
+traces contour lines at whatever interval you choose, tints the ground by
+height, and puts a legend beside it. The whole thing then exports at 2×, 3× or
+4× like everything else on the map, and can be tilted into a real 3D relief
+view.
+
+**The data.** Elevation comes from the AWS Open Data *Terrain Tiles* set in
+Mapzen's terrarium encoding — free, no API key, CORS-open, global. Under India
+that is largely SRTM: roughly **30 m between real samples**, with tiles down to
+zoom 15 (about 4.5 m per pixel at Mumbai's latitude). The panel says so, and
+says which resolution it actually achieved for the area you picked. A 5 m
+contour interval off this is a good picture of the shape of the ground and is
+not a survey, and nothing in the interface pretends otherwise.
+
+**The controls**, all in the Draw tab:
+
+| Control | What it does |
+|---|---|
+| **Area** | Rectangle, polygon or circle drawn on the map — or "Use current view". Reports its size in km². |
+| **Every** | Contour interval, 1 m to 500 m, or 5 ft to 2000 ft. |
+| **Colours** | Five hypsometric ramps: Rainbow, Terrain, Viridis, Greyscale and a DBOT brand ramp. |
+| **Bold** | Index contours drawn heavier — every line, 2nd, 5th, 10th, or none. |
+| **Labels** | Heights along the contours, on the bold ones or on all of them. |
+| **Smoothing** | Rounds off the staircase a sampled grid leaves behind. |
+| **Detail** | How finely the elevation is read, capped by what the source actually has. |
+| **Roads** | Roads, water and buildings from **OpenStreetMap**, drawn over the tint as real geometry. |
+| **Fill** | How strongly the elevation colours cover the basemap. |
+| **Relief shading** | Hillshade computed from *this* DEM, so it agrees with the contours exactly. |
+| **3D relief view** | A real terrain mesh with the contour map draped over it — drag to orbit, with a vertical exaggeration slider. |
+| **To shapes** | Converts the contours into ordinary editable shapes: cards, styling, undo, GeoJSON export. |
+
+**The legend is banded, and the bands are exact.** One labelled block per
+contour band, high ground at the top. Every block's colour is read from the
+same lookup table the map itself was painted from — the diagnostic checks each
+band against the actual pixel the fill painted at that height — and every band
+edge is a contour that is really drawn. When the interval is too fine to list,
+the card widens its step to a *multiple* of the interval and says so, so the
+card never describes a different map from the one beside it.
+
+**Where the work happens.** `js/services/elevation.js` fetches and decodes the
+DEM; `js/map/contourGen.js` is pure arithmetic — marching squares, Chaikin
+smoothing, Douglas–Peucker, hillshade, hypsometric fill — and is tested in Node
+with no browser at all; `js/map/contourLayer.js` draws it; `js/map/contour3d.js`
+is the oblique view; `js/services/osmDetail.js` fetches the road detail through
+the Overpass client `ringFeatures.js` already sets up.
+
+---
+
+## 🆕 Earlier in v6 (6.0091)
 
 ### A vector basemap — the ground can finally be told what not to draw
 
@@ -636,14 +688,19 @@ Map-studio/
                         drawing (shape tools + undo/redo), snapping, icons,
                         fillPatterns, textLabels, aerialDistance, markerCluster,
                         imageryEnhance, googleTiles, customBasemaps, providerKeys,
-                        nearby
+                        nearby, contourRamps + contourGen + contourLayer +
+                        contourMap + contour3d (the contour map: ramp table,
+                        pure maths, renderer, state and the 3D relief view)
     ui/             — sidebar, toolbar, propertyPanel, geometryPanel (shape cards),
                         colorKey (the editable LEGEND card), legendTable (Key
                         Distances), basemapSwitcher, ringScanPanel, layerManager,
                         settingsDialog, exportCenter, importDialog, iconPicker,
                         colorPresets, searchBox, dialogs, notifications, aiTab,
                         reportSheet, dash* (the board view)
-    services/       — geocoder (search box), geoapify, google (Places + Routes),
+    services/       — elevation (the DEM behind the contour map), osmDetail
+                        (roads/water/buildings over it, through the Overpass
+                        client ringFeatures sets up),
+                        geocoder (search box), geoapify, google (Places + Routes),
                         nearbyPlaces, boundaries, ringFeatures (the Overpass ring
                         scan + the way-joining that turns road fragments into
                         whole routes), mapIdentify, aiReports, placeCache, places
@@ -665,7 +722,9 @@ Map-studio/
   docs/             — OPENFREEMAP-VECTOR-BASEMAP.md (the vector ground: spec,
                         what shipped, and where the spec was wrong),
                         PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root
-                        cause), ACCOUNTS-SETUP.md, AI-REPORTS-SETUP.md,
+                        cause), CONTOUR-MAPS.md (elevation source, the
+                        contour pipeline, and what its accuracy is and is not),
+                        ACCOUNTS-SETUP.md, AI-REPORTS-SETUP.md,
                         DEPLOY-NOTES.md, PHASE3-FEATURE-INVENTORY.md,
                         PHASE5-PRODUCTION-POLISH.md, SESSION-HANDOFF-6.0090.md
 ```

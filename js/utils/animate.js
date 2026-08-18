@@ -33,6 +33,36 @@ function staggerPopIn(els, staggerMs) {
 }
 
 /**
+ * Slide a set of elements in from one side, staggered.
+ *
+ * Kept short and shallow on purpose. This is used for the elevation legend's
+ * bands, which are DATA — the reader is there to look up a number, not to watch
+ * it arrive — so the motion only has to say "this list just changed", and a
+ * 6px travel over 220ms says it without making anyone wait to read.
+ *
+ * @param {HTMLElement[]} els @param {object} [o] `{staggerMs, dx, duration}`
+ */
+function staggerSlideIn(els, o) {
+  const list = (els || []).filter(Boolean);
+  if (!list.length) return;
+  const opts = o || {};
+  if (motionReduced() || typeof anime !== 'function') {
+    list.forEach(el => { el.style.opacity = '1'; el.style.transform = 'none'; });
+    return;
+  }
+  anime({
+    targets: list,
+    opacity: [0, 1],
+    // translateX only: animating a width or a height here would relayout the
+    // card on every frame of every band.
+    translateX: [opts.dx == null ? 6 : opts.dx, 0],
+    easing: 'easeOutCubic',
+    duration: opts.duration || 220,
+    delay: anime.stagger(opts.staggerMs || 18),
+  });
+}
+
+/**
  * Expand or collapse an accordion body with a real height transition.
  *
  * The previous behaviour toggled `display:none` and cross-faded, so the panel

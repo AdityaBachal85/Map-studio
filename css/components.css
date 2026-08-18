@@ -295,7 +295,7 @@
       overflow: hidden;
     }
 
-    #legendCard .hd, #colorKeyCard .hd {
+    #legendCard .hd, #colorKeyCard .hd, #contourLegendCard .hd {
       background: var(--navy);
       color: #fff;
       font-size: 10.5px;
@@ -308,19 +308,19 @@
       user-select: none;
     }
 
-    #legendCard .hd .grip, #colorKeyCard .hd .grip {
+    #legendCard .hd .grip, #colorKeyCard .hd .grip, #contourLegendCard .hd .grip {
       cursor: move;
       color: #8FA5C6;
       font-size: 12px;
       letter-spacing: 0;
     }
 
-    #legendCard .hd .ttl, #colorKeyCard .hd .ttl {
+    #legendCard .hd .ttl, #colorKeyCard .hd .ttl, #contourLegendCard .hd .ttl {
       outline: none;
       flex: 1;
     }
 
-    #legendCard .hd .ttl:focus, #colorKeyCard .hd .ttl:focus {
+    #legendCard .hd .ttl:focus, #colorKeyCard .hd .ttl:focus, #contourLegendCard .hd .ttl:focus {
       color: var(--orange2);
     }
 

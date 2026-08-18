@@ -11,4 +11,25 @@ function png(r,g,b,noise){const S=256;const raw=Buffer.alloc(S*(S*3+1));let p=0;
   const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(S,0);ihdr.writeUInt32BE(S,4);ihdr[8]=8;ihdr[9]=2;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),
     chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);}
-module.exports={png};
+
+/**
+ * A 256x256 terrarium-encoded elevation tile.
+ *
+ * Terrarium packs metres into colour: `elev = R*256 + G + B/256 - 32768`. The
+ * decoder in services/elevation.js reads exactly that, so a fixture written the
+ * other way round exercises the real arithmetic rather than a stub of it.
+ *
+ * `fn(i, j)` is called per tile-local pixel and returns metres. Callers close
+ * over z/x/y and convert to a real position, which is what keeps a surface
+ * continuous across tile seams — a discontinuity there would look exactly like
+ * a mosaicking bug.
+ */
+function elevPng(fn){const S=256;const raw=Buffer.alloc(S*(S*3+1));let p=0;
+  for(let j=0;j<S;j++){raw[p++]=0;for(let i=0;i<S;i++){
+    let v=fn(i,j)+32768;if(!(v>0))v=0;if(v>65535)v=65535;
+    const r=Math.floor(v/256),g=Math.floor(v)%256,b=Math.round((v-Math.floor(v))*256)%256;
+    raw[p++]=r;raw[p++]=g;raw[p++]=b;}}
+  const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(S,0);ihdr.writeUInt32BE(S,4);ihdr[8]=8;ihdr[9]=2;
+  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),
+    chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);}
+module.exports={png,elevPng};

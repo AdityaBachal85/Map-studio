@@ -259,6 +259,17 @@ async function renderGroundPass(o) {
   const { scale, wrapW, wrapH } = o;
   const W = Math.round(wrapW * scale), H = Math.round(wrapH * scale);
 
+  // The oblique relief view replaces the flat map rather than sitting over it:
+  // Leaflet is hidden, its tiles and vectors are not on screen, and the picture
+  // is a GL canvas the operator aimed by hand. Rebuilding that camera from
+  // numbers is how an export stops matching what was on the screen, so the
+  // buffer is copied straight out instead. Same reasoning as the vector ground,
+  // one step further — here there is no Leaflet map left to reproduce at all.
+  if (typeof contour3dActive === 'function' && contour3dActive()) {
+    const gl = renderContour3dCanvas({ W, H });
+    if (gl) return { canvas: gl, reference: null, vectors: null, contour: null, complete: true };
+  }
+
   const host = document.createElement('div');
   // Parked far off-screen rather than hidden: Leaflet needs a laid-out box with
   // real dimensions, and `display:none` would give it a 0×0 viewport.
@@ -321,6 +332,20 @@ async function renderGroundPass(o) {
       tileLayers.push(hs);
     }
 
+    // The contour map, rendered by a second instance of the same layer against
+    // this larger map. It reads the shared model, so nothing is refetched and
+    // nothing is recomputed — only redrawn, at the export's own resolution, so
+    // the lines and their labels stay one pixel wide instead of being magnified.
+    let contourExportLayer = null;
+    if (typeof ContourLayer === 'function' && typeof contourModel !== 'undefined'
+      && contourModel.ready && typeof contourState !== 'undefined' && contourState.on) {
+      contourExportLayer = new ContourLayer(contourModel);
+      // 1, not the screen's device ratio: this map is already `scale` times the
+      // size, so its pixels are the export's pixels.
+      contourExportLayer.setRenderScale(1);
+      contourExportLayer.addTo(exportMap);
+    }
+
     // A 2x export covers four times the tiles of the screen, a 4x export
     // sixteen. Thirty seconds was a screen-sized budget applied to an
     // export-sized job, so a large or slow render ran out of time and shipped
@@ -378,6 +403,13 @@ async function renderGroundPass(o) {
       if (ref.drawn) reference = ref.canvas;
     }
 
+    const isContour = el => el.classList.contains('contour-canvas');
+    let contour = null;
+    if (contourExportLayer) {
+      const cc = rasteriseVectorCanvases(host, W, H, isContour);
+      if (cc.drawn) contour = cc.canvas;
+    }
+
     let vectors = null;
     if (o.includeVectors !== false) {
       const clones = [];
@@ -400,7 +432,7 @@ async function renderGroundPass(o) {
         // One frame for Leaflet's canvas renderer to actually paint the clones
         // it has only been handed so far.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const vec = rasteriseVectorCanvases(host, W, H);
+        const vec = rasteriseVectorCanvases(host, W, H, el => !isContour(el));
         if (vec.drawn) vectors = vec.canvas;
       }
     }
@@ -439,7 +471,7 @@ async function renderGroundPass(o) {
       tiles = composed;
     }
 
-    return { canvas: tiles, reference, vectors, complete };
+    return { canvas: tiles, reference, vectors, contour, complete };
   } finally {
     // Cleared here, not only after the furniture pass: if the ground pass
     // throws, a leaked bias would follow the *live* map and start scrubbing
@@ -545,9 +577,13 @@ function rasteriseTileLayers(host, W, H, pick, background) {
  * a <canvas> in the overlay pane. Copying it is one drawImage.
  *
  * @param {HTMLElement} host @param {number} W @param {number} H
+ * @param {function(Element):boolean} [pick] which canvases to include. The
+ *   contour map is one of these canvases and is composited separately — it is
+ *   ground rather than geometry, so it belongs under the routes, and it has to
+ *   survive `includeVectors:false` on the PPTX path where the routes do not.
  * @returns {{canvas:HTMLCanvasElement, drawn:number}}
  */
-function rasteriseVectorCanvases(host, W, H) {
+function rasteriseVectorCanvases(host, W, H, pick) {
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
@@ -556,6 +592,7 @@ function rasteriseVectorCanvases(host, W, H) {
 
   host.querySelectorAll('.leaflet-overlay-pane canvas').forEach(src => {
     if (!src.width || !src.height) return;
+    if (pick && !pick(src)) return;
     const r = src.getBoundingClientRect();
     try {
       ctx.drawImage(src, r.left - hostRect.left, r.top - hostRect.top, r.width, r.height);
@@ -686,6 +723,9 @@ async function captureMapHiRes(opts) {
   }
 
   // Vectors and furniture go on ungraded — their colours were chosen, not captured.
+  // Between the ground and the geometry: the contour map describes the land,
+  // and the routes and shapes are drawn on top of the land.
+  if (ground.contour) ctx.drawImage(ground.contour, 0, 0, out.width, out.height);
   if (ground.vectors) ctx.drawImage(ground.vectors, 0, 0, out.width, out.height);
   ctx.drawImage(furniture, 0, 0, out.width, out.height);
 
