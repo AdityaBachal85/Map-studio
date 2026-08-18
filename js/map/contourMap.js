@@ -51,7 +51,11 @@ const contourState = {
   roads: 'off',          // 'off' | 'roads' | 'full'
   showOutline: true,
   mode: '2d',            // '2d' | '3d'
-  exaggeration: 1.5,
+  // 1, not 1.5. An exaggerated default makes ground that is nearly flat look
+  // like it rolls, and the operator has no way to know the view is lying to
+  // them by half. Exaggeration is a deliberate choice for a presentation, not
+  // something the map should do to you on the way in.
+  exaggeration: 1,
 };
 
 /** @type {object} what the renderer draws. */

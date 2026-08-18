@@ -473,7 +473,8 @@ function map3dProjectPin(latlng) {
 
 /** The exaggeration the contour panel's slider is set to, or a sane default. */
 function map3dExaggeration() {
-  return (typeof contourState !== 'undefined' && contourState.exaggeration) || 1.5;
+  const v = (typeof contourState !== 'undefined') ? contourState.exaggeration : 1;
+  return (v > 0) ? v : 1;
 }
 
 /** Add the contour picture over the terrain, if there is one to add. */

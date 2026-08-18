@@ -31,6 +31,41 @@ vertical accuracy on the order of 10 m. Tiles exist down to **zoom 15** — abou
 not measured. Zoom 16 returns 404, which is the source being honest about where
 its data stops.
 
+### It is a SURFACE model, not the ground
+
+SRTM is radar. It measures whatever the beam bounced off — **rooftops over a
+town, canopy over forest** — not the earth beneath either. A house in a
+built-up block therefore sits on a small plateau made of the buildings around
+it, and dense forest reads several metres above the soil.
+
+This is the single most common reason somebody looks at their own address and
+says the elevation is wrong. It is not a defect in the decode and it is not
+something the app can correct for; stripping buildings and vegetation out of a
+surface model to get bare earth needs a different survey entirely. So the panel
+says it outright instead.
+
+The decode itself was checked against points whose height is not in dispute:
+open sea off Mumbai reads 0.0 m, Matheran's summit 801.3 m against a published
+~800 m, Thane 10.0 m, Bhiwandi 15.6 m.
+
+### The colour scale is relative, and that flatters flat ground
+
+The ramp stretches from the lowest point in the selection to the highest,
+whatever those are — which is what lets one ramp work over a river plain and a
+hill range without being redefined. The cost is that fifteen metres of relief
+gets the same red summit and blue depths as five hundred, and reads as
+mountains. The legend's numbers are right; the picture is what misleads.
+
+So the panel states the total relief outright, and an area flat enough for this
+to matter is called flat in as many words.
+
+### Vertical exaggeration defaults to 1x
+
+It was 1.5. An exaggerated default makes ground that is nearly flat look like
+it rolls, and nothing on screen tells the operator the view is overstating the
+slope by half. Exaggeration is a deliberate choice for a presentation, not
+something the map should do to you on the way in.
+
 So a 5 m contour interval off this describes the shape of the ground well and
 **is not a survey**. The panel says this in as many words, and reports the
 resolution it actually achieved for the chosen area rather than the one that was

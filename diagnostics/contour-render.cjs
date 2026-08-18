@@ -215,6 +215,41 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the study area reports its size', /km²|ha|m²/.test(legend.area), legend.area);
   ck('and the panel states the resolution it actually achieved',
     /m per sample/.test(legend.stats), legend.stats.slice(0, 90));
+  ck('it states the total relief, not just the two ends',
+    /of relief/.test(legend.stats), (legend.stats.match(/[^·]*of relief/) || [''])[0].trim());
+  // The commonest reason somebody says their own address reads wrong.
+  ck('and warns that buildings and canopy are part of the model',
+    /canopy/.test(legend.stats) && /built-up/.test(legend.stats));
+
+  const flat = await p.evaluate(async () => {
+    // A deliberately flat selection: well away from the fixture's hill and
+    // zoomed in far enough that only the gentle regional slope is in frame, so
+    // the ramp stretches across a few metres and would paint them like a
+    // mountain range unless the panel says otherwise.
+    map.setView([19.310, 73.010], 16);
+    contourAreaFromView();
+    await generateContours({ silent: true });
+    const g = contourModel.grid;
+    return {
+      relief: +(g.max - g.min).toFixed(1),
+      stats: document.getElementById('contourStats').textContent,
+    };
+  });
+  ck('the flat selection really is flat', flat.relief < 25, `${flat.relief} m of relief`);
+  ck('and it is called flat rather than left looking like mountains',
+    /nearly flat/i.test(flat.stats) && new RegExp(String(Math.round(flat.relief))).test(flat.stats),
+    (flat.stats.match(/This area is nearly flat[^]*?drama\./) || ['not warned'])[0].slice(0, 150));
+
+  // Back to the hill. Everything below this measures the contour map built at
+  // the top of the file, and a flat selection left in place would quietly
+  // change what those assertions are looking at.
+  await p.evaluate(async () => {
+    map.setView([19.235, 72.94], 14);
+    contourState.detail = 'high';
+    contourState.interval = 20;
+    contourAreaFromView();
+    await generateContours({ silent: true });
+  });
 
   /* -- the legend's colours are the map's colours -------------------------- */
 

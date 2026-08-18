@@ -102,29 +102,64 @@ function renderContourAreaInfo() {
   el.textContent = contourState.areaShape + ' · ' + txt;
 }
 
+/** Below this much total relief, a hypsometric ramp flatters the ground. */
+const CONTOUR_FLAT_RELIEF_M = 25;
+
 /**
- * What was actually built, including the resolution it was built at.
+ * What was actually built, including the two things that make a correct
+ * elevation model look wrong.
  *
- * The resolution line is not decoration. The source is roughly 30 m SRTM, and
- * an operator who picks a 1 m interval deserves to be told what that 1 m is
- * resting on rather than left to assume the map is a survey.
+ * THE COLOUR SCALE IS RELATIVE. The ramp stretches from the lowest point in the
+ * selection to the highest, whatever those are — which is what makes one ramp
+ * usable over a river plain and a hill range. The cost is that an area with
+ * fifteen metres in it gets the same red summit and blue depths as one with
+ * five hundred, and reads as mountains. The numbers on the legend are right;
+ * the picture is what misleads. So the relief is stated outright, and an area
+ * flat enough for this to matter is called flat in as many words.
+ *
+ * IT IS A SURFACE MODEL. SRTM is radar: it measures what the beam bounced off,
+ * which over a town is rooftops and over forest is canopy — not the ground
+ * under either. A house in a built-up block therefore sits on a small plateau
+ * made of the buildings around it. That is the single most common reason
+ * somebody looks at their own address and says the elevation is wrong, and it
+ * is not something the app can correct for, so it says so instead.
  */
 function renderContourStats() {
   const el = $('contourStats');
   if (!el) return;
   const g = contourModel.grid;
+
   if (!g) {
-    el.textContent = 'Elevation comes from open SRTM-derived data at roughly 30 m between '
-      + 'real samples. Fine intervals are interpolated between those samples — good for '
-      + 'reading the shape of the ground, not a substitute for a survey.';
+    el.innerHTML = 'Elevation comes from open SRTM-derived data at roughly 30 m between '
+      + 'real samples. It is a <b>surface</b> model — buildings and tree canopy are part of '
+      + 'the terrain it describes, not stripped out of it — and it dates from 2000, so '
+      + 'anything levelled, quarried or built since is not in it. Good for the shape of the '
+      + 'ground; not a survey.';
     return;
   }
-  const detail = contourState.detail !== 'standard' && g.zoom >= 15
+
+  const relief = g.max - g.min;
+  const deep = contourState.detail !== 'standard' && g.zoom >= 15
     ? ' (the deepest the source has)' : '';
-  el.textContent = contourHeightText(g.min) + ' to ' + contourHeightText(g.max)
+  const facts = contourHeightText(g.min) + ' to ' + contourHeightText(g.max)
+    + ' · ' + contourHeightText(relief) + ' of relief'
     + ' · ' + contourModel.lines.length + ' contours · '
-    + g.metresPerSample.toFixed(1) + ' m per sample' + detail
+    + g.metresPerSample.toFixed(1) + ' m per sample' + deep
     + (g.partial ? ' · some tiles unavailable' : '');
+
+  let note = '';
+  if (relief < CONTOUR_FLAT_RELIEF_M) {
+    note = '<b>This area is nearly flat.</b> The colours stretch to fit whatever range is '
+      + 'in the selection, so ' + contourHeightText(relief) + ' of relief is painted with the '
+      + 'same full ramp a mountain would get. Read the numbers, not the drama.';
+  }
+  // Always said, because it is the usual reason a familiar address looks wrong.
+  const surface = 'Buildings and tree canopy are part of this model, so a house in a built-up '
+    + 'block reads a few metres above the street it stands on.';
+
+  el.innerHTML = esc(facts).replace(/·/g, '·')
+    + (note ? '<br><br>' + note : '')
+    + '<br><br>' + surface;
 }
 
 /* ---------------------------------------------------------------------------
