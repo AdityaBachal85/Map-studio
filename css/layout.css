@@ -101,7 +101,7 @@
        neither of the two panes above, so each needs naming here or the
        furniture pass photographs it into the transparent layer and composites
        the whole basemap back over the high-resolution one underneath. */
-    .map-wrap.hires-overlay-pass .contour-3d-host,
+    .map-wrap.hires-overlay-pass .map-3d-host,
     .map-wrap.hires-overlay-pass .vector-basemap-host {
       display: none !important;
     }

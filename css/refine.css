@@ -4540,23 +4540,88 @@ body.identify-on .leaflet-container {
   color: #74808C;
 }
 
-/* ---- the 3D relief view -------------------------------------------------- */
+/* ---- the 2D / 3D switch --------------------------------------------------- */
 
-/* The host's geometry is set INLINE in map/contour3d.js, not here — MapLibre's
+/* Slot six in the right-hand stack, which steps 12 / 58 / 104 / 150 / 196 and
+   so continues at 242. Two segments stacked rather than side by side, because
+   the column is 38px wide and the stack reads down. */
+#dimSwitch {
+  position: absolute;
+  top: 242px;
+  right: 12px;
+  z-index: 1000;
+  width: 38px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+#dimSwitch .dim-item {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font: 800 10px/1 var(--mono), ui-monospace, monospace;
+  letter-spacing: .04em;
+  /* 36, not 30: the buttons above and below are 38 square, and a control that
+     is noticeably smaller than its neighbours reads as less important than
+     they are rather than as a different shape. */
+  height: 36px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+#dimSwitch .dim-item + .dim-item { border-top: 1px solid var(--glass-edge); }
+#dimSwitch .dim-item:hover:not(:disabled) { color: var(--text); }
+#dimSwitch .dim-item.on {
+  color: var(--accent-ink, #fff);
+  background: var(--accent);
+}
+#dimSwitch .dim-item:disabled { cursor: default; }
+#dimSwitch .dim-item:focus-visible { outline: 2px solid var(--orange2); outline-offset: -2px; }
+/* Mounting loads a renderer and a style; the button says so rather than
+   looking dead for a second and a half. */
+#dimSwitch .dim-item.working { opacity: .6; }
+
+/* Only present while 3D is, so it takes the slot below the switch. */
+#northUpBtn {
+  position: absolute;
+  top: 322px;
+  right: 12px;
+  z-index: 1000;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#northUpBtn[hidden] { display: none; }
+#northUpBtn:hover { color: var(--orange); }
+/* The needle turns with the camera. transform only — this repaints on every
+   frame of a drag. */
+#northUpBtn svg { transition: transform 90ms linear; }
+
+/* ---- the 3D view --------------------------------------------------------- */
+
+/* The host's geometry is set INLINE in map/map3d.js, not here — MapLibre's
    stylesheet is injected at load time and lands after this file, so its
    `.maplibregl-map { position: relative }` would win. These rules are the ones
    MapLibre has no opinion about. */
-.contour-3d-host { background: var(--bg0); }
-.contour-3d-host canvas { outline: none; }
+.map-3d-host { background: var(--bg0); }
+.map-3d-host canvas { outline: none; }
 
 /* One switch, and CSS decides what the oblique view is not showing. The flat
    map is hidden rather than removed: Leaflet caches its container size, and a
    display:none container measures 0x0, so every pin would come back stacked in
    the corner when the view is turned off again. */
-.contour-3d-on #tiltStage,
-.contour-3d-on #billboardLayer,
-.contour-3d-on #northArrow,
-.contour-3d-on #scaleBar { visibility: hidden; }
+.map-3d-on #tiltStage,
+.map-3d-on #billboardLayer,
+.map-3d-on #northArrow,
+.map-3d-on #scaleBar { visibility: hidden; }
 
 /* The contour canvas itself. `will-change` because it is repainted on every
    zoom frame and is often the largest surface on the page. */

@@ -190,7 +190,7 @@ function setContourEnabled(on) {
 function contourRefresh() {
   if (contourLayerRef) contourLayerRef.refresh();
   if (typeof renderContourLegend === 'function') renderContourLegend();
-  if (typeof contour3dRedrape === 'function') contour3dRedrape();
+  if (typeof map3dRedrape === 'function') map3dRedrape();
 }
 
 /* ---------------------------------------------------------------------------
@@ -565,13 +565,40 @@ function clearContourMap() {
  * ------------------------------------------------------------------------- */
 
 /**
- * Render the contour map into a canvas the exact size of the elevation grid.
+ * The drape's texture size along its longest edge.
+ *
+ * NOT the grid's own size, which is what this used to be. A 3.8 km selection
+ * reads back as an 850-pixel grid; draped over terrain and looked at from a low
+ * camera it covers well over two thousand screen pixels, so every contour was
+ * magnified two and a half times — soft, fat, stair-stepped lines over a
+ * blurred tint. Painting the same picture into a larger texture costs one
+ * canvas and fixes all of it.
+ */
+const CONTOUR_DRAPE_TARGET_PX = 2048;
+
+/** Contour line weights in TEXTURE pixels — see contourDrapeCanvas(). */
+const CONTOUR_DRAPE_LINE_PX = 1.4;
+const CONTOUR_DRAPE_BOLD_PX = 2.6;
+
+/**
+ * Render the contour map into a canvas to be draped over the terrain.
  *
  * The 2D layer draws through Leaflet's projection, which the 3D view does not
- * have: MapLibre drapes a flat image over the terrain mesh by its four
- * corners. Drawing in grid space instead makes the corners exactly the grid's
- * corners, so the picture lands on the ground it was computed from with no
- * resampling and no offset.
+ * have: MapLibre drapes a flat image over the terrain mesh by its four corners.
+ * Drawing in grid space instead makes the corners exactly the grid's corners,
+ * so the picture lands on the ground it was computed from with no offset.
+ *
+ * SUPERSAMPLED. The grid is the resolution of the DATA, not of the picture, and
+ * the two are not the same requirement: the fill is a smooth field that
+ * upscales cleanly, but a contour line is a hairline that has to survive being
+ * looked at from three metres above the ground. So the canvas is scaled up to
+ * CONTOUR_DRAPE_TARGET_PX and the lines are drawn at a fixed width in TEXTURE
+ * pixels — which makes them thinner relative to the ground the larger the
+ * texture gets, exactly as a finer pen would be.
+ *
+ * Labels are deliberately absent. Text baked into a texture is stretched by
+ * whatever the terrain does underneath it, and a contour label that is legible
+ * on the flat and skewed on a slope is worse than no label at all.
  *
  * @returns {HTMLCanvasElement|null}
  */
@@ -579,20 +606,30 @@ function contourDrapeCanvas() {
   const g = contourModel.grid;
   if (!contourModel.ready || !g) return null;
 
+  const cap = (typeof maxWebglDimension === 'function') ? maxWebglDimension() : 4096;
+  const target = Math.min(CONTOUR_DRAPE_TARGET_PX, cap);
+  // Never downscale below the data, and never upscale past what the GPU will
+  // hold as one texture.
+  const ss = Math.max(1, Math.min(4, target / Math.max(g.w, g.h)));
+  const W = Math.max(1, Math.round(g.w * ss));
+  const H = Math.max(1, Math.round(g.h * ss));
+
   const c = document.createElement('canvas');
-  c.width = g.w; c.height = g.h;
+  c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
   if (contourModel.fillCanvas) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.globalAlpha = contourModel.fillOpacity == null ? 1 : contourModel.fillOpacity;
-    ctx.drawImage(contourModel.fillCanvas, 0, 0);
+    ctx.drawImage(contourModel.fillCanvas, 0, 0, W, H);
     ctx.globalAlpha = 1;
   }
 
-  // Weights are in grid samples here, not screen pixels, so a line stays a
-  // sensible thickness however far the 3D camera happens to be.
-  const scale = Math.max(1, Math.min(3, g.w / 500));
-  const toGrid = p => { const q = latLngToGrid(g, p[0], p[1]); return [q.x, q.y]; };
+  const toTex = p => {
+    const q = latLngToGrid(g, p[0], p[1]);
+    return [q.x * ss, q.y * ss];
+  };
 
   const paint = (feats, kinds) => {
     if (!feats || !feats.length) return;
@@ -604,7 +641,7 @@ function contourDrapeCanvas() {
       feats.forEach(f => {
         if (f.cls !== kind) return;
         f.pts.forEach((p, i) => {
-          const q = toGrid(p);
+          const q = toTex(p);
           if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
         });
         if (f.closed || st.fill) ctx.closePath();
@@ -613,7 +650,7 @@ function contourDrapeCanvas() {
       if (!any) return;
       if (st.fill) { ctx.fillStyle = st.fill; ctx.fill('evenodd'); }
       if (st.w > 0) {
-        ctx.lineWidth = st.w * scale;
+        ctx.lineWidth = st.w;
         ctx.strokeStyle = st.color;
         ctx.setLineDash(st.dash || []);
         ctx.stroke();
@@ -626,14 +663,23 @@ function contourDrapeCanvas() {
   ctx.lineJoin = 'round';
   paint(contourModel.osm, ['waterbody', 'building']);
 
-  contourModel.lines.forEach(ln => {
+  // Batched into one path per weight rather than one stroke per contour: a fine
+  // interval is thousands of lines, and thousands of separate strokes is
+  // thousands of state changes for a picture drawn in two colours.
+  [false, true].forEach(bold => {
+    let any = false;
     ctx.beginPath();
-    ln.pts.forEach((p, i) => {
-      const q = toGrid(p);
-      if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+    contourModel.lines.forEach(ln => {
+      if (!!ln.bold !== bold) return;
+      ln.pts.forEach((p, i) => {
+        const q = toTex(p);
+        if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+      });
+      any = true;
     });
-    ctx.strokeStyle = ln.bold ? contourModel.boldColor : contourModel.lineColor;
-    ctx.lineWidth = (ln.bold ? contourModel.boldWidth : contourModel.lineWidth) * scale;
+    if (!any) return;
+    ctx.strokeStyle = bold ? contourModel.boldColor : contourModel.lineColor;
+    ctx.lineWidth = bold ? CONTOUR_DRAPE_BOLD_PX : CONTOUR_DRAPE_LINE_PX;
     ctx.stroke();
   });
 

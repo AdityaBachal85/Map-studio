@@ -71,7 +71,6 @@ function renderContourPanel() {
     bar.title = ramp.label + (ramp.note ? ' — ' + ramp.note : '');
   }
 
-  const t3 = $('contour3dTgl'); if (t3) t3.checked = contourState.mode === '3d';
   set('contourExag', Math.round(contourState.exaggeration * 10));
   const ev = $('contourExagVal');
   if (ev) ev.textContent = contourState.exaggeration.toFixed(1) + '×';
@@ -438,15 +437,11 @@ function initContourPanel() {
 
   on('contourLegendTgl', 'change', renderContourLegend);
 
-  on('contour3dTgl', 'change', e => {
-    if (typeof setContour3d === 'function') setContour3d(e.target.checked);
-    else e.target.checked = false;
-  });
   on('contourExag', 'input', e => {
     contourState.exaggeration = Number(e.target.value) / 10;
     const v = $('contourExagVal');
     if (v) v.textContent = contourState.exaggeration.toFixed(1) + '×';
-    if (typeof contour3dSetExaggeration === 'function') contour3dSetExaggeration(contourState.exaggeration);
+    if (typeof map3dSetExaggeration === 'function') map3dSetExaggeration(contourState.exaggeration);
   });
 
   initContourLegendDrag();

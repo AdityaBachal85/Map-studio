@@ -265,8 +265,8 @@ async function renderGroundPass(o) {
   // numbers is how an export stops matching what was on the screen, so the
   // buffer is copied straight out instead. Same reasoning as the vector ground,
   // one step further — here there is no Leaflet map left to reproduce at all.
-  if (typeof contour3dActive === 'function' && contour3dActive()) {
-    const gl = renderContour3dCanvas({ W, H });
+  if (typeof map3dActive === 'function' && map3dActive()) {
+    const gl = render3dGroundCanvas({ W, H });
     if (gl) return { canvas: gl, reference: null, vectors: null, contour: null, complete: true };
   }
 

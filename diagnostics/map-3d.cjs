@@ -1,6 +1,6 @@
 /**
- * The oblique relief view: it mounts, it really has a terrain mesh, and it
- * puts the map back exactly as it found it.
+ * The 3D map mode: it mounts on its own, it really has a terrain mesh, and it
+ * puts the flat map back exactly as it found it.
  *
  * The last of those is the one worth testing hardest. Mounting is visible — you
  * either see hills or you do not — but an asymmetric unmount is invisible until
@@ -8,12 +8,12 @@
  * still disabled, or Leaflet is still hidden under a host that was removed.
  * The vector ground had exactly this class of bug.
  *
- * Terrain is asserted through contour3dStatus() rather than through the
+ * Terrain is asserted through map3dStatus() rather than through the
  * checkbox, because setTerrain can be refused: a DEM that will not load leaves
  * a tilted FLAT map, which looks enough like relief to be believed.
  *
  *   python3 -m http.server 8000        # from the repo root
- *   node diagnostics/contour-3d.cjs
+ *   node diagnostics/map-3d.cjs
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -25,6 +25,9 @@ const REPO = path.join(__dirname, '..');
 const localAuthConfig = () => fs.readFileSync(path.join(REPO, 'js', 'config.js'), 'utf8')
   .replace(/const SUPABASE_URL = '[^']*';/, "const SUPABASE_URL = '';")
   .replace(/const SUPABASE_ANON_KEY = '[^']*';/, "const SUPABASE_ANON_KEY = '';");
+
+const VECTOR_STYLE = fs.readFileSync(
+  path.join(__dirname, 'vector-basemap', 'style-fixture.json'), 'utf8');
 
 const PEAK = { lat: 19.235, lng: 72.94 };
 function elevAt(lng, lat) {
@@ -62,20 +65,76 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     });
   });
 
+  await p.route('**/tiles.openfreemap.org/**', r =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: VECTOR_STYLE }));
+
   await p.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(3000);
 
-  /* -- 3D refuses politely before there is anything to drape ---------------- */
+  /* -- the switch exists, on the map, and starts on 2D ---------------------- */
 
-  const early = await p.evaluate(async () => {
-    const ok = await setContour3d(true);
-    return { ok, active: contour3dActive(), msg: document.getElementById('statusMsg').textContent };
+  const controls = await p.evaluate(() => {
+    const sw = document.getElementById('dimSwitch');
+    const b2 = document.getElementById('dim2dBtn'), b3 = document.getElementById('dim3dBtn');
+    return {
+      onMap: !!(sw && sw.closest('#mapWrap')),
+      visible: !!(sw && sw.offsetParent),
+      two: b2 ? b2.classList.contains('on') : null,
+      three: b3 ? b3.classList.contains('on') : null,
+      compassHidden: document.getElementById('northUpBtn').hidden,
+    };
   });
-  ck('3D declines until there is a contour map to drape, and says why',
-    early.ok === false && early.active === false && /contour map first/i.test(early.msg),
-    JSON.stringify(early));
+  ck('the 2D/3D switch is on the map, showing 2D',
+    controls.onMap && controls.visible && controls.two === true && controls.three === false,
+    JSON.stringify(controls));
+  ck('and the compass is not there until 3D is', controls.compassHidden === true);
 
-  /* -- mount ---------------------------------------------------------------- */
+  /* -- 3D works with nothing on the map at all ----------------------------- */
+
+  // The whole point of the change: the terrain is the world, a contour map is
+  // one rectangle on it, so 3D must not be gated on having one.
+  const bare = await p.evaluate(async () => {
+    map.setView([19.235, 72.94], 13);
+    document.getElementById('dim3dBtn').click();
+    await new Promise(r => setTimeout(r, 4500));
+    const st = map3dStatus();
+    return {
+      active: st.active, terrain: st.terrain, drape: st.drape, pitch: Math.round(st.pitch),
+      compassShown: !document.getElementById('northUpBtn').hidden,
+      threeOn: document.getElementById('dim3dBtn').classList.contains('on'),
+    };
+  });
+  ck('the switch turns 3D on with no contour map at all',
+    bare.active === true && bare.threeOn === true, JSON.stringify(bare));
+  ck('with a terrain mesh', bare.terrain === true, JSON.stringify(bare));
+  ck('and no drape, because there is nothing to drape', bare.drape === false);
+  ck('the camera has tilted back from flat', bare.pitch > 30, bare.pitch + '°');
+  ck('and the compass has appeared with it', bare.compassShown === true);
+
+  const backTo2d = await p.evaluate(async () => {
+    const before = { lat: +map.getCenter().lat.toFixed(4), zoom: map.getZoom() };
+    document.getElementById('dim2dBtn').click();
+    await new Promise(r => setTimeout(r, 1400));
+    return {
+      before,
+      active: map3dActive(),
+      after: { lat: +map.getCenter().lat.toFixed(4), zoom: map.getZoom() },
+      size: map.getSize(),
+      twoOn: document.getElementById('dim2dBtn').classList.contains('on'),
+      compassHidden: document.getElementById('northUpBtn').hidden,
+    };
+  });
+  ck('the switch turns it off again', backTo2d.active === false && backTo2d.twoOn === true,
+    JSON.stringify({ active: backTo2d.active, twoOn: backTo2d.twoOn }));
+  ck('the flat map comes back with a real size',
+    backTo2d.size.x > 100 && backTo2d.size.y > 100, JSON.stringify(backTo2d.size));
+  ck('and lands where the 3D camera was looking, not where it started',
+    Math.abs(backTo2d.after.lat - backTo2d.before.lat) < 0.05
+      && Math.abs(backTo2d.after.zoom - backTo2d.before.zoom) < 1.2,
+    `${JSON.stringify(backTo2d.before)} -> ${JSON.stringify(backTo2d.after)}`);
+  ck('the compass goes with it', backTo2d.compassHidden === true);
+
+  /* -- now with a contour map to drape -------------------------------------- */
 
   const before = await p.evaluate(async () => {
     map.setView([19.235, 72.94], 14);
@@ -90,17 +149,17 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('a contour map is ready to drape', before.lines > 0, JSON.stringify({ lines: before.lines }));
 
   const mounted = await p.evaluate(async () => {
-    const ok = await setContour3d(true);
-    await new Promise(r => setTimeout(r, 2500));
-    const host = document.querySelector('.contour-3d-host');
+    const ok = await setMap3d(true);
+    await new Promise(r => setTimeout(r, 3000));
+    const host = document.querySelector('.map-3d-host');
     const cv = host && host.querySelector('canvas');
     const wrapBox = document.getElementById('mapWrap').getBoundingClientRect();
     const hostBox = host ? host.getBoundingClientRect() : null;
     return {
       ok,
-      status: contour3dStatus(),
+      status: map3dStatus(),
       host: !!host,
-      wrapClass: document.getElementById('mapWrap').classList.contains('contour-3d-on'),
+      wrapClass: document.getElementById('mapWrap').classList.contains('map-3d-on'),
       canvas: cv ? { w: cv.width, h: cv.height } : null,
       // Measured on the page, not read off the canvas. A GL buffer can render
       // a perfect picture into a host that is zero pixels tall, and reading the
@@ -114,7 +173,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       mode: contourState.mode,
     };
   });
-  ck('the oblique view mounts', mounted.ok === true && mounted.host && mounted.wrapClass,
+  ck('the 3D view mounts over a contour map', mounted.ok === true && mounted.host && mounted.wrapClass,
     JSON.stringify({ ok: mounted.ok, host: mounted.host, wrapClass: mounted.wrapClass }));
   ck('with a real terrain mesh, not just a tilted flat map',
     mounted.status.terrain === true, JSON.stringify(mounted.status));
@@ -135,7 +194,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   /* -- it renders something ------------------------------------------------- */
 
   const pixels = await p.evaluate(() => {
-    const cv = document.querySelector('.contour-3d-host canvas');
+    const cv = document.querySelector('.map-3d-host canvas');
     const probe = document.createElement('canvas');
     probe.width = 70; probe.height = 45;
     const cx = probe.getContext('2d');
@@ -148,17 +207,17 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('and it draws the draped contour map rather than an empty sky',
     pixels.colours > 12, `${pixels.colours} distinct colours in the GL buffer`);
 
-  await p.screenshot({ path: path.join(__dirname, 'shot-contour-3d.png') });
+  await p.screenshot({ path: path.join(__dirname, 'shot-map-3d.png') });
 
   /* -- live updates and export ---------------------------------------------- */
 
   const live = await p.evaluate(() => {
-    contour3dSetExaggeration(3.2);
+    map3dSetExaggeration(3.2);
     contourState.interval = 50;
     contourBuildLines();
-    contour3dRedrape();
-    const shot = renderContour3dCanvas({ W: 900, H: 560 });
-    return { exag: contour3dStatus().exaggeration, drape: contour3dStatus().drape,
+    map3dRedrape();
+    const shot = render3dGroundCanvas({ W: 900, H: 560 });
+    return { exag: map3dStatus().exaggeration, drape: map3dStatus().drape,
              shot: shot ? { w: shot.width, h: shot.height } : null };
   });
   ck('exaggeration is applied to the live mesh', Math.abs(live.exag - 3.2) < 0.01, String(live.exag));
@@ -183,18 +242,17 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   /* -- unmount must put everything back ------------------------------------- */
 
   const after = await p.evaluate(async () => {
-    await setContour3d(false);
-    await new Promise(r => setTimeout(r, 300));
+    await setMap3d(false);
+    await new Promise(r => setTimeout(r, 900));
     map.invalidateSize({ animate: false });
     const size = map.getSize();
     return {
-      active: contour3dActive(),
-      host: !!document.querySelector('.contour-3d-host'),
-      wrapClass: document.getElementById('mapWrap').classList.contains('contour-3d-on'),
+      active: map3dActive(),
+      host: !!document.querySelector('.map-3d-host'),
+      wrapClass: document.getElementById('mapWrap').classList.contains('map-3d-on'),
       tiltDisabled: document.getElementById('tiltRange').disabled,
       leafletHidden: getComputedStyle(document.getElementById('tiltStage')).visibility === 'hidden',
       mapSize: { x: size.x, y: size.y },
-      mode: contourState.mode,
       contoursStillThere: !!document.querySelector('.leaflet-overlay-pane canvas.contour-canvas'),
     };
   });
@@ -204,7 +262,46 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     !after.leafletHidden && after.mapSize.x > 100 && after.mapSize.y > 100, JSON.stringify(after.mapSize));
   ck('the tilt slider is handed back', after.tiltDisabled === false);
   ck('the 2D contour map is still there underneath', after.contoursStillThere === true);
-  ck('and the mode is recorded as flat again', after.mode === '2d', after.mode);
+
+  /* -- the vector ground ---------------------------------------------------- */
+
+  // A raster ground gets a style synthesised around it; a vector ground brings
+  // its own, with its own sources, layers, glyphs and sprite. The DEM then has
+  // to be added TO that style rather than declared alongside it, which is a
+  // different code path and the one most likely to be quietly broken.
+  const vector = await p.evaluate(async () => {
+    await setMap3d(false);
+    await new Promise(r => setTimeout(r, 500));
+    setBasemap('openfreemap');
+    await new Promise(r => setTimeout(r, 2500));
+    const src = map3dGroundSource();
+    const ok = await setMap3d(true);
+    await new Promise(r => setTimeout(r, 3500));
+    const st = map3dStatus();
+    const cv = document.querySelector('.map-3d-host canvas');
+    let colours = 0;
+    if (cv) {
+      const probe = document.createElement('canvas');
+      probe.width = 60; probe.height = 40;
+      probe.getContext('2d').drawImage(cv, 0, 0, 60, 40);
+      const d = probe.getContext('2d').getImageData(0, 0, 60, 40).data;
+      const seen = new Set();
+      for (let i = 0; i < d.length; i += 4) seen.add((d[i] >> 3) + ',' + (d[i + 1] >> 3) + ',' + (d[i + 2] >> 3));
+      colours = seen.size;
+    }
+    return { ok, kind: src && src.kind, hasStyleUrl: !!(src && src.styleUrl), status: st, colours };
+  });
+  ck('a vector ground is described by its style, not by a tile template',
+    vector.kind === 'vector' && vector.hasStyleUrl === true, JSON.stringify({ kind: vector.kind }));
+  ck('3D mounts over the vector ground', vector.ok === true && vector.status.active === true,
+    JSON.stringify(vector.status));
+  ck('and the terrain mesh is added to its style',
+    vector.status.terrain === true, JSON.stringify(vector.status));
+  ck('the camera tilts over it too', vector.status.pitch > 30, vector.status.pitch + '°');
+  ck('and it renders', vector.colours > 3, `${vector.colours} distinct colours`);
+
+  await p.screenshot({ path: path.join(__dirname, 'shot-map-3d-vector.png') });
+  await p.evaluate(() => setMap3d(false));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();
