@@ -34,9 +34,15 @@ const CONTOUR_SIMPLIFY = 0.25;
 
 const CONTOUR_SMOOTHING = { none: 0, light: 1, medium: 2, heavy: 3 };
 
-/** @type {object} what the operator asked for. */
-const contourState = {
-  on: false,
+/**
+ * The settings a new contour map starts with.
+ *
+ * A template rather than the live object: there are several contour maps on a
+ * project now, each with its own area and its own interval, so "the settings"
+ * is a property of a map rather than of the app.
+ */
+const CONTOUR_DEFAULTS = {
+  visible: true,
   area: null,            // [{lat,lng}, ...] the selection ring
   areaShape: 'Rectangle',
   interval: 5,           // in `unit`
@@ -50,7 +56,6 @@ const contourState = {
   shade: true,
   roads: 'off',          // 'off' | 'roads' | 'full'
   showOutline: true,
-  mode: '2d',            // '2d' | '3d'
   // 1, not 1.5. An exaggerated default makes ground that is nearly flat look
   // like it rolls, and the operator has no way to know the view is lying to
   // them by half. Exaggeration is a deliberate choice for a presentation, not
@@ -58,32 +63,184 @@ const contourState = {
   exaggeration: 1,
 };
 
-/** @type {object} what the renderer draws. */
-const contourModel = {
-  ready: false,
-  grid: null,
-  ring: null,
-  fillCanvas: null,
-  lines: [],
-  osm: [],
-  min: 0, max: 0,
-  labels: 'bold',
-  fillOpacity: 0.78,
-  osmWeight: 1,
-  lineColor: 'rgba(28,26,24,.62)',
-  boldColor: 'rgba(20,18,16,.92)',
-  lineWidth: 0.8,
-  boldWidth: 1.5,
-  labelHalo: 'rgba(255,255,255,.9)',
-  showOutline: true,
-  outlineColor: 'rgba(255,122,26,.95)',
-};
+/** A fresh render model — what the renderer draws for one contour map. */
+function newContourModel() {
+  return {
+    ready: false,
+    grid: null,
+    ring: null,
+    fillCanvas: null,
+    lines: [],
+    osm: [],
+    min: 0, max: 0,
+    labels: 'bold',
+    fillOpacity: 0.78,
+    osmWeight: 1,
+    lineColor: 'rgba(28,26,24,.62)',
+    boldColor: 'rgba(20,18,16,.92)',
+    lineWidth: 0.8,
+    boldWidth: 1.5,
+    labelHalo: 'rgba(255,255,255,.9)',
+    showOutline: true,
+    outlineColor: 'rgba(255,122,26,.95)',
+    visible: true,
+  };
+}
+
+/**
+ * Every contour map on this project.
+ *
+ * IT USED TO BE ONE. Drawing a second study area silently replaced the first,
+ * which is not a limitation anybody would choose — a site has a plot and its
+ * catchment, or two plots being compared, and both want contours. Each entry
+ * owns its own settings and its own render model, so they are independent all
+ * the way down: different intervals, different ramps, different detail.
+ *
+ * @type {Array<{id:string, name:string, settings:object, model:object}>}
+ */
+const contourMaps = [];
+let activeContourId = null;
+let contourSeq = 0;
+
+/**
+ * The ACTIVE map's settings and model.
+ *
+ * Deliberately `let` and deliberately the same objects the record holds, not
+ * copies. Everything downstream — the panel, the renderer, the 3D drape — was
+ * written against `contourState` and `contourModel` when there was one of each,
+ * and all of it still reads correctly: those names now mean "the one being
+ * edited". Selecting a different map repoints them. Copying instead would mean
+ * every edit needing a write-back, and one missed write-back is a setting that
+ * silently does not stick.
+ */
+let contourState = Object.assign({}, CONTOUR_DEFAULTS);
+let contourModel = newContourModel();
 
 let contourLayerRef = null;
 let contourBusy = false;
 let contourRebuildTimer = null;
 /** Bumped on every generate so a slow fetch that has been superseded is dropped. */
 let contourRun = 0;
+
+/* ---------------------------------------------------------------------------
+ * The collection
+ * ------------------------------------------------------------------------- */
+
+/** @param {string} id @returns {object|null} */
+function contourMapById(id) {
+  return contourMaps.find(m => m.id === id) || null;
+}
+
+/** The record currently being edited, or null before the first one exists. */
+function activeContourMap() { return contourMapById(activeContourId); }
+
+/** A name that is not already taken. */
+function nextContourName() {
+  let n = contourMaps.length + 1;
+  const taken = new Set(contourMaps.map(m => m.name));
+  while (taken.has('Contour ' + n)) n++;
+  return 'Contour ' + n;
+}
+
+/**
+ * Add a contour map and select it.
+ *
+ * New maps inherit the settings of the one being edited rather than the
+ * factory defaults: somebody drawing a second area almost always wants it at
+ * the same interval and in the same colours as the first, and having to set
+ * all nine controls again for every area is how a feature stops being used.
+ * The area itself is not inherited — that is the one thing that differs.
+ *
+ * @param {object} [o] `{name, settings}`
+ * @returns {object} the new record
+ */
+function addContourMap(o) {
+  const opts = o || {};
+  const base = opts.settings
+    || (activeContourMap() ? activeContourMap().settings : CONTOUR_DEFAULTS);
+  const settings = Object.assign({}, CONTOUR_DEFAULTS, base, { area: null, visible: true });
+
+  const rec = {
+    id: 'cm' + (++contourSeq),
+    name: opts.name || nextContourName(),
+    settings,
+    model: newContourModel(),
+  };
+  contourMaps.push(rec);
+  selectContourMap(rec.id);
+  return rec;
+}
+
+/** Make `contourState` and `contourModel` point at this map. @param {string} id */
+function selectContourMap(id) {
+  const rec = contourMapById(id);
+  if (!rec) return;
+  activeContourId = rec.id;
+  contourState = rec.settings;
+  contourModel = rec.model;
+  if (typeof renderContourPanel === 'function') renderContourPanel();
+  if (typeof renderContourLegend === 'function') renderContourLegend();
+}
+
+/**
+ * There is always something to edit.
+ *
+ * The panel has nine controls and a Draw button, and they have to write
+ * somewhere before the first area is chosen. An empty first map is simpler than
+ * a draft state that has to be promoted into a real one later.
+ */
+function ensureContourMap() {
+  if (!activeContourMap()) {
+    if (contourMaps.length) selectContourMap(contourMaps[0].id);
+    else addContourMap();
+  }
+  return activeContourMap();
+}
+
+/** Every map with something drawn and showing. */
+function visibleContourModels() {
+  return contourMaps.filter(m => m.model.ready && m.settings.visible !== false).map(m => m.model);
+}
+
+/** Is anything drawn at all? */
+function anyContourReady() { return contourMaps.some(m => m.model.ready); }
+
+/**
+ * Delete one contour map.
+ *
+ * Returns what it removed so the caller can offer an Undo — the house rule is
+ * a reversal rather than a confirmation, and a contour map costs a network
+ * round trip to rebuild.
+ *
+ * @param {string} id @returns {object|null} `{rec, index, geoms}`
+ */
+function deleteContourMap(id) {
+  const i = contourMaps.findIndex(m => m.id === id);
+  if (i < 0) return null;
+  const rec = contourMaps[i];
+  const geoms = removeContourGeoms(rec.id);
+  contourMaps.splice(i, 1);
+
+  if (activeContourId === rec.id) {
+    activeContourId = null;
+    if (contourMaps.length) selectContourMap(contourMaps[Math.max(0, i - 1)].id);
+    else ensureContourMap();
+  }
+  contourRefresh();
+  if (typeof renderContourPanel === 'function') renderContourPanel();
+  return { rec, index: i, geoms };
+}
+
+/** Put a deleted contour map back where it was. @param {object} undo */
+function restoreContourMap(undo) {
+  if (!undo || !undo.rec) return;
+  contourMaps.splice(Math.min(undo.index, contourMaps.length), 0, undo.rec);
+  (undo.geoms || []).forEach(sn => {
+    if (typeof recreateGeomFromSnapshot === 'function') recreateGeomFromSnapshot(sn);
+  });
+  selectContourMap(undo.rec.id);
+  contourRefresh();
+}
 
 /* ---------------------------------------------------------------------------
  * Units and labels
@@ -144,8 +301,9 @@ function contourAreaM2() {
   return polygonAreaM2(ring);
 }
 
-/** Set the study area from a ring of points. @param {Array<{lat,lng}>} ring */
+/** Set the ACTIVE map's study area. @param {Array<{lat,lng}>} ring */
 function setContourArea(ring, shape) {
+  ensureContourMap();
   contourState.area = (ring || []).map(p => ({ lat: p.lat, lng: p.lng }));
   if (shape) contourState.areaShape = shape;
   contourModel.ring = contourState.area;
@@ -167,31 +325,55 @@ function contourAreaFromView() {
  * The layer
  * ------------------------------------------------------------------------- */
 
+/**
+ * The single layer that draws every contour map.
+ *
+ * One layer rather than one per map: they share a canvas, a projection and a
+ * repaint, and N Leaflet layers would mean N canvases stacked over the same
+ * ground, each clearing and redrawing on every frame of a pan.
+ */
 function contourLayer() {
   if (!contourLayerRef && typeof ContourLayer === 'function') {
-    contourLayerRef = new ContourLayer(contourModel);
+    contourLayerRef = new ContourLayer();
   }
   return contourLayerRef;
 }
 
-/** Put the contour map on the map, or take it off. @param {boolean} on */
-function setContourEnabled(on) {
-  contourState.on = !!on;
+/** Add or remove the layer according to whether anything wants drawing. */
+function syncContourLayer() {
   const layer = contourLayer();
   if (!layer || typeof map === 'undefined') return;
-  if (contourState.on) {
-    if (!map.hasLayer(layer)) layer.addTo(map);
-    // Not while one is already running: switching the layer on during a
-    // generate would start a second pass over the same area, and the first
-    // would then be discarded halfway through having already fetched its tiles.
-    if (!contourModel.ready && contourState.area && !contourBusy) generateContours();
-  } else if (map.hasLayer(layer)) {
-    map.removeLayer(layer);
-  }
+  const wanted = visibleContourModels().length > 0;
+  if (wanted && !map.hasLayer(layer)) layer.addTo(map);
+  else if (!wanted && map.hasLayer(layer)) map.removeLayer(layer);
+}
+
+/** Show or hide one contour map. @param {string} id @param {boolean} on */
+function setContourVisible(id, on) {
+  const rec = contourMapById(id);
+  if (!rec) return;
+  rec.settings.visible = !!on;
+  rec.model.visible = !!on;
+  syncContourLayer();
+  contourRefresh();
+  if (typeof renderContourPanel === 'function') renderContourPanel();
+}
+
+/** Show or hide the map being edited, and build it if it has never been built. */
+function setContourEnabled(on) {
+  ensureContourMap();
+  contourState.visible = !!on;
+  contourModel.visible = !!on;
+  syncContourLayer();
+  // Not while one is already running: switching the layer on during a generate
+  // would start a second pass over the same area, and the first would then be
+  // discarded halfway through having already fetched its tiles.
+  if (on && !contourModel.ready && contourState.area && !contourBusy) generateContours();
   if (typeof renderContourLegend === 'function') renderContourLegend();
 }
 
 function contourRefresh() {
+  syncContourLayer();
   if (contourLayerRef) contourLayerRef.refresh();
   if (typeof renderContourLegend === 'function') renderContourLegend();
   if (typeof map3dRedrape === 'function') map3dRedrape();
@@ -329,7 +511,7 @@ async function generateContours(o) {
   contourBusy = false;
 
   const layer = contourLayer();
-  if (layer && typeof map !== 'undefined' && !map.hasLayer(layer) && contourState.on) layer.addTo(map);
+  syncContourLayer();
   contourRefresh();
   if (typeof renderContourPanel === 'function') renderContourPanel();
 
@@ -482,6 +664,9 @@ function contoursToShapes(scope) {
       // Clearing the contour map used to leave every converted line behind,
       // one sidebar card each, with no way to tell which were which.
       fromContour: true,
+      // Which map made it, so clearing one contour map takes only its own
+      // shapes and leaves the other maps' alone.
+      contourMapId: activeContourId,
       contourLevel: ln.level,
       name: contourLabelFor(ln.level) + ' ' + contourState.unit,
       // Coloured by its own height, so a converted set still reads as terrain
@@ -503,59 +688,110 @@ function contoursToShapes(scope) {
  * Persistence
  * ------------------------------------------------------------------------- */
 
-/** The settings worth saving — never the lines, which regenerate. */
+/**
+ * The settings worth saving — never the lines, which regenerate.
+ *
+ * The whole collection, because there are several contour maps on a project
+ * now and each carries its own area and its own interval.
+ */
 function contourSettings() {
   return {
-    on: contourState.on,
-    area: contourState.area,
-    areaShape: contourState.areaShape,
-    interval: contourState.interval,
-    unit: contourState.unit,
-    ramp: contourState.ramp,
-    boldEvery: contourState.boldEvery,
-    labels: contourState.labels,
-    smoothing: contourState.smoothing,
-    detail: contourState.detail,
-    fillOpacity: contourState.fillOpacity,
-    shade: contourState.shade,
-    roads: contourState.roads,
-    showOutline: contourState.showOutline,
-    exaggeration: contourState.exaggeration,
+    activeId: activeContourId,
+    maps: contourMaps.map(m => ({
+      id: m.id,
+      name: m.name,
+      settings: Object.assign({}, m.settings),
+    })),
   };
 }
 
 /**
- * Restore saved settings and, if the map was on, rebuild it.
+ * Restore saved contour maps and rebuild the visible ones.
  *
  * The contours themselves are not in the project file. Half a million
  * coordinates would dwarf everything else in it, and they are derived data —
- * the same area at the same interval gives the same lines, and re-reading the
- * DEM costs a second against a file that stays small enough to email.
+ * the same area at the same interval gives the same lines back for the cost of
+ * one DEM read on open.
+ *
+ * Reads the OLD single-map shape too. Projects saved before contour maps could
+ * be collected have their settings flat on the object rather than under
+ * `maps`, and silently losing a saved contour map on upgrade would be a worse
+ * bug than the one collections fixed.
  */
 function applyContourSettings(s) {
   if (!s || typeof s !== 'object') return;
-  Object.keys(contourSettings()).forEach(k => {
-    if (s[k] !== undefined) contourState[k] = s[k];
+
+  contourMaps.length = 0;
+  activeContourId = null;
+  contourSeq = 0;
+
+  const list = Array.isArray(s.maps) ? s.maps
+    // The single-map shape: settings sat directly on the object.
+    : (s.area || s.interval !== undefined) ? [{ name: 'Contour 1', settings: s }] : [];
+
+  list.forEach(entry => {
+    const rec = addContourMap({
+      name: entry.name,
+      settings: Object.assign({}, CONTOUR_DEFAULTS, entry.settings || {}),
+    });
+    // addContourMap clears the area deliberately — a NEW map should not inherit
+    // one — so a restore has to put it back.
+    rec.settings.area = (entry.settings && entry.settings.area) || null;
+    // `on` was the old field for "is it showing".
+    if (entry.settings && entry.settings.on !== undefined && entry.settings.visible === undefined) {
+      rec.settings.visible = !!entry.settings.on;
+    }
+    rec.model.ring = rec.settings.area;
+    rec.model.visible = rec.settings.visible !== false;
   });
-  contourModel.ready = false;
-  contourModel.grid = null;
-  contourModel.lines = [];
-  contourModel.osm = [];
-  contourModel.ring = contourState.area;
+
+  ensureContourMap();
+  if (s.activeId && contourMapById(s.activeId)) selectContourMap(s.activeId);
+  else if (contourMaps.length) selectContourMap(contourMaps[0].id);
+
   contourApplyStyleState();
+  syncContourLayer();
   if (typeof renderContourPanel === 'function') renderContourPanel();
-  if (contourState.on && contourState.area) {
-    setContourEnabled(true);
-    generateContours({ silent: true });
-  } else {
-    setContourEnabled(false);
-  }
+
+  // Rebuild every map that has an area, one at a time. In parallel they would
+  // race each other for contourRun and all but the last would be discarded.
+  (async () => {
+    for (const rec of contourMaps.slice()) {
+      if (!rec.settings.area) continue;
+      selectContourMap(rec.id);
+      await generateContours({ silent: true });
+    }
+    if (s.activeId && contourMapById(s.activeId)) selectContourMap(s.activeId);
+  })();
 }
 
-/** Every shape that came from a contour conversion. */
-function contourDerivedGeoms() {
+/** Forget every contour map. Used when a project is closed or a new one opened. */
+function clearContourMap() {
+  contourRun++;
+  contourMaps.length = 0;
+  activeContourId = null;
+  contourSeq = 0;
+  contourState = Object.assign({}, CONTOUR_DEFAULTS);
+  contourModel = newContourModel();
+  ensureContourMap();
+  if (contourLayerRef && typeof map !== 'undefined' && map.hasLayer(contourLayerRef)) {
+    map.removeLayer(contourLayerRef);
+  }
+  if (typeof renderContourLegend === 'function') renderContourLegend();
+  if (typeof renderContourPanel === 'function') renderContourPanel();
+}
+
+/**
+ * Shapes that came from a contour conversion.
+ * @param {string} [mapId] only this map's; omit for all of them.
+ */
+function contourDerivedGeoms(mapId) {
   if (typeof geometries === 'undefined') return [];
-  return geometries.filter(g => g && g.fromContour);
+  return geometries.filter(g => g && g.fromContour
+    && (!mapId || g.contourMapId === mapId
+      // Shapes converted before contour maps could be told apart have no id.
+      // They belong to whoever is clearing, rather than becoming unremovable.
+      || g.contourMapId === undefined));
 }
 
 /**
@@ -565,10 +801,11 @@ function contourDerivedGeoms() {
  * a snapshot taken afterwards has no coordinates left to store. Same order, and
  * same reason, as geomGroupDelete().
  *
+ * @param {string} [mapId] only this map's; omit for all of them.
  * @returns {Array<object>} snapshots, for the undo
  */
-function removeContourGeoms() {
-  const doomed = contourDerivedGeoms();
+function removeContourGeoms(mapId) {
+  const doomed = contourDerivedGeoms(mapId);
   if (!doomed.length) return [];
   const snaps = doomed.map(g => (typeof snapshotGeom === 'function' ? snapshotGeom(g) : null)).filter(Boolean);
   doomed.forEach(g => {
@@ -579,23 +816,6 @@ function removeContourGeoms() {
   return snaps;
 }
 
-/** Forget everything. Used when a project is closed or a new one opened. */
-function clearContourMap() {
-  contourRun++;
-  contourState.on = false;
-  contourState.area = null;
-  contourModel.ready = false;
-  contourModel.grid = null;
-  contourModel.lines = [];
-  contourModel.osm = [];
-  contourModel.ring = null;
-  contourModel.fillCanvas = null;
-  if (contourLayerRef && typeof map !== 'undefined' && map.hasLayer(contourLayerRef)) {
-    map.removeLayer(contourLayerRef);
-  }
-  if (typeof renderContourLegend === 'function') renderContourLegend();
-  if (typeof renderContourPanel === 'function') renderContourPanel();
-}
 
 /* ---------------------------------------------------------------------------
  * The drape — the contour picture in the grid's own pixel space
@@ -639,9 +859,10 @@ const CONTOUR_DRAPE_BOLD_PX = 2.6;
  *
  * @returns {HTMLCanvasElement|null}
  */
-function contourDrapeCanvas() {
-  const g = contourModel.grid;
-  if (!contourModel.ready || !g) return null;
+function contourDrapeCanvas(model) {
+  const mdl = model || contourModel;
+  const g = mdl.grid;
+  if (!mdl.ready || !g) return null;
 
   const cap = (typeof maxWebglDimension === 'function') ? maxWebglDimension() : 4096;
   const target = Math.min(CONTOUR_DRAPE_TARGET_PX, cap);
@@ -655,11 +876,11 @@ function contourDrapeCanvas() {
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  if (contourModel.fillCanvas) {
+  if (mdl.fillCanvas) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.globalAlpha = contourModel.fillOpacity == null ? 1 : contourModel.fillOpacity;
-    ctx.drawImage(contourModel.fillCanvas, 0, 0, W, H);
+    ctx.globalAlpha = mdl.fillOpacity == null ? 1 : mdl.fillOpacity;
+    ctx.drawImage(mdl.fillCanvas, 0, 0, W, H);
     ctx.globalAlpha = 1;
   }
 
@@ -698,7 +919,7 @@ function contourDrapeCanvas() {
 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  paint(contourModel.osm, ['waterbody', 'building']);
+  paint(mdl.osm, ['waterbody', 'building']);
 
   // Batched into one path per weight rather than one stroke per contour: a fine
   // interval is thousands of lines, and thousands of separate strokes is
@@ -706,7 +927,7 @@ function contourDrapeCanvas() {
   [false, true].forEach(bold => {
     let any = false;
     ctx.beginPath();
-    contourModel.lines.forEach(ln => {
+    mdl.lines.forEach(ln => {
       if (!!ln.bold !== bold) return;
       ln.pts.forEach((p, i) => {
         const q = toTex(p);
@@ -715,20 +936,20 @@ function contourDrapeCanvas() {
       any = true;
     });
     if (!any) return;
-    ctx.strokeStyle = bold ? contourModel.boldColor : contourModel.lineColor;
+    ctx.strokeStyle = bold ? mdl.boldColor : mdl.lineColor;
     ctx.lineWidth = bold ? CONTOUR_DRAPE_BOLD_PX : CONTOUR_DRAPE_LINE_PX;
     ctx.stroke();
   });
 
-  paint(contourModel.osm, ['water', 'motorway', 'trunk', 'primary', 'secondary',
+  paint(mdl.osm, ['water', 'motorway', 'trunk', 'primary', 'secondary',
     'tertiary', 'minor', 'rail']);
 
   return c;
 }
 
-/** The drape's four corners, in MapLibre's order: TL, TR, BR, BL. */
-function contourDrapeCorners() {
-  const g = contourModel.grid;
+/** One drape's four corners, in MapLibre's order: TL, TR, BR, BL. */
+function contourDrapeCorners(model) {
+  const g = (model || contourModel).grid;
   if (!g) return null;
   const c = (x, y) => { const p = gridToLatLng(g, x, y); return [p.lng, p.lat]; };
   return [c(0, 0), c(g.w, 0), c(g.w, g.h), c(0, g.h)];

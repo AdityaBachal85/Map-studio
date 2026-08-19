@@ -4380,6 +4380,138 @@ body.identify-on .leaflet-container {
    down the whole panel rather than stepping in and out by row. */
 .contour-panel .inline-ctl .sub { flex: 0 0 64px; }
 
+/* ---- the list of contour maps -------------------------------------------- */
+
+.contour-maps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.contour-maps:empty { display: none; }
+
+/* A row, not nested buttons — those do not nest. The name is a button so the
+   whole width of it selects; the eye and the cross are their own buttons
+   beside it. */
+.cm-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, .04);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.cm-row:hover { border-color: var(--stroke2); }
+.cm-row.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* Hidden, not deleted — dimmed so it is obviously still there to bring back. */
+.cm-row.off .cm-pick { opacity: .45; }
+
+.cm-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.cm-pick .cm-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-pick em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--dim);
+}
+
+.cm-eye,
+.cm-del {
+  flex: none;
+  width: 24px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.cm-del { font-size: 15px; line-height: 1; }
+.cm-eye:hover { color: var(--text); background: rgba(255, 255, 255, .08); }
+.cm-del:hover { color: var(--danger); background: rgba(255, 255, 255, .08); }
+.cm-eye:focus-visible,
+.cm-del:focus-visible,
+.cm-pick:focus-visible { outline: 2px solid var(--orange2); outline-offset: -2px; }
+
+/* ---- the Clear menu ------------------------------------------------------ */
+
+.contour-clear-pop {
+  position: fixed;
+  z-index: 4000;
+  padding: 5px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-solid);
+  box-shadow: var(--elev-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  transform-origin: top left;
+  animation: cr-pop 160ms var(--ease-out) both;
+}
+.reduce-motion .contour-clear-pop { animation: none; }
+.contour-clear-pop .cc-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.contour-clear-pop .cc-item:hover { background: rgba(255, 255, 255, .08); }
+.contour-clear-pop .cc-item:focus-visible { outline: 2px solid var(--orange2); outline-offset: -2px; }
+.contour-clear-pop .cc-item em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--dim);
+}
+/* Set apart, because it is the one that takes everything and it should never
+   be reached by aiming at the item above it. */
+.contour-clear-pop .cc-all {
+  margin-top: 3px;
+  padding-top: 7px;
+  border-top: 1px solid var(--stroke);
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+.contour-clear-pop .cc-all:hover { color: var(--danger); }
+
 /* The colour ramp cannot be chosen from a <select> — the names mean nothing
    until you see the colours — so the control IS the gradient. */
 .contour-ramp-bar {

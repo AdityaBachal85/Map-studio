@@ -157,6 +157,17 @@ function serialiseProject() {
  * little when loading was a rare manual act; with session restore it would
  * duplicate every shape on every reload.
  */
+/**
+ * What the three editable card titles say before anybody renames them.
+ *
+ * Named here rather than read back out of the DOM: by the time a project is
+ * applied the DOM holds the PREVIOUS project's titles, so "the default" has to
+ * be a constant. They match index.html; if one is edited there, edit it here.
+ */
+const TITLE_CARD_DEFAULT = 'PROPERTY LOCATION & ACCESS';
+const LEGEND_TITLE_DEFAULT = 'KEY DISTANCES';
+const COLOR_KEY_TITLE_DEFAULT = 'LEGEND';
+
 function clearProject() {
   routes.slice().forEach(deleteRoute);
   locations.slice().forEach(deleteLocation);
@@ -176,18 +187,26 @@ function applyProject(proj, opts) {
   const silent = opts && opts.silent;
   clearProject();
 
-  if (proj.title) $('titleCard').textContent = proj.title;
-  if (proj.legendTitle) $('legendTitle').textContent = proj.legendTitle;
+  // A FIELD THE PROJECT DOES NOT CARRY MEANS THE DEFAULT, NOT WHATEVER WAS
+  // THERE BEFORE. These were all written as `if (proj.x) set(x)` with no else,
+  // which is correct for restoring a saved project and wrong for opening a new
+  // one: New project writes an empty document, so every one of these silently
+  // kept the last project's value. The reported symptom was a brand new map
+  // still titled "MY OLD PROJECT", and the same bug was sitting under the
+  // legend titles, the hillshade, the logo and the imagery grading.
+  $('titleCard').textContent = proj.title || TITLE_CARD_DEFAULT;
+  $('legendTitle').textContent = proj.legendTitle || LEGEND_TITLE_DEFAULT;
   if (proj.hd !== undefined) $('hdTgl').checked = !!proj.hd;
   if (proj.basemap && BASEMAPS[proj.basemap]) $('basemapSel').value = proj.basemap;
-  if (proj.imageryLook) setImageryLook(proj.imageryLook);
-  if (proj.roadLook) setRoadLook(proj.roadLook);
+  setImageryLook(proj.imageryLook || (typeof getPref === 'function' ? getPref('imageryLook') : 'natural'));
+  setRoadLook(proj.roadLook || (typeof getPref === 'function' ? getPref('roadLook') : 'subtle'));
   // Before setBasemap, not after: mounting a vector ground applies these as its
   // style loads, so a pref written afterwards would arrive to a ground that had
   // already drawn itself with the previous project's filters.
-  if (proj.vectorLayers && typeof proj.vectorLayers === 'object') {
-    try { setPref('vectorLayers', proj.vectorLayers); } catch (e) { /* ignore */ }
-  }
+  try {
+    setPref('vectorLayers',
+      (proj.vectorLayers && typeof proj.vectorLayers === 'object') ? proj.vectorLayers : null);
+  } catch (e) { /* ignore */ }
   if (typeof applyContourSettings === 'function') {
     // Always called, even with nothing saved: a project without a contour map
     // has to CLEAR whatever the last one left on screen, not inherit it.
@@ -196,7 +215,12 @@ function applyProject(proj, opts) {
   }
   setBasemap($('basemapSel').value);
   if (proj.tilt !== undefined) { setTiltDeg(+proj.tilt || 0); $('tiltRange').value = tiltDeg; applyTilt(); }
-  if (proj.hill) { $('hillTgl').checked = true; hillshade.addTo(map); }
+  // Off unless the project says on. It only ever turned itself ON, so terrain
+  // shading followed you out of the project that wanted it and into the next.
+  const hillOn = !!proj.hill;
+  $('hillTgl').checked = hillOn;
+  if (hillOn) hillshade.addTo(map);
+  else if (map.hasLayer(hillshade)) map.removeLayer(hillshade);
   if (proj.chipPct) setChipPct(+proj.chipPct);
   else if (proj.chipFont) setChipPct(Math.round(+proj.chipFont / 11.5 * 100));
   else applyChipScale();
@@ -212,8 +236,9 @@ function applyProject(proj, opts) {
     el.dispatchEvent(new Event('change'));
   });
   if (proj.north !== undefined) { $('northTgl').checked = !!proj.north; document.body.classList.toggle('no-north', !proj.north); }
-  if (proj.projectLogo) setProjectLogo(proj.projectLogo);
-  if (proj.siteUsesProjLogo) { brand.siteUsesProjLogo = true; $('siteUsesProjLogo').checked = true; }
+  setProjectLogo(proj.projectLogo || null);
+  brand.siteUsesProjLogo = !!proj.siteUsesProjLogo;
+  $('siteUsesProjLogo').checked = !!proj.siteUsesProjLogo;
 
   if (typeof dashCards !== 'undefined') {
     dashCards = Array.isArray(proj.dashboard) ? proj.dashboard : [];
@@ -239,7 +264,7 @@ function applyProject(proj, opts) {
     colorKeyEdits = (proj.colorKeyEdits && typeof proj.colorKeyEdits === 'object') ? proj.colorKeyEdits : {};
     colorKeyExtras = Array.isArray(proj.colorKeyExtras) ? proj.colorKeyExtras : [];
     const t = document.getElementById('colorKeyTitle');
-    if (t && proj.colorKeyTitle) t.textContent = proj.colorKeyTitle;
+    if (t) t.textContent = proj.colorKeyTitle || COLOR_KEY_TITLE_DEFAULT;
   }
   if (typeof legendOrder !== 'undefined') legendOrder = Array.isArray(proj.legendOrder) ? proj.legendOrder : [];
   if (typeof legendEdits !== 'undefined') legendEdits = (proj.legendEdits && typeof proj.legendEdits === 'object') ? proj.legendEdits : {};

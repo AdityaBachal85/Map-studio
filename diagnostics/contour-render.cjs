@@ -78,10 +78,10 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   const wired = await p.evaluate(() => ({
     layer: typeof ContourLayer === 'function',
     gen: typeof generateContours === 'function',
-    panel: !!document.getElementById('contourTgl'),
+    panel: !!document.getElementById('contourMapList'),
     card: !!document.getElementById('contourLegendCard'),
-    inDraw: !!(document.getElementById('contourTgl') || {}).closest
-      && !!document.getElementById('contourTgl').closest('#paneDraw'),
+    inDraw: !!document.getElementById('contourMapList')
+      && !!document.getElementById('contourMapList').closest('#paneDraw'),
   }));
   ck('the contour module is loaded and its controls are in the Draw tab',
     wired.layer && wired.gen && wired.panel && wired.card && wired.inDraw, JSON.stringify(wired));
@@ -371,7 +371,11 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     const handDrawn = registerGeom(L.polyline([[19.20, 72.90], [19.21, 72.91]]), 'Line',
       { name: 'drawn by hand' });
     const before = geometries.length;
+    // Through the menu, the way the operator does it — Clear names the maps now
+    // rather than silently meaning "all of them".
     document.getElementById('contourClearBtn').click();
+    const item = document.querySelector('.contour-clear-pop .cc-item');
+    if (item) item.click();
     return {
       before,
       after: geometries.length,
@@ -398,6 +402,104 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     return { restored: geometries.filter(g => g.fromContour).length, on: contourState.on };
   });
   ck('and Undo puts them back', undone.restored > 0, JSON.stringify(undone));
+
+  /* -- several contour maps at once ----------------------------------------- */
+
+  // The gap this closes: there was ONE. Drawing a second study area silently
+  // replaced the first, which is not a limitation anybody would choose — a site
+  // has a plot and its catchment, or two plots being compared.
+  const many = await p.evaluate(async () => {
+    clearContourMap();
+
+    map.setView([19.235, 72.94], 14);
+    contourState.interval = 25;
+    contourState.ramp = 'rainbow';
+    contourAreaFromView();
+    await generateContours({ silent: true });
+    const first = { id: activeContourId, lines: contourModel.lines.length, interval: contourState.interval };
+
+    const rec = addContourMap();
+    map.setView([19.255, 72.965], 14);
+    contourState.interval = 100;
+    contourState.ramp = 'viridis';
+    contourAreaFromView();
+    await generateContours({ silent: true });
+    const second = { id: activeContourId, lines: contourModel.lines.length, interval: contourState.interval };
+
+    const one = contourMapById(first.id);
+    return {
+      first, second,
+      count: contourMaps.length,
+      firstStillReady: one.model.ready,
+      firstStillHasLines: one.model.lines.length,
+      firstKeptItsInterval: one.settings.interval,
+      firstKeptItsRamp: one.settings.ramp,
+      secondRamp: rec.settings.ramp,
+      names: contourMaps.map(m => m.name),
+      rows: document.querySelectorAll('#contourMapList .cm-row').length,
+      drawn: visibleContourModels().length,
+    };
+  });
+  ck('a second contour map does not replace the first',
+    many.count === 2 && many.firstStillReady === true && many.firstStillHasLines > 0,
+    JSON.stringify({ count: many.count, firstLines: many.firstStillHasLines, secondLines: many.second.lines }));
+  ck('each keeps its own settings',
+    many.firstKeptItsInterval === 25 && many.second.interval === 100 && many.firstKeptItsRamp === 'rainbow',
+    `first ${many.firstKeptItsInterval} m ${many.firstKeptItsRamp}, second ${many.second.interval} m ${many.secondRamp}`);
+  ck('a new one inherits the settings of the one you were on, but not its area',
+    many.secondRamp === 'viridis' || many.secondRamp === 'rainbow', 'ramp ' + many.secondRamp);
+  ck('both are listed, and both are drawn',
+    many.rows === 2 && many.drawn === 2, JSON.stringify({ rows: many.rows, drawn: many.drawn }));
+  ck('and they are named apart', new Set(many.names).size === 2, many.names.join(', '));
+
+  const painted2 = await p.evaluate(() => {
+    const cv = document.querySelector('.leaflet-overlay-pane canvas.contour-canvas');
+    const probe = document.createElement('canvas');
+    probe.width = 70; probe.height = 44;
+    const cx = probe.getContext('2d');
+    cx.drawImage(cv, 0, 0, 70, 44);
+    const d = cx.getImageData(0, 0, 70, 44).data;
+    let opaque = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8) opaque++;
+    return { coverage: opaque / (70 * 44) };
+  });
+  ck('two areas cover more of the canvas than one did',
+    painted2.coverage > 0.35, `${(painted2.coverage * 100).toFixed(0)}% opaque`);
+
+  const hidden = await p.evaluate(() => {
+    const first = contourMaps[0];
+    setContourVisible(first.id, false);
+    return { drawn: visibleContourModels().length, stillThere: contourMaps.length,
+             row: document.querySelector('#contourMapList .cm-row').classList.contains('off') };
+  });
+  ck('hiding one leaves the other drawn, and keeps the hidden one in the list',
+    hidden.drawn === 1 && hidden.stillThere === 2 && hidden.row === true, JSON.stringify(hidden));
+
+  const clearedOne = await p.evaluate(() => {
+    document.getElementById('contourClearBtn').click();
+    const items = [...document.querySelectorAll('.contour-clear-pop .cc-item')];
+    const labels = items.map(i => i.textContent.trim().slice(0, 24));
+    items[0].click();                       // the first map by name, not "all"
+    return { labels, left: contourMaps.length, names: contourMaps.map(m => m.name) };
+  });
+  ck('the Clear menu names each map rather than silently meaning all of them',
+    clearedOne.labels.length === 3 && /All contour maps/.test(clearedOne.labels[2]),
+    clearedOne.labels.join(' | '));
+  ck('and clearing one leaves the other alone',
+    clearedOne.left === 1, `${clearedOne.left} left: ${clearedOne.names.join(', ')}`);
+
+  const clearedAll = await p.evaluate(() => {
+    // Rebuild to two, then take the "All" item.
+    addContourMap();
+    contourAreaFromView();
+    document.getElementById('contourClearBtn').click();
+    const all = [...document.querySelectorAll('.contour-clear-pop .cc-item')].pop();
+    all.click();
+    return { left: contourMaps.length, anyReady: anyContourReady(),
+             onMap: !!document.querySelector('.leaflet-overlay-pane canvas.contour-canvas') };
+  });
+  ck('and "All" takes every one of them',
+    clearedAll.anyReady === false && clearedAll.onMap === false, JSON.stringify(clearedAll));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();

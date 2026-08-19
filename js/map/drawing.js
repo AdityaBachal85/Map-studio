@@ -417,7 +417,7 @@ function snapshotGeom(g) {
     // and the standard stops owning it.
     cls: g.cls, proposed: g.proposed, fromRing: g.fromRing,
     // Where a converted contour came from, so an undone delete is still one.
-    fromContour: g.fromContour, contourLevel: g.contourLevel,
+    fromContour: g.fromContour, contourLevel: g.contourLevel, contourMapId: g.contourMapId,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
   };
 }
@@ -571,7 +571,7 @@ function recreateGeomFromSnapshot(snap) {
     // delete unclassed the shape it brought back. `fromRing` and `fromContour`
     // are the same kind of fact and were lost the same way.
     cls: snap.cls, proposed: snap.proposed, fromRing: snap.fromRing,
-    fromContour: snap.fromContour, contourLevel: snap.contourLevel,
+    fromContour: snap.fromContour, contourLevel: snap.contourLevel, contourMapId: snap.contourMapId,
     createdAt: snap.createdAt,
   });
 }

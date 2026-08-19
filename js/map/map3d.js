@@ -54,7 +54,8 @@ const MAP_3D_DEM_SOURCE = {
 
 let _m3dMap = null;
 let _m3dHost = null;
-let _m3dDrapeCanvas = null;
+/** Drape canvases by contour-map id — one texture each. */
+const _m3dDrapes = new Map();
 let _m3dMounting = false;
 /**
  * Bumped by every mount and every unmount.
@@ -97,7 +98,7 @@ function map3dStatus() {
     active: true,
     terrain,
     exaggeration,
-    drape: !!(_m3dMap.getSource && _m3dMap.getSource('drape')),
+    drape: _m3dDrapes.size > 0,
     pitch: _m3dMap.getPitch ? _m3dMap.getPitch() : 0,
     bearing: _m3dMap.getBearing ? _m3dMap.getBearing() : 0,
     ground: _m3dGroundKind,
@@ -356,7 +357,7 @@ async function unmountMap3d() {
     try { _m3dMap.remove(); } catch (e) { /* already gone */ }
   }
   _m3dMap = null;
-  _m3dDrapeCanvas = null;
+  _m3dDrapes.clear();
   _m3dGroundKind = '';
 
   if (_m3dHost && _m3dHost.parentNode) _m3dHost.parentNode.removeChild(_m3dHost);
@@ -477,64 +478,82 @@ function map3dExaggeration() {
   return (v > 0) ? v : 1;
 }
 
-/** Add the contour picture over the terrain, if there is one to add. */
+/**
+ * Put every visible contour map over the terrain.
+ *
+ * One `canvas` source per contour map, keyed by its id. A canvas rather than an
+ * image because the interval or the ramp can change while the view is up, and a
+ * canvas source re-reads its pixels without the map being torn down.
+ */
 function map3dAttachDrape() {
-  if (!_m3dMap) return;
-  if (typeof contourModel === 'undefined' || !contourModel.ready) return;
-  if (typeof contourDrapeCanvas !== 'function') return;
-
-  const canvas = contourDrapeCanvas();
-  const corners = contourDrapeCorners();
-  if (!canvas || !corners) return;
-
-  _m3dDrapeCanvas = canvas;
-  try {
-    if (!_m3dMap.getSource('drape')) {
-      _m3dMap.addSource('drape', { type: 'canvas', canvas, coordinates: corners, animate: false });
-    }
-    if (!_m3dMap.getLayer('drape')) {
-      _m3dMap.addLayer({ id: 'drape', type: 'raster', source: 'drape', paint: { 'raster-opacity': 1 } });
-    }
-  } catch (e) { /* style still settling */ }
+  map3dSyncDrapes();
 }
 
-/** Redraw the drape after the contours changed. Cheap: no style reload. */
-function map3dRedrape() {
+/**
+ * Reconcile the drapes against the contour maps that currently exist.
+ *
+ * Written as a reconcile rather than an add/remove pair because contour maps
+ * can appear, be hidden, be rebuilt at a new size and be deleted while the 3D
+ * view is up, and every one of those has to end with the GL scene matching the
+ * list — not with whatever the last event happened to do.
+ */
+function map3dSyncDrapes() {
   if (!_m3dMap) return;
-  if (typeof contourModel === 'undefined' || !contourModel.ready) {
+  if (typeof contourMaps === 'undefined') return;
+
+  const wanted = new Set();
+
+  contourMaps.forEach(rec => {
+    if (!rec.model.ready || rec.settings.visible === false) return;
+    if (typeof contourDrapeCanvas !== 'function') return;
+    const fresh = contourDrapeCanvas(rec.model);
+    const corners = contourDrapeCorners(rec.model);
+    if (!fresh || !corners) return;
+
+    const srcId = 'drape-' + rec.id;
+    wanted.add(srcId);
+    const held = _m3dDrapes.get(srcId);
+
+    if (held && held.width === fresh.width && held.height === fresh.height) {
+      // Painted into the SAME canvas element the source is holding. Swapping
+      // the element would mean removing and re-adding the source and its layer,
+      // which flickers the whole drape; repainting in place is one upload.
+      const ctx = held.getContext('2d');
+      ctx.clearRect(0, 0, held.width, held.height);
+      ctx.drawImage(fresh, 0, 0);
+      const src = _m3dMap.getSource(srcId);
+      if (src && typeof src.play === 'function') { src.play(); src.pause(); }
+      return;
+    }
+
     try {
-      if (_m3dMap.getLayer('drape')) _m3dMap.removeLayer('drape');
-      if (_m3dMap.getSource('drape')) _m3dMap.removeSource('drape');
+      if (_m3dMap.getLayer(srcId)) _m3dMap.removeLayer(srcId);
+      if (_m3dMap.getSource(srcId)) _m3dMap.removeSource(srcId);
+      _m3dMap.addSource(srcId, { type: 'canvas', canvas: fresh, coordinates: corners, animate: false });
+      // Under the map's own geometry, which map3dContent.js added: a contour
+      // map is ground, and the routes and shapes are drawn on the ground.
+      const before = _m3dMap.getLayer('m3d-fill') ? 'm3d-fill' : undefined;
+      _m3dMap.addLayer({ id: srcId, type: 'raster', source: srcId, paint: { 'raster-opacity': 1 } }, before);
+      _m3dDrapes.set(srcId, fresh);
+    } catch (e) { /* style still settling */ }
+  });
+
+  // Anything held that is no longer wanted — hidden, deleted, or cleared.
+  Array.from(_m3dDrapes.keys()).forEach(srcId => {
+    if (wanted.has(srcId)) return;
+    try {
+      if (_m3dMap.getLayer(srcId)) _m3dMap.removeLayer(srcId);
+      if (_m3dMap.getSource(srcId)) _m3dMap.removeSource(srcId);
     } catch (e) { /* mid-teardown */ }
-    _m3dDrapeCanvas = null;
-    return;
-  }
-  if (!_m3dDrapeCanvas) { map3dAttachDrape(); return; }
+    _m3dDrapes.delete(srcId);
+  });
 
-  const fresh = contourDrapeCanvas();
-  if (!fresh) return;
+  _m3dMap.triggerRepaint();
+}
 
-  if (fresh.width === _m3dDrapeCanvas.width && fresh.height === _m3dDrapeCanvas.height) {
-    // Painted into the SAME canvas element the source is holding. Swapping the
-    // element would mean removing and re-adding the source and its layer, which
-    // flickers the whole drape; repainting in place is one texture upload.
-    const ctx = _m3dDrapeCanvas.getContext('2d');
-    ctx.clearRect(0, 0, _m3dDrapeCanvas.width, _m3dDrapeCanvas.height);
-    ctx.drawImage(fresh, 0, 0);
-    const src = _m3dMap.getSource('drape');
-    if (src && typeof src.play === 'function') { src.play(); src.pause(); }
-    _m3dMap.triggerRepaint();
-    return;
-  }
-
-  // A new grid is a new size, so the source has to be rebuilt.
-  _m3dDrapeCanvas = fresh;
-  try {
-    if (_m3dMap.getLayer('drape')) _m3dMap.removeLayer('drape');
-    if (_m3dMap.getSource('drape')) _m3dMap.removeSource('drape');
-    _m3dMap.addSource('drape', { type: 'canvas', canvas: fresh, coordinates: contourDrapeCorners(), animate: false });
-    _m3dMap.addLayer({ id: 'drape', type: 'raster', source: 'drape', paint: { 'raster-opacity': 1 } });
-  } catch (e) { /* mid-teardown */ }
+/** Redraw the drapes after the contours changed. Cheap: no style reload. */
+function map3dRedrape() {
+  map3dSyncDrapes();
 }
 
 /** @param {number} v vertical exaggeration */

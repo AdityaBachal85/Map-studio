@@ -136,8 +136,9 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     const json = JSON.stringify(proj);
     return {
       lines: contourModel.lines.length,
-      has: !!proj.contour,
-      settings: proj.contour,
+      has: !!(proj.contour && proj.contour.maps && proj.contour.maps.length),
+      settings: proj.contour && proj.contour.maps && proj.contour.maps[0]
+        ? proj.contour.maps[0].settings : null,
       bytes: json.length,
       // The one that matters: no coordinate arrays from the contours.
       mentionsLines: /"lines"\s*:/.test(json),
@@ -155,28 +156,28 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     const proj = serialiseProject();
     // Wipe it, then put the saved project back, the way opening a file does.
     clearContourMap();
-    const wiped = { ready: contourModel.ready, on: contourState.on };
+    const wiped = { ready: contourModel.ready, maps: contourMaps.length };
     applyProject(proj);
     await new Promise(r => setTimeout(r, 2500));
     return {
       wiped,
-      on: contourState.on,
+      visible: contourState.visible,
       interval: contourState.interval,
       ramp: contourState.ramp,
       boldEvery: contourState.boldEvery,
       area: contourState.area ? contourState.area.length : 0,
       ready: contourModel.ready,
       lines: contourModel.lines.length,
-      tgl: document.getElementById('contourTgl').checked,
+      rows: document.querySelectorAll('#contourMapList .cm-row').length,
     };
   });
   ck('opening a project puts the contour map back',
-    restored.wiped.ready === false && restored.on === true && restored.ready === true && restored.lines > 0,
+    restored.wiped.ready === false && restored.visible !== false && restored.ready === true && restored.lines > 0,
     JSON.stringify({ ready: restored.ready, lines: restored.lines }));
   ck('with the settings it was saved with',
     restored.interval === 25 && restored.ramp === 'terrain' && restored.boldEvery === 2 && restored.area >= 3,
     JSON.stringify({ interval: restored.interval, ramp: restored.ramp, bold: restored.boldEvery, area: restored.area }));
-  ck('and the panel reflects it', restored.tgl === true);
+  ck('and the panel lists it', restored.rows >= 1, restored.rows + ' rows');
 
   const other = await p.evaluate(async () => {
     const proj = serialiseProject();
@@ -184,14 +185,62 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     applyProject(proj);
     await new Promise(r => setTimeout(r, 600));
     return {
-      on: contourState.on,
+      maps: contourMaps.length,
       ready: contourModel.ready,
       onMap: !!document.querySelector('.leaflet-overlay-pane canvas.contour-canvas'),
       legend: !!document.getElementById('contourLegendCard').offsetParent,
     };
   });
   ck('a project with no contour map clears the one that was on screen',
-    !other.on && !other.ready && !other.onMap && !other.legend, JSON.stringify(other));
+    !other.ready && !other.onMap && !other.legend, JSON.stringify(other));
+
+  /* -- a new project starts clean ------------------------------------------- */
+
+  // "New project" writes an empty document. Every `if (proj.x) set(x)` in
+  // applyProject with no else silently kept the PREVIOUS project's value —
+  // reported as a brand new map still carrying the old one's title, and the
+  // same bug sat under the legend titles, the hillshade, the logo and the
+  // imagery grading. A field the project does not carry means the default.
+  const fresh = await p.evaluate(async () => {
+    map.setView([19.235, 72.94], 14);
+    addLocation({ lat: 19.24, lng: 72.93, name: 'Site A' });
+    registerGeom(L.polyline([[19.24, 72.93], [19.23, 72.95]]), 'Line', { name: 'a line' });
+    document.getElementById('titleCard').textContent = 'MY OLD PROJECT';
+    document.getElementById('legendTitle').textContent = 'OLD KEY';
+    document.getElementById('colorKeyTitle').textContent = 'OLD LEGEND';
+    document.getElementById('hillTgl').checked = true;
+    hillshade.addTo(map);
+    contourAreaFromView();
+    await generateContours({ silent: true });
+
+    // Exactly what the New project button writes.
+    applyProject({ locations: [], routes: [], geometries: [], brand: {}, uiState: {} });
+    await new Promise(r => setTimeout(r, 1000));
+
+    return {
+      locations: locations.length,
+      routes: routes.length,
+      geometries: geometries.length,
+      contoursReady: anyContourReady(),
+      contourCanvas: !!document.querySelector('.leaflet-overlay-pane canvas.contour-canvas'),
+      title: document.getElementById('titleCard').textContent,
+      legendTitle: document.getElementById('legendTitle').textContent,
+      colorKeyTitle: document.getElementById('colorKeyTitle').textContent,
+      hill: document.getElementById('hillTgl').checked,
+      hillLayer: map.hasLayer(hillshade),
+    };
+  });
+  ck('a new project drops the previous one\'s locations and shapes',
+    fresh.locations === 0 && fresh.routes === 0 && fresh.geometries === 0, JSON.stringify(fresh));
+  ck('and its contour maps',
+    fresh.contoursReady === false && fresh.contourCanvas === false, JSON.stringify(fresh));
+  ck('and its title, rather than opening a new map still named after the old one',
+    fresh.title === 'PROPERTY LOCATION & ACCESS', fresh.title);
+  ck('and both card titles',
+    fresh.legendTitle === 'KEY DISTANCES' && fresh.colorKeyTitle === 'LEGEND',
+    `${fresh.legendTitle} / ${fresh.colorKeyTitle}`);
+  ck('and its terrain shading, which only ever turned itself on',
+    fresh.hill === false && fresh.hillLayer === false, JSON.stringify({ tgl: fresh.hill, layer: fresh.hillLayer }));
 
   ck('the pref vocabulary declares the contour key',
     await p.evaluate(() => Object.prototype.hasOwnProperty.call(PREF_DEFAULTS, 'contour')));

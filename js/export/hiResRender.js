@@ -337,9 +337,9 @@ async function renderGroundPass(o) {
     // nothing is recomputed — only redrawn, at the export's own resolution, so
     // the lines and their labels stay one pixel wide instead of being magnified.
     let contourExportLayer = null;
-    if (typeof ContourLayer === 'function' && typeof contourModel !== 'undefined'
-      && contourModel.ready && typeof contourState !== 'undefined' && contourState.on) {
-      contourExportLayer = new ContourLayer(contourModel);
+    if (typeof ContourLayer === 'function' && typeof visibleContourModels === 'function'
+      && visibleContourModels().length) {
+      contourExportLayer = new ContourLayer();
       // 1, not the screen's device ratio: this map is already `scale` times the
       // size, so its pixels are the export's pixels.
       contourExportLayer.setRenderScale(1);

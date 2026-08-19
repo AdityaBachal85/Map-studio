@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0131-blue)
+![Version](https://img.shields.io/badge/version-v6.0136-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,30 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0131 (latest)
+## 🆕 New in v6.0136 (latest)
+
+### Several contour maps on one project
+
+Drawing a second study area used to silently replace the first. Now each one is
+its own contour map with its own area, interval, colours and detail — listed in
+the Draw tab, selectable, hideable one at a time, and all drawn together.
+
+**Clear names them.** Instead of one button that silently meant "all of them",
+it opens a menu listing each map and what it holds, with *All contour maps* set
+apart at the bottom. Every delete is reversible from the status line.
+
+### A new project no longer inherits the old one
+
+"New project" writes an empty document, and every field applied as
+`if (project.has(x))` with no *else* was quietly keeping the previous project's
+value. Reported as a brand new map still carrying the old one's title — and the
+same bug sat under both legend card titles, the terrain shading, the project
+logo and the imagery grading. **A field a project does not carry now means the
+default**, not whatever happened to be there before.
+
+---
+
+## 🆕 Earlier in v6 (6.0131)
 
 ### A 2D / 3D switch on the map — the whole map, on real terrain
 

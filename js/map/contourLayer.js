@@ -45,10 +45,13 @@ const ContourLayer = L.Layer.extend({
     padding: 0.1,
   },
 
-  /** @param {object} model the shared contour model; see map/contourMap.js */
-  initialize: function (model) {
-    this._model = model;
-  },
+  /**
+   * No arguments. The layer draws EVERY visible contour map, asking
+   * map/contourMap.js for the current list on each frame rather than holding a
+   * reference to one — a project can have several, and they can be added,
+   * hidden and deleted while the layer is on the map.
+   */
+  initialize: function () {},
 
   onAdd: function () {
     const c = this._canvas = document.createElement('canvas');
@@ -137,10 +140,15 @@ const ContourLayer = L.Layer.extend({
   /* -- the picture -------------------------------------------------------- */
 
   _draw: function (size) {
-    const ctx = this._ctx, m = this._model;
+    const ctx = this._ctx;
     ctx.clearRect(0, 0, size.x, size.y);
-    if (!m || !m.ready || !m.grid) return;
+    const models = (typeof visibleContourModels === 'function') ? visibleContourModels() : [];
+    // Painted in list order, so a contour map added later sits over an earlier
+    // one where they overlap — the same rule as every other stack in this app.
+    models.forEach(m => { if (m && m.ready && m.grid) this._drawOne(ctx, m, size); });
+  },
 
+  _drawOne: function (ctx, m, size) {
     const off = this._bounds.min;
     // Layer points rather than container points: the canvas is positioned in
     // the layer plane, so anything projected has to be measured in the same

@@ -22,6 +22,7 @@ function geomToGeoJSONFeature(g) {
       // hand-drawn line that "Clear the contour map" can no longer find.
       fromContour: g.fromContour || undefined,
       contourLevel: g.contourLevel,
+      contourMapId: g.contourMapId,
       createdAt: g.createdAt, modifiedAt: g.modifiedAt,
       // The connectivity class. Without it a reopened project has shapes that
       // still LOOK right — the colours are saved separately — but belong to no
@@ -96,6 +97,7 @@ function importGeoJSONFeature(feat) {
     markerStyle: props.markerStyle || (props.pin ? 'pin' : undefined),
     fromContour: props.fromContour ? true : undefined,
     contourLevel: props.contourLevel != null ? +props.contourLevel : undefined,
+    contourMapId: props.contourMapId || undefined,
     iconKey: props.iconKey || undefined,
     captionSize: props.captionSize != null ? +props.captionSize : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,

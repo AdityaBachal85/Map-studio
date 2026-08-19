@@ -261,14 +261,54 @@ check that actually fails if somebody later caches the lines into the save.
 A project with no contour map **clears** whatever the last one left on screen,
 rather than inheriting it.
 
+## Several contour maps at once
+
+There used to be one. Drawing a second study area silently replaced the first,
+which is not a limitation anybody would choose — a site has a plot and its
+catchment, or two plots being compared, and both want contours.
+
+`contourMaps` is now the list, and each entry owns its own settings and its own
+render model: different areas, intervals, ramps, detail levels, all independent.
+
+`contourState` and `contourModel` still exist and still mean what they did —
+they are `let` bindings pointing at the **active** map's own objects, not
+copies. Everything downstream was written against those names when there was
+one of each, and all of it still reads correctly; selecting a different map
+repoints them. Copying instead would have meant every edit needing a
+write-back, and one missed write-back is a setting that silently does not
+stick.
+
+- **One Leaflet layer draws all of them.** They share a canvas, a projection
+  and a repaint; N layers would be N canvases over the same ground, each
+  clearing and redrawing on every frame of a pan.
+- **A new map inherits the settings of the one you were on**, but not its area.
+  Somebody drawing a second area almost always wants the same interval and
+  colours; having to set nine controls again per area is how a feature stops
+  being used.
+- **Each can be hidden without being deleted**, from the eye on its row.
+- **In 3D, each is its own `canvas` source**, reconciled against the list
+  rather than added and removed event by event — maps appear, get hidden, get
+  rebuilt at a new size and get deleted while the view is up, and every one of
+  those has to end with the scene matching the list.
+- **The legend names the map it describes**, and stops doing so once you rename
+  the card yourself.
+
 ## Clearing
 
 "To shapes" creates ordinary geometries, and they were indistinguishable from
 lines drawn by hand — so clearing the contour map left every converted line
 behind, one sidebar card each, with nothing able to tell which were which.
-Converted contours now carry `fromContour` and their level, through the undo
-snapshot and through the project file, and **Clear removes them too** with an
-inline Undo that puts them back. Hand-drawn shapes are untouched.
+Converted contours now carry `fromContour`, their level and **which map made
+them**, through the undo snapshot and through the project file, and **Clear
+removes them too** with an inline Undo that puts them back. Hand-drawn shapes
+are untouched.
+
+**Clear names the maps.** A single Clear button was fine when there was one
+contour map and wrong the moment there could be several: it silently meant "all
+of them", which is the one reading nobody wants having just spent a minute
+building two. It opens a menu listing each map by name and what it holds, with
+"All contour maps" set apart at the bottom behind a divider so it is never
+reached by aiming at the item above it.
 
 That change surfaced an older bug of the same shape: `snapshotGeom()` had
 stored `cls` since the colour key was built, with a comment explaining that a
