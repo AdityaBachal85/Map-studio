@@ -34,22 +34,69 @@
    stays a card.
    --------------------------------------------------------------------------- */
 
-.auth-body { background: #060D18; }
+.auth-body { background: var(--auth-bg); }
+
+/* The sign-in page's own palette. Deliberately not the app's tokens: this page
+   is one dark island with no map under it and no theme switch, and borrowing
+   the studio's surfaces made it read as a panel that had lost its map. */
+.auth-body {
+  --auth-bg: #101214;
+  --auth-surface: #161A1D;
+  --auth-border: #2C333A;
+  --auth-text: #C7D1DB;
+  --auth-heading: #DEE4EA;
+  --auth-dim: #7A8894;
+}
 
 /* One frame, never a page that scrolls. dvh rather than vh because mobile
    browsers count their own collapsing chrome in vh, which makes a "full
    height" layout overflow by exactly the height of the address bar. */
 .auth-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 100dvh;
   min-height: 100dvh;
+  padding: clamp(12px, 3vh, 40px);
   overflow: hidden;
+}
+
+/* The card: form on the left, photograph on the right. Sized as a proportion
+   of the viewport rather than fixed, so it stays a card on a laptop and does
+   not become a stamp on a large monitor. */
+.auth-shell {
+  display: flex;
+  width: min(1120px, 92vw);
+  height: min(640px, 88dvh);
+  border: 1px solid var(--auth-border);
+  border-radius: 20px;
+  background: var(--auth-surface);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
+  overflow: hidden;
+}
+
+/* Below this the photograph is dropped rather than squeezed: it is
+   reassurance, and the form is the task. */
+@media (max-width: 1000px) {
+  .auth-shell { width: min(460px, 94vw); height: auto; max-height: 94dvh; }
+  .auth-shell .auth-stage { display: none; }
 }
 
 /* ---- Left: the scene ---- */
 
-.auth-stage { position: relative; height: 100%; overflow: hidden; }
+.auth-stage {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border-left: 1px solid var(--auth-border);
+}
+
+/* Held back so the photograph reads as ground rather than as the subject —
+   the same treatment the reference design uses on its own image. */
+.auth-stage .auth-photo,
+.auth-stage .auth-scene { opacity: .34; }
 
 .auth-scene {
   position: absolute;
@@ -108,6 +155,16 @@
 
 .auth-copy { margin-top: auto; margin-bottom: auto; max-width: 30rem; padding-top: clamp(12px, 3vh, 48px); }
 
+/* The photograph is half a card now rather than most of a page, so the type
+   over it comes down to match. The brand block goes entirely: it is already on
+   the form side, and the same logo twice on one card reads as a mistake. */
+.auth-shell .auth-brand { display: none; }
+.auth-shell .auth-copy h2 { font-size: clamp(22px, 3.4vh, 34px); }
+.auth-shell .auth-sub { font-size: var(--fs-micro); }
+.auth-shell .auth-stage-inner { padding: clamp(18px, 3vh, 34px); }
+.auth-shell .auth-point .ic { width: 30px; height: 30px; border-radius: 9px; }
+.auth-shell .auth-point .ic svg { width: 15px; height: 15px; }
+
 .auth-copy h2 {
   margin: 0 0 clamp(12px, 2.2vh, 20px);
   font-size: clamp(26px, min(3.6vw, 5.4vh), 46px);
@@ -159,31 +216,63 @@
    can still be reached; on every normal one the rules below keep it from
    needing to. */
 .auth-main {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   overflow-y: auto;
-  padding: clamp(16px, 3vh, 48px) clamp(20px, 3vw, 48px);
+  padding: clamp(16px, 3vh, 44px) clamp(20px, 2.6vw, 44px);
 }
 
-.auth-card {
-  /* The island's own palette — see the section note. */
-  --text: #16233A;
-  --text-2: #64748B;
-  --border: #E4E9F0;
-  --border-strong: #D5DDE8;
-  --bg0: #FFFFFF;
-  --bg1: #F6F8FB;
+/* The cursor glow. A single blurred blob translated to the pointer — behind
+   everything, and inert, so it cannot eat a click meant for a field. */
+.auth-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle,
+      rgba(168, 133, 255, .30) 0%,
+      rgba(93, 158, 255, .22) 42%,
+      rgba(255, 138, 199, .16) 68%,
+      transparent 72%);
+  filter: blur(46px);
+  transition: opacity 200ms var(--ease-out);
+}
+.auth-main.glowing .auth-glow { opacity: 1; }
+.reduce-motion .auth-glow { display: none; }
 
+.auth-card {
+  /* The island's own palette. Every rule below this reads these six names, so
+     the whole card went from light to dark by changing them and nothing else —
+     which is the entire reason they were local variables in the first place. */
+  --text: var(--auth-heading);
+  --text-2: var(--auth-dim);
+  --border: var(--auth-border);
+  --border-strong: #38414A;
+  --bg0: #12161A;
+  --bg1: #1B2026;
+
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 420px;
-  padding: clamp(20px, 3.2vh, 38px) clamp(22px, 2.6vw, 36px);
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 22px;
-  background: #FFFFFF;
+  max-width: 380px;
+  /* The card IS the shell's left half now, so it carries no frame of its own:
+     a bordered card inside a bordered card reads as a mistake. */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
   color: var(--text);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .2);
+  box-shadow: none;
 }
 
 .auth-card-brand { margin-bottom: clamp(14px, 2.6vh, 30px); }
@@ -210,15 +299,46 @@
   padding: 12px 16px;
   border: 1px solid var(--border-strong);
   border-radius: 11px;
-  background: #fff;
+  /* var(--bg1), not a literal white. This rule and the focused-field rule
+     below were the only two in the card that named a colour instead of one of
+     its six local tokens, which is why they stayed light when everything else
+     went dark — white text on a white button. */
+  background: var(--bg1);
   color: var(--text);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
   transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 
-.auth-ms:hover { background: var(--bg1); border-color: #B9C5D4; }
+.auth-ms:hover { background: #232A31; border-color: var(--border-strong); }
+
+/* The sweep from the reference design: a skewed highlight crossing the button
+   once on hover. Its own element rather than a pseudo-element so the button's
+   contents keep the stacking they already had. */
+.auth-ms .sheen,
+.auth-submit .sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.2rem;
+  height: 100%;
+  background: rgba(255, 255, 255, .18);
+  transform: skew(-13deg) translateX(-260%);
+  pointer-events: none;
+}
+/* Both buttons have to be positioned and clipped, or the strip resolves
+   against the nearest positioned ancestor — the card — and hangs across the
+   whole form as a grey diagonal that never moves. .auth-ms sets these in its
+   own rule; .auth-submit did not, which is exactly what happened. */
+.auth-submit { position: relative; overflow: hidden; }
+
+.auth-ms:hover .sheen,
+.auth-submit:hover .sheen { transition: transform 900ms var(--ease-out); transform: skew(-13deg) translateX(2600%); }
+.reduce-motion .auth-ms .sheen,
+.reduce-motion .auth-submit .sheen { display: none; }
 .auth-ms:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); }
 
 .auth-or {
@@ -262,11 +382,34 @@
     background var(--dur-fast) var(--ease-out);
 }
 
+.auth-input {
+  position: relative;
+}
+
 .auth-input:focus-within {
   border-color: var(--orange);
-  background: #fff;
+  background: var(--bg0);
   box-shadow: 0 0 0 3px rgba(255, 122, 26, .16);
 }
+
+/* The cursor-tracking edge lines from the reference design: a bright point on
+   the top and bottom rules that follows the pointer across the field. Painted
+   into two 2px strips rather than onto the border, because a border cannot
+   carry a gradient that moves. */
+.auth-input .edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 11px;
+  transition: opacity 160ms var(--ease-out);
+}
+.auth-input .edge-t { top: -1px; }
+.auth-input .edge-b { bottom: -1px; }
+.auth-input.tracking .edge { opacity: 1; }
+.reduce-motion .auth-input .edge { display: none; }
 
 .auth-input svg { flex: none; }
 

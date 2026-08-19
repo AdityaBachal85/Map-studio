@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0136-blue)
+![Version](https://img.shields.io/badge/version-v6.0142-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,24 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0136 (latest)
+## 🆕 New in v6.0142 (latest)
+
+### The sign-in page, rebuilt as one dark split card
+
+Form on the left, the photograph on the right, on a dark ground — with the
+three pointer effects from the reference design: a soft glow that follows the
+cursor across the form, a bright point that runs along a field's top and bottom
+edges as you move over it, and a highlight that sweeps across a button once on
+hover.
+
+All of it is **decoration and only decoration** — built at runtime by
+`js/auth/loginFx.js`, marked `aria-hidden`, inert to the pointer, and the form
+works identically with every one of those elements deleted. A diagnostic asserts
+that by ripping them out and using the form.
+
+---
+
+## 🆕 Earlier in v6 (6.0136)
 
 ### Several contour maps on one project
 

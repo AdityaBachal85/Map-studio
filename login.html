@@ -5,18 +5,182 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0136" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0142" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0136">
-  <link rel="stylesheet" href="./css/style.css?v=6.0136">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0136">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0142">
+  <link rel="stylesheet" href="./css/style.css?v=6.0142">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0142">
 </head>
 
 <body class="shell-body auth-body">
   <div class="auth-wrap">
 
-    <!-- ===== Left: the product, shown rather than described ================
+    <!-- One card, split. The form is the task, so it takes the left half and
+         the photograph takes the right — image-led rather than text-led, and
+         the photograph is dropped entirely below 1000px where the form needs
+         the whole width. -->
+    <div class="auth-shell" id="authShell">
+
+
+    <!-- ===== Right: the task ============================================== -->
+    <main class="auth-main">
+      <div class="auth-card">
+        <div class="auth-card-brand">
+          <img class="dbotLogo" alt="DBOT">
+          <div>
+            <div class="kicker">Market Research</div>
+            <div class="wordmark">Map Studio</div>
+          </div>
+        </div>
+
+        <h1 id="authTitle">Welcome back</h1>
+        <p class="lede" id="authLede">Sign in to continue to DBOT Map Studio</p>
+
+        <div class="auth-error" id="authError" hidden></div>
+        <div class="auth-ok" id="authOk" hidden></div>
+
+        <!-- Real accounts. Shown only when Supabase is configured. -->
+        <div id="authReal" hidden>
+          <button class="auth-ms" id="authMsBtn" type="button">
+            <svg viewBox="0 0 21 21" width="17" height="17" aria-hidden="true">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+            </svg>
+            Continue with Microsoft
+          </button>
+
+          <div class="auth-or"><span id="authOrLabel">or</span></div>
+
+          <form id="authForm" novalidate>
+            <!-- Only for creating an account: the name is already on the
+                 account by the time anyone signs in. -->
+            <div class="auth-field" id="authNameField" hidden>
+              <label for="authFullName">Your name</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authFullName" name="fullName" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal">
+              </div>
+            </div>
+
+            <div class="auth-field">
+              <label for="authEmail">Work email</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authEmail" name="email" type="email" autocomplete="username"
+                  placeholder="you@dbotrealty.com" required>
+              </div>
+            </div>
+
+            <div class="auth-field">
+              <label for="authPassword">Password</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                <input id="authPassword" name="password" type="password"
+                  autocomplete="current-password" placeholder="Enter your password" required>
+                <!-- Typing a password you cannot see, into a field that may
+                     reject it, is the most common way to get locked out of
+                     an account you know the password to. -->
+                <button class="auth-eye" id="authEye" type="button" aria-label="Show password"
+                  aria-pressed="false">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgot your password?</a></div>
+            </div>
+
+            <button class="auth-submit" type="submit" id="authSubmit">
+              <span id="authSubmitLabel">Sign in</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
+          </form>
+
+          <div class="auth-switch">
+            <span id="authSwitchText">Don't have an account?</span>
+            <button type="button" id="authSwitchBtn">Create one</button>
+          </div>
+        </div>
+
+        <!-- No accounts configured yet: name yourself, and be told plainly
+             that is all this does. -->
+        <div id="authLocal" hidden>
+          <form id="authLocalForm" novalidate>
+            <div class="auth-field">
+              <label for="authName">Your name</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authName" name="name" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal" required>
+              </div>
+            </div>
+
+            <div class="auth-field">
+              <label for="authLocalEmail">Email <span class="opt">(optional)</span></label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authLocalEmail" name="email" type="email" autocomplete="email"
+                  placeholder="you@dbotrealty.com">
+              </div>
+              <div class="hint">Used only to recognise you again on this machine. It is not sent anywhere.</div>
+            </div>
+
+            <button class="auth-submit" type="submit">
+              <span>Continue</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
+          </form>
+
+          <div class="auth-note">
+            <b>Accounts are not switched on yet.</b> This names you and keeps separate people's projects apart on
+            a shared machine — it does not lock anything, because a site with no server cannot. Anyone with access
+            to this computer can open the app directly. Treat a project here as a file on this disk, because that
+            is what it is.
+          </div>
+        </div>
+
+        <!-- Which build this is. Without it, a feature that has not arrived
+             yet is indistinguishable from one that is broken — see
+             js/core/freshness.js. -->
+        <div class="auth-ver">DBOT Map Studio <span id="authVer"></span></div>
+      </div>
+    </main>
+
+    <!-- ===== Right: the product, shown rather than described ================
          Two layers. The photograph on top when there is one; the inline SVG
          beneath as a fallback that needs no file, no request and no licence,
          and draws the same thing the photo shows — a measured route between
@@ -194,171 +358,18 @@
       </div>
     </aside>
 
-    <!-- ===== Right: the task ============================================== -->
-    <main class="auth-main">
-      <div class="auth-card">
-        <div class="auth-card-brand">
-          <img class="dbotLogo" alt="DBOT">
-          <div>
-            <div class="kicker">Market Research</div>
-            <div class="wordmark">Map Studio</div>
-          </div>
-        </div>
-
-        <h1 id="authTitle">Welcome back</h1>
-        <p class="lede" id="authLede">Sign in to continue to DBOT Map Studio</p>
-
-        <div class="auth-error" id="authError" hidden></div>
-        <div class="auth-ok" id="authOk" hidden></div>
-
-        <!-- Real accounts. Shown only when Supabase is configured. -->
-        <div id="authReal" hidden>
-          <button class="auth-ms" id="authMsBtn" type="button">
-            <svg viewBox="0 0 21 21" width="17" height="17" aria-hidden="true">
-              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-            </svg>
-            Continue with Microsoft
-          </button>
-
-          <div class="auth-or"><span id="authOrLabel">or</span></div>
-
-          <form id="authForm" novalidate>
-            <!-- Only for creating an account: the name is already on the
-                 account by the time anyone signs in. -->
-            <div class="auth-field" id="authNameField" hidden>
-              <label for="authFullName">Your name</label>
-              <div class="auth-input">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                <input id="authFullName" name="fullName" type="text" autocomplete="name"
-                  placeholder="Aditya Bachal">
-              </div>
-            </div>
-
-            <div class="auth-field">
-              <label for="authEmail">Work email</label>
-              <div class="auth-input">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="m2 7 10 6 10-6" />
-                </svg>
-                <input id="authEmail" name="email" type="email" autocomplete="username"
-                  placeholder="you@dbotrealty.com" required>
-              </div>
-            </div>
-
-            <div class="auth-field">
-              <label for="authPassword">Password</label>
-              <div class="auth-input">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="4" y="11" width="16" height="10" rx="2" />
-                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                </svg>
-                <input id="authPassword" name="password" type="password"
-                  autocomplete="current-password" placeholder="Enter your password" required>
-                <!-- Typing a password you cannot see, into a field that may
-                     reject it, is the most common way to get locked out of
-                     an account you know the password to. -->
-                <button class="auth-eye" id="authEye" type="button" aria-label="Show password"
-                  aria-pressed="false">
-                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                </button>
-              </div>
-              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgot your password?</a></div>
-            </div>
-
-            <button class="auth-submit" type="submit" id="authSubmit">
-              <span id="authSubmitLabel">Sign in</span>
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="18" y2="12" />
-                <polyline points="12 6 18 12 12 18" />
-              </svg>
-            </button>
-          </form>
-
-          <div class="auth-switch">
-            <span id="authSwitchText">Don't have an account?</span>
-            <button type="button" id="authSwitchBtn">Create one</button>
-          </div>
-        </div>
-
-        <!-- No accounts configured yet: name yourself, and be told plainly
-             that is all this does. -->
-        <div id="authLocal" hidden>
-          <form id="authLocalForm" novalidate>
-            <div class="auth-field">
-              <label for="authName">Your name</label>
-              <div class="auth-input">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                <input id="authName" name="name" type="text" autocomplete="name"
-                  placeholder="Aditya Bachal" required>
-              </div>
-            </div>
-
-            <div class="auth-field">
-              <label for="authLocalEmail">Email <span class="opt">(optional)</span></label>
-              <div class="auth-input">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="m2 7 10 6 10-6" />
-                </svg>
-                <input id="authLocalEmail" name="email" type="email" autocomplete="email"
-                  placeholder="you@dbotrealty.com">
-              </div>
-              <div class="hint">Used only to recognise you again on this machine. It is not sent anywhere.</div>
-            </div>
-
-            <button class="auth-submit" type="submit">
-              <span>Continue</span>
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="18" y2="12" />
-                <polyline points="12 6 18 12 12 18" />
-              </svg>
-            </button>
-          </form>
-
-          <div class="auth-note">
-            <b>Accounts are not switched on yet.</b> This names you and keeps separate people's projects apart on
-            a shared machine — it does not lock anything, because a site with no server cannot. Anyone with access
-            to this computer can open the app directly. Treat a project here as a file on this disk, because that
-            is what it is.
-          </div>
-        </div>
-
-        <!-- Which build this is. Without it, a feature that has not arrived
-             yet is indistinguishable from one that is broken — see
-             js/core/freshness.js. -->
-        <div class="auth-ver">DBOT Map Studio <span id="authVer"></span></div>
-      </div>
-    </main>
+    </div>
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0136"></script>
-  <script src="./js/core/prefs.js?v=6.0136"></script>
-  <script src="./js/constants.js?v=6.0136"></script>
-  <script src="./js/core/freshness.js?v=6.0136"></script>
-  <script src="./js/config.js?v=6.0136"></script>
-  <script src="./js/auth/session.js?v=6.0136"></script>
+  <script src="./vendor/supabase.js?v=6.0142"></script>
+  <script src="./js/core/prefs.js?v=6.0142"></script>
+  <script src="./js/constants.js?v=6.0142"></script>
+  <script src="./js/core/freshness.js?v=6.0142"></script>
+  <script src="./js/config.js?v=6.0142"></script>
+  <script src="./js/auth/session.js?v=6.0142"></script>
+  <!-- Decoration only. The form works identically without it. -->
+  <script src="./js/auth/loginFx.js?v=6.0142"></script>
   <script>
     applyTheme();
     initFreshness();
