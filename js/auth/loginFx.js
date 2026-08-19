@@ -55,29 +55,29 @@ function initLoginGlow() {
 }
 
 /**
- * A bright point running along a field's top and bottom edges, under the
- * pointer.
+ * A bright point that follows the pointer along a field's rule.
  *
- * Two 2px strips rather than the border itself: a border cannot carry a
- * gradient, let alone one that moves.
+ * ONE element per field, not two. It is the field's frame, masked down to a
+ * hairline ring in CSS, so the light follows the corner radius instead of
+ * running off the end of it — see the note on `.auth-input .edge`.
+ *
+ * Two radial gradients in one background: one riding the top edge and one the
+ * bottom, both tracking the pointer's x. Where they reach a corner the ring
+ * curves and so does the light.
  */
 function initLoginFieldEdges() {
   document.querySelectorAll('.auth-input').forEach(field => {
-    const top = document.createElement('span');
-    const bottom = document.createElement('span');
-    top.className = 'edge edge-t';
-    bottom.className = 'edge edge-b';
-    top.setAttribute('aria-hidden', 'true');
-    bottom.setAttribute('aria-hidden', 'true');
-    field.appendChild(top);
-    field.appendChild(bottom);
+    const ring = document.createElement('span');
+    ring.className = 'edge';
+    ring.setAttribute('aria-hidden', 'true');
+    field.appendChild(ring);
 
     let raf = 0, px = 0;
     const paint = () => {
       raf = 0;
-      const g = `radial-gradient(26px circle at ${px}px 1px, var(--orange) 0%, transparent 72%)`;
-      top.style.background = g;
-      bottom.style.background = g;
+      ring.style.background =
+        `radial-gradient(30px circle at ${px}px 0%, var(--orange) 0%, transparent 72%),`
+        + `radial-gradient(30px circle at ${px}px 100%, var(--orange) 0%, transparent 72%)`;
     };
 
     field.addEventListener('pointermove', e => {

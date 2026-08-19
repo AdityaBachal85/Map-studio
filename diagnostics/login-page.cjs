@@ -131,6 +131,36 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   }));
   ck('the pointer effects are present', fx.glow && fx.edges > 0 && fx.sheens > 0,
     JSON.stringify({ glow: fx.glow, edges: fx.edges, sheens: fx.sheens }));
+
+  // The edge light started as two straight bars pinned across the top and
+  // bottom of the field. A bar is a rectangle and the field is not, so at each
+  // corner the bar carried straight on while the field curved away beneath it
+  // and the light ended in a square tab hanging off the corner. It is one
+  // masked ring now — the field's own frame, so it cannot leave the shape.
+  const ring = await p.evaluate(() => {
+    const field = document.querySelector('.auth-input');
+    const edges = field.querySelectorAll('.edge');
+    const e = edges[0];
+    const cs = e ? getComputedStyle(e) : null;
+    const fs = getComputedStyle(field);
+    return {
+      perField: edges.length,
+      masked: !!cs && (cs.maskComposite === 'exclude' || cs.webkitMaskComposite === 'xor'
+        || /content-box/.test(cs.maskImage + cs.webkitMaskImage + cs.mask + '')),
+      radius: cs ? parseFloat(cs.borderTopLeftRadius) : 0,
+      fieldRadius: parseFloat(fs.borderTopLeftRadius),
+      // A ring, not a slab: the padding IS its thickness.
+      thickness: cs ? parseFloat(cs.paddingTop) : 0,
+    };
+  });
+  ck('the edge light is one ring per field, not a pair of straight bars',
+    ring.perField === 1, ring.perField + ' per field');
+  ck('it is masked down to a hairline rather than filling the field',
+    ring.masked === true && ring.thickness > 0 && ring.thickness < 4,
+    JSON.stringify({ masked: ring.masked, thickness: ring.thickness }));
+  ck('and it carries the field\'s corner radius, so the light follows the curve',
+    ring.radius >= ring.fieldRadius,
+    `ring ${ring.radius}px vs field ${ring.fieldRadius}px`);
   ck('and every one of them is hidden from assistive tech and inert to the pointer',
     fx.hidden === true && fx.focusable === 0 && fx.inert === true, JSON.stringify(fx));
 

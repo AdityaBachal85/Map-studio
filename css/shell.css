@@ -446,24 +446,44 @@
   box-shadow: 0 0 0 3px rgba(255, 122, 26, .16);
 }
 
-/* The cursor-tracking edge lines from the reference design: a bright point on
-   the top and bottom rules that follows the pointer across the field. Painted
-   into two 2px strips rather than onto the border, because a border cannot
-   carry a gradient that moves. */
+/* The cursor-tracking edge light from the reference design: a bright point that
+   follows the pointer along the field's rule.
+
+   ONE RING, NOT TWO STRIPS. The first version was a pair of 2px bars pinned
+   left:0/right:0 across the top and bottom. A bar is a rectangle and the field
+   is not: at each corner the bar carried straight on while the field curved
+   away beneath it, so the light ended in a square tab hanging off the rounded
+   corner.
+
+   This is the gradient-border technique instead: one element the size of the
+   field's frame, painted with the gradient, and masked so only the ring is
+   kept — the border box minus the content box. The light then follows the
+   corner radius exactly, because it IS the shape. */
 .auth-input .edge {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
+  /* Over the 1px border, not inside it. */
+  inset: -1px;
+  border-radius: 12px;
+  /* The thickness of the ring. */
+  padding: 1.6px;
   opacity: 0;
   pointer-events: none;
-  border-radius: 11px;
   transition: opacity 160ms var(--ease-out);
+
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
-.auth-input .edge-t { top: -1px; }
-.auth-input .edge-b { bottom: -1px; }
 .auth-input.tracking .edge { opacity: 1; }
 .reduce-motion .auth-input .edge { display: none; }
+
+/* Without the mask this is a filled orange rectangle over the field rather
+   than a hairline around it — far worse than no effect, so on a browser that
+   cannot composite masks there is no effect. */
+@supports not ((mask-composite: exclude) or (-webkit-mask-composite: xor)) {
+  .auth-input .edge { display: none; }
+}
 
 .auth-input svg { flex: none; }
 
