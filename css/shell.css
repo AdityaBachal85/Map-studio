@@ -81,6 +81,12 @@
   background: var(--auth-surface);
   box-shadow: 0 40px 90px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
   overflow: hidden;
+  /* Above the dot field behind it. Without this the card and the canvas are
+     both auto-z siblings in paint order, and the canvas is drawn first only
+     because it happens to come first in the markup — one reordering away from
+     a page of dots over the form. */
+  position: relative;
+  z-index: 1;
 }
 
 /* Below this the photograph is dropped rather than squeezed: it is
@@ -88,6 +94,47 @@
 @media (max-width: 1000px) {
   .auth-shell { width: min(460px, 100%); min-height: 0; }
   .auth-shell .auth-stage { display: none; }
+}
+
+/* ---- The dot field behind the card ----------------------------------------
+   A grid of dots across the whole window that pushes away from the pointer,
+   drawn by js/ui/dotField.js. The card is opaque, so what shows is the frame
+   around it: on a laptop that is a couple of hundred pixels each side, which is
+   exactly the amount of empty dark that made the page feel unfinished.
+
+   FIXED, NOT ABSOLUTE. The wrapper scrolls when a window is genuinely too short
+   for the card; a background that scrolls away with it stops being a background
+   and becomes a panel that ran out. Fixed also gives the canvas a rect whose
+   origin is the viewport's, which is the coordinate space the pointer events
+   already arrive in.
+
+   INERT. Nothing on this page reads it, it never takes the pointer, and the
+   whole element can be deleted with no effect on the form. */
+.dot-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dot-field-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* Centred on the pointer by a negative margin the size of its own radius, then
+   moved with a transform — so following the pointer never touches layout. Its
+   size, offset and colour are written inline by startDotField(), because they
+   are derived from the same options the dots are. */
+.dot-field-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
 }
 
 /* ---- Left: the scene ---- */

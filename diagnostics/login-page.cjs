@@ -9,7 +9,9 @@
  *
  * The pointer effects are asserted to be DECORATION: they are built by
  * js/auth/loginFx.js at runtime, marked aria-hidden, and the form has to work
- * identically with that file's elements removed.
+ * identically with that file's elements removed. That now includes the dot
+ * field behind the whole page — the largest of them, and the one with the most
+ * ways to end up in front of the form instead of behind it.
  *
  *   python3 -m http.server 8000        # from the repo root
  *   node diagnostics/login-page.cjs
@@ -132,6 +134,85 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the pointer effects are present', fx.glow && fx.edges > 0 && fx.sheens > 0,
     JSON.stringify({ glow: fx.glow, edges: fx.edges, sheens: fx.sheens }));
 
+  /* -- the dot field is behind the card, and is only decoration ------------- */
+
+  const field = await p.evaluate(() => {
+    const host = document.querySelector('.dot-field');
+    const cv = document.querySelector('.dot-field-canvas');
+    const glow = document.querySelector('.dot-field-glow');
+    const shell = document.querySelector('.auth-shell');
+    if (!host || !cv) return { host: false };
+    const hs = getComputedStyle(host);
+    const hr = host.getBoundingClientRect();
+    const sr = shell.getBoundingClientRect();
+    return {
+      host: true, canvas: true, glow: !!glow,
+      // Fixed and full-viewport, so it cannot scroll away from the card or
+      // leave a band of bare page along an edge.
+      fixed: hs.position === 'fixed',
+      covers: Math.abs(hr.width - window.innerWidth) < 2
+        && Math.abs(hr.height - window.innerHeight) < 2,
+      hostZ: parseInt(hs.zIndex, 10),
+      shellZ: parseInt(getComputedStyle(shell).zIndex, 10),
+      inert: hs.pointerEvents === 'none',
+      hidden: host.getAttribute('aria-hidden') === 'true',
+      focusable: [...host.querySelectorAll('*')].filter(el => el.tabIndex >= 0).length,
+      // What is actually on top in the middle of the card had better be the card.
+      overCard: (document.elementFromPoint(sr.left + sr.width / 2, sr.top + 40) || {}).className,
+    };
+  });
+  ck('the dot field is behind the card', field.host && field.canvas && field.glow
+    && field.hostZ < field.shellZ, JSON.stringify(field));
+  ck('it is fixed and covers the whole window, so it never scrolls away or leaves a seam',
+    field.fixed === true && field.covers === true, JSON.stringify(field));
+  ck('nothing in the card is covered by it',
+    typeof field.overCard === 'string' && !/dot-field/.test(field.overCard), String(field.overCard));
+  ck('and it is hidden from assistive tech, unfocusable and inert to the pointer',
+    field.hidden === true && field.focusable === 0 && field.inert === true, JSON.stringify(field));
+
+  // A canvas that mounts, sizes and paints nothing passes every structural
+  // check above — which is exactly how a 3D view once shipped rendering
+  // perfectly into a buffer nobody could see. So: read the pixels.
+  const grabField = () => p.evaluate(() => {
+    const cv = document.querySelector('.dot-field-canvas');
+    const c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    const cx = c.getContext('2d');
+    cx.drawImage(cv, 0, 0);
+    const d = cx.getImageData(0, 0, c.width, c.height).data;
+    // `lit` is how much is painted; `sum` of the lit indices is a cheap
+    // fingerprint of WHERE it is painted, which is what moves when dots do.
+    let lit = 0, sum = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 8) { lit++; sum += i; }
+    return { lit, sum, opacity: parseFloat(document.querySelector('.dot-field-glow').style.opacity) || 0 };
+  });
+
+  // Waited for rather than slept through. Everything here eases by a fixed
+  // fraction PER FRAME, so how long it takes to settle is a function of the
+  // frame rate — and a headless browser on software GL does not run at sixty.
+  // A fixed sleep tests the machine; waiting for the value tests the decay.
+  const settle = async () => p.waitForFunction(
+    () => (parseFloat(document.querySelector('.dot-field-glow').style.opacity) || 0) < 0.03,
+    null, { timeout: 8000 }).then(() => true).catch(() => false);
+
+  await p.mouse.move(12, 12);
+  const settledCold = await settle();
+  const atRest = await grabField();
+  for (let i = 0; i < 30; i++) { await p.mouse.move(60 + i * 3, 250 + i * 14); await p.waitForTimeout(8); }
+  await p.waitForTimeout(120);
+  const swept = await grabField();
+  await p.mouse.move(14, 14);
+  const settledAgain = await settle();
+
+  ck('the field actually paints dots', atRest.lit > 500, atRest.lit + ' lit pixels');
+  ck('and they move when the pointer sweeps past them',
+    swept.sum !== atRest.sum, JSON.stringify({ rest: atRest.sum, swept: swept.sum }));
+  ck('the pool of light comes up with the pointer',
+    swept.opacity > 0.05, 'rose to ' + swept.opacity);
+  ck('and settles back down when the pointer stops, so a page being typed into is still',
+    settledCold === true && settledAgain === true,
+    JSON.stringify({ cold: settledCold, afterSweep: settledAgain }));
+
   // The edge light started as two straight bars pinned across the top and
   // bottom of the field. A bar is a rectangle and the field is not, so at each
   // corner the bar carried straight on while the field curved away beneath it
@@ -166,7 +247,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
   const stillWorks = await p.evaluate(() => {
     // Rip the decoration out entirely; the form must not notice.
-    document.querySelectorAll('.auth-glow, .edge, .sheen').forEach(el => el.remove());
+    document.querySelectorAll('.auth-glow, .edge, .sheen, .dot-field').forEach(el => el.remove());
     const email = document.getElementById('authEmail');
     email.value = 'after@dbotrealty.com';
     document.getElementById('authSwitchBtn').click();
@@ -268,6 +349,35 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     narrow.formVisible && narrow.submitVisible, JSON.stringify(narrow));
   ck('with no sideways scroll', narrow.noSideScroll === true);
   await p.screenshot({ path: path.join(__dirname, 'shot-login-narrow.png') });
+
+  /* -- Reduce Motion turns all of it off ------------------------------------ */
+
+  // Not merely "stops animating": nothing is built at all, so there is no
+  // canvas repainting every frame behind a page whose reader has asked the
+  // whole machine to calm down.
+  const rmCtx = await b.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
+  const rm = await rmCtx.newPage();
+  const rmErrs = []; rm.on('pageerror', e => rmErrs.push(e.message));
+  await rm.route('**', r => {
+    const u = r.request().url();
+    return (u.startsWith(BASE) || u.startsWith('data:')) ? r.continue() : r.abort();
+  });
+  await rm.goto(BASE + '/login.html', { waitUntil: 'domcontentloaded' });
+  await rm.waitForTimeout(1400);
+  const quiet = await rm.evaluate(() => ({
+    effects: document.querySelectorAll('.dot-field, .auth-glow, .edge, .sheen').length,
+    // The page it is decorating still has to work.
+    formUsable: (() => {
+      const email = document.getElementById('authEmail');
+      email.value = 'quiet@dbotrealty.com';
+      return email.value === 'quiet@dbotrealty.com' && !!document.getElementById('authSubmit');
+    })(),
+  }));
+  ck('under Reduce Motion none of the effects are built at all',
+    quiet.effects === 0, quiet.effects + ' effect elements');
+  ck('and the sign-in form is untouched by their absence', quiet.formUsable === true);
+  ck('with no errors on that path', rmErrs.length === 0, rmErrs.slice(0, 2).join(' // ') || 'none');
+  await rmCtx.close();
 
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();

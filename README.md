@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0145-blue)
+![Version](https://img.shields.io/badge/version-v6.0146-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,31 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0142 (latest)
+## 🆕 New in v6.0146 (latest)
+
+### An interactive dot field behind the sign-in card
+
+A grid of dots across the whole window that bulges away from the pointer as it
+moves, with a soft pool of light following it. Ported to plain JavaScript from
+a React component — this app has no build step, and the mechanics are a canvas,
+a `requestAnimationFrame` loop and a radial gradient, none of which needed React
+to begin with.
+
+Three things make it cheap enough to leave running on a page people sit and type
+into: every dot goes into **one path and one fill**, so several thousand dots
+cost a single draw call; it reacts to the pointer's **speed** rather than its
+position, so a still cursor lets the whole field settle and the loop go quiet;
+and it stops entirely when the tab is hidden. Under **Reduce Motion it is never
+built at all**.
+
+Its colours are this page's rather than the component's — brand orange running
+to the map scene's blue across the diagonal, at roughly twice the size and alpha
+the original uses, because a 1.5px dot at 35% alpha on a near-black page is
+mostly antialiasing and reads as nothing.
+
+---
+
+## 🆕 Earlier in v6 (6.0142)
 
 ### The sign-in page, rebuilt as one dark split card
 
@@ -755,6 +779,8 @@ Map-studio/
     auth/session.js  — who is using this browser. Degrades to a local profile
                          when Supabase is not configured; the rest of the app
                          cannot tell which mode is running.
+    auth/loginFx.js  — login.html's pointer decoration, built at runtime so the
+                         page's markup stays about authentication
     projects/       — projectStore (many named projects in IndexedDB, metadata
                         split from payload so the list stays fast), projectsPage
                         (drives projects.html), projectBridge (loads the opened
@@ -782,7 +808,8 @@ Map-studio/
                         Distances), basemapSwitcher, ringScanPanel, layerManager,
                         settingsDialog, exportCenter, importDialog, iconPicker,
                         colorPresets, searchBox, dialogs, notifications, aiTab,
-                        reportSheet, dash* (the board view)
+                        reportSheet, dash* (the board view), dotField (the
+                        interactive dot background; login.html only)
     services/       — elevation (the DEM behind the contour map), osmDetail
                         (roads/water/buildings over it, through the Overpass
                         client ringFeatures sets up),

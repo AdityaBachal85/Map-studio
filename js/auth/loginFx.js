@@ -1,9 +1,9 @@
 /**
- * auth/loginFx.js — the sign-in page's three pointer effects.
+ * auth/loginFx.js — the sign-in page's pointer effects.
  *
- * A glow that follows the cursor across the form, a bright point that runs
- * along a field's top and bottom edges as you move over it, and a highlight
- * that sweeps across a button once on hover.
+ * A field of dots behind the whole page, a glow that follows the cursor across
+ * the form, a bright point that runs along a field's top and bottom edges as
+ * you move over it, and a highlight that sweeps across a button once on hover.
  *
  * EVERY ELEMENT THESE NEED IS BUILT HERE, not written into login.html. They are
  * decoration with no meaning to a reader or a screen reader, and a page whose
@@ -21,6 +21,49 @@ function loginFxMotionOff() {
     if (typeof getPref === 'function' && getPref('reduceMotion')) return true;
   } catch (e) { /* prefs not loaded on this page */ }
   return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * The dot field across the whole window, behind the card.
+ *
+ * The mechanics live in js/ui/dotField.js; what belongs here is the decision to
+ * put one on this page, and its colours.
+ *
+ * THE PALETTE IS THIS PAGE'S, not the component's. Its defaults are violet and
+ * blue on white, which on a #101214 ground read as a grey haze. These are the
+ * two colours already on the page — the brand orange on the buttons and kicker,
+ * and the cool blue of the map scene — run across the diagonal, so the corners
+ * pick up a tint and the middle, which is behind an opaque card anyway, does
+ * not have to resolve into anything.
+ *
+ * Attached to <body>, not to .auth-wrap: it is fixed-position, so it would
+ * escape that wrapper regardless, and hanging it there would only imply a
+ * containment that is not real.
+ */
+function initLoginDotField() {
+  if (typeof startDotField !== 'function') return;   // absent in legacy snapshots
+  if (!document.querySelector('.auth-wrap')) return;
+
+  const host = document.createElement('div');
+  host.className = 'dot-field';
+  host.setAttribute('aria-hidden', 'true');
+  document.body.insertBefore(host, document.body.firstChild);
+
+  startDotField(host, {
+    // Bigger and brighter than the component's own defaults, which are tuned
+    // for a white page. A 1.5px dot at 35% alpha is mostly antialiasing, and
+    // antialiasing against near-black is nothing at all — at those defaults the
+    // field was technically painting and visibly absent.
+    dotRadius: 2.4,
+    dotSpacing: 16,
+    gradientFrom: 'rgba(255, 150, 64, .44)',
+    gradientTo: 'rgba(104, 162, 240, .34)',
+    // Cool, against warm dots. The obvious choice was to glow in the brand
+    // orange, and the obvious choice is wrong: a warm wash at 12% over #101214
+    // does not read as light, it reads as a brown stain on the page. A cool
+    // pool separates from the dots it is lighting and looks like illumination.
+    glowColor: 'rgba(160, 185, 240, .12)',
+  });
 }
 
 /**
@@ -103,6 +146,7 @@ function initLoginSheen() {
 
 function initLoginFx() {
   if (loginFxMotionOff()) return;
+  initLoginDotField();
   initLoginGlow();
   initLoginFieldEdges();
   initLoginSheen();
