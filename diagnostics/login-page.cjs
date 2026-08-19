@@ -158,6 +158,67 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
   await p.screenshot({ path: path.join(__dirname, 'shot-login.png') });
 
+  /* -- nothing inside the card ever scrolls --------------------------------- */
+
+  // Two separate faults produced the scrollbars in the report. The form column
+  // is a flex item, so it defaulted to min-height:auto — "never shrink below my
+  // content" — and was therefore taller than the card holding it, which clipped
+  // it and gave the column its own scrollbar. And the card was sized in `vw`,
+  // which ignores the wrapper's padding, so it overflowed the viewport
+  // sideways on anything under about a thousand pixels wide.
+  const sizes = [[1440, 900], [1280, 600], [1100, 430], [900, 520], [714, 450]];
+  const scrolling = [];
+  for (const [w, h] of sizes) {
+    await p.setViewportSize({ width: w, height: h });
+    await p.waitForTimeout(260);
+    scrolling.push(await p.evaluate(vp => {
+      const main = document.querySelector('.auth-main');
+      const shell = document.querySelector('.auth-shell');
+      const sr = shell.getBoundingClientRect();
+      return {
+        vp,
+        innerScroll: main.scrollHeight > main.clientHeight + 1,
+        clipped: sr.height + 1 < main.scrollHeight,
+        sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    }, w + 'x' + h));
+  }
+  ck('no panel inside the card ever gets its own scrollbar',
+    scrolling.every(r => !r.innerScroll),
+    scrolling.filter(r => r.innerScroll).map(r => r.vp).join(', ') || 'clean at ' + sizes.length + ' sizes');
+  ck('and the card never clips its own contents',
+    scrolling.every(r => !r.clipped),
+    scrolling.filter(r => r.clipped).map(r => r.vp).join(', ') || 'clean');
+  ck('and the page never scrolls sideways',
+    scrolling.every(r => !r.sideways),
+    scrolling.filter(r => r.sideways).map(r => r.vp).join(', ') || 'clean');
+
+  /* -- the logo has something to stand on ----------------------------------- */
+
+  await p.setViewportSize({ width: 1440, height: 900 });
+  await p.waitForTimeout(300);
+  const plate = await p.evaluate(() => {
+    const img = document.querySelector('.auth-card-brand img');
+    const cs = getComputedStyle(img);
+    const r = img.getBoundingClientRect();
+    return {
+      box: cs.boxSizing,
+      pad: parseFloat(cs.paddingLeft),
+      radius: parseFloat(cs.borderTopLeftRadius),
+      lit: /rgb/.test(cs.backgroundImage) || cs.backgroundColor !== 'rgba(0, 0, 0, 0)',
+      shadow: cs.boxShadow !== 'none',
+      h: Math.round(r.height),
+      declaredH: parseFloat(cs.height),
+    };
+  });
+  ck('the logo sits on a plate', plate.pad > 4 && plate.radius > 6 && plate.lit && plate.shadow,
+    JSON.stringify({ pad: plate.pad, radius: plate.radius, shadow: plate.shadow }));
+  ck('and the plate grows around the mark rather than shrinking it',
+    // border-box would take the padding OUT of the declared height, which is
+    // what left the logo at sixteen pixels inside a full-size plate.
+    plate.box === 'content-box' && plate.h >= plate.declaredH + plate.pad,
+    `${plate.box}, ${plate.declaredH}px mark in a ${plate.h}px plate`);
+
   /* -- narrow: the photograph goes, the form does not ----------------------- */
 
   await p.setViewportSize({ width: 430, height: 900 });

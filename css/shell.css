@@ -55,10 +55,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100dvh;
   min-height: 100dvh;
   padding: clamp(12px, 3vh, 40px);
-  overflow: hidden;
+  /* The PAGE scrolls when a window is genuinely too short, not a panel inside
+     the card. An inner scrollbar on one half of a card reads as something
+     broken, and it was appearing on any window under about 700px tall. */
+  overflow-x: hidden;
 }
 
 /* The card: form on the left, photograph on the right. Sized as a proportion
@@ -66,8 +68,14 @@
    not become a stamp on a large monitor. */
 .auth-shell {
   display: flex;
-  width: min(1120px, 92vw);
-  height: min(640px, 88dvh);
+  /* 100%, not 92vw. `vw` counts the scrollbar and ignores this wrapper's own
+     padding, so 92vw + 40px either side overflowed the viewport horizontally on
+     anything under ~1000px wide — which is where the sideways scrollbar came
+     from. A percentage is of the content box, so the padding is already out. */
+  width: min(1120px, 100%);
+  /* Grows if the content needs it rather than clipping it. */
+  height: auto;
+  min-height: min(640px, 82dvh);
   border: 1px solid var(--auth-border);
   border-radius: 20px;
   background: var(--auth-surface);
@@ -78,7 +86,7 @@
 /* Below this the photograph is dropped rather than squeezed: it is
    reassurance, and the form is the task. */
 @media (max-width: 1000px) {
-  .auth-shell { width: min(460px, 94vw); height: auto; max-height: 94dvh; }
+  .auth-shell { width: min(460px, 100%); min-height: 0; }
   .auth-shell .auth-stage { display: none; }
 }
 
@@ -88,7 +96,10 @@
   position: relative;
   flex: 1 1 50%;
   min-width: 0;
-  height: 100%;
+  /* A flex item defaults to min-height:auto, which means "never shrink below my
+     content" — so this column and the form beside it were both refusing to fit
+     the card and being clipped by it. */
+  min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--auth-border);
 }
@@ -159,6 +170,50 @@
    over it comes down to match. The brand block goes entirely: it is already on
    the form side, and the same logo twice on one card reads as a mistake. */
 .auth-shell .auth-brand { display: none; }
+
+/* A frosted plate under the logo.
+   The DBOT mark is navy and green, drawn to sit on white — on this dark card it
+   went from a logo to a smudge. Rather than recolour somebody's brand mark, it
+   gets its own pane of glass to stand on: a bright, slightly translucent
+   surface with a lit top edge and a shadow under it, so it reads as a physical
+   plate lying on the card rather than as a white box behind the picture. */
+.auth-shell .auth-card-brand img {
+  /* content-box, because the reset makes everything border-box and the plate's
+     padding was therefore eaten OUT of the logo's 30px height — it came back
+     at sixteen pixels inside a full-size plate. The padding has to grow the
+     plate around the mark, not shrink the mark inside it. */
+  box-sizing: content-box;
+  height: 32px;
+  padding: 8px 12px;
+  border-radius: 13px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .99) 0%, rgba(243, 247, 252, .92) 46%,
+      rgba(255, 255, 255, .97) 100%);
+  border: 1px solid rgba(255, 255, 255, .5);
+  box-shadow:
+    /* the lit edge that makes it glass rather than paper */
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 -1px 0 rgba(120, 140, 165, .18),
+    0 8px 22px rgba(0, 0, 0, .5),
+    0 1px 3px rgba(0, 0, 0, .35);
+  /* Blurs whatever passes under it — the cursor glow does, which is what makes
+     it look like glass rather than a sticker. */
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+
+/* Lifts very slightly when the pointer is over the form, which is the moment
+   the glow is behind it and the glass has something to refract. */
+.auth-main.glowing .auth-card-brand img {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 -1px 0 rgba(120, 140, 165, .18),
+    0 12px 28px rgba(0, 0, 0, .55),
+    0 1px 3px rgba(0, 0, 0, .35);
+}
+.reduce-motion .auth-main.glowing .auth-card-brand img { transform: none; }
 .auth-shell .auth-copy h2 { font-size: clamp(22px, 3.4vh, 34px); }
 .auth-shell .auth-sub { font-size: var(--fs-micro); }
 .auth-shell .auth-stage-inner { padding: clamp(18px, 3vh, 34px); }
@@ -219,11 +274,10 @@
   position: relative;
   flex: 1 1 50%;
   min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  overflow-y: auto;
   padding: clamp(16px, 3vh, 44px) clamp(20px, 2.6vw, 44px);
 }
 
