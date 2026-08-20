@@ -4,3 +4,6 @@ dist/
 
 # unzip scratch dirs created while inspecting fixtures
 test/ppt-export/fixtures/u_*/
+
+# Fetched MCGM ArcGIS REST responses
+mcgm-responses/
