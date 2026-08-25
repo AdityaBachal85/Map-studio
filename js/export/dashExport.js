@@ -5,10 +5,9 @@
  * handles them. The map tile is not: html2canvas cannot rasterise Leaflet's
  * transformed tile images or its overlay pane, and an export that quietly
  * dropped the map would be the one thing nobody would forgive. So the map is
- * drawn separately — its tiles and its vector canvases copied straight onto a
- * 2D context, which is what js/export/hiResRender.js already does for the map
- * export — and the result is pasted into the board bitmap at the tile's
- * position.
+ * rendered separately, by captureMapHiRes() in js/export/hiResRender.js — the
+ * same renderer the map's own export uses — and pasted into the board bitmap
+ * at the tile's position.
  *
  * THIS FILE MAKES THE PICTURE; export/dashPdf.js MAKES THE DOCUMENT. PNG and
  * JPEG want exactly the bitmap below and nothing else. The PDF used to want it
@@ -26,53 +25,47 @@
 const DASH_JPEG_Q = 0.92;
 
 /**
- * Paint the live map tile onto the board canvas.
+ * Paint the map tile onto the board canvas, through the map export's own
+ * high-resolution renderer.
  *
- * THREE PASSES, because no single one can do it. The basemap is transformed
- * <img> tiles, which html2canvas cannot rasterise — those are copied straight
- * onto a 2D context. Routes and shapes are already in the overlay pane's own
- * canvas, so that is one drawImage. Pins, labels and the key-distances card are
- * ordinary HTML and only html2canvas can draw them — run with
- * `.hires-overlay-pass`, which hides the two panes above and makes every
- * surface behind them transparent, so what comes back is the furniture alone on
- * nothing. (That class already existed for the map's own export; this reuses it
- * rather than inventing a second way to say the same thing.)
+ * html2canvas cannot rasterise Leaflet's transformed tile images or its overlay
+ * pane, which is why the map is excluded from the board pass and drawn here
+ * instead. What it is drawn WITH changed: see the note in the body.
  *
  * @param {CanvasRenderingContext2D} ctx the board canvas context
  * @param {DOMRect} boardRect the canvas element's rect, to offset against
  * @param {number} scale
- * @returns {Promise<boolean>} whether the ground drew
+ * @returns {Promise<{drawn:boolean, complete:boolean, failed?:boolean}>}
  */
 async function dashPaintMap(ctx, boardRect, scale) {
   const wrap = document.getElementById('mapWrap');
-  if (!wrap || !wrap.closest('#dashGrid')) return false;
+  if (!wrap || !wrap.closest('#dashGrid')) return { drawn: false, complete: true };
   const r = wrap.getBoundingClientRect();
   const W = Math.round(r.width), H = Math.round(r.height);
-  if (W < 4 || H < 4) return false;
+  if (W < 4 || H < 4) return { drawn: false, complete: true };
 
-  const ground = rasteriseTileLayers(wrap, W, H, () => true, '#0b1220');
-  const vec = rasteriseVectorCanvases(wrap, W, H);
-
-  let furniture = null;
-  const stage = document.getElementById('tiltStage');
-  const savedTransform = stage ? stage.style.transform : null;
-  const wasTilted = wrap.classList.contains('tilted');
+  // THE MAP EXPORT'S OWN RENDERER, not a copy of the screen.
+  //
+  // This used to call rasteriseTileLayers / rasteriseVectorCanvases straight at
+  // the live map, which copies whatever pixels are already on screen and scales
+  // them up — the exact defect hiResRender.js was written to fix, quoted in its
+  // own header: "Every export was therefore a blown-up screenshot — the imagery
+  // could never be sharper than what was already on screen." The map export
+  // stopped doing that and the board carried on doing it, so the same map came
+  // out sharp from one button and soft from the other.
+  //
+  // captureMapHiRes builds a throwaway Leaflet map at zoom + log2(scale), so
+  // the ground is composed from genuinely more tile pixels rather than
+  // interpolated from fewer. It also brings the pixel budget with it
+  // (safeExportScale), which this path never had.
+  let shot = null;
   try {
-    if (stage) stage.style.transform = '';
-    wrap.classList.remove('tilted');
-    wrap.classList.add('capturing', 'hires-overlay-pass');
-    if (typeof flattenBillboardForCapture === 'function') flattenBillboardForCapture();
-    furniture = await html2canvas(wrap, {
-      useCORS: true, allowTaint: false, logging: false,
-      backgroundColor: null, width: W, height: H, scale,
-    });
+    shot = await captureMapHiRes({ scale });
   } catch (e) {
-    console.warn('Dashboard export: the map furniture pass failed —', e && e.message);
-  } finally {
-    if (typeof restoreBillboardAfterCapture === 'function') restoreBillboardAfterCapture();
-    wrap.classList.remove('capturing', 'hires-overlay-pass');
-    if (stage) stage.style.transform = savedTransform;
-    if (wasTilted) wrap.classList.add('tilted');
+    // Loud, because the map is the one thing nobody would forgive losing, and
+    // a silent console line is how that goes unnoticed until a client asks.
+    console.error('Dashboard export: the map could not be rendered —', e && e.message);
+    return { drawn: false, complete: false, failed: true };
   }
 
   const x = (r.left - boardRect.left) * scale;
@@ -96,12 +89,19 @@ async function dashPaintMap(ctx, boardRect, scale) {
   ctx.arcTo(x, y, x + w, y, rad);
   ctx.closePath();
   ctx.clip();
-  ctx.drawImage(ground.canvas, x, y, w, h);
-  if (vec.drawn) ctx.drawImage(vec.canvas, x, y, w, h);
-  if (furniture) ctx.drawImage(furniture, x, y, w, h);
+  // The capture is at its own clamped scale, which need not be the board's —
+  // drawImage resolves the difference, and it is always downward, so no
+  // sharpness is invented on the way in.
+  ctx.drawImage(shot.canvas, x, y, w, h);
   ctx.restore();
 
-  return ground.drawn > 0;
+  // The board bitmap holds the map at the BOARD's scale, so the extra
+  // resolution just fetched is spent on a better downsample and then thrown
+  // away. That is right for PNG and JPEG, which are the board at that scale.
+  // It is wasteful for the PDF, which places the map as its own image and can
+  // carry every pixel of it — so the full-size canvas is handed on rather than
+  // being re-cropped out of the flattened board.
+  return { drawn: true, complete: shot.complete !== false, canvas: shot.canvas };
 }
 
 /**
@@ -160,9 +160,9 @@ async function dashRenderBoard(scale) {
       // empty box there and, worse, sometimes throw on the transformed panes.
       ignoreElements: el => el.id === 'mapWrap' || el.id === 'dashAdd' || el.id === 'dashGhost',
     });
-    const painted = await dashPaintMap(shot.getContext('2d'), rect, scale);
+    const map = await dashPaintMap(shot.getContext('2d'), rect, scale);
     shot._dashRects = rects;
-    shot._dashMapDrawn = painted;
+    shot._dashMap = map;
     return shot;
   } finally {
     grid.classList.remove('exporting');
@@ -283,6 +283,21 @@ function dashExportName() {
  *
  * @param {object} model @returns {string} a sentence to append, or ''
  */
+function dashMapNote(canvas) {
+  const m = canvas && canvas._dashMap;
+  if (!m || !m.drawn) return m && m.failed ? ' The map could not be rendered into it.' : '';
+  // rasteriseTileLayers has always counted the tiles it could not decode, and
+  // this path has always thrown that count away — so a board exported before
+  // the imagery finished loading came out with dark patches and reported
+  // success. runPngExport says so; now this does too.
+  return m.complete ? '' : ' Some imagery had not finished loading, so parts of the map are dark.';
+}
+
+/**
+ * What to say about the cards nobody typed into.
+ *
+ * @param {object} model @returns {string} a sentence to append, or ''
+ */
 function dashEmptyNote(model) {
   const n = model.emptyCount;
   if (!n) return '';
@@ -310,14 +325,14 @@ async function dashExport(kind) {
     if (kind === 'png') {
       canvas.toBlob(b => {
         dashSaveBlob(b, stem + '-dashboard.png');
-        status('Saved ' + stem + '-dashboard.png (' + (b.size / 1048576).toFixed(1) + ' MB).');
+        status('Saved ' + stem + '-dashboard.png (' + (b.size / 1048576).toFixed(1) + ' MB).' + dashMapNote(canvas));
       }, 'image/png');
       return;
     }
     if (kind === 'jpeg') {
       canvas.toBlob(b => {
         dashSaveBlob(b, stem + '-dashboard.jpg');
-        status('Saved ' + stem + '-dashboard.jpg (' + (b.size / 1048576).toFixed(1) + ' MB).');
+        status('Saved ' + stem + '-dashboard.jpg (' + (b.size / 1048576).toFixed(1) + ' MB).' + dashMapNote(canvas));
       }, 'image/jpeg', DASH_JPEG_Q);
       return;
     }
@@ -328,7 +343,7 @@ async function dashExport(kind) {
     dashSaveBlob(doc.blob, stem + '-dashboard.pdf');
     status('Saved ' + stem + '-dashboard.pdf — ' + doc.paper.label + ', '
       + doc.pages + ' page' + (doc.pages === 1 ? '' : 's') + ', '
-      + (doc.blob.size / 1048576).toFixed(1) + ' MB.' + dashEmptyNote(model));
+      + (doc.blob.size / 1048576).toFixed(1) + ' MB.' + dashMapNote(canvas) + dashEmptyNote(model));
   } catch (e) {
     console.error('Dashboard export failed:', e);
     status('The board could not be exported: ' + (e && e.message ? e.message : 'unknown error'));

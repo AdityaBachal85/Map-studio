@@ -377,6 +377,7 @@ function dashPdfCard(page, tile, box, pal) {
  */
 function dashBuildDocument(model, canvas, rects, scale, size) {
   const pal = dashPdfPalette();
+  const mapCanvas = (canvas && canvas._dashMap && canvas._dashMap.canvas) || null;
   const boardW = canvas.width / scale;
   const boardH = canvas.height / scale;
   const paper = dashPdfPaper(size, boardW, boardH);
@@ -435,7 +436,12 @@ function dashBuildDocument(model, canvas, rects, scale, size) {
         h: t.h * fit,
       };
       if (DASH_PICTORIAL.indexOf(t.tile.type) >= 0) {
-        const im = dashPdfCrop(canvas, t.x * scale, t.y * scale, t.w * scale, t.h * scale);
+        // The map arrives as its own full-resolution canvas (see dashPaintMap);
+        // everything else is cropped out of the flattened board.
+        const src = (t.tile.type === 'map' && mapCanvas) ? mapCanvas : null;
+        const im = src
+          ? dashPdfCrop(src, 0, 0, src.width, src.height)
+          : dashPdfCrop(canvas, t.x * scale, t.y * scale, t.w * scale, t.h * scale);
         pdfImage(page, im.bytes, im.pxW, im.pxH, box.x, box.y, box.w, box.h);
       } else {
         dashPdfCard(page, t.tile, box, pal);
