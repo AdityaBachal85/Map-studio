@@ -177,12 +177,29 @@ function dashModelData(card, resolve) {
       return { body: dashModelTyped(card.body) ? card.body : '' };
     case 'slicer':
       return { items: (card.items || []).slice(), picked: (card.picked || []).slice() };
-    case 'access':
+    case 'access': {
+      // A COLUMN NOBODY FILLED IN IS NOT A COLUMN. This card always offers
+      // Place / Distance / Time, but a route the router has not timed has no
+      // time, and a whole column of em-dashes still takes its full share of the
+      // width — width taken from the place names, which are then the thing that
+      // gets cut short. Dropped here rather than in a writer, so the PDF, the
+      // deck and the Word file agree about what the card contains.
+      //
+      // Only this card, and only because THIS card invented the columns. A
+      // table the operator typed keeps every column they made, empty or not:
+      // withdrawing one of those would be editing their work.
+      const rows = (card._rows || []).map(r => [r.name || '', r.km || '', r.min || '']);
+      const cols = ['Place', 'Distance', 'Time'];
+      const keep = cols.map((c, i) => i === 0 || rows.some(r => {
+        const v = String(r[i] == null ? '' : r[i]).trim();
+        return v && v !== '—' && v !== '-';
+      }));
       return {
-        columns: ['Place', 'Distance', 'Time'],
-        rows: (card._rows || []).map(r => [r.name || '', r.km || '', r.min || '']),
+        columns: cols.filter((c, i) => keep[i]),
+        rows: rows.map(r => r.filter((c, i) => keep[i])),
         marks: (card._rows || []).map(r => col(r.color)),
       };
+    }
     case 'legend':
       return {
         rows: (card._rows || []).map(r => ({

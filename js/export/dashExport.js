@@ -313,13 +313,18 @@ function dashEmptyNote(model) {
  */
 async function dashExport(kind) {
   if (typeof html2canvas !== 'function') { status('The export library did not load — reload the page.'); return; }
-  const isPdf = kind.indexOf('pdf') === 0;
-  status(isPdf ? 'Building the PDF…' : 'Rendering the board…', true);
+  // Everything except the two raster formats is a document, and documents are
+  // rendered at print scale.
+  const isDoc = kind === 'pptx' || kind === 'docx' || kind.indexOf('pdf') === 0;
+  const label = kind === 'pptx' ? 'Building the deck…'
+    : kind === 'docx' ? 'Building the document…'
+      : kind.indexOf('pdf') === 0 ? 'Building the PDF…' : 'Rendering the board…';
+  status(label, true);
 
   try {
     // 2× for the raster formats, 2.5× for print — enough for a page without
     // producing a file nobody can email.
-    const canvas = await dashRenderBoard(isPdf ? 2.5 : 2);
+    const canvas = await dashRenderBoard(isDoc ? 2.5 : 2);
     const stem = dashExportName();
 
     if (kind === 'png') {
@@ -338,7 +343,26 @@ async function dashExport(kind) {
     }
 
     const model = dashCurrentModel();
-    const doc = dashBuildDocument(model, canvas, canvas._dashRects || {}, 2.5,
+    const rects = canvas._dashRects || {};
+
+    if (kind === 'pptx') {
+      const deck = await dashBuildPptx(model, canvas, rects, 2.5);
+      dashSaveBlob(deck.blob, stem + '-dashboard.pptx');
+      status('Saved ' + stem + '-dashboard.pptx — ' + deck.slides + ' slide'
+        + (deck.slides === 1 ? '' : 's') + ', ' + (deck.blob.size / 1048576).toFixed(1) + ' MB.'
+        + dashMapNote(canvas) + dashEmptyNote(model));
+      return;
+    }
+    if (kind === 'docx') {
+      const docx = await dashBuildDocx(model, canvas, rects, 2.5);
+      dashSaveBlob(docx.blob, stem + '-dashboard.docx');
+      status('Saved ' + stem + '-dashboard.docx — '
+        + (docx.blob.size / 1048576).toFixed(1) + ' MB.'
+        + dashMapNote(canvas) + dashEmptyNote(model));
+      return;
+    }
+
+    const doc = dashBuildDocument(model, canvas, rects, 2.5,
       kind === 'pdf-a3' ? 'a3' : 'a4');
     dashSaveBlob(doc.blob, stem + '-dashboard.pdf');
     status('Saved ' + stem + '-dashboard.pdf — ' + doc.paper.label + ', '
@@ -351,9 +375,11 @@ async function dashExport(kind) {
 }
 
 const DASH_EXPORT_ITEMS = [
-  ['pdf-a4', 'PDF — A4 landscape', 'One page, sized to the paper.'],
-  ['pdf-a3', 'PDF — A3 landscape', 'For a wide board with a lot on it.'],
-  ['png', 'PNG — 2×', 'Lossless. The biggest file.'],
+  ['pdf-a4', 'PDF — A4', 'Selectable text. Turns and paginates to suit the board.'],
+  ['pdf-a3', 'PDF — A3', 'The same, on bigger paper.'],
+  ['pptx', 'PowerPoint', 'Editable shapes and native tables, one slide per page.'],
+  ['docx', 'Word', 'Headings, paragraphs and tables — the version you edit.'],
+  ['png', 'PNG — 2×', 'A picture of the board. Lossless, the biggest file.'],
   ['jpeg', 'JPEG — 2×', 'Much smaller, fine for sending.'],
 ];
 

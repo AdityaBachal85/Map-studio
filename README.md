@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0150-blue)
+![Version](https://img.shields.io/badge/version-v6.0151-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,61 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0147 (latest)
+## 🆕 New in v6.0151 (latest)
+
+### The board shows each thing once
+
+The map tile carried the map's own floating furniture — Key Distances, the
+colour key, the title card — because they are children of `#mapWrap` and the
+board moves that whole element into a card. So the same five places, distances
+and times printed twice on one page: once in a box over a third of the map,
+once in the Key access points card beside it, both from the same
+`legendRows()`. Dashboard mode hides them now, as report mode already did.
+
+The colour key was worse than duplicated: it read **"Road / line" five times**
+over five different colours, because it named routes from a label that is empty
+until somebody types one. It uses the same derivation the Key Distances card
+does, so the two agree. With the on-map key gone the board gets a **Legend
+card** of its own — live, like Key access points.
+
+### Export the board as a document, in four formats
+
+The PDF was one screenshot in a wrapper: a single page, always landscape, so a
+portrait board was letterboxed onto a landscape sheet with **40% of the page
+blank**. No text in it could be selected, searched or copied, and nothing on it
+named the project.
+
+All four writers now read one description of the board, so they cannot drift:
+
+- **PDF** — real text drawn with the built-in Helvetica (no font embedding, no
+  library). Pictorial cards are cropped from the render; everything else is
+  text. The page turns to suit the board's own shape, paginates a tall board at
+  a readable size cutting between cards rather than through one, and carries a
+  header and page numbers.
+- **PowerPoint** — one slide per page, cards as editable shapes, tables as
+  **native PowerPoint tables**.
+- **Word** — headings, paragraphs and tables, read out in board order: the
+  version somebody edits.
+- **PNG / JPEG** — unchanged, a picture of the board.
+
+**The map is sharp now.** The board blitted the on-screen map and scaled it up;
+it goes through `captureMapHiRes()`, the same renderer the map's own export
+uses, which composes the ground from real tiles at a deeper zoom.
+
+**Empty cards are counted, not hidden.** Nothing is dropped — the status line
+says how many had no data and names them. The editor prompts inside them
+(*"turn on Edit board to type them"*) never print: an instruction to a reader
+who has no board reads as an unfinished document.
+
+### AI reports switched off
+
+All three buttons opened the same panel and the backend behind it is not
+working, so they are hidden — in one block, deleted to turn it back on. Nothing
+is removed, so boot is untouched.
+
+---
+
+## 🆕 Earlier in v6 (6.0147)
 
 ### Add a location by pasting DMS coordinates
 
@@ -844,6 +898,9 @@ Map-studio/
                         colorPresets, searchBox, dialogs, notifications, aiTab,
                         reportSheet, dash* (the board view), dotField (the
                         interactive dot background; login.html only)
+    export/         — hiResRender (the sharp map), dashExportModel (what the
+                        board IS, DOM-free — read by all four writers),
+                        pdfWriter + dashPdf, dashPptx, dashDocx, exportPPT*
     services/       — elevation (the DEM behind the contour map), osmDetail
                         (roads/water/buildings over it, through the Overpass
                         client ringFeatures sets up),

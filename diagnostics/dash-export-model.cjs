@@ -157,6 +157,35 @@ ck('reading order is top-to-bottom then left-to-right, not creation order',
 
 ck('the live access card was filled from the map, not from stored values',
   board.cards.find(c => c.id === 'c3').data.rows.length === 2);
+
+// A column of nothing takes width from the place names, which then get cut
+// short — the defect that printed "SVPN Police Acad…" beside a column of
+// em-dashes. Dropped in the model so all three writers agree about it.
+{
+  const untimed = M.dashExportModel({
+    cards: [{ id: 'a', type: 'access', title: 'Key access', x: 0, y: 0, w: 4, h: 5 }],
+    mapTile: null, resolveColor,
+    liveRows: { access: [{ name: 'SVPN Police Academy', km: '0.6 km', min: '—' }] },
+  }).cards[0].data;
+  ck('a column that is empty all the way down is dropped',
+    untimed.columns.join(',') === 'Place,Distance', untimed.columns.join(','));
+  ck('and its cells go with it, so rows still match the header',
+    untimed.rows[0].length === untimed.columns.length, JSON.stringify(untimed.rows[0]));
+
+  const timed = M.dashExportModel({
+    cards: [{ id: 'a', type: 'access', title: 'Key access', x: 0, y: 0, w: 4, h: 5 }],
+    mapTile: null, resolveColor,
+    liveRows: { access: [{ name: 'SVPN Police Academy', km: '0.6 km', min: '2 min' }] },
+  }).cards[0].data;
+  ck('a column with even one real value is kept',
+    timed.columns.join(',') === 'Place,Distance,Time', timed.columns.join(','));
+}
+
+// The operator's own table is theirs. Withdrawing a column they made would be
+// editing their work, not tidying ours.
+ck('a typed table keeps every column, empty or not',
+  M.dashModelData({ type: 'table', columns: ['Item', 'Value', 'Note'], rows: [['Carpet', '1140', '']] })
+    .columns.join(',') === 'Item,Value,Note');
 ck('and it is therefore not empty', board.cards.find(c => c.id === 'c3').isEmpty === false);
 ck('the live legend card too', board.cards.find(c => c.id === 'c6').data.rows.length === 2);
 

@@ -260,20 +260,11 @@ function dashPdfCard(page, tile, box, pal) {
       const lead = marks ? 13 : 0;
       const size = 8.5;
 
-      // A COLUMN NOBODY FILLED IN IS NOT A COLUMN. Key access points always
-      // offers Place / Distance / Time, but a route the router has not timed
-      // has no time, and a whole column of em-dashes still charges full width
-      // for saying nothing — width taken directly from the place names, which
-      // is the column that then had to be cut short. Drop any column that is
-      // empty all the way down, and the names get the room back.
-      //
-      // The first column is never dropped: it is what the row IS.
-      const allCols = d.columns || [];
-      const allRows = d.rows || [];
-      const keep = allCols.map((c, i) => i === 0
-        || allRows.some(r => { const v = String((r || [])[i] == null ? '' : (r || [])[i]).trim(); return v && v !== '—' && v !== '-'; }));
-      const cols = allCols.filter((c, i) => keep[i]);
-      const rows = allRows.map(r => (r || []).filter((c, i) => keep[i]));
+      // Empty columns are already gone where they should be — see the note in
+      // dashExportModel's 'access' case. A table the operator typed arrives
+      // here with every column they made.
+      const cols = d.columns || [];
+      const rows = d.rows || [];
 
       // MEASURE THE NUMBERS, DO NOT GUESS AT THEM. Splitting the width by a
       // fixed fraction gave every value column the same slice whatever was in
