@@ -735,7 +735,11 @@ body.dash-gesture .map-wrap { transition: none; }
 .viz-grid { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
 
 .viz-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.viz-area { opacity: .12; stroke: none; }
+
+/* The wash is carried by a gradient now (vizDefs), so the element itself is
+   fully opaque and the fade lives in the stops. A flat wash ends in a hard
+   horizontal edge along the axis and reads as a second series. */
+.viz-area { stroke: none; }
 
 /* The ring is the surface colour, so a dot stays legible where it crosses the
    line or another dot — separation by negative space, not by more ink. */
@@ -819,6 +823,120 @@ body.dash-gesture .map-wrap { transition: none; }
 .viz-tip span { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
 .viz-tip i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .viz-tip b { margin-left: auto; padding-left: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------------------------------
+   The enter animation
+   --------------------------------------------------------------------------
+   A chart arrives rather than appearing. Marks grow from the axis they are
+   measured against, staggered across the categories; a line draws in from the
+   left, the direction it is read; the dots and the labels settle afterwards.
+
+   EVERY MARK IS DRAWN IN ITS FINAL STATE AND ANIMATED `from`. There is no `to`
+   in any of these keyframes, so removing the class — which dashDrawChart does
+   once the window is up, and which the export pass does immediately — leaves
+   the chart already there rather than stuck at zero. That is what makes this
+   safe to rasterise into a PDF, and what makes reduced motion a no-op instead
+   of a separate code path.
+
+   The class is also carried by `.viz-enter` alone, never by the marks, so a
+   redraw for a resize costs nothing: no animation is attached to re-evaluate.
+   ----------------------------------------------------------------------- */
+
+@keyframes viz-rise { from { transform: scaleY(0); } }
+@keyframes viz-widen { from { transform: scaleX(0); } }
+@keyframes viz-draw { from { stroke-dashoffset: var(--len, 1200); } }
+@keyframes viz-fade { from { opacity: 0; } }
+@keyframes viz-pop { from { opacity: 0; transform: scale(.4); } }
+@keyframes viz-sweep { from { opacity: 0; transform: rotate(-12deg) scale(.93); } }
+
+/* fill-box, so the origin is the mark's own baseline rather than the SVG's
+   top-left corner — without it every bar would grow from the corner of the
+   card. */
+.viz-enter .viz-mark,
+.viz-enter .viz-tm,
+.viz-enter .viz-dot,
+.viz-enter .viz-slice,
+.viz-enter .viz-arc { transform-box: fill-box; }
+
+.viz-enter .viz-mark {
+  transform-origin: bottom;
+  animation: viz-rise 620ms cubic-bezier(.85, 0, .15, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Horizontal forms — bar, stacked bar, funnel — grow from the value axis on
+   the left, which is where their zero is. */
+.viz-enter .viz-mark-h,
+.viz-enter[data-horiz] .viz-mark {
+  transform-origin: left;
+  animation-name: viz-widen;
+}
+
+.viz-enter .viz-area { animation: viz-fade 1100ms ease-out both; }
+
+.viz-enter .viz-line {
+  stroke-dasharray: var(--len, 1200);
+  animation: viz-draw 1100ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+.viz-enter .viz-dot {
+  transform-origin: center;
+  animation: viz-pop 320ms cubic-bezier(.34, 1.4, .64, 1) both;
+  /* After the line has passed them, not before: a dot that lands ahead of its
+     own line is a dot with nothing under it. */
+  animation-delay: calc(260ms + var(--i, 0) * 40ms);
+}
+
+.viz-enter .viz-slice,
+.viz-enter .viz-arc {
+  transform-origin: center;
+  animation: viz-sweep 700ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.viz-enter .viz-tm {
+  transform-origin: center;
+  animation: viz-pop 480ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+.viz-enter .viz-label,
+.viz-enter .viz-inlabel,
+.viz-enter .viz-endlabel,
+.viz-enter .viz-donut-total,
+.viz-enter .viz-donut-cap,
+.viz-enter .viz-tm-name,
+.viz-enter .viz-tm-val { animation: viz-fade 400ms ease-out 900ms both; }
+
+/* The grid and the axis text do not animate. They are the frame the data
+   arrives into; a frame that arrives with it is just motion. */
+
+/* An export rasterises whatever is on screen at that instant, so a chart caught
+   mid-reveal would be exported half-drawn. Every keyframe above is `from`-only,
+   which makes switching the animation off the same thing as finishing it. */
+#dashGrid.exporting .viz-enter * { animation: none !important; }
+
+/* And the cards lose their drop shadows for the same pass.
+   html2canvas does not render box-shadow the way a browser does: the card's
+   two-layer 2px/8px shadow came out as a flat 11%-grey slab about 210px wide
+   standing over the right-hand third of every card in the right column. It
+   looked like a rendering fault because it was one, and it was in every export
+   of a board.
+   Removing it is also the right call on its own terms. A drop shadow says "this
+   floats above the page"; on paper nothing floats, and the card already has a
+   border. */
+#dashGrid.exporting .dash-card,
+#dashGrid.exporting .map-wrap,
+#dashGrid.exporting .dash-tile { box-shadow: none; }
+
+/* Hover marks: the point the crosshair is actually reading, on every series at
+   once. The crosshair alone tells you which category; these tell you which
+   value on which line, which is the question a multi-series chart raises. */
+.viz-hit {
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+  pointer-events: none;
+}
 
 /* --------------------------------------------------------------------------
    9. Card internals

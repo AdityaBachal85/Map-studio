@@ -125,6 +125,37 @@ function zipText(buf, entries, name) {
     return fs.readFileSync(file);
   };
 
+  /* ---- what the rasteriser actually paints -------------------------------- */
+
+  // A card's drop shadow came out of html2canvas as a flat 11%-grey slab about
+  // 210px wide, standing over the right-hand third of every card in the right
+  // column of the board — in every export, of every board. It read as a
+  // rendering fault because it was one.
+  //
+  // Asserted on the pixels rather than on the CSS, because the defect was never
+  // visible in the CSS: the shadow is correct on screen and only html2canvas
+  // disagrees about how to draw it.
+  const slab = await p.evaluate(async () => {
+    const shot = await dashRenderBoard(1);
+    const cv = shot.canvas || shot;
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let worst = 0, at = null, col = 0;
+    for (let y = 20; y < cv.height; y += 8) {
+      let run = 0;
+      for (let x = 0; x < cv.width; x++) {
+        const i = (y * cv.width + x) * 4;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        // Flat, mid-light and nearly neutral: page white is 255 and a gridline
+        // is one pixel, so only a slab can hold this for hundreds of pixels.
+        const flat = Math.max(r, g, b) - Math.min(r, g, b) < 10 && r > 205 && r < 245;
+        if (flat) { run++; if (run > worst) { worst = run; col = r; at = y; } } else run = 0;
+      }
+    }
+    return { worst, at, col, w: cv.width };
+  });
+  ck('no slab of flat grey is painted over the cards',
+    slab.worst < slab.w * 0.1, slab.worst + 'px at y=' + slab.at);
+
   /* ---- PDF ---------------------------------------------------------------- */
 
   const pdf = await grab('pdf-a4', 'pdf');

@@ -1,5 +1,5 @@
 <!--
-  DBOT Property Map Studio — v6.0154
+  DBOT Property Map Studio — v6.0159
   Single-file snapshot built 2026-08-25 by tools/build-single-file.js
 
   Everything is inlined: 10 stylesheets, 123 scripts,
@@ -4855,7 +4855,11 @@ body.dash-gesture .map-wrap { transition: none; }
 .viz-grid { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
 
 .viz-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.viz-area { opacity: .12; stroke: none; }
+
+/* The wash is carried by a gradient now (vizDefs), so the element itself is
+   fully opaque and the fade lives in the stops. A flat wash ends in a hard
+   horizontal edge along the axis and reads as a second series. */
+.viz-area { stroke: none; }
 
 /* The ring is the surface colour, so a dot stays legible where it crosses the
    line or another dot — separation by negative space, not by more ink. */
@@ -4939,6 +4943,120 @@ body.dash-gesture .map-wrap { transition: none; }
 .viz-tip span { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
 .viz-tip i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .viz-tip b { margin-left: auto; padding-left: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------------------------------
+   The enter animation
+   --------------------------------------------------------------------------
+   A chart arrives rather than appearing. Marks grow from the axis they are
+   measured against, staggered across the categories; a line draws in from the
+   left, the direction it is read; the dots and the labels settle afterwards.
+
+   EVERY MARK IS DRAWN IN ITS FINAL STATE AND ANIMATED `from`. There is no `to`
+   in any of these keyframes, so removing the class — which dashDrawChart does
+   once the window is up, and which the export pass does immediately — leaves
+   the chart already there rather than stuck at zero. That is what makes this
+   safe to rasterise into a PDF, and what makes reduced motion a no-op instead
+   of a separate code path.
+
+   The class is also carried by `.viz-enter` alone, never by the marks, so a
+   redraw for a resize costs nothing: no animation is attached to re-evaluate.
+   ----------------------------------------------------------------------- */
+
+@keyframes viz-rise { from { transform: scaleY(0); } }
+@keyframes viz-widen { from { transform: scaleX(0); } }
+@keyframes viz-draw { from { stroke-dashoffset: var(--len, 1200); } }
+@keyframes viz-fade { from { opacity: 0; } }
+@keyframes viz-pop { from { opacity: 0; transform: scale(.4); } }
+@keyframes viz-sweep { from { opacity: 0; transform: rotate(-12deg) scale(.93); } }
+
+/* fill-box, so the origin is the mark's own baseline rather than the SVG's
+   top-left corner — without it every bar would grow from the corner of the
+   card. */
+.viz-enter .viz-mark,
+.viz-enter .viz-tm,
+.viz-enter .viz-dot,
+.viz-enter .viz-slice,
+.viz-enter .viz-arc { transform-box: fill-box; }
+
+.viz-enter .viz-mark {
+  transform-origin: bottom;
+  animation: viz-rise 620ms cubic-bezier(.85, 0, .15, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Horizontal forms — bar, stacked bar, funnel — grow from the value axis on
+   the left, which is where their zero is. */
+.viz-enter .viz-mark-h,
+.viz-enter[data-horiz] .viz-mark {
+  transform-origin: left;
+  animation-name: viz-widen;
+}
+
+.viz-enter .viz-area { animation: viz-fade 1100ms ease-out both; }
+
+.viz-enter .viz-line {
+  stroke-dasharray: var(--len, 1200);
+  animation: viz-draw 1100ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+.viz-enter .viz-dot {
+  transform-origin: center;
+  animation: viz-pop 320ms cubic-bezier(.34, 1.4, .64, 1) both;
+  /* After the line has passed them, not before: a dot that lands ahead of its
+     own line is a dot with nothing under it. */
+  animation-delay: calc(260ms + var(--i, 0) * 40ms);
+}
+
+.viz-enter .viz-slice,
+.viz-enter .viz-arc {
+  transform-origin: center;
+  animation: viz-sweep 700ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.viz-enter .viz-tm {
+  transform-origin: center;
+  animation: viz-pop 480ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+.viz-enter .viz-label,
+.viz-enter .viz-inlabel,
+.viz-enter .viz-endlabel,
+.viz-enter .viz-donut-total,
+.viz-enter .viz-donut-cap,
+.viz-enter .viz-tm-name,
+.viz-enter .viz-tm-val { animation: viz-fade 400ms ease-out 900ms both; }
+
+/* The grid and the axis text do not animate. They are the frame the data
+   arrives into; a frame that arrives with it is just motion. */
+
+/* An export rasterises whatever is on screen at that instant, so a chart caught
+   mid-reveal would be exported half-drawn. Every keyframe above is `from`-only,
+   which makes switching the animation off the same thing as finishing it. */
+#dashGrid.exporting .viz-enter * { animation: none !important; }
+
+/* And the cards lose their drop shadows for the same pass.
+   html2canvas does not render box-shadow the way a browser does: the card's
+   two-layer 2px/8px shadow came out as a flat 11%-grey slab about 210px wide
+   standing over the right-hand third of every card in the right column. It
+   looked like a rendering fault because it was one, and it was in every export
+   of a board.
+   Removing it is also the right call on its own terms. A drop shadow says "this
+   floats above the page"; on paper nothing floats, and the card already has a
+   border. */
+#dashGrid.exporting .dash-card,
+#dashGrid.exporting .map-wrap,
+#dashGrid.exporting .dash-tile { box-shadow: none; }
+
+/* Hover marks: the point the crosshair is actually reading, on every series at
+   once. The crosshair alone tells you which category; these tell you which
+   value on which line, which is the question a multi-series chart raises. */
+.viz-hit {
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+  pointer-events: none;
+}
 
 /* --------------------------------------------------------------------------
    9. Card internals
@@ -39817,7 +39935,7 @@ function vlink(url) {
  * Bump it with `node tools/stamp-assets.js --bump`, which increments the last
  * four digits and re-stamps every asset in one step. Do that on every change.
  */
-const APP_VERSION = '6.0154';
+const APP_VERSION = '6.0159';
 const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAXwAAACZCAYAAAAsGYFPAABZxUlEQVR42u29eXydVbX//157P2dI0oFSWua2KRWkRRHLoIgkRbmiXmdOrgoydEhBxQH06nU6OQ733p+Kep2gKYP1oldzrvNXLyrYBBREQQUhTtCBmZahY3KGZ+/1++N5TpKWzj1Jk/Cs16uUJKcnz9lr789e67MmSCSRbSRnAZh54WHMWvL66Ht5k6xLIomMfUkOciJDJB9A0TH7/OnYphtBXgVAS7JPEkkkAfxExhnYF0KaF70Qmm7FNp4IuiFZl0QSSQA/kfEjEtE4hZDZ7a9F0t1gjsX3e0SCZHkSSSQB/ETGh1VvAI1onPb3gf0J6BR8WAaT7I1EEhlnklhwz12wjyicmRdmkexXkPRifFlBPWCT9UkkkQTwExn7ItASUTizFh6HpFZg0qfhSyGIBTEx6CeSSCKj5szmZfDLwj6fzwTwn1OSs1B00BMya3EbElyFsQfHYJ/shUQSGZXGWU8IBd32+zkDRQ9oAviJ7ECGUDgm+/9hgvegDnzVJWCfSCKj7ryayJLvCQGYsbgZYyeR4kn+seyRyHADUAHZY9BPDvpzY+NonIVzMmqvxgTz8SUfWQqS8PWJJDIawX7qwolMynwU/NtBp6CqhAKzL3kE/DJWdX4pAvs9B/0E8Me9O1gIAWF2+4dQU8CYTELhJJLIKAf7WRefiMn+FNU+4D8xvgdjNxD6I/D2HIz9GLPf+Tb6w9fymDy5p6CfHPpxKUO4+pmLX4QJvoSkWtAyeJ9QOIkkMmrBHjjm0qPx+hvQ/2H1VUu2e9EjwO+Z3f5lNPgZWdPDnMtezP0d1fjnmgD+c2rD9AoUHXPOyeBn/Svwb4htGMzCSVIuE0lk9ErB49u/CfI7Vl0dgf2spZ/AyMmRtS8bsOGnub/zYebPb+WZkx/C9X8aCh8cNPR2Lklxzbiy6gseio7mpWfjmm9HUp9EtWFIYFaSdUokkdFqrBU8zZe+EGgl1CURTYMgfgFeb8HySVS3EJqrIG+4664qyrvBvJPjFk6MwV4SwB//Eln1MxY303zJCsT8ApGTIqteNbHqE0lklEutQaG616P8mYc6H6Cl1QIK0oe6X3P/sl4CvQr0uIFzX9KfoVQpBy+NDT+TAP64Fo1u9OYl7ydI3YUJLkBDRas+seoTSWTMSTOiqwBhfWt8CajDBO+huf1ynLkG4frIm88ZHuvsA12H4Zjon69LLPzxbdmLxlbAexE7BVeqgkhUMZtIIomMMQOuAmSi/++tfdMirEHlTah/hNXL/4OWuJV5hAIpVMt78u4JKIwf2YA6RZK8+kQSGX2G2W6GCPUMIPKfUDkBUHqpBWBTaPWHaOl1CGcwa+FMegoO8obZl0wHOQyRe6KXtvoE8J8ThgE2suwTSSSR0SF5E1W4o7vvf1OIwF39DxE9gpnt50QWfN4g0o+3R7F2xQbwRST4z4irL3jUvRPV9ax65o8Rvbvr35OkZSaSSCKJ1NWarwVOCw7wzDlvEq7xOFYvv5Od58kr5Cyrr32C5vYvYOTbzM41s6qwkcrid9HQsIn57Sn6n/ko/ZNnRS3NL3oBpPJo+NbocmizgEsAP5FEEklkeF1sgda40VnMrR/dfgxWzkODRRCuAVoGe+TsSIoe8obVvR9m9tRTYfqfmPnON7H263/a7oV/p/mSfwbzv/jw66zp/G78vm53T5kAfiKJJJLIPkut2FEcELUxmdV+NmIWgv4zJtUU1TtWevfk1oBC9Hc2dzb9h1yDld/R3P4b0JtAnkCZhchrwMwD/QxrOj85WIOze0kA/4C4fHmhBRMFXvauvWkiiSQyGs5wzkCXB4mAduY7D0PCHCIXIfbFiAFfBV8uY9KpvciaU0DoLVaAC5i5+OvY1CLUn4v6CSDPIPyKSrmNh6+9f08t+wTwD8gGmStRM7OC0kMyZCSRRMacNd9tBmkbgVntpyFyEbhzMZlDUAda9agoYKJamL1OkdYBw3Bt4bfAb3f8spzdG7BPAH+4rXgw0BvNjB3ocZE3ND86H0m/DV95nDXLP7snPTASSSSRA2qs1TJtPMctnEgleAOYRQitSAq0Cq7kEOpVA6NRW/O8idgAfPT7t/l6rzEjAfxhA/iCQmzFH7dwIpXMaeBeBY+dA3ICtgF89dron89N0ikTSWRUyQ6CsDPf/Xyk+g6qnIdJzQSNaZtSiIgdnhqYgt+WDdj+6wTwR2AjtBlYJ7S0MnjzDgF4cpZjJj8ftWegehYVOR2Ro5AM0ZSpsIorCdCfrGciiYw2ydnBIGw+oPmJc4CFUH0NJp1BQ/CVmnVtkbHTbjwB/D2WWjqVKLVc1564PG7OZZNQPwdXPRnhDJBT8HosJmUQQMOI1/NVj2AAiTdJUviWSCKjToqOIxcfRcq+FfPEBYh5ARjwFXClMDrDY7OiPQH8vXGtAOZcPA0XzEJ5PsiJoC/ClY8HOQKbATSy4tUNsQI04vWkBvCaBGwTSWT0iXDU+7Okt14J5u1IanI897lm6JmxZM0ngL9PEo8Oa17yWST1Klx4JGKmYmqNKH0M8B58OYz/jYnbHNjaPkokkUTGwDlPuUkol0YW/YA1P2488QTw93g/cDY29UK8A/WKVjyqiogMAfggAfhEEhnLNn5FUZ4GPyUOwo6rw5wA/p47e5ui/Fr18brZwV5lCcAnksg4Mu5slF45/ooik6Dh3myCyLVL0D2RRBJJAD+RRBJJJJEE8BNJJJFEEkkAP5FEEkkkkQTwE0kkkUQSSQA/kUQSSSSRBPATSSSRRBJJAD+RRBJJJAH8RBJJJJFEEsBPJJFEEkkkAfxEEkkkkUQSwE8kkUQSSSQB/EQSSSSRRBLATySRRBJJJAH8RBJJJJFEEsBPJJFEEkkkAfxEEkkkkUQSwE8kkUQSSQA/kUQSSSSRBPATSSSRRBIZqzKWhphLNFO4Q6B3F3Nl5yp0aDx6VhMVjzYd5mPdJTpM5DkkqkJLPmA9hml5P6y/q6fgdnZuRing5w30Ci1zhZ5ehaKPPsCeAkBhyPt0G1paid6ny4MkAHJAdVjYw/UfqkMMLbDt+yQyPMAUHZCODoSOId+P/7+jA5Xo6k50sHe2ToWeQphY+AOWX87AXIFCCIXoBuwZ8oqj3t+ALU+G8hSQyVjThJMMRi0iDrSMZwvKRox7hoZNz9BbqACenp7BX4MKLR02AY8DoMM5l2Uo+6mky1PATMJrEyIZFIPXEKSE0S2I2UCgz/D3v22I3gu/zfuQN7Rg6MHHF0iiw30A9jx5obvbAPSun67FXNEjMaCDDty5Q6/hQs1gRYrkzH3d66R3/XQtthVdsqg7ORfqAJ7P7KWfQL1BhtXo9KRTX+evX3sKVLY3cIMDDxAARRf9ieWYS4/G6VzEzwdOAJrRviNApyCmCbEGDFiJjf5oB2I8qPOo2UL/lKeY1f4whn+A3IP3fyIIe7lf1tPD4E3bkg9i4NiNm2UHTsrgL93vJTCjFQ2iz2j2XYez22eAmYf3JyMyD/UzcOXDsEzHmybEgkj8hyHOmwd1IVU2M+vYJ+G4hxD5O6J348yfIPNX1hY2RDrbWx0+t4EnrzHAt7b6ghR8Ibost1mzy342J3PwjEOacL4xrLpMkCblVNQK1aoLyin6tz7mgq0id1WH6juvmIKQrP+zxaAOjDkGSRXqBh27Ort91e8BT0X0Nwca8FWg1UJPOLBh5lw2ibD6Uox/FZ4z8H4exjYiqeh5VUE8aLyf1Cs4jd9OGTBKREAMIpMQMwljmsG8PFr2EJw8TfPSu1H5FepvZu3ffj/EzYrBa8dWv7hnjNqpMfC7/QP9gX+q8fp3jzJoSIFWIHzSPMtK35kOZ7dPBnkZytmgL0eZi9gGbKxDNNZfvLzqIsVqzQIZqkMTIDIl+mOeB+as6M6tgi89QfPSP4LchOdXrL36j4M6jGmkxHNjKBDT3WIKC3rCgtQAvof8vS0TMOVjUZ2LZ66qPxaVGYgeot5PUqHBpG3KK1ZQPOIC6ytKpu9Qy8aP333qOlTXphvM3yslf2tBfn9zritnt7f0VfMGCirPdQpIveJLw+gFDeCgw6bDUUDp1A6jOCBkbi5NaeorUM3hKmdj7VGQAuNAHWjV46seiRnDyD2RQcgU2QGCxlecgoYxmKjGBqtF7MGIXQBmAVr9FM3H9cLcn2Ao8sBVdw1aLC0B9MSBj+i9pfqQEb8RH0wDOyF6xrpa+6PBqo+8GAmfQtzTqOs3us2FtJ0O51yWwVdeAbwF1VdhgiMRE+vPgVY8nn3QoSqqDFwIqhq/1GLMoUhwDsg5UIHmpX9A5McYLXJ/oXfwPXL2OQv8inSRMzmKXgQPPV4V+VTvS18UevdKRM5U7TvJqDky3WgQI6g3+FDxDrzX6G5WHSDsBQwiKTE0GSvTjJU5xnK6GAEjfOQPp77x319c/FF+ZUtQWNAzADgikde1cmVL0Nra6mtfPyepHZFgeA+wSEwhyQEEfBVoM1CIrfnFR+HsO+jnHRhzPGJBq+CrHq16BDNoqQ/lFGTPF3bAUqzhypBbVr2PAcQiwVzEzsVXPkTz0h5UrqXsv8djnX1DQCM2TwPwfZjSajQ1FU1NJ3p2Nz5AXwLw/ZjK4+A2gU2DqW2P4wSm2wEdRpTbhbjqeRj7/OiiqIKv+MgYrLMOh94L6obqMECCFyP2xbjKR2leehNirmHV9B/H3H9Nh88NflmRfHeLLUhP2BZ/5k/e99KTVNxbCr28TtW9sGFigPdKWAZXVfo3hQ5BUUQEFBF0yIrLIGMK0YXgqqoiqtH3xAUpCbKNcsO/3XXaywrze+7p6srZtraie+TO9ka3qfLyhrS5bdoZ122GHlTzpljslbaE8z8gMsyAn7OxNeg4ZtEcfOrdOL0Ak56ChtuD/HbgMEy3LNiB7TzoRQSYVAtIC9nw4zQvvQq75Vru/9ammOqx8ERkAYsi1fWI34JPHQm2CTQco6CvRDy9INUnkerjEe0iNv48LtZhZzWibZY+Dy/vQfV8bOqg7XRoR0aHsjMdpjCpVwOvZvYTd6OXfBXffwNrV5QYSAcdp9ZlbNG3SdEV6Amv+NMLmyamsm9WWOTUnZltCiSseKolT9+maogiiIiAERG7zRW7s3tZtv9LaiqwYdW7dKOdkM74rg/dOf+0++bP3bxyZUtwxE8OLz308jVzQL7x+C0Lv4H33xYp/Dm6QFSKxTaTAP/IyjAdznyEIhQdzYsOZfbSz+NTf8Ck3gtMwZVCNPQx3x4cuOBl7fcDvurwFYfI8zDpL+Am/JHZ7ZdAS2whigxw0RKAL2HKq5Hq+hggxyqF45HKQ0jlkXhJ7FCqSqHoOPK8o2he+kWUP2JT70b1oB3oUA6wDjXWoQdzIia1HNNwJ83t50efo+Cjy2vccHCRSdWVswjaJkWX/+OJB3X85bQrJqazf0o32m+mMrZFPdK3qRpW+r2PeYVARKzU8eyLiC33uTA7MTgunTJXF6Tgu4HivF6Z8coVX+srhT8+dFrTh6ue3z/affEPHupeuEBEtK2t6Lq6cjafzycFoGPXwm8JYndaaG5/F2I+iqQORyvgSmFEpchozP+PUFtDjw89JpiNBFfRfPwizNx/ZcvdIZKO8UIH7kqpPAq+hKaPiH/mxwCm6CCFU34IfH/0de1CQyJLX32K2e++CA0/i0lNw49qHUrsgkVWv4aKBPOQ4L9pvnQR3n2EtZ23jxeaRxUpFnOmra3oLvvZnMzUGYe0Y/WKTIOdWS05+jeFLg6dWEGC4d6SRiTo21gNGyan3vqJu0+5sXBiz4qVK1uCrq6cnWFnvevhR9ec1NCQOgWVNzrv3/hYz8U3etV/P7L1G7dGnydnRRJrfwxZ+CqRZd8TMnPhScy+pBuT+SpwOK4URltUgtGPhrHFqKHHlxzGnozqrzR91Elxlond5iNIgIRPI+XVMbVTs5BHN9hLuBFTWgVaGgL2tZe4ACyamb0E0esRpo05HYKN6J6Kw5hWrPk1s5Z+nmm5CRHYtwRj9dB2ac6KoG1tRZe/77TXHDJr6m8zE8yXBWb2bay6akV9RNWMsOupYqt9zpuU+WL+7lOPWtDa4555ZpWRBYWwUtbFYailciWslMqhz6SDc6wxtzzWs/C/1958wTEiRaeKaGLtjwXAz0XkNgXPrKUfwKZvQ+yZ+FKIujECEjsCDbFRINKjqUMafHY2mBpnvx2Auj5MeScAOurA/imk8mDsjQylcKLUSU0dgs/OBjuhIfr8Y1mHWHzVoV4IMlcwceptHLPk9CiltEY9jh3Jr2wJ2qTo8n964fSO3lOvD9LyUxPIi/o2VF1YUa03XbN31A4SVrymG+wUh34JQW+aMtvrypbgmNd8855SufqZiU3pNOA391VdueK1MRucn04Fdz7avfByEZBCwa9cOXYv4+cA4LcEUHTMPn86s5f+CJv+HKpZfNVFyCdjnDMVAyhaBcniM81Rhg5DM/40ztipYEqrwW0ZnaAvQRRwLj/CYLVTDexdZBRnZqDpI2NaJ9T44hvrvHfE3Yf9IWJegA+6aW6/PA7iagz8oxvo8xhVpLCgJ/z4n05+nck0/D7dGFxU6fO+0u+8GLEiB/7yEiO2tLnqsk3BWz7+51NeVWwrug6gqytnZx7e/9lnNpfvbcymAlRFBHlmc9l5pwdNaExd+WjPxb9a/Yt3HL9gQU+oXTmr4yzeMg4APx9AT0jzklPQCbch6dfjY9d/sDR1PIgMgqKi6cPR9NHbAWbtIztMeQ0SbhhFoB9dSFJdF8UctomRS+SxmAY0OxsNDhriwcj4OnAiAb7qwQWYzJXMWvrfHJVrGBLQHZWS68IWCngR+MR9p/5Huin4McKM/o3VUAQjMvoqtlUVnHyu/c75Kbp7/LRp60ROKFbAXxEVWEcFd0bEhk71mU2lMJsOWhuyqdsf/tVFF0pb0aGQBHRHDeDno+Ds7EVvRoKViDkmAvux6PrvBe4DaIgGU9BMc/RxB3LxBwuxpPIgUn0yXo5RQONUn0Qqj21H68ZgH0yKPBfJjOEU073y2MCXQmzmfFJTf8mMt0+JeP3RB/pdmrPFNtyH7zhlakfvqT9tmBh8uNLvfVhWL6Mz+QEQW+lzruGg4AWHp8x5hQK+G9CunJ35im/+Yktf9WcTm1JWFVejgkQk2Ly16pzTyU2N6W883H3xl4ttOVMoFHxUrZvIAQT8GOxntbdD5nvgm9DQjQJ0Gzng1xA1jfjMbDDZHRRgGaTySJTbfsCcHR0MKlcf3SHYa3AwPj0z3grjpIhszzy2AN8fYoKXYSffzDGL5oy2YG6Nr//wHacc2zDJ3JJuDF7d90w1jPLnR/0sCwnLXr3Iv+VXtmQ7Wnscudp1wCfKFee2p6BEsKHzumlrxU1uSl92xrsm/vTertzBIgWvXTlLIgcC8GOwn9n+PmxqGRp61PtxRuHsobXvQNL4bHPcbmE761gsUnkCqTzMkA5hI0rj4DbHOfY7oHFSh6Dpo9gmHfO5pcMAXw4x9iR8upuZi46PgrkHHlxqLQo+cscpJzdMNt02ZeZGFM7YMKpExFRLzjdMtMfq1L63iKAd3eukqytnZ5614q5y2f9k0oS0qVn5Q/6dCNinNpTCpsbgVVMPnfirB375jhnSVnQJ6I844Ncs+8WXEaS/iA9d3B/lOepyDQY7fWYmDPDf26dt1rJiajnuw4Xw26nWl6M8+x14J6QOwaePgOd8g8MY9EWOxKR/GYH+gaV3amD/8btOeWlmsvmFiBxe3hK6sQL2Qyx2fKiqXt6XV0xHa4/LRVa+qNXPlytORXSHVoYxEjyzsRxm0vbExnTqV/+48fw5CeiPKOAPgP0F2MyX8RUH3oy7wN4+gX6EtT49A00dsuO0zXAjprw6on7ixJ+6grwQbv8jU3kYCIeoeQiNkzpisPvoc14kQKsOY47EBP+PoxceEYH+yHPHXZqzhQU94UfufsmLgybzU0GmVEvOiRmL5dxiy31eUw3mZH/PqS8TQYtF0HxeZp214jelUnh7U0OqxiXuEPQ3b6mE6ZQ9ZmJj+pdrfn5+s8TVucmeHVbAz1kohDQvOhuTug4fetAE7J8lHk0dgaYP2w5M48rWWq6+Lw9jTUwtI+dxcFvZNs/egZ0Yp10mYL89OOErISY1myD4MYde0RSv54jt8VxXzrZJ0eXvesmcTFp/KiJTqmXnBvrdjMllVR9kDCIsrH2ruzUaumKMLrPWxI3ZdvLPjQRb+iphKrCz0pnUjQ/ctOjQtraiG4OBXI0vtpH4s1PZAxcxH3W6nL30eSjfjYDeawL2uwL9Q4EgCpQOtuqMc/XLmPIq1ByLmvQw/P4Awg1I+NSQtNBavCGLzxydqGh39I7JzqdhyzfhyrdAd0AtH3c40UARoeg/fM8ZU8RWfmxT5rDylrFq2Q/9YGIrfQ5V/ef86paD2pqLG/KaN9BDaOTHGzeXn0yl7CHVqted1RGISLBlayWcPDFzrO+r/PDB23JnAWWNOnyOjfbXYgQJRkCXagm92VfAjwaGH97eiGoRk5oSUTmjZhPqEF5lFG3yEE1NjaicykMM9t6Jc/U1RMprUDtF6rsUEhV/VR/bhmqq/V5NH7ldGmkiOwH9KkH2zcxc1MHaazsG6Mzh28VSjIfvpKl8O90UHN+3sRoaM/az3kQQV/UuOzE4pLy5/2ygSHe30a6cyIIVG9bedOFPmrLBxRurFbcrPBIjwYbN5XDqQdmXPL1RrxEpnBdV5PaEo3sF1CMpgw/vgdJnUBMMK5cqomTDh6Mvnj0/ejcbKh9ROZklX8ZkTxySZ38ggD3ugV6jomT7tJc9ec1IbfOYK58cZ+o8uG2fHTFAiISPpyONTK+PlSIGqT4BvrKtda8OzRyJHthWztvpR2ozFGWbw8HQgSd6oHQY4EohNpNnVvttrCn8YjgbruW7W2zbgmL4sT+d8pnGg4NztjxTDY2MoxRnIZp4Jfp6oDhv/XTtnrZOFGSt8r3Q6cWKmt0VChsjwTObytUpk7NvX/3LC+5sXvDNL65c2RIsWDCaQV80jtk9zJprug6QQbwngB/z9rMWt2Ezi/DlkQb7GuclIBYT2IGQg/roR9FFGaGaWEHMkNe42lSq2iEd4b4ptVz9JjQzG1NeO4S7r9EsUleMwm1Cwme2/R0aQjAFDQ4+EGC/cx1Gs2vZhsAVawZ78ccjETUE1TAazzFiOpToslFF5HoObz+Rxw5/OqY362qd5bpytrCgGH70rlPOyTTZj/RtrIZGZJwFJcVUy17U0Zq/c35j28nFvrzmzQJ69AEyv97cV16fSdlplV3QOkOor2DTlopryKY+u+rn5982e8ENd9QGrozyRUhFNR7TDawb5gBaz04pyJ0AeN5Ah2fmuw5D3NeivudqRuasqUdFMcYiQQAKvroBV/0zIn9C9C8ga9HwSULZilGPtQFhOJFADsPLbERPAH0RKnOxmRR48FVQdURl6COEejXuPIPPNGMqD0aB1Np5VsrR/6yrw/M4THXddt/zYNL41GExsI4U2MeWugzRoatuxIV/Br0Hkb+g/kFU1iPShxjFuQDxkyA8DNE5YOYhnAgch80GAzocTHOS4QYpNAwx2SPIlL4MhbfXO1VTFemgqPl7X3KwiC5Xp6pezGjoiVPnU2DCsmqQMUeFhhOB23uLvdLVlbPHnN25ce3NF/26IRO8qVKt7LaeRwRxXskYCYIguF5ve//84sMPV0Y9ny+igw37igcsY2IngN8rIB5Z8gVM9hBcyTHsVkc8qVwCiwnAl59CKz9F5If44HbWfv3xvX7L5sXH4sqtiLwZ5CxsJoWvgPoRBP4a6Af4THPUciHcGF34dQsESjSIxfcNCa/EVE76UDDpEbLuazpMWcSArz6JVn6G8CM8t/Pgssf20v61zJ56PFp+JSpvAnk5JmOH6HCY92QcxLXptzFryXdYs/zH9aR2iuRMQYruo38Ir5wwNX1U34axU1i1D8yGSzcGgXvGnw7cPnfaOskNMj4rxcib9vQ8CNi+/mp48OTs8Ws2PNXR1lb8UJSfn/TT3wfAjxeueckrkdTb8OXhP1iqDmMtkrL4yl+gsgzcd1h97RNDXiTQYWkBenrjjTFXt72kgJa5Ev286Fh9zd+BvwOdHLN4HlpdBFyEzU7Bl2uW6Aikd9UGoxg0PRN4FPEbqQOvE3MfXiQ8MzX4UaJLRu0k1E4ZmSCtqsMEFrEWH/biw6sx5rusWrZu2+dtsbS07kKH62Tw50XHKu4F7gW+xDGL5+Mr7cDbsdkJ+LLGl8ww6lAN6hWRL/LCK27mngn9bBsR32cqJ2pzfOpZQaO5qH9j1Y1bsB/w+xQ1vARg3vrpWhxYYX/71r6qRmMy99RgFrtxS8U1ZIPL19x00Xflld/4wxihdkYV4AvMVVryAQ8++vkR2AJRTb/NWnz1EbT6H1Sfvo6Hi/2Dlw9AV0QRQEjP7uir7ampbgOtngcK9wGXM7v9S2j1g2Auwdhg5LKOBjFC00eCy0LpoXL0zS37j8aKHcT0KCtIU9OGfC0joMPKQ+D+HZu5nvu/Ut6xDntCenajxMGfR7NoW7oNPT2OB665C1hK8+Ir0cqHELMQjKDVYdRhjdppmM2mzZfDlZ+qg5Uvc3NFbb9zfsqLfnE0EDiqUX+NgeHkO6NHasPOVSQabLuHT69iwoqCygm5GJjz+Sigk2XiX/urW9dlMvbQSsVp1F1h92vonNKYDYJS2X1BlQXbGg+J7Ei2s4xyUVDqoYffgcmeGB2k4eqRox6xgkkbtHINVOez+uqvRWDfEnfcLLp4nuw+KrLgI96s4CPwbwlY1fkgq66+DPVn4MPfYrI2jg6O4GbxoqnpaONxx0fgcVe1rlWd6lA7OervM7wN0VwULE8ZtHIVtjKfVZ1XR2BfFx1GQ3V6ekIG+tbnLKuv+Turli3C+bPA/znS4XDmyovFlz1GrmBG++ERB7vv+urSnCkI/tB0cHHj5NQLK31uRFOdI3BXp2ioGiU12EAklTUm3RjY7MTANkwMgsZJqYE/DZNSQcPEIMhODGy60dpU1hgTiKCoavReoC6+OHZk7oirKqBHn3jCqumDz6Jy6IKvbwH+ng4sIrLH/LYIdvPWqps8IdPy8MoL35w0Wds7C1+g6Jl5YRZvP4IJh9EsVIdJWdQ/jQsvZc2yOF0pH0DBDU9ubcFHvIoKtFrWdN4B88+k+eTPIOkPRhy3HyGKh2iSlp14FrOzPyT7zrfRW9hSH344KvDSYOowB2rVYdIW79fhK5ew9pofRN9vCaIsgWHTYey59QprO1dyePtLyFavxKQvwVdqFE+9P7SAd0h2Mqb/g8Dl0Gv2UT2So+jz97ZMUNf/sUrJxTbzsIO8R9SjYmxKTCpjrQkE75Rqv8eHutE7vw6VJ1V4CtgEbK01NzNCoF6bECaLcDAq00Cnm5SZmG6wVozgqkpY9rjQewSPymBXT0HUqQZp01T2ZgbwWO+8nHR3txogFOEvQWBeroruzWqIQBh6dV4Kd97Z/uOOnxzu6kG5PQcAP865t5m3IZk5+NIwWR0aYjIBvvoXXOVcHry+NwKJbgcyAvm0MTUUgWvI6rv+leb2e8BcgwQZ1A2jV7MdVeDLDpP9Z/qrN3H0wjfz0HWPxoAZ7jMuqUeDKWAbhzFQW9Nh+CdMNcfqa+8f3st6Z8CfszzW2QdcSvOSPyPBV1Evw3Nxi40uFLOIoxd+noeue2xf0jTz3S1WFvSEH7+nb2HjQamj+zZUh611gkYGjheVIN1gTJA2Jqx4qiX/ZCkM7xHDneK424v5m1H7EE+nny7sYU57+53zU4dnzVQthzPKzj7fq75IROYDL8g0BVNsIKZa9lRLXhF1qFhQH2Ss9VvCmcAdc6etk9ZByudv+7hTbV8pdAdNSM8zGyu5QqHw7dGfmz8qAL/D0dIdsFbfh3HDNF1MXQwUdyBbX8+DN6wbrGIcaSKzGFsC+YDVhRuYvfAxyBSRYMrwcsLbg0gpxGROI6CbmYvewNpr/7LvoB/FL6Oc++Gy7gcu7B586Y2sXrFh2CtRd69Dy+rC15m56HFM+n+A1DC0/xDwITY7CdV2oIMWLD170ZRIkQI97v23vaQB795bLQ1XixJ1qhBkjE1nA1Pe6qiW/Z/DirsR0V9kA/njR+b+/qmdeALSVsyZXA7u6942XXhe63QtFqErV/Qid1WBx+M/vwO+CfBv95x2qJT9/GpJ/wnlnFTGHJfKmqDS5wirGhqDAEcNvGlrVHQo4leHzsM+pKSKQNV59V4/pJr7bpKts1vAz1kQx4NLF2CDF+Irvv6AV6MAqnfhS+ew9oYNA8VdB040+v35gFWFm5m1dAFGfoTJzBy5QjMJIks/9TxIdzP74rew6vpf7xOIqkdNI5hGhqc5Wnxha/XX9G19LU/csHX06LA9xdrO79O86Fwk/X0UGYZurgYNFWEhh57/OXoKW/eGPsh3t9jCgp6w6U/hGxomp2b3bwrrbN2rUxXJNEUUS7XPrSn1hd/zSNH87+9+XygMbop8HkNrS+QFtbb6DgoqEXgqFF1x1zcfaOQqtxVzZu606GLoaO1xInc8AfwM+NkynZ96tFdf6rb4twJvzDTZw1MNlr5NboDDLxZrpo88Vq44UDX7oDLb11/1E5vSL1y7knNmncVPtStnJcnY2ZWFD6BLIspDohzC+m3EKDdb3Rqcvo4HV2wYzlL1faAIItBfU7ibWQtbEPkBJnvSyLWSEIuvOiSYDtmfM3vx+awq/GCvLH0RD16xB0VsRt3pnFiHPvwH5b43RmAfN9YbFdJZhfYUqzt/wqzFi7CZFfhqyB41CNwLGk6dw2aOpkH+GfjuABW6J9LaEwOuucS7+nHMqlHJeaYpsOqVsOx/rcgyaPhhYW7PlgGQX9kS9K6frpGFjqdQe54eCnvv78RtRAfPcCH2EIrkzH3d62Sp9FSBW4Bb8ve+5GOVkr4F494n6OG1f5PLRZk1VW+f8d55Y8TEgd+93LyixoiK553AT8klGTs7Afz40M5oPxz01fiqUF8OW8EqaAkJz+XBax4bXWA/FPRzljXXrWXmhWchDV2YhrMj0GdkQF9Dj5hGSH2PWUsuZc3yZfFa+d1bkb4RkxG1Ex3q61wVrZEO1W9BKm/m0f9+KrbsR5kOY9Bf0/lNZi1+Prbh34bp0laECyPA3zNXKq+YguA/dt8p8wI4o9Ln2F/rPs628ekGa0UgrPib1fvPF074/Y1DQZ7WVl+Qgtb4+eEkT2seQm2VcjE91CbFp4Hl5/zXnG+etmByM0BhQU9IvtUABBpuUaRkjDSGXvfeyBfMlr4K1ppXPvSLi54nUviHat6IFJI+4Nu4qC2xJW94HSY7AXyd8/jUYwKLc5dHedT5YPRybPHQi7UrNjDFvxYtfxuTDYimiIyAxSBRkY86xWauZtaST8TPtLMCrThVUUDDD6s9qA/bEMQ6rOdzRTr0lfey6rp7R7cOO0NoCVhzzUfxpVsw6WBIP6X6nJnIKGpldvuMwZTf3Uh3RJ8YJ2/NTAis7uczqaozVqRhcsp65//gKv6NHXPveGXhhN/fqIp0ac6iSGFBT1iIQG/kLV5Bi21F1yZFp4rkV7YEN773/nLhhXf9tfaSjo6oo2OpYisglX1NWBIQ73GTmtJpb7QtWvPuZPj5szZvLegk+qY4pa2e7++iUvjyz1nbedWBC+7tlaUfHeC7OkNWLTsPLX0Rk4lbT45Err4IqOArDpstMKv963EmiO4YWAoe8uKf+G2XyvSz8eGjmLRFtU7rHMdeXPknrL3uujGgQ4XWaL3ELMa7rWDqmaYXpWiaTAOO1wyco93tqtYel+vKWVV9Y1j2oOxrWqeqqstODKwYNla2uA88stW9JD/vdz9SRXJdOSuCtknRMYp6y4gQeRiK1AquhkqqwVdFtCpxgGAfVW/KVQfIuap5Q2tPwuE/C/ApeOZcPA3l9NhyMfU7eCJo2A/6Hgb7C4wBKfho0+UNqzovx5U+hKRM3NPej8jxgCiDJ8heyuyl/8vMC7PRc+2osKTgoSXgwatuI+w7E3V3Rw3H9hv0FYzgq1tQM4Z0GK/HqmX/QMP/xKRNffUmEaEivLbGp+2azskbBD3u+LUnWCtzqyWvInufNhq1VkMaJqdstex+FpY4peOEO67sPPmuapdGQF8c7YFKQYcGjwcIyTCj+15gWTs1YvpLoQaBecFDN62dJ4KOwclYww34QBi8FJuZVN+mK+owaYN3y6KeNi223q1lh3lnajRAoCVgzfLP4qsXgXGINSM3DFYCXH+IpN+CabiRY9sP2fmA7Z6Iynjomw/g+lvxlRsxDfsJ+uqjSmj3VdYuWzO2dNgT0XP9pS/iS2uQoJ56M2goCC9hxqVT4jXZ+bmJqQWj8srMxMDsC52jqi6VtcakpFLeUr2i4/jfvfbTL77jH/mVUUVzm4ztjJQM/YGiQeRD7zsEqeImNqYshlcltM7OAF/k5WBA60ZZKBiLr2wmZT4fabB1LAZPai1NA9Z0rsCHr0fZFFn7OkIHTKJhHCZooWq6Obr9mAj0W4Idg37OsnbFBlY//c/4yvI4BuH2gY5SxBp8+RkC94W4QtmPLd11myibiM8hQX1pHXUeCQ7BhvOjb+V2DiyttXXTVu80CvnuHdiH2YmBVa+rwv7wrMIJv/9CXjF5xcSB2DGbkdLRkReAMN2QFpX0fkOQIKHzqOort137RAYBHz01auEr9bTuBfQ7/GPZIwM9esasxGmba5f/H+JfgeojmLStA2Wyp75qgCuHGDuPwPYwe+HJAxfRsyQOPFP0rL66HVf+OCZuV7xXFq46JCXAN7n/+vXQNgZ12BN5rDZ7A770eDxTtD7gqPhoRrG8BIi6tO7k2ixIIWqloMwPy569qQJWNGw8KBVU+/3KzZv8yz510l2/ya9sCQqCL8jYn0TfUQOiftcEmvX7Wy+omHLFgchJT/7svEkiBa+azPMcBPwj3jEV5fnxdKh6uT8WrSrKtYyb4am1Aq3OOwldCz68NwrmjiDo+4pDOBJN38zM9nMGnunZzzrYemBN56dx4YWoCWM6ag89E7FoxePNijGsQ4W85f6vbEL5Tjz20dVJHxKFqTg5ult6d3iR5KMMK3DlY20gh7mq6p4OOFE0bJycCkpbwm/dd9/mcz5/2u8f79KcLYyntgEx4qupHBQENvCqKvux30SQStVrJjDTt2RSJwAUi7mE1hkA/FTT8xA5JDL+6mHhq0dSgnd/Zs3hvx+0OscL6OcsD3U+QEoX4Ks9+8+T79V2jnP1mYS1P2HW0gsGnunZhyTOh84HrFn2TVz1HJAno6Z1u31ehwSC93ez9tC7x7YOe2ObUb6DVrV+FeQq8d0xj/ntqcE2D9tJzCE7409INxrZU/5+AOw3ua8V5v3u/K5cbzWvmAGuPp835MdBQLIYzbFQMYem0xapT1KAa2gIMMKLAHLT1iUW/iClo8+vc0DLx3NJfwYFT0t+nLUrjYOmf+98El86By39b5T7zkiBvkGdR73F2BU0L/3UIBjvMG0z8gIevOZXhKUW1P8VuxvPRFURC8JPx74O46K1qfwB7+5HrNRnr4vEb3MUG+xh8frvFFiM6jwxe9g6fgDsw68UXnDHu/NxpskAhZNXQ6HgKYz9oqLuGIyNlZkpK6D1odwEAeUFAN0Jzg8BfNFjI8NetG7vqQ5Eb96Vqzv2QT9vWLuixKrOHGH5axG9I26EcvVN1AgxdJjMx2huXzGYQbPDtM0Y9K/vxZTPxIfdUTB3J6AvmKi9ufxyHOgwyrS6q7MK0hMX3fq6YAqqiM1SDY+OvYlnIXrv+unx1BuO3ZOArWoE9v0bXWfhBb97T5fmbIGCDsxrza8MKIjnPT8/gX+97dQBa3+MSuvgBz+2bkNp48AtqsdGTlYSuB0K+LPre7iMwYebwf85+lbXOF3sQtxbP29Ys+zduPInMCkbXZwjmavfH2KyF9B8/E+Yc96knadtxtTP/devx645By1/a7CKeOglpXF2Trgew91DrOQxLK213f7rOk//irxZ42PAfzZ1UGyL10442rtd5xwOgP2m8AeffOEdS3NdOZuj6NkG7BeEvL/nVCYecQuhvjX+fGOX2qmBscjx+9otc0d0WzX0KMy4c1l7qlBIArdDrHE5Mp5SV4+FjqkAXcXqa9dFm1vGcROjWq5+zrKm81O4ans0AWqEc/V9f4hJnYObeDNzFh81wN3vzDO5/8YyqzrPx5X/I2o9IAw+r9Qoub+zqnMj42KYxICHcl/s1NSHotK4Ml3kSABaWrc3fwTQ/MqWrKpMU7fzbsiq6jITgqC8xd05ebM5L5/HzL2vuJ1lvyDkiltfTarhJkwwBTHHx6g5Ji9kVUQKBb/6+guz6vW4Sujrg0Mq4pwiyCFHHF89KIH5bSx8psbnWeoCgGIAWR2BxHiLju/QdR4aHF2Or74Jla1xXGTkcvV9KcQEJ+NSPcxeeMJuMnhiz6TzI4SVS6NL2hqiMYHE2bprov8fDzqMvUwXPIx3m2PUrd8lJmbaTtzdSA5nAsIk79ghpaOKD9LGhGW/vlqunHvF6b/tpwMGKlIHLPvuNxE0/AivE+nfoKg7hfeuPCji8nUMWrBRzMPM0GOsNUdVKg6pR+KIgPMeFSb6sp0CQEc+sfAjC5+JdXNzaxaPagwWc8fZIu+qUVatxfI1P8KE/wT6RJyrP4KgX3aIzEbT3cxc1Lpz0Cf2TPIBazuvBve6qKAssKhW49c8FFmt40GH8UdoWv80Ik/GNQn1A3wlApXtZrN3dES/OHSVJlEadtKpSsXijRVxJXfhZ+b/cW0tz34bsH9fz2tJTejCuwAferwqqYap2HRU+JUrjr2LOc5g8t6cNqExZeNxilIHbYv3aCow1hNOBijO600APzblsnWPMwrrIrAYT0vVEjBjcfPOA6NDQP+B5bfhKy1o+DdMxo5w2qZDZCo2/X80t+eGgP4O0jYHagt+iistQP1qTCoL3iO6bhwpL9rgvcUK6Ia6cfiDjkLjdtRRjPjxy8JqViGlO0B89eobJgZBuc999lMvvvP/8itbgoE8+1yXjcD+lpeRbiqizuJCJerD4wkyIHJOZFtNG3uAFge0rdAat4Oto9elGliDEz8BIJdg/QDgp+qPO6ZvfC1T3FbAyApmt186JDAqO7f0r/sbrtSKD2/fZUZM/SXK1cdnkaCL5iXvjgO2ZpfP++A3/oANz0TdbdisAd20I6t17Jv5lOuclQZIejf7Jy2CieFMhjjEPtNkbf/G6t022PrxXFfOFmodHvNqKLY53n/bHNLZH4A2DAF7QA1hGby+hpxaCgvGVJ2Egkhb0T3YlWvwaEup7EDU1PMXGAHrTTqB+W0Bv/7idRwGagseEYtp/DrNS/8tAv24o+YOQTRnWbvicfq2nI2v/Hjkc/W9oqHHZL4ymKufl10+7/3XPExJzybsvwnM5OR47Oklsk/8uRoj6p069WZp4YTeSvyOisbv986VE7Dm+5j0NMKKY2iHTRFDtewJUscz49aTASXXNXbqJbri2NAhE05tzAYzytWwroPnRURFwNV3mNO4AHw3DO/aMC7PddSnXjGpf6d56TLokJ1TPHFGzBM3bGX1sjfiSsvjvvojNUwl8pJ9xWHSH2PW0uXRELqdxSHi532ss4/s+tfi7A/jy2C89BSvrXlD/bLS4vccjHvsWEIfqg6Ea7Vm3WcnBrbS75d96kV33JFf2RIMtDbu6LYUxNOQ6SQz4QWUt4bseDqWJ90oYN861midWsEV6t+UTQeoSl0zjVRVVMEOB76NbcDX/vrOeQY8B40ztK+V5x8EKrhKBZNpp/nx/8fMCw/aRe57DK4Kqzvb8ZVPR2mQIzVMhcG++jazmFlLf8ih5zftuq8+Qm+xwoNXrdoOKMf+jT03l4ZakkJdUCXeFhJTmDsu4VebKgHV2mwPBW9TxpQ2h+sbM3win8d01KicLo15+55LyE56G/2bQsxORzQaqv2g0sYHfz0xonVGf7aOKrJgQU9454/bG73y5r5SWF86J9a4VxBjKgnMD90wwqa6pVrXtproEQD0dI+flZpz3kSUgyP2UaM+9Sb9akxDNzMunr3zlsUFHy1MzrJ62cfx5cuQwCBGRryvvk2/jsYJv2TmhYft/Hlrl5uOo6yGeG+Xph6EytQYqOv4+fxG4Fl5+B3xL/ZG+hAtDbRWUNVMoxXv9D8/Mvf3T9HaYkRQ8mpoE8cHf30cqeyVVPocqN3FeTOEFUd24hGE5k2Aku8e9RRGd3eLVZDpjeV/mtSUPrpSdU7qSOfEzrg451HCrQDFBOtrFr6si5G6Hogf9z6SOdHX42HEWK3bYcNhCFMHmsxJLffdnojN3MrM9pfuvGVxLVe/JWD18q+iYRuY0ojm6g88b/BSTGM3My98/q6fdzwVzHXEOgyPQGRyZPvVsfJSZf2u7J+K798isFkMqKgLMtb0bwrXTqK8bBvrvrcoqAqOZQTZRlx19y3LRcBXweh7yKsZC0VYra2tXkC9colI/V1IBTUGqVSdNxJsBMjdN3ccF4DuFeDzRP2yFtRE87P1+dEkoPrWsR8YifN3VZ6PScXDRGqfqdayWI7A2ptoXnxuFADt2kkGTwywqzuL+PAcVJ+K2jGMaK5+iDHHYRu6mbHk9F3k6o8jGZh6dDwmBfUa0zjQIlke3aFHG1fJXnniPX0ITxkroOLTDUYQ/8UPvuierQPWfZdaim2OK36ziIbJLbvg7bcXS6Xfk26az6bfnkOh4OnSUWvld3XlLFLQh25a9MJMxr5i89aqSr0DqwrGCCJstmHlmejO70gAn6i1wsP1NCPBKRIcTCqMy77HeKXmYOHRaTueCia1NMhGJF2kecn7oS3OiNFdpG0u70EqrXhdNcK5+tElhRxKEPySWYvfMP5BP6ZajLw0LgysF4kfdcxUjYrUmP6s963Ns0XlEbGCsZLq31B9QsLqChQptPY4VIX7OpR33TEVE3yaasmzNxl0IlFkQPzHo/cavXGXXGQJqSO8ojETBHGxVZ23eJSDj8qTh01tfGZbf+s5b+Hr3yJDvG6crUMC8KZlO8Acm9Iz0IK2BfxOXOyhaZDZL9C89Isxd6+7bFm86rp7qVRb8OGdI5urH19S6hsxqR8wq719F331x4EUogwkpSXq5FqXdORao8AqrmY07YA2qM1UVX1AgHSDEQ//XTjp7g357haLoBSJ2h1nwg+RmXAoYcXv5TNayv2OzISX8IHb3kJBPF2jL0VTNW/IFf3DNy88LpMy/7Jpa0WR+qdNCqKpwKDCQ3JyZ1VV69aIc+wDvnH34UOtXw5szOOrf10MmGOYx89HFY0zFjcjZj4+ZOeWVy0NshxiM++jeen3dpMREwHsI9c8jN38CnzlxhHP1cd71Ck2vYxZ7R8fzNUfTwHbvAGUYx45HjHz0FDrNOgn7hvFY5jyI7FOdRevvs9YodLnyhhzXeR49HjyeUMbng/dOQNr30l5q983EFSJz/FneP9tDdyXG8znHy1S7BURtOLCjoZsKuM9XobBwFBFrTUI+rfozm1NcvEHAN9lHgDdEG/eetyCFl9VxJzMzEXHDzl0Y5DOqQ15N2/ApLNEiC+7NC6glhHzZhqbbuKopUfuPCOm1r3yW5tY/dfX4UrfHGxZzAj11dcoV99mPsms9q/t2jMZq14s4My5mLRFtS79WgYbBfI31q4oDVws28lAP3zD3WLBe/3Np19wx1/yiikInnnzoo6y1dIVpCc04Z3fpwtJxFAtebKTjkXcByiIp2P0ZOxoV85KW9E9tPLClzRmg3/ZtKXiRRjePaZy7xBCLxHAsPbrj6Nybzz5rU4RfnWYdApj3wboAHCOOTqnI8qvN3pRFFfd04MoAa4UYlIvISW3MnPhSTvPiKnl6vc4VndeiC9/Li7QGqFc/Vpf/XKIzb6TWUv/l5kXZnfdM2jMiEDBMeeyDOh5daRz4jiAAbhrG+NgO+nKRf3wjav8pbQpDA36vYjqaYlGFLa1OT5wx2GIuYjKVkX2I+AqGMpbPEH233jv7cdTWBBGmTsHGOxraYCaN97xpVRg46DDsNGHtr8U4o3+EaC4fnpC52xj/aB3ga1jMKs2MYmLmHPZJHrwjDluOBcNM5k55WxM+kS06tmrbIJa90rTjM2sZOai1+y8kdmQoeOrl/0rvvwBTGDiro4jlWZX80zegmn4OYe3H7KLXP2x4qJZQHHl12Mzz0NDVzfqUgZSkH8bGQc7ngomgqJI4aS7Nzin3S6QqDtRd48fGFziqwvJTpqEc27/6CYRvFNsqgHrl8dpmuZAU3TdK1ustBXd2pvXXHrQpOxpW/qqToap5YGqajplpFwJ1zuXuRcglysmE6+2AXzh1zsPSO4jVaChw2aPJuy/NAK0lrFpLYp+bMCF3/t/HHWvRCdjUz9h1pKlu2hkptFkqZaA1Z1X4ivnoybctk/9sBv7tVz9M8mabo6+4Jhd5OqPAeu+tealfLjO92Y0DN1XtuD1d9G3dp7nXfuBEfOZKRPtKoBCB0qh1XHZzzLAxYRloA7WuIil3BfSMPllbPnNxyIr/8BRO6p5s2BBT7j2lxfPTgfmP7b2VfYuA2nvP7/PZiwIfzjm7M6Nms+bJGC7PeA7uQ1f6SPidbReK49WPBJ8gOZFh0aHb6zwwjkLRUfzkrdg0y/DVx37bpHYeOi4YDNXM2vJZ+Kh47pj0O8JI9C/5lvgXwuyAQkOQK6+nUfQ1EPzklPGZtpmPON31uTzMOkXRxdv3axKjwkAuYsHOx+L9vXOB4rXAKfwgju6r5jx234AimpAlMxBC0g3zaFa8ts0R9s/I8VS3uywDXkuv+UVEeivHHH9qSLd3d1GFRGj12YzwcRqqCoyfN6+KGqNQZCbAGjtHmdDmPYb8PMm2rR6Z7SJ68XjY1CnmNQhIP9ffCDGwuILzFXmvnMCyOdRr/vvEkvUT8dXHEH2I8xqv4HjFk6Mq3h3UaC17Je48lmgD8bDVEY2V184EoKbmb3k1WMM9A20emZcOgWx/xFl5tSR1qjx98r/RXfLnu3rbeaqFou1q+PtmEChns3DRPBewAtBww1c3nM0hQXhiHfT7G6xCxb0hGtuujB/0MRM6+at1VBkmLtXCnbT1orH8/MI8JMB5tsejIHNKj/acWHRfq2+jXjs9IXMWvL6sQEa+cgy7K98HpOZFRVV1cPyEgE1uIoH2qhIYzwIfSevj9dq7XV/xPW14N3dByRXX3QiGvyE2Ysvip6pJWDUx2Nii9u6L2LSR8SZL/UzNkQsvhKi7sfR/bxnRtIgtaBCsc3xoV9OBj2HsF/2K1i7419mCCsemzoMk/4+7Xc20pWL0kBHwrpf2RLIgp5wzS8vfG1TQyq/cUvFDTvYg2vIBuKc3nP0K2fep4qIFBLA3wbwa5vV+R/gymXEBNQ1JVCjvnXGdvK8pUfGQDZKLf18AIWQmUveisksxZfDmOaq1yl0mJQg+n1WX/vEQGB4pzLQV38N1epZ+OrNUa6+jmBffefBGSRzPbPaPxR5HzsbpjIapD0FhZBZiy/ApC/El/e0RcEegwomBervZO21f4n2916CSi42sioNLyPdOI2w6ql7y9r4YipvDclMOJlJlf9BOiRq6Ta8QVztyllZ0BOu/sU7js+k7Q2h8+rVy3DvGVXVTMoC+r8iBU93S5J//2zXN04LfPCa1cDNkXuJrztoiD2UUL8bt6hl9IF+DPbHLJ6PtdfgQ7/LToX7TBchqP9B9OW6PTgAcevlh699moanXoOr/M+QAq2RytUHX3XYzH/S3P65wQKt0Qb6+QA6qzQvOhUTXI2v1l+HEZ0jCP8dfaNj799/bne0bkbOwabqTOc8C/QD+jeHZCa9niv+6fooPx8ZLtDvivPtH/jRWw/NZFI/CgJzUKXitO7dMHegGWOM3bSlUhHrvpvQOTsFfIB5kfJFrxsWSyPKaHCYzMvom/Kt6JLpGEXFPTWwXzQHH/wIpClOuavnWihiLL7yND79i+hbe9pNNC7Q6i1WWH3123Gl/4py9cWPYK6+iYK5mQ8wa8lXY0NhFFXlxjpsXnwspH4I0jAsOjTW4ssbsNmYhO/Y+2B6oTXqW6+8HFeRumTn7NrMCOjfFJKdfAEfuP0aCvEFU2d6p6srZ9vaiu7Ortzk7KSGn2TTwfO29ofOGBn+c664CY0pcd7/YsaCG+5XzZtRReeMkqrnWBFtUZ68P+Kn+PKqKBWw3vnfUhvEcS7N7d+GNjM6intiCqB58bH41C8QcyTqHHW3SNQhKYAiD171TPy59wKsCz4C17xhdef70PK/YQI7grn6URWxL4XYhnfFE7TiqtxRosOZ7c+H4BeIOXwYdSgo/8P9X1m/e0puR/dSPsrOueK2GQjHEVZARsBTqoF+ZuIiPvDbG2jtsBQKvl6BXI3B/u8/O2/SYdMm/KSpMXXK5q3l0MjIjBhU1Djv8crXou/0yt5vb6Dfe0R9fTWiINIUn+MDmiJqBp8ob1lbKKFchQR1mojyrEWN87wzb6P54J8MTos6EIHcvIkCkJ3VqJd9sBIxzXVO39veywlx8uXYr9+XvH6NNkxLwKrO/yQsLQTjh+eC3pUO+0NsejHNS7uiKtYDqcOchc4qsy8+A2NWImYmWh0uHRp8tYqXr1LL5tpb6Y1783szj3RTwz63Utgv0J9wHqe8+v9x6f+bQrHN7W/K5sqVLYG0Fd1ff/y2QyY0pG+c0Jh6+cZN5VBERmpPuKaGlGzdWv3DrFfO+kU+nzcixX1LY26gilIdgMX9B3tBFZRDhhh5B8zaH2IBFaIeIz64FldeP3wgUgP91Ksx2VuZeclJUXBSZYQsRYndfw89Ic1LF2HtzYgcMXxgryEmLaj/MQ8u640+5z67m4O5+muvvR5XeT0qm0d0mMqADtM5XNjN7KXPGwzGj7QOi45Z7e1o5iZEDouraYdDhw6TMaj/XqxDs0867IrjY8bfSaXvCWwalJGjHoSA/o0h6cZXMWF6D++7dd5gnv7e0w66siVYsKAn/PvPLjhm8kENv2poSL1046ZyKGbEwB5VsNYIRv5TpOA7Onr3HVBduYxIf12HQkXH8nBmTptWv4tkvwEfhRYb0Q36eSQlw/dkcdsBY0/AcCuzL3lfZL3GXPXwgIbEKYUKhZAZ7Ycz+5IbMKlrUN8QpV8Oi/sZdSL1YYjqp+r3tgOg/zOovBLVR0c+V7/kMOYlqPyG2e2XDADwSOnw6IVHMHvpt7DpZaCZYdah4KtVrP/0Plv30flX8isDrnzZOtR/lnSDiSdwjZyIBJS2hNjUC0hnf80Vt7+VwoIQRPeW4pEFPeGDN19w5sQJwa3pwLxg4+ayG0mwj6z7wG7aXP7DjKe2fj+qrN2PVgprV5TR2tjXeu1Z7zF2IoTHR1+3DWdMQ/bmhwJ5Ydr6RprC+zD26Lid7DA9oHowBpMGrdyK4xOsXdY95Fks4PfDGpbBASyxizfnsgyuvBiRjyGpw6JhIGqGz61Wh8lafHkFqzsvGqjirZu0BNATB5xTP8QE8+J00hFzpxFjoxkI4Y2o/w/WdN4yBKBtVGVdRx3OvDCLyS5G5KNIEOuQYUwV1RCTDfCl5axe3r7/OlQhj7Dp9gyGuwkyc6iWtG6VtntuGjtsYLFpcNWrKD35Yb7ymk3k1DK3QynsWGcK0pFHXje/PTu9qXxFJh18MnRKNXQVQVIiI0pZuMaGlO0rVc+ZcdY3fl7ryrnvFGHB09x+MyZ11n5W2A9d5xCbDXClf2fN8o/Skg/oKQyDYZbfrde5A8XU2gq0n4/J/De+NEwu8tD9oz5qXetB9QcIX2XV1b96NrBBNFVorkZZPrLt29Ah0Cu0zJWomdUQxc9un4y3/4L4yzDpE9AqeOfqnKP97M8moihbMOUTeOAbD0eZLfXOHohBf87F03CZ/8WmzsSVRhD0NUotNGkbORj6PRxfHXJ570SH2wew9kSH8laEdx8AHW4krJ7AQ9c+Fj3jfuow1xWNNHzfr99Aw8QfUt4y3J9jZ6pTQGmYbKj0/RXcFXzupT+L8GNlQEeriyZqbaNtAVh186LpGeuuFJFXZlL20CAw9JdCylWngjgEQTHDdQF4VXfQxIx9ZlP5x81nr3hDLUtov89R85IVmOwF+HqdIfVIYPDh/TQeMY9ewnjva93B/qj3N/DwF/v30vzPWSh6ZrXfgk2dUbebbrfWvkjEdTtQfwdoF2p+ypqr/7ZPb3no+U1km07B8GbgjZj00dF7h8Ns1W93s2v5/azq/FL9rfsdXNRH5RpIT/0mJn0urn8kLf3I2gczRIe3I3wXdf/H6mv+vk/veHh7I2k5FdG3IPJGTPqoA6JD1/8e1lzzlbrqsAb6l//6+zRMfhP9mw4M6EfXWkgqE+0VH95A6Ap88fT7B4Cfbr8zi3/trW+fYl36lQKvV09rOmWPymYCqs5TrjiqVa8SNwBUIUrlVZH9vAh8EBgFSsboCw894/rVkN+/ytqa5T2r/ePYzCdxpZD6BZ4dJm1xlYtY07liII24LkAPsWdyPnAF1abTY9B/Fi0vu7wtZl5yEobfRcEcHanqyuggS0oQC75SBf0zwm9RvQv0H4TmURrYSBCUeGqTMnGKpVJuIuUPJpQZCPNATkM4BbEzkQC0Cuqj/GdGxHV2mJTFVX7HKRtOpwhRN8zhjNgMcelmt38NybwTXx4ZYNwh8KcEDLhyBeHPKLdj+APwD6o89iwdVl0jQWXqqNOhr97GBYe/nEKv1FWHeTV0oFx++xHY4G5EpuCq9evZv/eXmweB7ARDtbQJ1a8Slr7Kl1oeG7igAIptvubW0ZUzQymUv/x64cQJISfj/QKBM1Q5IZUy0xqyUUcO5zzV0BOGHucVVfWIqCiqu1nWyGGILgxB/MEHZYOnnu5//8x/WvGl/aNytmc3lrwFk/7f+hq66hELqk8gW1/EqhvWDXgU+0x15u3ApdG8tAMxeUwafP95rOr89o7eX3b/4Rd/BNP4GfxIW4vqiXo2B0gw2MhTHXhXRXQLSAnUoxIAjQgTkVSMBfFrNVQUFx2iEeNI4+pJ41B/KmuW3T281v2zNkJEOcxq/zg2/Ul8pTZvYqTTweKuoBIgds91aFIxJf8sHdoR/AwapbxSwejJ3L+sd0840v2w8v+F7KTvUNoSIhzYflOqDmMtmSao9K0DXU5Fr+G/Xrpm8LJaGUCrpyBx962coQjbg+6DNy462DS457tQThT1LwCOQ5ilKtOtkQmZjCWwBmN2X46gKOqhEnpSgWHTlvLPZ7xixauLxZxpa6vHRVzj8BcfC+Y+oNZmRuqGaSZt8OEt9G19DU/csJX57SnuOtzt4b6KzzZmAOiPufRovH4Fk3oDrlzFBBat/o7Vy0/fEX28m3F9OQNzlebHbsakWyNrccRdzmjyk+Kjs642Km2XIR+hNhxKo0WNXisjaAlu/8hRkC8sXc7a5V8cQbDfTndFx6zF7ZjU1ZEbXecmYvumw9hbHDM6fBdrl399WHWYXxlQWBBy+W+uovGgS+jbUE8qYZ9RH8VjA0u6CSpbN0XxNX89jS+9daBat/b881qV+1DtQCm2me5p66S7u9UXdkAD3duVS088aOIhxuo0rzpdRA5BOFi9ThbRJkUyKOl4a1QELavIVlXdbISnQZ5saAye7Pcbe2ecXuyPmqTVxeuKNmJLPmDtY/dh7LH1a544sK4Ok7H48Ha8X8jazr9uY7G3AD3dRHGudUJLa/TTHcWzVBYCH8akpg8mLqhGKdr+DFYtu20AB/YA8Gs3nnLMpUfh/V2IHII6PUCgsR2ADPwV38Cyh59phIDCl37E6uVvjN0qxwFJvo1dulmL34BJfQtoGr489fGow/7vsPqat+2n670nv0/oKhrum2vZuukWUk2nHbAg7rNxX6OmfyYg3QSuDGF4D8L3Efkpa9b+kWKb2+az5LvtUOu/WMyZadOivlGt3a1eCqO5g+UArXM9JnthnLRS58tXIz7fu82I/yqObw4B/p3L3Fya/oNORM0bEc7DpGcO0pw16klDTCbAl7/L6uVv3d5QkT1fgEVnI+mfo96DNweAHhgDMqDIXpycwYPTN8bZRAewnDoODs1YcjqB/R5iD8NXRjqYO/Z06MJ7aLQvo3daX/0zKnakJjUUxHN5z9HYhtsROZKw4kc8VXN3Fj8YUlkhyEBlK3h/H8KteLkFq3fyuZf+41ney7xW5b4OpRCdhSjLJ87IKvZKd+0yoBXopnu739w68N/oZ63rpyu5KMur/tOsaj2Zlp6LSRVjy3k4CvkGU9J9uQJyVxSjlPsRngRfQkjh5CBEjwY5FjgRMc+LurWGRO1DnhWfq2UvlnBuXtQUc5CKlL1ahFmLL8M2fDkOpI6BvugjeiDiFgfyDM6dHt3YI07l7MbSX3gcJvUjJHXcCOfqjyEdBgb16wj1dB7qfGBYePud2lYxn//eW04j03gr3ll8yOgB/QHs9yAeISDIQJAG76HSX0HkDtDvY1I/57Pz/7LDi414CtW8VqVYhLm5GLQ72Obv3qKQy0ERKMpInaOI1plx6RRs+A/ETo2GIA0L1imqHjE2Gj41pNPNQOhAhrCiLv6j4a5jkrGH6sr/wZrOjwzNCNqLDzHQjfBz2MYP4EpVIJWARA0ojKCmiqu+mgev+dXoAfvtQL950aGQ+j4mdXr98ozH1YXdRxiezYPLbzsgOqzx+e+/9e1kJnyLsOLwVYOY0WlcDYK/IGIJsmADKG1xwD0o3Rh+g9O7mfTSNRQkHP17Idb7rCXXYbMXj8A5iVrS14ZPbTNbPE5e2rt4lkeMQf1j2Mzzuf8rmwf5tr26+VpsBBrt/4XNvucA5HmPTqCILluByrmsuvb7w8/57udGPvT8Jhobv4XJvCEB/QGwF1Qq+MobWXvtjfXLk94P0L/8NwtJN15LWPZ4N/os/Z0CF4pIQCoDNg3eQWVrBXQtIn9HuR/V1QiPYGQ9TjcB/RitEqQVV0kRBlnENRGkjyAsT8NyA587YzM7yC0fPsBvPw1jbx/ebgPDpopahf8SVndeU9vPe2s1DGZ/NLdfjc0ujSo6sc9Neie27DGKC89j7fLvHFCg2DM0qVEUQnP7ddjsRc/tizu27FUqiHszqzp/Oip0OGjpX0Cq4XrUGVw4OgK5e05X6DbWv02BTQ2m53oPvgouBO88gkNFI7pYhcxEAQ+V/ouY8NJo4ExB/Iiek1lLbsZmzho+Ln/YxEX0ZPVuVh8xvxZL3BeQHgr6n8NkPxBFsvU5FshVhwQWKOGqb2ftNT8Y/WA/dDNDlHO8dBkm0/6c1qGyFR/mWLv8/0aVDgcs/V+/niD7LUQmUC2NgpTNfeN+UFEk/jtCEkGRmI8eNBm9d6QbLeoep9x3Ll868zeoyvYtHkbIyj8TE/QMXyfd4TZmUgatns3q5TdBzu6Lm6JRtWHOsrrzg/j+j2FSUW78iPVkP+B7N4z6xuh6XOXVYwvsY6CnEE0cW71sKa7/36NOmyM2TGU0KDGMu4s+jgn/adSBPTDQtvgLZ/yY0pazUF1FdlKAajgyk87qKVIDdosQxMVldrCqWMF7j/oqDZMsPrybal8LXzrzN+RXBiML9jAwWnRN5y1opYjJ2JFrP163NffxhNL31L6zr7zUENBf/hl89R2I6cOkTLQZxy/SA3F/HHc3vv9M1l7bPbbAfqgOC9G0qjXLP4qvLAFTRVJm5FosH0AdmmyAD+/C+DN4YPlto1aHNdD/cuvv2bL5ZVT7b6RhchB1GBhHl7OqwxhDdlKKSt936F9/Jl848+8DXs4BkbkKKpjUFfjKBsSONaPW4iuK2HOYtfA4KPo6uO+17J0lpyB2BZI6Pu7fImMv0LE7TkwskgatfBuz5VLu/9am0ZeNsy8SB5lnt5+Bmm9gUsccoB48I6dDX1lB39Z38cQNW8eEDmspmwAfuP3jmCCPCSyV/hBRO2b1VCvsyjQGuLAPX/kwnz/9KxG0xLUJB3bhay1mzsNkb4hqWBhDlJqGmIYAV7qSNZ0fkLoCxoy3T8FO+hImuAANwbsxyjc+yyL0cUHVFtAPsXrZ1+PLbuRytIdd4ot7zsXTcOmvYFL/Ms506DDpAO+2IP6DrOq8eszpMJ83dHRE7Zo/cNvLMMGXSTW+mPKWkWgTXX+dqDisDUg1QrX/FsLye/jiy++OLrecP7AFizs0ar+MabgMV6oiYyYlXREjeP8EoZtbR6tgiJU0s/3tGPtZTHAkvhwB5pgLeKBxE6kASYGv3oxU3seq6+4daDlxIGeVDac1AzCr/UKM+f+Q1KH4UtwMbqzrMPwVUn5vpMO4BfhY1GGN5sh1pWme+UHUfpB0ZjKlzRE1EqVvjlKLP67YNcaSmQiV/idQ/RSfP/XrgNKlljYZbd7W0L5iP8BkX48fS3VIA8Hbj8nwLEzRMfPCwzCNBUSXIFbwldqNbccESIgJ4klAjyH+k4MW4WjNsa/bx5eBAR9zFh+FCz6JyMWIYezqMHwEcZ8eVzocSvG8/7Y5BKmPgF5AKmspb4n626N22yKeA6qRqPttrSdPta8PZTn91c/ytTMeHZgCdsApnF1hW16YuSaNyf4AmzmHcMxY+lVsJkVYvm2YNsMQS/GYS09HNY/YfwKIWvVK1JNjVFkhtQ6NJoj6W1S3IizD9X+OtSseZ2jb4eeEbGPtn4nYPMacFeuwBvyjU4fGBBFPX90MXIVwJauuXjcOdSh0qRmwiD94x8kYeT9ezyXdmKbSD67q4i6zByAeM6TLrU1ZUg1Q2boFkRvQypf43BnRYKPRadXvyLWK6L9oTOo3sdk2XNmBH6XxyrgK2mYDXPlmrLtoGDeAxsN6Y9CY3f5a1FyByIJosEkV1Icj3Kf+2XZHRDeB2Hgua3UTot9C3ZcGpzSNh8BsHXQ4a+kbELkcMWdGFv+o1eHToDdg9cvc3/nAuNdhPm/onScDFv8VvzkBY5eA5Eg1HI4qVPsjnj9aKBmmISvbFlsZG4G8KoTl1cC30cr1fP6MBwaAPocf+ZTLOoB+ZAh9Ght8FFXwYRjHUEaDARRTmUEQY20nDU9fRm+xIiOzQEM6Rs68dAFGLwH+GZNqjAdcxA2BRIbfatQhwSCx0bANQMM1eL6FD6+NOszVQKJrFAWPDqi1P8h3Ny89G2Ep8FoknR01OvTVVaheTyjX8/CyR3b47ONZ8mroLQ4C/4fvmErI64A20JeTbpwAQFgGV434fiQqfVKNOnVFToDsgeUeAYtQK6gSMJYgPaSZWt8ziLkZ1e/S338jX1+wZYCOmnvfToekjwnPquYpzm5/LWr/CxMcg69ErYoPXAwlpjIlwGbAVR+NExS+XcNiOWCgccw756D+XFTPBeZj0pGh5kPAbz8AQ/ZhAWtTnvyQBkRDJi8BvrIJzEpUv02m+n/87brNg886V5879M2+Av/iY8HmgHMRXoQMow4HG0ttp8PqBuBXwP/QN+H/eOLKrc95HebVMA/Zhia54jczsZlWXPhq8KchMot0U+SYeRfpzIcRUOM17oej2+G8RG0STDR+1ARgY12og3KfA+4HfgPm5wi38PnTHh98rl3Pxh2ztOdRiw4mCD6CkXciqYYY+EfK8x1svDZAR1fKqCxH+z8T0dGD51YOzCLBNu71Me0vxptzQF8JehImddDgiLt40qH6IZbdTsZfDlgnQyYqiWWgviwaFrAWzG2I/znG38z91zw8+AYt0di2BOj3QIfbgKkwu30+nnMQ8wpUT8IGk/dahzKoxJ3q0FcAXYXKbQg34vRXPNj52LY67HaJVxYDdBHDfeg2wdD339ZA2hxLqC9G9EWoPB90JjAdmIRNWYyNsWpoe14f9b1xYYiwIZrPKqtR+Qv4P0Lmj0zcfP82hVK5LksuB22MU095CFU4Y+lcrLwP9F8w6UnP9nzrUpsUj4aLpgAjNQ/XgK88A9KFCb/CA9fctyMq8wDyTfm4L/Z22RIz33kY1p+E9/MRXgx6HCpHIjI5mm1bMxRlJ5fdQN9oh/IkwmpU78PIXajcRUnv5bHOvm2fo87DqZ87puSOdTij/XACOQkv8xF/0rY6HAoksgP9wXZzb59CeQD4E0buBe7Ele9l7YpSosO9UVXeQKuhd71uO6FqCDAfdtjBZLMHo5WD8TIJaEAkDQ4kVcZrH8ImDE8T6lN88fSnd/i7ujQy6sYcP78/FM+QUYIzFjdj7VuBNkRehElHl2Wtn/02lKQOmfMp25+FGm2p2xpB27AUDrgDkSIi3+OBqx4aBPpn09EyaoCjBUNPx44sM2HOxYfgM4eCPxSn07AyBa9NIFlQg5gq+BKYTXh9CivrkfAJAn1ikKbZkZeR8PN15TR3p0O101EOxdtDQA9CmIAOpLV5hD5UNwEb8TwJ+hj96fWs//qWRId1Nf2jFMjaIJJoHOG+ebW5LsvcaTL4PuhzVx8Dhocb2PfHtJ+Ek7MwtOL1BQhHIoEddGR1W0PnWdAsQ5xeD+r6gQdB/oialaA9rLn6b7vwvhmFgL+DRWuZK88a3LvvYBQPB+7VxAocizpUoaUjAvhEh8N3CSjQgQxMmrqve1t86G1ViCdUdaAxECV62KkBu11vpuMWTiQMnodnbuT1Mgs4HOFglAkgGYQgrlkoI2yOWYpHUO5HzF8IpJfU9AfoLVS2wbiWvKWH3dLR/z9RtN6DWWjo8QAAAABJRU5ErkJggg==';
 const LOGO_AR = 0.4026; // height / width
 
@@ -43777,6 +43895,18 @@ function legendResetAll() {
  * is the only thing allowed to be loud.
  */
 
+/**
+ * The enter animation's budget, in milliseconds.
+ *
+ * A chart arrives rather than appearing: marks grow from the axis they are
+ * measured against, staggered across the categories, and the line reveals left
+ * to right the way it is read. The window is the reveal plus the longest
+ * stagger plus the dots and labels that settle after it.
+ */
+const VIZ_ENTER_MS = 1100;
+const VIZ_STAGGER_MS = 45;
+const VIZ_ENTER_TOTAL = 1700;
+
 /** Plot padding, in pixels. Left carries the value ticks, bottom the categories. */
 const VIZ_PAD = { t: 12, r: 14, b: 22, l: 42 };
 
@@ -43800,6 +43930,61 @@ const VIZ_SHARE_KINDS = ['pie', 'donut', 'funnel', 'treemap'];
 
 /** Kinds drawn along a horizontal value axis. */
 const VIZ_HORIZONTAL = ['bar', 'stackedBar'];
+
+/**
+ * Unique per drawn SVG.
+ *
+ * Gradients are referenced by id, ids are document-wide, and a board carries
+ * several charts at once — so without this, one card's area fill would be
+ * painted by whichever chart happened to be earlier in the DOM, and would
+ * vanish when that chart was deleted.
+ */
+let _vizUid = 0;
+
+/** @param {number} slot @returns {string} the gradient id for that slot, in this SVG */
+function vizGradId(slot) {
+  return 'vg' + _vizUid + '-' + Math.max(1, Math.min(8, Math.round(Number(slot) || 1)));
+}
+
+/**
+ * One vertical fade per slot, from the series colour down to nothing.
+ *
+ * A flat wash under a line ends in a hard horizontal edge along the axis, which
+ * reads as a second series. A fade ends where the data ends.
+ *
+ * @returns {string} an SVG `<defs>` block
+ */
+function vizDefs() {
+  let d = '';
+  for (let n = 1; n <= 8; n++) {
+    const c = vizSlot(n);
+    // `style`, not the `stop-color` attribute: var() resolves in a CSS
+    // declaration and is invalid in a presentation attribute.
+    d += '<linearGradient id="' + vizGradId(n) + '" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0" style="stop-color:' + c + ';stop-opacity:.30"/>'
+      + '<stop offset="1" style="stop-color:' + c + ';stop-opacity:.02"/>'
+      + '</linearGradient>';
+  }
+  return '<defs>' + d + '</defs>';
+}
+
+/**
+ * The length of a polyline, padded.
+ *
+ * Used as the dash length that draws a line in from the left. A smoothed path
+ * is longer than the polyline through the same points, so the figure is padded
+ * rather than measured — a dash longer than the path is a solid line, a dash
+ * shorter than it leaves a visible gap at the end.
+ *
+ * @param {number[][]} pts @returns {number}
+ */
+function vizPathLen(pts) {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) {
+    n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return n * 1.15 + 8;
+}
 
 /** @param {number} slot @returns {string} a CSS colour reference for that slot */
 function vizSlot(slot) {
@@ -43950,17 +44135,24 @@ function vizSmoothPath(pts) {
  * ------------------------------------------------------------------------ */
 
 /**
- * Column, bar, line, area, both stacks, combo and scatter.
+ * The plot's geometry and scales — everything a mark needs to know where it goes.
  *
- * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ * Extracted because two places need it and only one used to have it: the marks
+ * were placed by vizCartesian and the crosshair recomputed its own copy of the
+ * padding and the band width. That worked only as long as the two copies agreed,
+ * and nothing made them agree; the hover dots added here would have landed on a
+ * second, slightly different chart.
+ *
+ * @param {object} card @param {number} w @param {number} h
+ * @returns {?object} null when there is nothing to draw
  */
-function vizCartesian(card, w, h) {
+function vizFrame(card, w, h) {
   const kind = card.kind || 'column';
   const fmt = vizFmt(card);
   const f = vizFiltered(vizCategories(card), vizSeries(card));
   const cats = f.cats;
   const series = f.series.filter(s => s.values.some(isFinite));
-  if (!series.length || !cats.length) return '';
+  if (!series.length || !cats.length) return null;
 
   const horiz = VIZ_HORIZONTAL.indexOf(kind) >= 0;
   const stacked = kind === 'stackedColumn' || kind === 'stackedBar';
@@ -43971,13 +44163,12 @@ function vizCartesian(card, w, h) {
   const iw = Math.max(10, w - pl - VIZ_PAD.r);
   const ih = Math.max(10, h - VIZ_PAD.t - pb);
   const x0 = pl, y0 = VIZ_PAD.t;
+  const tickCount = Math.max(2, Math.floor((horiz ? iw : ih) / 46));
 
-  /* ---- the value scale ---- */
   let lo, hi;
   if (stacked) {
     const totals = cats.map((c, i) => series.reduce((a, s) => a + (isFinite(s.values[i]) ? s.values[i] : 0), 0));
-    const t = vizTicks(Math.min(0, Math.min.apply(null, totals)), Math.max.apply(null, totals),
-      Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
+    const t = vizTicks(Math.min(0, Math.min.apply(null, totals)), Math.max.apply(null, totals), tickCount);
     lo = t[0]; hi = t[t.length - 1];
   } else {
     const all = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
@@ -43986,17 +44177,36 @@ function vizCartesian(card, w, h) {
     // 4,800 to 5,200 would be a flat line at the top of a zero-based axis.
     const zeroBased = kind !== 'line' && kind !== 'area' && kind !== 'scatter';
     const t = vizTicks(zeroBased ? Math.min(0, Math.min.apply(null, all)) : Math.min.apply(null, all),
-      Math.max.apply(null, all), Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
+      Math.max.apply(null, all), tickCount);
     lo = t[0]; hi = t[t.length - 1];
   }
   const span = (hi - lo) || 1;
-  const ticks = vizTicks(lo, hi, Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
-
-  /** value → pixel along the value axis */
-  const vOf = v => horiz ? x0 + ((v - lo) / span) * iw : y0 + ih - ((v - lo) / span) * ih;
-  /** category index → pixel along the category axis */
   const band = (horiz ? ih : iw) / n;
-  const cOf = i => (horiz ? y0 : x0) + (i + 0.5) * band;
+
+  return {
+    kind, fmt, cats, series, horiz, stacked, n,
+    x0, y0, iw, ih, lo, hi, span, band,
+    ticks: vizTicks(lo, hi, tickCount),
+    /** value → pixel along the value axis */
+    vOf: v => (horiz ? x0 + ((v - lo) / span) * iw : y0 + ih - ((v - lo) / span) * ih),
+    /** category index → pixel along the category axis */
+    cOf: i => (horiz ? y0 : x0) + (i + 0.5) * band,
+  };
+}
+
+/**
+ * Column, bar, line, area, both stacks, combo and scatter.
+ *
+ * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ */
+function vizCartesian(card, w, h) {
+  const fr = vizFrame(card, w, h);
+  if (!fr) return '';
+  const kind = fr.kind, fmt = fr.fmt, cats = fr.cats, series = fr.series;
+  const horiz = fr.horiz, stacked = fr.stacked, n = fr.n;
+  const x0 = fr.x0, y0 = fr.y0, iw = fr.iw, ih = fr.ih;
+  const lo = fr.lo, hi = fr.hi, ticks = fr.ticks, band = fr.band;
+  const vOf = fr.vOf, cOf = fr.cOf;
 
   let s = '';
 
@@ -44031,7 +44241,8 @@ function vizCartesian(card, w, h) {
         if (!isFinite(v)) return '';
         const y = vOf(v), top = Math.min(y, zero), hgt = Math.max(1, Math.abs(zero - y));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(series[0].slot) + '"/>';
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(series[0].slot)
+          + ';--i:' + i + '"/>';
       }).join('');
     }
 
@@ -44043,17 +44254,20 @@ function vizCartesian(card, w, h) {
         const d = fmt.smooth ? vizSmoothPath(pts) : 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
         if (kind === 'area') {
           // A wash at ~12%, never a saturated block: it says "under the line",
-          // it is not a second thing to read.
+          // it is not a second thing to read. It fades from the line down to
+          // nothing at the axis, so the eye is held by the series and not by a
+          // hard edge along the bottom of the plot.
           s += '<path class="viz-area" d="' + d + 'L' + pts[pts.length - 1][0].toFixed(1) + ',' + (y0 + ih)
-            + 'L' + pts[0][0].toFixed(1) + ',' + (y0 + ih) + 'Z" style="fill:' + col + '"/>';
+            + 'L' + pts[0][0].toFixed(1) + ',' + (y0 + ih) + 'Z" fill="url(#' + vizGradId(ser.slot) + ')"/>';
         }
-        s += '<path class="viz-line" d="' + d + '" style="stroke:' + col + '"/>';
+        s += '<path class="viz-line" d="' + d + '" style="stroke:' + col
+          + ';--len:' + vizPathLen(pts).toFixed(0) + '"/>';
       }
       // A ring in the surface colour keeps a dot legible where it crosses the
       // line or another dot — a stroke around the mark would be ink that is
       // not data.
-      s += pts.map(p => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
-        + '" r="' + VIZ_DOT_R + '" style="fill:' + col + '"/>').join('');
+      s += pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
+        + '" r="' + VIZ_DOT_R + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
       if (fmt.labels) {
         ser.values.forEach((v, i) => {
           if (!isFinite(v)) return;
@@ -44078,11 +44292,13 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(a, b), width = Math.max(1, Math.abs(b - a) - VIZ_GAP);
           s += '<rect class="viz-mark" x="' + left.toFixed(1) + '" y="' + (cOf(i) - bw / 2).toFixed(1)
-            + '" width="' + width.toFixed(1) + '" height="' + bw.toFixed(1) + '" style="fill:' + col + '"/>';
+            + '" width="' + width.toFixed(1) + '" height="' + bw.toFixed(1)
+            + '" style="fill:' + col + ';--i:' + i + '"/>';
         } else {
           const top = Math.min(a, b), hgt = Math.max(1, Math.abs(b - a) - VIZ_GAP);
           s += '<rect class="viz-mark" x="' + (cOf(i) - bw / 2).toFixed(1) + '" y="' + top.toFixed(1)
-            + '" width="' + bw.toFixed(1) + '" height="' + hgt.toFixed(1) + '" style="fill:' + col + '"/>';
+            + '" width="' + bw.toFixed(1) + '" height="' + hgt.toFixed(1)
+            + '" style="fill:' + col + ';--i:' + i + '"/>';
         }
       });
     });
@@ -44099,11 +44315,13 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(p, zero), width = Math.max(1, Math.abs(zero - p));
           return '<path class="viz-mark" d="' + vizBarPath(+left.toFixed(1), +(cOf(i) + off - bw / 2).toFixed(1),
-            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizSlot(ser.slot) + '"/>';
+            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizSlot(ser.slot)
+            + ';--i:' + i + '"/>';
         }
         const top = Math.min(p, zero), hgt = Math.max(1, Math.abs(zero - p));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) + off - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(ser.slot) + '"/>';
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(ser.slot)
+          + ';--i:' + i + '"/>';
       }).join('');
 
       if (fmt.labels) {
@@ -44177,9 +44395,9 @@ function vizPie(card, w, h) {
     vals.forEach((v, i) => {
       const frac = v / total;
       const len = Math.max(0, circ * frac - VIZ_GAP);
-      s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1)
+      s += '<circle class="viz-arc" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1)
         + '" fill="none" stroke-linecap="butt" style="stroke:' + vizSlot(i + 1)
-        + ';stroke-width:' + thick.toFixed(1) + '" stroke-dasharray="' + len.toFixed(2) + ' '
+        + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '" stroke-dasharray="' + len.toFixed(2) + ' '
         + (circ - len).toFixed(2) + '" stroke-dashoffset="' + (-circ * acc).toFixed(2)
         + '" transform="rotate(-90 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"/>';
       acc += frac;
@@ -44198,7 +44416,7 @@ function vizPie(card, w, h) {
         + 'L' + (cx + R * Math.cos(a0)).toFixed(1) + ' ' + (cy + R * Math.sin(a0)).toFixed(1)
         + 'A' + R.toFixed(1) + ' ' + R.toFixed(1) + ' 0 ' + big + ' 1 '
         + (cx + R * Math.cos(a1)).toFixed(1) + ' ' + (cy + R * Math.sin(a1)).toFixed(1)
-        + 'Z" style="fill:' + vizSlot(i + 1) + '"/>';
+        + 'Z" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>';
     });
   }
 
@@ -44231,8 +44449,8 @@ function vizFunnel(card, w, h) {
   return vals.map((v, i) => {
     const bw = Math.max(2, (v / max) * iw);
     const y = top + i * rowH;
-    return '<rect class="viz-mark" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
-      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + '"/>'
+    return '<rect class="viz-mark viz-mark-h" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
+      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>'
       + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (y + rowH / 2 + 3.5).toFixed(1)
       + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>'
       + '<text class="viz-label" x="' + (labelW + bw + 6).toFixed(1) + '" y="'
@@ -44269,7 +44487,7 @@ function vizTreemap(card, w, h) {
 
     s += '<rect class="viz-tm" x="' + (x + VIZ_GAP / 2).toFixed(1) + '" y="' + (y + VIZ_GAP / 2).toFixed(1)
       + '" width="' + Math.max(0, bw - VIZ_GAP).toFixed(1) + '" height="' + Math.max(0, bh - VIZ_GAP).toFixed(1)
-      + '" rx="4" style="fill:' + vizSlot(it.slot) + '"/>';
+      + '" rx="4" style="fill:' + vizSlot(it.slot) + ';--i:' + i + '"/>';
 
     // Only label a tile the text actually fits in: a clipped label that loses
     // its first and last characters is worse than no label.
@@ -44291,6 +44509,23 @@ function vizTreemap(card, w, h) {
  * ------------------------------------------------------------------------ */
 
 /**
+ * What the marks are made of, as one string.
+ *
+ * The enter animation replays when this changes and not otherwise, which is the
+ * whole reason it exists: `dashDrawAllCharts()` also runs on every drag, resize
+ * and tile move, and a chart that re-animates each time a neighbouring card is
+ * nudged is a chart nobody can read. Geometry is deliberately absent from the
+ * signature — a wider card is the same data.
+ *
+ * @param {object} card @returns {string}
+ */
+function vizRevealSignature(card) {
+  const f = vizFiltered(vizCategories(card), vizSeries(card));
+  return (card.kind || 'column') + '|' + f.cats.join('\u001f') + '|'
+    + f.series.map(s => s.slot + ':' + s.values.join(',')).join(';');
+}
+
+/**
  * Draw one visual into its host, at the host's real size.
  *
  * @param {HTMLElement} host a `.dc-plot` element
@@ -44305,20 +44540,42 @@ function dashDrawChart(host, card) {
   const series = vizSeries(card);
   const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
   const enough = VIZ_SHARE_KINDS.indexOf(kind) >= 0 ? flat.length >= 1 : flat.length >= 2;
-  if (!enough) { host.innerHTML = ''; return; }
+  if (!enough) { host.innerHTML = ''; host.dataset.viz = ''; return; }
 
+  _vizUid++;
   let body;
   if (kind === 'pie' || kind === 'donut') body = vizPie(card, w, h);
   else if (kind === 'funnel') body = vizFunnel(card, w, h);
   else if (kind === 'treemap') body = vizTreemap(card, w, h);
   else body = vizCartesian(card, w, h);
 
+  const sig = vizRevealSignature(card);
+  const fresh = host.dataset.viz !== sig;
+  host.dataset.viz = sig;
+
   host.innerHTML =
-    '<svg class="viz" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"'
-    + ' role="img" aria-label="' + vizEsc(card.title || 'Chart') + '">' + body + '</svg>'
+    '<svg class="viz' + (fresh && !vizMotionOff() ? ' viz-enter' : '') + '"'
+    + (VIZ_HORIZONTAL.indexOf(kind) >= 0 ? ' data-horiz' : '')
+    + ' width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"'
+    + ' role="img" aria-label="' + vizEsc(card.title || 'Chart') + '">'
+    + vizDefs() + body + '</svg>'
     + '<div class="viz-tip" hidden></div>';
 
+  // The class is what runs the animation, so it is taken off once it has run.
+  // Everything the enter animation touches is drawn in its final state and
+  // animated `from` — so with the class gone, or an export freezing it, or
+  // reduced motion on, the chart is simply already there.
+  if (fresh && !vizMotionOff()) {
+    const svg = host.querySelector('svg');
+    setTimeout(() => { if (svg && svg.isConnected) svg.classList.remove('viz-enter'); }, VIZ_ENTER_TOTAL);
+  }
+
   if (VIZ_SHARE_KINDS.indexOf(kind) < 0) vizWireHover(host, card, w, h);
+}
+
+/** @returns {boolean} true when the operator has asked for less motion */
+function vizMotionOff() {
+  return typeof motionReduced === 'function' ? motionReduced() : false;
 }
 
 /**
@@ -44329,28 +44586,46 @@ function dashDrawChart(host, card) {
  * way to read a value.
  */
 function vizWireHover(host, card, w, h) {
+  // The host outlives its contents — a redraw replaces the SVG inside it, not
+  // the element itself — so listeners bound to the host stack up one per
+  // redraw, each of them writing into a crosshair and a tooltip that were
+  // detached several redraws ago. With the size observer redrawing on every
+  // tile move that goes from a slow leak to a fast one.
+  if (host._vizOff) { host._vizOff(); host._vizOff = null; }
+
   const svg = host.querySelector('svg');
   const tip = host.querySelector('.viz-tip');
-  const fmt = vizFmt(card);
-  const f = vizFiltered(vizCategories(card), vizSeries(card));
-  const cats = f.cats;
-  const series = f.series.filter(s => s.values.some(isFinite));
-  if (!svg || !tip || !series.length || cats.length < 2) return;
-
-  const kind = card.kind || 'column';
-  const horiz = VIZ_HORIZONTAL.indexOf(kind) >= 0;
-  const pl = fmt.yAxis ? (horiz ? 74 : VIZ_PAD.l) : 10;
-  const pb = fmt.xAxis ? VIZ_PAD.b : 8;
-  const iw = Math.max(10, w - pl - VIZ_PAD.r), ih = Math.max(10, h - VIZ_PAD.t - pb);
-  const band = (horiz ? ih : iw) / cats.length;
-  const cOf = i => (horiz ? VIZ_PAD.t : pl) + (i + 0.5) * band;
+  const fr = vizFrame(card, w, h);
+  if (!svg || !tip || !fr || fr.cats.length < 2) return;
+  const cats = fr.cats, series = fr.series, horiz = fr.horiz;
+  const kind = fr.kind, pl = fr.x0, iw = fr.iw, ih = fr.ih, cOf = fr.cOf;
 
   const cross = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   cross.setAttribute('class', 'viz-cross');
   cross.style.display = 'none';
   svg.appendChild(cross);
 
+  // A dot per series on the category being read. The crosshair says which
+  // category; on a chart with three lines in it, that leaves the actual
+  // question — which value belongs to which series — to be answered by
+  // matching colours in a tooltip. These answer it on the chart.
+  const hits = series.map(ser => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'viz-hit');
+    c.setAttribute('r', String(VIZ_DOT_R + 1));
+    c.style.fill = vizSlot(ser.slot);
+    c.style.display = 'none';
+    svg.appendChild(c);
+    return c;
+  });
+
+  // The same scale the marks were drawn with, rebuilt so the dots land on them
+  // rather than near them. Bars are read at their end, not their middle, so
+  // only the point forms get a dot.
+  const dotted = kind === 'line' || kind === 'area' || kind === 'scatter';
+
   const move = e => {
+    host._vizAt = { clientX: e.clientX, clientY: e.clientY };
     const r = svg.getBoundingClientRect();
     const along = horiz ? e.clientY - r.top : e.clientX - r.left;
     // Nearest index, so the whole band is the hit target rather than the mark
@@ -44365,10 +44640,18 @@ function vizWireHover(host, card, w, h) {
       cross.setAttribute('x1', pl); cross.setAttribute('x2', pl + iw);
       cross.setAttribute('y1', p); cross.setAttribute('y2', p);
     } else {
-      cross.setAttribute('y1', VIZ_PAD.t); cross.setAttribute('y2', VIZ_PAD.t + ih);
+      cross.setAttribute('y1', fr.y0); cross.setAttribute('y2', fr.y0 + ih);
       cross.setAttribute('x1', p); cross.setAttribute('x2', p);
     }
     cross.style.display = '';
+
+    hits.forEach((c, si) => {
+      const v = series[si].values[best];
+      if (!dotted || !isFinite(v)) { c.style.display = 'none'; return; }
+      c.setAttribute('cx', horiz ? fr.vOf(v).toFixed(1) : cOf(best).toFixed(1));
+      c.setAttribute('cy', horiz ? p : fr.vOf(v).toFixed(1));
+      c.style.display = '';
+    });
 
     tip.hidden = false;
     tip.innerHTML = '<em>' + vizEsc(cats[best]) + '</em>' + series.map(s =>
@@ -44386,8 +44669,24 @@ function vizWireHover(host, card, w, h) {
     }
   };
 
+  const leave = () => {
+    cross.style.display = 'none';
+    hits.forEach(c => { c.style.display = 'none'; });
+    tip.hidden = true;
+    host._vizAt = null;
+  };
   host.addEventListener('pointermove', move);
-  host.addEventListener('pointerleave', () => { cross.style.display = 'none'; tip.hidden = true; });
+  host.addEventListener('pointerleave', leave);
+  host._vizOff = () => {
+    host.removeEventListener('pointermove', move);
+    host.removeEventListener('pointerleave', leave);
+  };
+
+  // A chart can be redrawn while the pointer is sitting on it — a neighbouring
+  // tile is dragged, the window is resized — and the new crosshair would then
+  // wait for a movement that never comes, because the pointer has not moved.
+  // Replaying the last position puts it back where the reader left it.
+  if (host._vizAt) move(host._vizAt);
 }
 
 /** Redraw every chart on the board, measuring each host as it goes. */
@@ -44396,6 +44695,53 @@ function dashDrawAllCharts() {
     const card = typeof dashCardById === 'function' ? dashCardById(host.dataset.card) : null;
     if (card) dashDrawChart(host, card);
   });
+  vizObserveSizes();
+}
+
+/** The one observer, rebound to whatever plots are on the board. */
+let _vizRo = null;
+let _vizRoPending = null;
+let _vizRoRaf = 0;
+
+/**
+ * Redraw a chart when its own box changes, whatever changed it.
+ *
+ * Charts are drawn in real pixels against `host.clientWidth`, so a chart is
+ * only correct for the size it was measured at. The board used to redraw them
+ * from the window's resize handler, in the same tick as the relayout — but
+ * tiles transition their width over 160ms, so every chart was measured at the
+ * width it was LEAVING and then left that way until something unrelated
+ * redrew it. Dragging a tile wider and watching the chart inside stay narrow
+ * is the visible version of that.
+ *
+ * Observing the box removes the guess. It fires when the width actually
+ * arrives, once per frame however many tiles moved, and it covers the cases
+ * nobody enumerated — the sidebar opening, a font loading, a card being
+ * resized by its own handle.
+ *
+ * Redrawing does not resize the host, so this cannot drive itself.
+ */
+function vizObserveSizes() {
+  if (typeof ResizeObserver !== 'function') return;
+  if (!_vizRo) {
+    _vizRoPending = new Set();
+    _vizRo = new ResizeObserver(entries => {
+      entries.forEach(e => _vizRoPending.add(e.target));
+      if (_vizRoRaf) return;
+      _vizRoRaf = requestAnimationFrame(() => {
+        _vizRoRaf = 0;
+        const hosts = Array.from(_vizRoPending);
+        _vizRoPending.clear();
+        hosts.forEach(host => {
+          if (!host.isConnected) return;
+          const card = typeof dashCardById === 'function' ? dashCardById(host.dataset.card) : null;
+          if (card) dashDrawChart(host, card);
+        });
+      });
+    });
+  }
+  _vizRo.disconnect();
+  document.querySelectorAll('#dashGrid .dc-plot[data-card]').forEach(h => _vizRo.observe(h));
 }
 
 </script>
@@ -47420,6 +47766,15 @@ const DASH_JPEG_Q = 0.92;
 const DASH_EXPORT_GROUND = '#FFFFFF';
 
 /**
+ * Elements html2canvas must not draw.
+ *
+ * The map because it is painted in afterwards at a higher resolution; the rest
+ * because they are the tools for building the board rather than any part of it.
+ */
+const DASH_EXPORT_SKIP = ['mapWrap', 'dashAdd', 'dashGhost',
+  'dashNav', 'dashTop', 'dashFormat', 'dashGallery'];
+
+/**
  * Paint the map tile onto the board canvas, through the map export's own
  * high-resolution renderer.
  *
@@ -47571,7 +47926,14 @@ async function dashRenderBoard(scale) {
       logging: false,
       // The map is painted in by hand afterwards; html2canvas would render an
       // empty box there and, worse, sometimes throw on the transformed panes.
-      ignoreElements: el => el.id === 'mapWrap' || el.id === 'dashAdd' || el.id === 'dashGhost',
+      //
+      // The board's own chrome is on this list for a different reason. It is
+      // outside #dashGrid and should therefore be outside the crop entirely —
+      // but html2canvas renders the document and crops it, and the left nav was
+      // coming out as a 210px grey column standing in the middle of the board,
+      // over whichever cards were behind it. Naming it here is both the fix and
+      // the correct statement: a navigation rail is not part of a deliverable.
+      ignoreElements: el => DASH_EXPORT_SKIP.indexOf(el.id) >= 0,
     });
     const map = await dashPaintMap(shot.getContext('2d'), rect, scale);
     shot._dashRects = rects;

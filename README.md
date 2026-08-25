@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0154-blue)
+![Version](https://img.shields.io/badge/version-v6.0159-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 

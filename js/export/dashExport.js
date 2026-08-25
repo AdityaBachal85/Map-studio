@@ -28,6 +28,15 @@ const DASH_JPEG_Q = 0.92;
 const DASH_EXPORT_GROUND = '#FFFFFF';
 
 /**
+ * Elements html2canvas must not draw.
+ *
+ * The map because it is painted in afterwards at a higher resolution; the rest
+ * because they are the tools for building the board rather than any part of it.
+ */
+const DASH_EXPORT_SKIP = ['mapWrap', 'dashAdd', 'dashGhost',
+  'dashNav', 'dashTop', 'dashFormat', 'dashGallery'];
+
+/**
  * Paint the map tile onto the board canvas, through the map export's own
  * high-resolution renderer.
  *
@@ -179,7 +188,14 @@ async function dashRenderBoard(scale) {
       logging: false,
       // The map is painted in by hand afterwards; html2canvas would render an
       // empty box there and, worse, sometimes throw on the transformed panes.
-      ignoreElements: el => el.id === 'mapWrap' || el.id === 'dashAdd' || el.id === 'dashGhost',
+      //
+      // The board's own chrome is on this list for a different reason. It is
+      // outside #dashGrid and should therefore be outside the crop entirely —
+      // but html2canvas renders the document and crops it, and the left nav was
+      // coming out as a 210px grey column standing in the middle of the board,
+      // over whichever cards were behind it. Naming it here is both the fix and
+      // the correct statement: a navigation rail is not part of a deliverable.
+      ignoreElements: el => DASH_EXPORT_SKIP.indexOf(el.id) >= 0,
     });
     const map = await dashPaintMap(shot.getContext('2d'), rect, scale);
     shot._dashRects = rects;

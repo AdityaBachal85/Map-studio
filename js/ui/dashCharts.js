@@ -26,6 +26,18 @@
  * is the only thing allowed to be loud.
  */
 
+/**
+ * The enter animation's budget, in milliseconds.
+ *
+ * A chart arrives rather than appearing: marks grow from the axis they are
+ * measured against, staggered across the categories, and the line reveals left
+ * to right the way it is read. The window is the reveal plus the longest
+ * stagger plus the dots and labels that settle after it.
+ */
+const VIZ_ENTER_MS = 1100;
+const VIZ_STAGGER_MS = 45;
+const VIZ_ENTER_TOTAL = 1700;
+
 /** Plot padding, in pixels. Left carries the value ticks, bottom the categories. */
 const VIZ_PAD = { t: 12, r: 14, b: 22, l: 42 };
 
@@ -49,6 +61,61 @@ const VIZ_SHARE_KINDS = ['pie', 'donut', 'funnel', 'treemap'];
 
 /** Kinds drawn along a horizontal value axis. */
 const VIZ_HORIZONTAL = ['bar', 'stackedBar'];
+
+/**
+ * Unique per drawn SVG.
+ *
+ * Gradients are referenced by id, ids are document-wide, and a board carries
+ * several charts at once — so without this, one card's area fill would be
+ * painted by whichever chart happened to be earlier in the DOM, and would
+ * vanish when that chart was deleted.
+ */
+let _vizUid = 0;
+
+/** @param {number} slot @returns {string} the gradient id for that slot, in this SVG */
+function vizGradId(slot) {
+  return 'vg' + _vizUid + '-' + Math.max(1, Math.min(8, Math.round(Number(slot) || 1)));
+}
+
+/**
+ * One vertical fade per slot, from the series colour down to nothing.
+ *
+ * A flat wash under a line ends in a hard horizontal edge along the axis, which
+ * reads as a second series. A fade ends where the data ends.
+ *
+ * @returns {string} an SVG `<defs>` block
+ */
+function vizDefs() {
+  let d = '';
+  for (let n = 1; n <= 8; n++) {
+    const c = vizSlot(n);
+    // `style`, not the `stop-color` attribute: var() resolves in a CSS
+    // declaration and is invalid in a presentation attribute.
+    d += '<linearGradient id="' + vizGradId(n) + '" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0" style="stop-color:' + c + ';stop-opacity:.30"/>'
+      + '<stop offset="1" style="stop-color:' + c + ';stop-opacity:.02"/>'
+      + '</linearGradient>';
+  }
+  return '<defs>' + d + '</defs>';
+}
+
+/**
+ * The length of a polyline, padded.
+ *
+ * Used as the dash length that draws a line in from the left. A smoothed path
+ * is longer than the polyline through the same points, so the figure is padded
+ * rather than measured — a dash longer than the path is a solid line, a dash
+ * shorter than it leaves a visible gap at the end.
+ *
+ * @param {number[][]} pts @returns {number}
+ */
+function vizPathLen(pts) {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) {
+    n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return n * 1.15 + 8;
+}
 
 /** @param {number} slot @returns {string} a CSS colour reference for that slot */
 function vizSlot(slot) {
@@ -199,17 +266,24 @@ function vizSmoothPath(pts) {
  * ------------------------------------------------------------------------ */
 
 /**
- * Column, bar, line, area, both stacks, combo and scatter.
+ * The plot's geometry and scales — everything a mark needs to know where it goes.
  *
- * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ * Extracted because two places need it and only one used to have it: the marks
+ * were placed by vizCartesian and the crosshair recomputed its own copy of the
+ * padding and the band width. That worked only as long as the two copies agreed,
+ * and nothing made them agree; the hover dots added here would have landed on a
+ * second, slightly different chart.
+ *
+ * @param {object} card @param {number} w @param {number} h
+ * @returns {?object} null when there is nothing to draw
  */
-function vizCartesian(card, w, h) {
+function vizFrame(card, w, h) {
   const kind = card.kind || 'column';
   const fmt = vizFmt(card);
   const f = vizFiltered(vizCategories(card), vizSeries(card));
   const cats = f.cats;
   const series = f.series.filter(s => s.values.some(isFinite));
-  if (!series.length || !cats.length) return '';
+  if (!series.length || !cats.length) return null;
 
   const horiz = VIZ_HORIZONTAL.indexOf(kind) >= 0;
   const stacked = kind === 'stackedColumn' || kind === 'stackedBar';
@@ -220,13 +294,12 @@ function vizCartesian(card, w, h) {
   const iw = Math.max(10, w - pl - VIZ_PAD.r);
   const ih = Math.max(10, h - VIZ_PAD.t - pb);
   const x0 = pl, y0 = VIZ_PAD.t;
+  const tickCount = Math.max(2, Math.floor((horiz ? iw : ih) / 46));
 
-  /* ---- the value scale ---- */
   let lo, hi;
   if (stacked) {
     const totals = cats.map((c, i) => series.reduce((a, s) => a + (isFinite(s.values[i]) ? s.values[i] : 0), 0));
-    const t = vizTicks(Math.min(0, Math.min.apply(null, totals)), Math.max.apply(null, totals),
-      Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
+    const t = vizTicks(Math.min(0, Math.min.apply(null, totals)), Math.max.apply(null, totals), tickCount);
     lo = t[0]; hi = t[t.length - 1];
   } else {
     const all = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
@@ -235,17 +308,36 @@ function vizCartesian(card, w, h) {
     // 4,800 to 5,200 would be a flat line at the top of a zero-based axis.
     const zeroBased = kind !== 'line' && kind !== 'area' && kind !== 'scatter';
     const t = vizTicks(zeroBased ? Math.min(0, Math.min.apply(null, all)) : Math.min.apply(null, all),
-      Math.max.apply(null, all), Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
+      Math.max.apply(null, all), tickCount);
     lo = t[0]; hi = t[t.length - 1];
   }
   const span = (hi - lo) || 1;
-  const ticks = vizTicks(lo, hi, Math.max(2, Math.floor((horiz ? iw : ih) / 46)));
-
-  /** value → pixel along the value axis */
-  const vOf = v => horiz ? x0 + ((v - lo) / span) * iw : y0 + ih - ((v - lo) / span) * ih;
-  /** category index → pixel along the category axis */
   const band = (horiz ? ih : iw) / n;
-  const cOf = i => (horiz ? y0 : x0) + (i + 0.5) * band;
+
+  return {
+    kind, fmt, cats, series, horiz, stacked, n,
+    x0, y0, iw, ih, lo, hi, span, band,
+    ticks: vizTicks(lo, hi, tickCount),
+    /** value → pixel along the value axis */
+    vOf: v => (horiz ? x0 + ((v - lo) / span) * iw : y0 + ih - ((v - lo) / span) * ih),
+    /** category index → pixel along the category axis */
+    cOf: i => (horiz ? y0 : x0) + (i + 0.5) * band,
+  };
+}
+
+/**
+ * Column, bar, line, area, both stacks, combo and scatter.
+ *
+ * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ */
+function vizCartesian(card, w, h) {
+  const fr = vizFrame(card, w, h);
+  if (!fr) return '';
+  const kind = fr.kind, fmt = fr.fmt, cats = fr.cats, series = fr.series;
+  const horiz = fr.horiz, stacked = fr.stacked, n = fr.n;
+  const x0 = fr.x0, y0 = fr.y0, iw = fr.iw, ih = fr.ih;
+  const lo = fr.lo, hi = fr.hi, ticks = fr.ticks, band = fr.band;
+  const vOf = fr.vOf, cOf = fr.cOf;
 
   let s = '';
 
@@ -280,7 +372,8 @@ function vizCartesian(card, w, h) {
         if (!isFinite(v)) return '';
         const y = vOf(v), top = Math.min(y, zero), hgt = Math.max(1, Math.abs(zero - y));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(series[0].slot) + '"/>';
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(series[0].slot)
+          + ';--i:' + i + '"/>';
       }).join('');
     }
 
@@ -292,17 +385,20 @@ function vizCartesian(card, w, h) {
         const d = fmt.smooth ? vizSmoothPath(pts) : 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
         if (kind === 'area') {
           // A wash at ~12%, never a saturated block: it says "under the line",
-          // it is not a second thing to read.
+          // it is not a second thing to read. It fades from the line down to
+          // nothing at the axis, so the eye is held by the series and not by a
+          // hard edge along the bottom of the plot.
           s += '<path class="viz-area" d="' + d + 'L' + pts[pts.length - 1][0].toFixed(1) + ',' + (y0 + ih)
-            + 'L' + pts[0][0].toFixed(1) + ',' + (y0 + ih) + 'Z" style="fill:' + col + '"/>';
+            + 'L' + pts[0][0].toFixed(1) + ',' + (y0 + ih) + 'Z" fill="url(#' + vizGradId(ser.slot) + ')"/>';
         }
-        s += '<path class="viz-line" d="' + d + '" style="stroke:' + col + '"/>';
+        s += '<path class="viz-line" d="' + d + '" style="stroke:' + col
+          + ';--len:' + vizPathLen(pts).toFixed(0) + '"/>';
       }
       // A ring in the surface colour keeps a dot legible where it crosses the
       // line or another dot — a stroke around the mark would be ink that is
       // not data.
-      s += pts.map(p => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
-        + '" r="' + VIZ_DOT_R + '" style="fill:' + col + '"/>').join('');
+      s += pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
+        + '" r="' + VIZ_DOT_R + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
       if (fmt.labels) {
         ser.values.forEach((v, i) => {
           if (!isFinite(v)) return;
@@ -327,11 +423,13 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(a, b), width = Math.max(1, Math.abs(b - a) - VIZ_GAP);
           s += '<rect class="viz-mark" x="' + left.toFixed(1) + '" y="' + (cOf(i) - bw / 2).toFixed(1)
-            + '" width="' + width.toFixed(1) + '" height="' + bw.toFixed(1) + '" style="fill:' + col + '"/>';
+            + '" width="' + width.toFixed(1) + '" height="' + bw.toFixed(1)
+            + '" style="fill:' + col + ';--i:' + i + '"/>';
         } else {
           const top = Math.min(a, b), hgt = Math.max(1, Math.abs(b - a) - VIZ_GAP);
           s += '<rect class="viz-mark" x="' + (cOf(i) - bw / 2).toFixed(1) + '" y="' + top.toFixed(1)
-            + '" width="' + bw.toFixed(1) + '" height="' + hgt.toFixed(1) + '" style="fill:' + col + '"/>';
+            + '" width="' + bw.toFixed(1) + '" height="' + hgt.toFixed(1)
+            + '" style="fill:' + col + ';--i:' + i + '"/>';
         }
       });
     });
@@ -348,11 +446,13 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(p, zero), width = Math.max(1, Math.abs(zero - p));
           return '<path class="viz-mark" d="' + vizBarPath(+left.toFixed(1), +(cOf(i) + off - bw / 2).toFixed(1),
-            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizSlot(ser.slot) + '"/>';
+            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizSlot(ser.slot)
+            + ';--i:' + i + '"/>';
         }
         const top = Math.min(p, zero), hgt = Math.max(1, Math.abs(zero - p));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) + off - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(ser.slot) + '"/>';
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(ser.slot)
+          + ';--i:' + i + '"/>';
       }).join('');
 
       if (fmt.labels) {
@@ -426,9 +526,9 @@ function vizPie(card, w, h) {
     vals.forEach((v, i) => {
       const frac = v / total;
       const len = Math.max(0, circ * frac - VIZ_GAP);
-      s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1)
+      s += '<circle class="viz-arc" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1)
         + '" fill="none" stroke-linecap="butt" style="stroke:' + vizSlot(i + 1)
-        + ';stroke-width:' + thick.toFixed(1) + '" stroke-dasharray="' + len.toFixed(2) + ' '
+        + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '" stroke-dasharray="' + len.toFixed(2) + ' '
         + (circ - len).toFixed(2) + '" stroke-dashoffset="' + (-circ * acc).toFixed(2)
         + '" transform="rotate(-90 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"/>';
       acc += frac;
@@ -447,7 +547,7 @@ function vizPie(card, w, h) {
         + 'L' + (cx + R * Math.cos(a0)).toFixed(1) + ' ' + (cy + R * Math.sin(a0)).toFixed(1)
         + 'A' + R.toFixed(1) + ' ' + R.toFixed(1) + ' 0 ' + big + ' 1 '
         + (cx + R * Math.cos(a1)).toFixed(1) + ' ' + (cy + R * Math.sin(a1)).toFixed(1)
-        + 'Z" style="fill:' + vizSlot(i + 1) + '"/>';
+        + 'Z" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>';
     });
   }
 
@@ -480,8 +580,8 @@ function vizFunnel(card, w, h) {
   return vals.map((v, i) => {
     const bw = Math.max(2, (v / max) * iw);
     const y = top + i * rowH;
-    return '<rect class="viz-mark" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
-      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + '"/>'
+    return '<rect class="viz-mark viz-mark-h" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
+      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>'
       + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (y + rowH / 2 + 3.5).toFixed(1)
       + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>'
       + '<text class="viz-label" x="' + (labelW + bw + 6).toFixed(1) + '" y="'
@@ -518,7 +618,7 @@ function vizTreemap(card, w, h) {
 
     s += '<rect class="viz-tm" x="' + (x + VIZ_GAP / 2).toFixed(1) + '" y="' + (y + VIZ_GAP / 2).toFixed(1)
       + '" width="' + Math.max(0, bw - VIZ_GAP).toFixed(1) + '" height="' + Math.max(0, bh - VIZ_GAP).toFixed(1)
-      + '" rx="4" style="fill:' + vizSlot(it.slot) + '"/>';
+      + '" rx="4" style="fill:' + vizSlot(it.slot) + ';--i:' + i + '"/>';
 
     // Only label a tile the text actually fits in: a clipped label that loses
     // its first and last characters is worse than no label.
@@ -540,6 +640,23 @@ function vizTreemap(card, w, h) {
  * ------------------------------------------------------------------------ */
 
 /**
+ * What the marks are made of, as one string.
+ *
+ * The enter animation replays when this changes and not otherwise, which is the
+ * whole reason it exists: `dashDrawAllCharts()` also runs on every drag, resize
+ * and tile move, and a chart that re-animates each time a neighbouring card is
+ * nudged is a chart nobody can read. Geometry is deliberately absent from the
+ * signature — a wider card is the same data.
+ *
+ * @param {object} card @returns {string}
+ */
+function vizRevealSignature(card) {
+  const f = vizFiltered(vizCategories(card), vizSeries(card));
+  return (card.kind || 'column') + '|' + f.cats.join('\u001f') + '|'
+    + f.series.map(s => s.slot + ':' + s.values.join(',')).join(';');
+}
+
+/**
  * Draw one visual into its host, at the host's real size.
  *
  * @param {HTMLElement} host a `.dc-plot` element
@@ -554,20 +671,42 @@ function dashDrawChart(host, card) {
   const series = vizSeries(card);
   const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
   const enough = VIZ_SHARE_KINDS.indexOf(kind) >= 0 ? flat.length >= 1 : flat.length >= 2;
-  if (!enough) { host.innerHTML = ''; return; }
+  if (!enough) { host.innerHTML = ''; host.dataset.viz = ''; return; }
 
+  _vizUid++;
   let body;
   if (kind === 'pie' || kind === 'donut') body = vizPie(card, w, h);
   else if (kind === 'funnel') body = vizFunnel(card, w, h);
   else if (kind === 'treemap') body = vizTreemap(card, w, h);
   else body = vizCartesian(card, w, h);
 
+  const sig = vizRevealSignature(card);
+  const fresh = host.dataset.viz !== sig;
+  host.dataset.viz = sig;
+
   host.innerHTML =
-    '<svg class="viz" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"'
-    + ' role="img" aria-label="' + vizEsc(card.title || 'Chart') + '">' + body + '</svg>'
+    '<svg class="viz' + (fresh && !vizMotionOff() ? ' viz-enter' : '') + '"'
+    + (VIZ_HORIZONTAL.indexOf(kind) >= 0 ? ' data-horiz' : '')
+    + ' width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '"'
+    + ' role="img" aria-label="' + vizEsc(card.title || 'Chart') + '">'
+    + vizDefs() + body + '</svg>'
     + '<div class="viz-tip" hidden></div>';
 
+  // The class is what runs the animation, so it is taken off once it has run.
+  // Everything the enter animation touches is drawn in its final state and
+  // animated `from` — so with the class gone, or an export freezing it, or
+  // reduced motion on, the chart is simply already there.
+  if (fresh && !vizMotionOff()) {
+    const svg = host.querySelector('svg');
+    setTimeout(() => { if (svg && svg.isConnected) svg.classList.remove('viz-enter'); }, VIZ_ENTER_TOTAL);
+  }
+
   if (VIZ_SHARE_KINDS.indexOf(kind) < 0) vizWireHover(host, card, w, h);
+}
+
+/** @returns {boolean} true when the operator has asked for less motion */
+function vizMotionOff() {
+  return typeof motionReduced === 'function' ? motionReduced() : false;
 }
 
 /**
@@ -578,28 +717,46 @@ function dashDrawChart(host, card) {
  * way to read a value.
  */
 function vizWireHover(host, card, w, h) {
+  // The host outlives its contents — a redraw replaces the SVG inside it, not
+  // the element itself — so listeners bound to the host stack up one per
+  // redraw, each of them writing into a crosshair and a tooltip that were
+  // detached several redraws ago. With the size observer redrawing on every
+  // tile move that goes from a slow leak to a fast one.
+  if (host._vizOff) { host._vizOff(); host._vizOff = null; }
+
   const svg = host.querySelector('svg');
   const tip = host.querySelector('.viz-tip');
-  const fmt = vizFmt(card);
-  const f = vizFiltered(vizCategories(card), vizSeries(card));
-  const cats = f.cats;
-  const series = f.series.filter(s => s.values.some(isFinite));
-  if (!svg || !tip || !series.length || cats.length < 2) return;
-
-  const kind = card.kind || 'column';
-  const horiz = VIZ_HORIZONTAL.indexOf(kind) >= 0;
-  const pl = fmt.yAxis ? (horiz ? 74 : VIZ_PAD.l) : 10;
-  const pb = fmt.xAxis ? VIZ_PAD.b : 8;
-  const iw = Math.max(10, w - pl - VIZ_PAD.r), ih = Math.max(10, h - VIZ_PAD.t - pb);
-  const band = (horiz ? ih : iw) / cats.length;
-  const cOf = i => (horiz ? VIZ_PAD.t : pl) + (i + 0.5) * band;
+  const fr = vizFrame(card, w, h);
+  if (!svg || !tip || !fr || fr.cats.length < 2) return;
+  const cats = fr.cats, series = fr.series, horiz = fr.horiz;
+  const kind = fr.kind, pl = fr.x0, iw = fr.iw, ih = fr.ih, cOf = fr.cOf;
 
   const cross = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   cross.setAttribute('class', 'viz-cross');
   cross.style.display = 'none';
   svg.appendChild(cross);
 
+  // A dot per series on the category being read. The crosshair says which
+  // category; on a chart with three lines in it, that leaves the actual
+  // question — which value belongs to which series — to be answered by
+  // matching colours in a tooltip. These answer it on the chart.
+  const hits = series.map(ser => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'viz-hit');
+    c.setAttribute('r', String(VIZ_DOT_R + 1));
+    c.style.fill = vizSlot(ser.slot);
+    c.style.display = 'none';
+    svg.appendChild(c);
+    return c;
+  });
+
+  // The same scale the marks were drawn with, rebuilt so the dots land on them
+  // rather than near them. Bars are read at their end, not their middle, so
+  // only the point forms get a dot.
+  const dotted = kind === 'line' || kind === 'area' || kind === 'scatter';
+
   const move = e => {
+    host._vizAt = { clientX: e.clientX, clientY: e.clientY };
     const r = svg.getBoundingClientRect();
     const along = horiz ? e.clientY - r.top : e.clientX - r.left;
     // Nearest index, so the whole band is the hit target rather than the mark
@@ -614,10 +771,18 @@ function vizWireHover(host, card, w, h) {
       cross.setAttribute('x1', pl); cross.setAttribute('x2', pl + iw);
       cross.setAttribute('y1', p); cross.setAttribute('y2', p);
     } else {
-      cross.setAttribute('y1', VIZ_PAD.t); cross.setAttribute('y2', VIZ_PAD.t + ih);
+      cross.setAttribute('y1', fr.y0); cross.setAttribute('y2', fr.y0 + ih);
       cross.setAttribute('x1', p); cross.setAttribute('x2', p);
     }
     cross.style.display = '';
+
+    hits.forEach((c, si) => {
+      const v = series[si].values[best];
+      if (!dotted || !isFinite(v)) { c.style.display = 'none'; return; }
+      c.setAttribute('cx', horiz ? fr.vOf(v).toFixed(1) : cOf(best).toFixed(1));
+      c.setAttribute('cy', horiz ? p : fr.vOf(v).toFixed(1));
+      c.style.display = '';
+    });
 
     tip.hidden = false;
     tip.innerHTML = '<em>' + vizEsc(cats[best]) + '</em>' + series.map(s =>
@@ -635,8 +800,24 @@ function vizWireHover(host, card, w, h) {
     }
   };
 
+  const leave = () => {
+    cross.style.display = 'none';
+    hits.forEach(c => { c.style.display = 'none'; });
+    tip.hidden = true;
+    host._vizAt = null;
+  };
   host.addEventListener('pointermove', move);
-  host.addEventListener('pointerleave', () => { cross.style.display = 'none'; tip.hidden = true; });
+  host.addEventListener('pointerleave', leave);
+  host._vizOff = () => {
+    host.removeEventListener('pointermove', move);
+    host.removeEventListener('pointerleave', leave);
+  };
+
+  // A chart can be redrawn while the pointer is sitting on it — a neighbouring
+  // tile is dragged, the window is resized — and the new crosshair would then
+  // wait for a movement that never comes, because the pointer has not moved.
+  // Replaying the last position puts it back where the reader left it.
+  if (host._vizAt) move(host._vizAt);
 }
 
 /** Redraw every chart on the board, measuring each host as it goes. */
@@ -645,4 +826,51 @@ function dashDrawAllCharts() {
     const card = typeof dashCardById === 'function' ? dashCardById(host.dataset.card) : null;
     if (card) dashDrawChart(host, card);
   });
+  vizObserveSizes();
+}
+
+/** The one observer, rebound to whatever plots are on the board. */
+let _vizRo = null;
+let _vizRoPending = null;
+let _vizRoRaf = 0;
+
+/**
+ * Redraw a chart when its own box changes, whatever changed it.
+ *
+ * Charts are drawn in real pixels against `host.clientWidth`, so a chart is
+ * only correct for the size it was measured at. The board used to redraw them
+ * from the window's resize handler, in the same tick as the relayout — but
+ * tiles transition their width over 160ms, so every chart was measured at the
+ * width it was LEAVING and then left that way until something unrelated
+ * redrew it. Dragging a tile wider and watching the chart inside stay narrow
+ * is the visible version of that.
+ *
+ * Observing the box removes the guess. It fires when the width actually
+ * arrives, once per frame however many tiles moved, and it covers the cases
+ * nobody enumerated — the sidebar opening, a font loading, a card being
+ * resized by its own handle.
+ *
+ * Redrawing does not resize the host, so this cannot drive itself.
+ */
+function vizObserveSizes() {
+  if (typeof ResizeObserver !== 'function') return;
+  if (!_vizRo) {
+    _vizRoPending = new Set();
+    _vizRo = new ResizeObserver(entries => {
+      entries.forEach(e => _vizRoPending.add(e.target));
+      if (_vizRoRaf) return;
+      _vizRoRaf = requestAnimationFrame(() => {
+        _vizRoRaf = 0;
+        const hosts = Array.from(_vizRoPending);
+        _vizRoPending.clear();
+        hosts.forEach(host => {
+          if (!host.isConnected) return;
+          const card = typeof dashCardById === 'function' ? dashCardById(host.dataset.card) : null;
+          if (card) dashDrawChart(host, card);
+        });
+      });
+    });
+  }
+  _vizRo.disconnect();
+  document.querySelectorAll('#dashGrid .dc-plot[data-card]').forEach(h => _vizRo.observe(h));
 }
