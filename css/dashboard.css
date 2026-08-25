@@ -1111,6 +1111,14 @@ body.dash-gesture { cursor: grabbing; user-select: none; }
 #dashGrid.exporting #dashAdd,
 #dashGrid.exporting .dc-tools { display: none !important; }
 
+/* An empty visual states that it is empty in every context. The half that
+   tells you what to DO about it — "turn on Edit board to type them", "Draw one
+   in the Routes tab" — is addressed to whoever is building the board, and in an
+   exported file it is an instruction to a reader who has no board and no
+   controls. It reads as the document being unfinished, which is the impression
+   an export exists to avoid. The state survives; the instruction does not. */
+#dashGrid.exporting .dc-hint { display: none !important; }
+
 /* --------------------------------------------------------------------------
    11. Legend, table, slicer
    ----------------------------------------------------------------------- */

@@ -45,6 +45,16 @@
     .map-wrap.capturing #clickHint,
     .map-wrap.capturing .leaflet-control-zoom,
     .map-wrap.capturing .pin-ghost,
+    /* The rest of the right-hand rail, and the undo pair. This list was written
+       when the rail ended at #centerBtn; everything added to the column since
+       — Identify, the 2D/3D switch, North-up — was never added here and has
+       been printing into every export as a result. A magnifier button and a
+       "2D / 3D" toggle in a client's PDF are controls the reader cannot press,
+       which reads as a screenshot rather than a document. */
+    .map-wrap.capturing #identifyBtn,
+    .map-wrap.capturing #dimSwitch,
+    .map-wrap.capturing #northUpBtn,
+    .map-wrap.capturing #mapHistory,
     /* Transient UI, not map content: a popup or hover tooltip left open at the
        moment someone hits Export does not belong in the deliverable. */
     .map-wrap.capturing .leaflet-popup,

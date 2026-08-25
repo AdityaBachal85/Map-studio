@@ -10,20 +10,17 @@
  * export — and the result is pasted into the board bitmap at the tile's
  * position.
  *
- * PDF WITHOUT A PDF LIBRARY. A single-page PDF wrapping one JPEG is a handful
- * of objects and an xref table; jsPDF is ~300KB to do that. This writes the
- * bytes directly. It is not a general PDF writer and does not pretend to be —
- * one page, one image, sized to the paper with the margins the page needs.
+ * THIS FILE MAKES THE PICTURE; export/dashPdf.js MAKES THE DOCUMENT. PNG and
+ * JPEG want exactly the bitmap below and nothing else. The PDF used to want it
+ * too — one page, one image — which is why it had no selectable text, no page
+ * furniture, and a portrait board letterboxed onto a landscape sheet with forty
+ * per cent of the page left blank. It now reads export/dashExportModel.js and
+ * draws a real document, cropping only the pictorial cards out of this bitmap.
+ * The split is the point: one rasteriser, several writers.
  *
  * Chrome is left out on purpose: the edit handles, the drag grips, the add bar
  * and the format pane are tools, not content.
  */
-
-/** Paper sizes, in PDF points (72 per inch), landscape. */
-const DASH_PAPER = {
-  a4: { w: 841.89, h: 595.28, label: 'A4 landscape' },
-  a3: { w: 1190.55, h: 841.89, label: 'A3 landscape' },
-};
 
 /** Quality of the JPEG inside the PDF, and of the JPEG export. */
 const DASH_JPEG_Q = 0.92;
@@ -130,6 +127,25 @@ async function dashRenderBoard(scale) {
   const rect = grid.getBoundingClientRect();
   const W = Math.round(rect.width), H = Math.round(grid.scrollHeight || rect.height);
 
+  // Where every tile sits on the bitmap about to be made. Measured here, from
+  // the settled layout, rather than recomputed from the grid constants later:
+  // the PDF crops cards out of this bitmap by these rectangles, and a rect
+  // derived a second way is a rect that can disagree with the pixels.
+  const rects = {};
+  const note = (id, el) => {
+    const r = el.getBoundingClientRect();
+    rects[id] = {
+      x: (r.left - rect.left) * scale,
+      y: (r.top - rect.top + grid.scrollTop) * scale,
+      w: r.width * scale, h: r.height * scale,
+    };
+  };
+  grid.querySelectorAll('.dash-card[data-card]').forEach(el => note(el.dataset.card, el));
+  const mapEl = document.getElementById('mapWrap');
+  if (mapEl && mapEl.closest('#dashGrid')) {
+    note(typeof DASH_MAP_ID !== 'undefined' ? DASH_MAP_ID : '__map', mapEl);
+  }
+
   try {
     const surface = getComputedStyle(app || document.body).getPropertyValue('--bg0').trim() || '#ffffff';
     const shot = await html2canvas(grid, {
@@ -144,7 +160,9 @@ async function dashRenderBoard(scale) {
       // empty box there and, worse, sometimes throw on the transformed panes.
       ignoreElements: el => el.id === 'mapWrap' || el.id === 'dashAdd' || el.id === 'dashGhost',
     });
-    await dashPaintMap(shot.getContext('2d'), rect, scale);
+    const painted = await dashPaintMap(shot.getContext('2d'), rect, scale);
+    shot._dashRects = rects;
+    shot._dashMapDrawn = painted;
     return shot;
   } finally {
     grid.classList.remove('exporting');
@@ -152,8 +170,70 @@ async function dashRenderBoard(scale) {
   }
 }
 
+/** The map's title card as it ships. Anything still reading exactly this has
+ *  not been named, whatever it says. */
+const DASH_TITLE_PLACEHOLDER = 'property location & access';
+
+/**
+ * What to call this board — on the page header and in the filename.
+ *
+ * The open project's name first: that is the one thing somebody has definitely
+ * chosen, and it is what they will look for in a downloads folder.
+ *
+ * Then the SITE's name, which is new here and is what makes the fallback worth
+ * having. A board is about one property, the site pin is that property, and it
+ * is nearly always named. Falling back to it means an unsaved board still
+ * exports as "ashoka-site" rather than as "dashboard".
+ *
+ * The map's title card comes last and only when it has been edited. It ships
+ * reading "PROPERTY LOCATION & ACCESS" and it is off by default, so using it
+ * unconditionally — which is what happened — titles every unnamed board with
+ * the same placeholder and gives three different boards one filename. That is
+ * the exact failure its own comment warned about.
+ *
+ * @returns {string}
+ */
+function dashBoardTitle() {
+  const pb = document.getElementById('pbName');
+  const named = pb && pb.textContent.trim();
+  if (named) return named;
+
+  if (typeof locations !== 'undefined' && locations) {
+    const site = locations.find(l => l.type === 'site' && l.name && l.name.trim());
+    if (site) return site.name.trim();
+  }
+
+  const card = document.getElementById('titleCard');
+  const t = card ? card.textContent.trim() : '';
+  if (t && t.toLowerCase() !== DASH_TITLE_PLACEHOLDER) return t;
+
+  return '';
+}
+
+/**
+ * The model, with the two live cards' rows read off the map.
+ *
+ * dashExportModel() may not touch the DOM, so the rows it cannot fetch for
+ * itself are fetched here and handed in. The colour resolver is the same
+ * arrangement: what `var(--viz-3)` means is a question only a live stylesheet
+ * can answer.
+ *
+ * @returns {object}
+ */
+function dashCurrentModel() {
+  const cs = getComputedStyle(document.documentElement);
+  return dashExportModel({
+    title: dashBoardTitle(),
+    resolveColor: name => cs.getPropertyValue(name).trim(),
+    liveRows: {
+      access: (typeof legendRows === 'function') ? legendRows() : [],
+      legend: (typeof colorKeyRows === 'function') ? colorKeyRows().filter(r => !r.hidden) : [],
+    },
+  });
+}
+
 /* ---------------------------------------------------------------------------
- * A one-page, one-image PDF
+ * JPEG bytes, shared with the document writer
  * ------------------------------------------------------------------------ */
 
 /** @param {string} dataUrl a data: JPEG @returns {Uint8Array} its bytes */
@@ -163,57 +243,6 @@ function dashJpegBytes(dataUrl) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
-}
-
-/**
- * Assemble a minimal PDF around one JPEG.
- *
- * The image is placed with `/DCTDecode`, which means the JPEG goes in as-is
- * rather than being re-encoded — so the file is barely larger than the image
- * and there is no second generation of compression artefacts.
- *
- * @param {Uint8Array} jpeg @param {number} iw @param {number} ih
- * @param {{w:number,h:number}} paper in points
- * @returns {Blob}
- */
-function dashBuildPdf(jpeg, iw, ih, paper) {
-  const margin = 18;
-  const availW = paper.w - margin * 2, availH = paper.h - margin * 2;
-  const fit = Math.min(availW / iw, availH / ih);
-  const dw = iw * fit, dh = ih * fit;
-  const dx = (paper.w - dw) / 2, dy = (paper.h - dh) / 2;
-
-  const enc = new TextEncoder();
-  const parts = [];
-  const offsets = [];
-  let len = 0;
-  const push = bytes => { parts.push(bytes); len += bytes.length; };
-  const pushStr = s => push(enc.encode(s));
-  const obj = (n, body) => { offsets[n] = len; pushStr(n + ' 0 obj\n' + body + '\nendobj\n'); };
-
-  pushStr('%PDF-1.4\n');
-  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + paper.w.toFixed(2) + ' ' + paper.h.toFixed(2) + ']'
-    + ' /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
-
-  // The image object: header, raw JPEG bytes, trailer.
-  offsets[4] = len;
-  pushStr('4 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + iw + ' /Height ' + ih
-    + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\nstream\n');
-  push(jpeg);
-  pushStr('\nendstream\nendobj\n');
-
-  const content = 'q\n' + dw.toFixed(2) + ' 0 0 ' + dh.toFixed(2) + ' ' + dx.toFixed(2) + ' '
-    + dy.toFixed(2) + ' cm\n/Im0 Do\nQ\n';
-  obj(5, '<< /Length ' + enc.encode(content).length + ' >>\nstream\n' + content + 'endstream');
-
-  const xref = len;
-  let table = 'xref\n0 6\n0000000000 65535 f \n';
-  for (let i = 1; i <= 5; i++) table += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
-  pushStr(table + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
-
-  return new Blob(parts, { type: 'application/pdf' });
 }
 
 /* ---------------------------------------------------------------------------
@@ -235,17 +264,32 @@ function dashSaveBlob(blob, name) {
 /**
  * @returns {string} a filename stem
  *
- * The project's name first — that is what someone recognises in a downloads
- * folder. The map's title card is the fallback, and it is only a fallback now
- * that the card is off by default: naming every export after a title nobody
- * turned on would give three different boards the same filename.
+ * Same title the page header carries — see dashBoardTitle() for the order it
+ * resolves in and why the placeholder is excluded. One resolver, so the file on
+ * disk and the heading inside it can never disagree.
  */
 function dashExportName() {
-  const pb = document.getElementById('pbName');
-  const t = (pb && pb.textContent.trim())
-    || ((document.getElementById('titleCard') || {}).textContent || '').trim()
-    || 'dashboard';
+  const t = dashBoardTitle() || 'dashboard';
   return t.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').slice(0, 48).toLowerCase() || 'dashboard';
+}
+
+/**
+ * What to say about the cards nobody typed into.
+ *
+ * The export never drops them — a card on the board is a card in the file, and
+ * silently removing content is a worse surprise than an empty box. But it does
+ * say so, because four blank cards in a client's PDF is usually somebody having
+ * forgotten rather than having decided.
+ *
+ * @param {object} model @returns {string} a sentence to append, or ''
+ */
+function dashEmptyNote(model) {
+  const n = model.emptyCount;
+  if (!n) return '';
+  const named = model.emptyTitles.slice(0, 3).join(', ');
+  return ' ' + n + ' card' + (n === 1 ? '' : 's')
+    + ' had no data in ' + (n === 1 ? 'it' : 'them')
+    + (named ? ' — ' + named + (model.emptyTitles.length > 3 ? '…' : '') : '') + '.';
 }
 
 /**
@@ -278,12 +322,13 @@ async function dashExport(kind) {
       return;
     }
 
-    const paper = DASH_PAPER[kind === 'pdf-a3' ? 'a3' : 'a4'];
-    const jpeg = dashJpegBytes(canvas.toDataURL('image/jpeg', DASH_JPEG_Q));
-    const blob = dashBuildPdf(jpeg, canvas.width, canvas.height, paper);
-    dashSaveBlob(blob, stem + '-dashboard.pdf');
-    status('Saved ' + stem + '-dashboard.pdf — ' + paper.label + ', '
-      + (blob.size / 1048576).toFixed(1) + ' MB.');
+    const model = dashCurrentModel();
+    const doc = dashBuildDocument(model, canvas, canvas._dashRects || {}, 2.5,
+      kind === 'pdf-a3' ? 'a3' : 'a4');
+    dashSaveBlob(doc.blob, stem + '-dashboard.pdf');
+    status('Saved ' + stem + '-dashboard.pdf — ' + doc.paper.label + ', '
+      + doc.pages + ' page' + (doc.pages === 1 ? '' : 's') + ', '
+      + (doc.blob.size / 1048576).toFixed(1) + ' MB.' + dashEmptyNote(model));
   } catch (e) {
     console.error('Dashboard export failed:', e);
     status('The board could not be exported: ' + (e && e.message ? e.message : 'unknown error'));

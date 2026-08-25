@@ -256,11 +256,16 @@ function dashChartHtml(card) {
       + '</div>';
   }
 
-  const empty = enough ? '' : '<div class="dc-empty">'
+  // Two halves, because they have two audiences. The state ("No data yet") is
+  // true for anybody; the instruction after it is addressed to whoever is
+  // building the board, and printing it into a client's PDF tells the reader
+  // to turn on a control they do not have. `.dc-hint` is dropped from every
+  // export by #dashGrid.exporting — see css/dashboard.css.
+  const empty = enough ? '' : '<div class="dc-empty">No data yet<span class="dc-hint"> — '
     + (dashEditing
-      ? 'No data yet — type values in the Format pane on the right.'
-      : 'No values yet — turn on Edit board to type them.')
-    + '</div>';
+      ? 'type values in the Format pane on the right.'
+      : 'turn on Edit board to type them.')
+    + '</span></div>';
 
   return legend + '<div class="dc-plot" data-card="' + card.id + '"></div>' + empty;
 }
@@ -326,7 +331,7 @@ function dashSlicerHtml(card) {
     + '</div>'
     + (picked.size
       ? '<button type="button" class="dc-btn dc-addrow dc-clear" data-slice-clear="1">Clear filter</button>'
-      : '<div class="dc-empty">Click a value to filter every chart on the board.</div>');
+      : '<div class="dc-empty"><span class="dc-hint">Click a value to filter every chart on the board.</span></div>');
 }
 
 /**
@@ -348,8 +353,8 @@ function dashAccessHtml() {
     // the card being broken.
     const drawn = (typeof routes !== 'undefined' && routes) ? routes.length : 0;
     return '<div class="dc-empty">' + (drawn
-      ? 'Measuring ' + drawn + ' route' + (drawn === 1 ? '' : 's') + '… distances appear here once the routing service answers.'
-      : 'No routes yet. Draw one in the Routes tab and it appears here.') + '</div>';
+      ? 'Measuring ' + drawn + ' route' + (drawn === 1 ? '' : 's') + '…<span class="dc-hint"> distances appear here once the routing service answers.</span>'
+      : 'No routes yet.<span class="dc-hint"> Draw one in the Routes tab and it appears here.</span>') + '</div>';
   }
   return '<div class="dc-list">' + rows.map(r =>
     '<div class="dc-row">'
@@ -379,8 +384,8 @@ function dashLegendHtml() {
   const rows = (typeof colorKeyRows === 'function') ? colorKeyRows() : [];
   const shown = rows.filter(r => !r.hidden);
   if (!shown.length) {
-    return '<div class="dc-empty">Nothing on the map has a colour yet. '
-      + 'Draw a route or a shape and its key appears here.</div>';
+    return '<div class="dc-empty">Nothing on the map has a colour yet.'
+      + '<span class="dc-hint"> Draw a route or a shape and its key appears here.</span></div>';
   }
   return '<div class="dc-list">' + shown.map(r =>
     '<div class="dc-row">'
