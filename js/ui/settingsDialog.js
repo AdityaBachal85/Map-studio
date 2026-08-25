@@ -9,6 +9,7 @@
 function reflectPrefs() {
   $('prefTheme').querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === getPref('theme')));
   $('prefGlass').checked = !!getPref('glass');
+  $('prefBoardLight').checked = !!getPref('boardLight');
   $('prefMotion').checked = !!getPref('reduceMotion');
   $('prefLayout').querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === getPref('layout')));
   $('prefUnitDistance').value = getPref('unitDistance');
@@ -29,7 +30,14 @@ $('prefsOverlay').addEventListener('click', e => { if (e.target === $('prefsOver
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('prefsOverlay').hidden) closePrefs(); });
 
 $('prefTheme').querySelectorAll('.seg-btn').forEach(btn => {
-  btn.addEventListener('click', () => { setPref('theme', btn.dataset.v); applyTheme(); reflectPrefs(); });
+  // applyBoardTheme rather than applyTheme: on the board with the light
+  // override on, applyTheme would immediately undo it. It falls through to
+  // applyTheme everywhere else, so this is the same call plus one condition.
+  btn.addEventListener('click', () => {
+    setPref('theme', btn.dataset.v);
+    if (typeof applyBoardTheme === 'function') applyBoardTheme(); else applyTheme();
+    reflectPrefs();
+  });
 });
 /**
  * The layout a *new* map opens as — and the only writer of that pref.
@@ -48,6 +56,13 @@ $('prefLayout').querySelectorAll('.seg-btn').forEach(btn => {
 });
 $('prefGlass').addEventListener('change', e => {
   setPref('glass', e.target.checked); applyGlass();
+});
+$('prefBoardLight').addEventListener('change', e => {
+  setPref('boardLight', e.target.checked);
+  // Applied immediately, because this control is reachable FROM the board — the
+  // gear is in its top bar — and a theme switch you have to leave and come back
+  // to would read as not having worked.
+  if (typeof applyBoardTheme === 'function') applyBoardTheme();
 });
 $('prefMotion').addEventListener('change', e => { setPref('reduceMotion', e.target.checked); applyMotion(); });
 $('prefUnitDistance').addEventListener('change', e => { setPref('unitDistance', e.target.value); refreshMeasurementsForUnits(); });

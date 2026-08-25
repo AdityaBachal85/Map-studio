@@ -24,6 +24,9 @@
 /** Quality of the JPEG inside the PDF, and of the JPEG export. */
 const DASH_JPEG_Q = 0.92;
 
+/** What an export is printed on. See the note in dashRenderBoard. */
+const DASH_EXPORT_GROUND = '#FFFFFF';
+
 /**
  * Paint the map tile onto the board canvas, through the map export's own
  * high-resolution renderer.
@@ -114,14 +117,30 @@ async function dashRenderBoard(scale) {
   const grid = document.getElementById('dashGrid');
   if (!grid) throw new Error('The board is not open.');
 
-  const app = document.getElementById('app');
   const wasEditing = typeof dashEditing !== 'undefined' && dashEditing;
   // Tools are not content. Turning edit mode off for the capture also settles
   // the cards into their non-editing height, which is the layout somebody
   // actually wants to hand over.
   if (wasEditing && typeof setDashEditing === 'function') setDashEditing(false);
   grid.classList.add('exporting');
-  // Let the layout and the charts settle at their new sizes before measuring.
+
+  // A DELIVERABLE IS PRINTED ON PAPER, AND PAPER IS WHITE.
+  //
+  // The board follows the app's theme, and the app is usually dark. The PDF
+  // draws its text cards itself and so drew them light, but the pictorial cards
+  // are cropped from THIS bitmap — so a dark-mode export came out as a white
+  // page with the map and every chart sitting on it as black rectangles. Two
+  // themes in one document, which reads as a mistake because it is one.
+  //
+  // The app already has a complete light theme and it is one attribute, so the
+  // capture borrows it rather than a second set of export-only colours being
+  // invented and kept in step by hand. Restored in the `finally` below, and the
+  // frame after the swap is waited for so the browser has actually restyled
+  // before anything is measured or drawn.
+  const themeWas = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = 'light';
+
+  // Let the layout, the charts and the theme swap settle before measuring.
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 260)));
 
   const rect = grid.getBoundingClientRect();
@@ -147,9 +166,11 @@ async function dashRenderBoard(scale) {
   }
 
   try {
-    const surface = getComputedStyle(app || document.body).getPropertyValue('--bg0').trim() || '#ffffff';
     const shot = await html2canvas(grid, {
-      backgroundColor: surface,
+      // White, not the light theme's own --bg0 (#EDF1F7). The reports these
+      // sit alongside are on white, and the cards carry a border of their own,
+      // so they still read as cards against it.
+      backgroundColor: DASH_EXPORT_GROUND,
       scale,
       width: W,
       height: H,
@@ -166,6 +187,8 @@ async function dashRenderBoard(scale) {
     return shot;
   } finally {
     grid.classList.remove('exporting');
+    if (themeWas) document.documentElement.dataset.theme = themeWas;
+    else delete document.documentElement.dataset.theme;
     if (wasEditing && typeof setDashEditing === 'function') setDashEditing(true);
   }
 }

@@ -10,6 +10,11 @@ const PREFS_KEY = 'dbotMapStudioPrefs.v1';
 const PREF_DEFAULTS = {
   theme: 'system',        // 'system' | 'light' | 'dark'
   glass: true,            // frosted-glass effects
+  // The board, in light, whatever the rest of the app is set to. Exports
+  // are always rendered light because a deliverable is printed on white
+  // paper; this is for building one and seeing what you are going to hand
+  // over, without putting the map studio into a theme you do not want it in.
+  boardLight: false,      // force light while the dashboard is open
   reduceMotion: false,    // minimise animations
   unitDistance: 'auto',   // 'auto' | 'km' | 'm' | 'mi'
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'

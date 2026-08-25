@@ -111,6 +111,16 @@ function setAppMode(mode, opts) {
   if (mode === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
   if (mode === 'report' && typeof renderReportSheet === 'function') renderReportSheet();
 
+  // The account chip is drawn on the way in, not at wire time. This file loads
+  // well before auth/session.js, so the call in wireAppMode() runs while
+  // currentUser() does not yet exist and correctly renders nothing — by the
+  // time anybody reaches the board the session has long since resolved.
+  if (mode === 'dashboard') renderDashAccount();
+
+  // Before the frame is drawn, so the board never flashes the app's theme on
+  // the way in or the board's on the way out.
+  applyBoardTheme();
+
   // Leaflet caches the container size and will keep drawing to the old one —
   // a map that thinks it is 1400px wide inside a 700px panel renders half its
   // tiles off the edge and puts every click in the wrong place.
@@ -183,6 +193,57 @@ function renderReportsMenu(serverCount) {
   });
 }
 
+/**
+ * The account chip in the board's top bar.
+ *
+ * Deliberately silent when nobody is signed in: local mode has no account to
+ * show, and an avatar with no name behind it is a control that does nothing.
+ */
+function renderDashAccount() {
+  const slot = document.getElementById('dashAcct');
+  if (!slot) return;
+  slot.innerHTML = '';
+
+  const user = (typeof currentUser === 'function') ? currentUser() : null;
+  if (!user) return;
+
+  const av = document.createElement('button');
+  av.className = 'dt-avatar';
+  av.type = 'button';
+  av.setAttribute('aria-haspopup', 'menu');
+  av.textContent = user.initials || '?';
+  av.style.background = user.color || 'var(--accent)';
+  av.title = user.name + ' \u2014 account';
+  av.setAttribute('aria-label', 'Account menu for ' + user.name);
+  av.addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof projectBridgeAccountMenu === 'function') projectBridgeAccountMenu(av, user);
+  });
+  slot.appendChild(av);
+}
+
+/**
+ * The board, in light, when that is asked for.
+ *
+ * Exports are always rendered light because a deliverable is printed on white
+ * paper (see dashRenderBoard). This is the same idea for the screen: a way to
+ * build the thing you are about to hand over while looking at roughly what it
+ * will be, without putting the map studio itself into a theme nobody wanted.
+ *
+ * IT BORROWS THE THEME RATHER THAN SCOPING ONE. The alternative is a
+ * `.board-light` class re-declaring the token vocabulary for one subtree, and a
+ * second copy of a palette is a second thing to keep in step — css/themes.css
+ * already carries a complete, checked light theme, and it is one attribute.
+ * effectiveTheme() stays the source of truth for every other mode, so leaving
+ * the board puts back whatever the app was actually set to.
+ */
+function applyBoardTheme() {
+  const want = appMode() === 'dashboard' && (typeof getPref === 'function') && !!getPref('boardLight');
+  const root = document.documentElement;
+  if (want) root.dataset.theme = 'light';
+  else if (typeof applyTheme === 'function') applyTheme();
+}
+
 (function wireAppMode() {
   document.querySelectorAll('[data-mode-btn]').forEach(b => {
     b.addEventListener('click', () => setAppMode(b.dataset.modeBtn));
@@ -234,6 +295,21 @@ function renderReportsMenu(serverCount) {
 
   const editBtn = document.getElementById('dashEditBtn');
   if (editBtn) editBtn.addEventListener('click', () => setDashEditing(!dashEditing));
+
+  // Preferences and the account, on the board.
+  //
+  // Both already existed — the gear at #prefsBtn and the avatar projectBridge
+  // builds — but both live in the map sidebar's brandbar, and that panel is
+  // off-canvas outside map mode. So changing the theme or the units, or signing
+  // out, meant going back to the map first: the wrong shape for a control you
+  // reach for WHILE reading a board.
+  //
+  // Wired to the same functions rather than reimplemented. One preferences
+  // dialog, and one sign-out path — projectBridgeAccountMenu also flushes the
+  // autosave before it leaves, which a second copy would quietly forget to do.
+  const prefs = document.getElementById('dashPrefsBtn');
+  if (prefs) prefs.addEventListener('click', () => { if (typeof openPrefs === 'function') openPrefs(); });
+  renderDashAccount();
 
   // "New research" opens the AI panel rather than starting a run: which site
   // the report is for is a choice, and a button that picked one for you would
