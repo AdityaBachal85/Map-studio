@@ -324,13 +324,22 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     content.placed > 0, `${content.placed} of ${content.chips} placed on screen`);
   ck('the leader-line canvas came too', content.leaderCanvas === true);
 
-  const moved = await p.evaluate(async () => {
+  // Polled rather than slept through. The chips are repositioned on a frame,
+  // and this scene renders on SwiftShader at a rate that has nothing to do with
+  // the wall clock — a fixed wait read "0 of 4 moved" on the slow runs and
+  // called a working feature broken.
+  await p.evaluate(() => {
     const bb = document.getElementById('billboardLayer');
-    const before = [...bb.querySelectorAll('.bb')].map(el => el.style.transform);
+    window.__bbWas = [...bb.querySelectorAll('.bb')].map(el => el.style.transform);
     map3dGl().easeTo({ bearing: 55, duration: 0 });
-    await new Promise(r => setTimeout(r, 700));
-    const after = [...bb.querySelectorAll('.bb')].map(el => el.style.transform);
-    return { changed: before.filter((t, i) => t !== after[i]).length, n: before.length };
+  });
+  await p.waitForFunction(() => {
+    const now = [...document.querySelectorAll('#billboardLayer .bb')].map(el => el.style.transform);
+    return window.__bbWas.filter((t, i) => t !== now[i]).length === window.__bbWas.length;
+  }, null, { timeout: 8000, polling: 100 }).catch(() => {});
+  const moved = await p.evaluate(() => {
+    const now = [...document.querySelectorAll('#billboardLayer .bb')].map(el => el.style.transform);
+    return { changed: window.__bbWas.filter((t, i) => t !== now[i]).length, n: window.__bbWas.length };
   });
   ck('and they follow the camera when it is orbited',
     moved.changed > 0, `${moved.changed} of ${moved.n} moved when the bearing changed`);
@@ -388,6 +397,116 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
   await p.screenshot({ path: path.join(__dirname, 'shot-map-3d-vector.png') });
   await p.evaluate(() => setMap3d(false));
+
+  /* -- the navigator: the two gestures MapLibre had and never showed --------- */
+
+  // dragRotate and touchZoomRotate have been enabled since this view was built,
+  // but MapLibre binds them to right-drag and ctrl-drag, which nobody finds —
+  // so the camera was reported as being welded to one angle. These are the
+  // visible controls for the same two capabilities.
+
+  ck('the tilt control is not on screen in 2D',
+    await p.evaluate(() => document.getElementById('m3dTiltWrap').hidden) === true);
+
+  await p.evaluate(() => setMap3d(true));
+  await p.waitForTimeout(2200);
+
+  const nav = await p.evaluate(() => ({
+    shown: !document.getElementById('m3dTiltWrap').hidden,
+    slider: Number(document.getElementById('m3dTilt').value),
+    camera: Math.round(map3dPitch()),
+    readout: document.getElementById('m3dTiltVal').textContent,
+  }));
+  ck('it appears with the 3D view', nav.shown === true);
+  ck('and starts where the camera actually is, rather than at its own default',
+    Math.abs(nav.slider - nav.camera) <= 1 && nav.readout === nav.camera + '\u00B0',
+    JSON.stringify(nav));
+
+  const tilted = await p.evaluate(() => {
+    const t = document.getElementById('m3dTilt');
+    t.value = '22';
+    t.dispatchEvent(new Event('input', { bubbles: true }));
+    return { camera: Math.round(map3dPitch()), readout: document.getElementById('m3dTiltVal').textContent };
+  });
+  ck('moving it leans the camera', Math.abs(tilted.camera - 22) <= 1, JSON.stringify(tilted));
+  ck('and the readout says so', tilted.readout === '22\u00B0', tilted.readout);
+
+  // Orbit by dragging the compass. A real pointer drag, because the whole point
+  // is the gesture: pointerdown, an arc, pointerup.
+  const centre = await p.evaluate(() => {
+    map3dSetBearing(0);
+    const r = document.getElementById('northUpBtn').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await p.waitForTimeout(400);
+  const bearingWas = await p.evaluate(() => Math.round(map3dBearing()));
+  await p.mouse.move(centre.x, centre.y - 14);
+  await p.mouse.down();
+  for (let i = 1; i <= 12; i++) {
+    const a = (-90 + i * 8) * Math.PI / 180;
+    await p.mouse.move(centre.x + Math.cos(a) * 16, centre.y + Math.sin(a) * 16);
+    await p.waitForTimeout(12);
+  }
+  await p.mouse.up();
+  await p.waitForTimeout(400);
+  const bearingNow = await p.evaluate(() => Math.round(map3dBearing()));
+  ck('dragging the compass orbits the camera',
+    Math.abs(bearingNow - bearingWas) > 20,
+    bearingWas + '\u00B0 \u2192 ' + bearingNow + '\u00B0');
+
+  // And the click it was before still works: a drag ends in a click event too,
+  // and that one must not be read as "face north".
+  //
+  // Poll for the swing rather than sleeping through it. Facing north is an
+  // easeTo, so it needs frames, and this scene renders on SwiftShader at a
+  // rate that has nothing to do with the 300ms the animation asks for — a
+  // fixed sleep caught it a third of the way round and called that a failure.
+  await p.evaluate(() => map3dSetBearing(120));
+  await p.waitForTimeout(300);
+  await p.mouse.click(centre.x, centre.y);
+  const faced = await p.waitForFunction(() => Math.abs(map3dBearing()) < 3, null,
+    { timeout: 8000, polling: 100 }).then(() => true).catch(() => false);
+  ck('a plain click still faces north', faced,
+    await p.evaluate(() => Math.round(map3dBearing())) + '\u00B0');
+
+  // Ctrl + left-drag on the map itself. MapLibre has bound this since the view
+  // was built, which is the point: the camera was reported as being welded to
+  // one angle while two gestures for moving it already worked. Asserted so that
+  // the hint the app now shows cannot start telling people something untrue.
+  const mapMid = await p.evaluate(() => {
+    map3dSetBearing(30);
+    const r = document.getElementById('mapWrap').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await p.waitForTimeout(200);
+  const ctrlWas = await p.evaluate(() => Math.round(map3dBearing()));
+  await p.keyboard.down('Control');
+  await p.mouse.move(mapMid.x, mapMid.y);
+  await p.mouse.down();
+  for (let i = 1; i <= 10; i++) { await p.mouse.move(mapMid.x + i * 12, mapMid.y); await p.waitForTimeout(16); }
+  await p.mouse.up();
+  await p.keyboard.up('Control');
+  await p.waitForTimeout(400);
+  const ctrlNow = await p.evaluate(() => Math.round(map3dBearing()));
+  ck('ctrl and a left-drag on the map orbits it too',
+    Math.abs(ctrlNow - ctrlWas) > 20, ctrlWas + '\u00B0 \u2192 ' + ctrlNow + '\u00B0');
+
+  await p.evaluate(() => setMap3d(false));
+  await p.waitForTimeout(600);
+  ck('and the control leaves with the view',
+    await p.evaluate(() => document.getElementById('m3dTiltWrap').hidden) === true);
+
+  // The gestures are only half the fix; being told about them is the other
+  // half. Every one the camera answers to has to be named, or the view reads as
+  // stuck again — which is how this was reported in the first place.
+  await p.click('#dim3dBtn');
+  await p.waitForTimeout(2500);
+  const entryMsg = await p.evaluate(() => document.getElementById('statusMsg').textContent);
+  ck('entering 3D names every way to move the camera',
+    /ctrl-drag/i.test(entryMsg) && /right-drag/i.test(entryMsg)
+      && /compass/i.test(entryMsg) && /slider/i.test(entryMsg), JSON.stringify(entryMsg));
+  await p.evaluate(() => setMap3d(false));
+  await p.waitForTimeout(600);
 
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();

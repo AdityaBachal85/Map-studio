@@ -4848,3 +4848,107 @@ body.identify-on .leaflet-container {
 #identifyBtn { top: 150px; }
 #dimSwitch { top: 196px; }
 #northUpBtn { top: 272px; }
+
+/* ---------------------------------------------------------------------------
+   The 3D navigator's tilt slider
+   ---------------------------------------------------------------------------
+   The compass above it (#northUpBtn) spins the camera; this leans it. Together
+   they are the two things MapLibre could always do and never showed: rotation
+   and pitch are bound to right-drag and ctrl-drag, which almost nobody
+   discovers, so the view read as being locked at one angle.
+
+   Vertical, and in the rail, because it is a camera control and the rail is
+   where the camera controls are. `orient="vertical"` is Firefox's spelling and
+   `writing-mode` is everyone else's; both are set so the track runs the same
+   way in either. Slot seven — see the rail note earlier in this file. */
+#m3dTiltWrap {
+  position: absolute;
+  top: 318px;
+  right: 12px;
+  z-index: 1000;
+  width: 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 7px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+
+#m3dTiltWrap[hidden] { display: none; }
+
+#m3dTilt {
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 18px;
+  height: 84px;
+  margin: 0;
+  background: transparent;
+  cursor: ns-resize;
+}
+
+/* Track and thumb are drawn rather than left to the platform. Left alone,
+   Chromium paints a vertical range as an opaque white pill, which in a rail of
+   frosted dark glass reads as a piece of somebody else's interface. */
+/* The rail is painted, not sized. In vertical writing mode the track box takes
+   the control's whole 18px width — which is the hit area we want and not the
+   line we want — so the 4px rail is a background sized to 4px and centred.
+   Filled below the thumb, so the tilt is readable without reading the number:
+   --m3d-fill is where the thumb sits, written by syncMap3dTilt(). */
+#m3dTilt::-webkit-slider-runnable-track {
+  height: 84px;
+  border-radius: var(--r-pill);
+  background-image: linear-gradient(to bottom,
+    var(--border-strong) 0 var(--m3d-fill, 25%), var(--accent) var(--m3d-fill, 25%) 100%);
+  background-size: 4px 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#m3dTilt::-moz-range-track {
+  height: 84px;
+  border-radius: var(--r-pill);
+  background-image: linear-gradient(to bottom,
+    var(--border-strong) 0 var(--m3d-fill, 25%), var(--accent) var(--m3d-fill, 25%) 100%);
+  background-size: 4px 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#m3dTilt::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--glass-solid);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+
+#m3dTilt::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--glass-solid);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+
+#m3dTilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#m3dTiltVal {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dragging the compass orbits, so it must not also be trying to select its own
+   glyph or hand the pointer back mid-spin. */
+#northUpBtn.orbiting { cursor: grabbing; }
+#northUpBtn svg { pointer-events: none; }

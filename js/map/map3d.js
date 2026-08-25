@@ -312,8 +312,14 @@ async function mountMap3d() {
   }
   _m3dMounting = false;
 
+  // Every gesture the camera answers to, named. The view was reported as being
+  // stuck at one fixed angle when in fact three separate things could move it —
+  // they were simply never said out loud, and "right-drag" alone reads as an
+  // afterthought rather than as the way round. The navigator on the right is
+  // the visible version of the same two capabilities.
   status(loaded
-    ? '3D view: drag to pan, right-drag or two fingers to orbit and tilt. Press 2D to go back.'
+    ? '3D view: drag to pan \u00b7 Ctrl-drag, right-drag or two fingers to orbit and tilt '
+      + '\u00b7 or spin the compass and lean the slider on the right.'
     : '3D view opened, but the ground is still loading.');
   if (typeof syncMap3dControls === 'function') syncMap3dControls();
   return true;
@@ -415,6 +421,33 @@ function map3dResetNorth() {
 function map3dSetPitch(deg) {
   if (!_m3dMap) return;
   _m3dMap.easeTo({ pitch: Math.max(0, Math.min(80, deg)), duration: 200 });
+}
+
+/** @returns {number} the camera's pitch in degrees, or 0 when 3D is off */
+function map3dPitch() {
+  return _m3dMap && _m3dMap.getPitch ? _m3dMap.getPitch() : 0;
+}
+
+/** @returns {number} the camera's bearing in degrees, or 0 when 3D is off */
+function map3dBearing() {
+  return _m3dMap && _m3dMap.getBearing ? _m3dMap.getBearing() : 0;
+}
+
+/**
+ * Point the camera at an absolute bearing.
+ *
+ * `jumpTo` rather than `easeTo` when live: this is driven by a drag, and easing
+ * every pointermove queues a 200ms animation per frame, which fights the next
+ * one and turns a smooth spin into a stutter. The widget eases only when it is
+ * setting a bearing the user did not drag to.
+ *
+ * @param {number} deg @param {boolean} [animate]
+ */
+function map3dSetBearing(deg, animate) {
+  if (!_m3dMap) return;
+  const b = ((Number(deg) || 0) % 360 + 360) % 360;
+  if (animate) _m3dMap.easeTo({ bearing: b, duration: 220 });
+  else _m3dMap.jumpTo({ bearing: b });
 }
 
 /** Frame a bounding box, solving for the pitch rather than ignoring it. */
