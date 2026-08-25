@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0146-blue)
+![Version](https://img.shields.io/badge/version-v6.0147-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,41 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0146 (latest)
+## 🆕 New in v6.0147 (latest)
+
+### Add a location by pasting DMS coordinates
+
+The search bar's coordinate paste and a location card's coordinate field
+used to accept only `19.37697, 73.16956`. They now also read
+`19°22'37.1"N 73°10'10.4"E` — what a phone's GPS app or Google Earth
+actually hands you — straight or curly minute/second marks and either
+hemisphere-letter case included.
+
+One rule makes this safe rather than merely convenient: text carrying a
+degree mark is routed *exclusively* to the DMS parser and never touches the
+old decimal path. `parseFloat` stops at the first character it cannot read
+instead of failing, so a comma-joined DMS pair fed to the decimal path would
+have silently truncated to degrees-only — a coordinate several kilometres
+from the one pasted in, with no error raised. The DMS form also requires a
+hemisphere letter on both halves, which is what removes every ambiguity
+(which half is lat, which is lng, and the sign of each) in one move; text
+with a degree mark but no hemisphere letters is refused rather than guessed
+at, the same posture the bulk sheet importer already takes for the identical
+reason.
+
+### The blank satellite tiles, diagnosed
+
+A report of the map going blank at deep zoom — Esri's "Map data not yet
+available" placeholder, tiled edge to edge — turned out not to be a bug: the
+app already has a mechanism (`attachAdaptiveDepth`) that steps the satellite
+layer's zoom back when it detects that exact placeholder, and the console
+confirmed it was doing so correctly. What it lacked was any way to say so
+*on screen*. When the probe backs all the way down to its floor and a spot
+genuinely has no deeper Esri coverage, it now says as much in the status
+line instead of leaving only a `console.warn` nobody but a developer would
+ever see.
+
+## 🆕 Earlier in v6 (6.0146)
 
 ### An interactive dot field behind the sign-in card
 

@@ -519,6 +519,14 @@
           if (next < floor) {
             disabled = true;
             console.warn('[basemap] depth probe hit its floor at z' + floor + ' and still sees no-data tiles');
+            // The console line above is invisible to anyone without devtools
+            // open, which is exactly why this looks like a broken map rather
+            // than a real limit: nothing on screen said so. This is the one
+            // case worth a message — the routine one-step-down case above
+            // resolves itself within a redraw and would just be noise here.
+            if (typeof status === 'function') {
+              status('Satellite imagery doesn’t go this deep here — zoom out a little for a clear picture.', true);
+            }
             return;
           }
           console.log('[basemap] no imagery at z' + (layer.options.maxNativeZoom + (layer.options.zoomOffset || 0))

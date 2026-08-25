@@ -271,8 +271,16 @@ function wireLocCard(card, loc) {
         });
         card.querySelector('.coord').addEventListener('change', e => {
           const c = parseCoord(e.target.value);
-          if (!c) { status('Coordinates must be "lat, lng" — e.g. 15.28500, 73.95800'); e.target.value = fmtCoord(loc.lat, loc.lng); return; }
+          if (!c) {
+            status('Coordinates must be "lat, lng" (e.g. 15.28500, 73.95800) or DMS with N/S/E/W (e.g. 19°22\'37.1"N 73°10\'10.4"E)');
+            e.target.value = fmtCoord(loc.lat, loc.lng);
+            return;
+          }
           loc.lat = c[0]; loc.lng = c[1]; locChanged(loc); recomputeRoutesTouching(loc.id);
+          // Repaint in canonical decimal even on success — otherwise a DMS
+          // string sits in a field meant to show decimal degrees until the
+          // card happens to rebuild for some unrelated reason.
+          e.target.value = fmtCoord(loc.lat, loc.lng);
         });
         refreshIconButton(card, loc);
         card.querySelector('.icoBtn').addEventListener('click', () => {

@@ -78,4 +78,4 @@ projectBridgeBoot()
 buildImageryLookControl();
 buildRoadLookControl();
 syncEmpties();
-status('Start blank: type in the search bar for live suggestions, paste "lat, lng" directly, or use Click-to-add.');
+status('Start blank: type in the search bar for live suggestions, paste coordinates directly (decimal or DMS), or use Click-to-add.');

@@ -2,13 +2,84 @@
  * utils/math.js — coordinate parsing/formatting and geodesic distance.
  */
 
-/** Parse "lat, lng" text into [lat, lng], or null when invalid/out of range. @param {string} str */
+/**
+ * Parse coordinate text into [lat, lng], or null when invalid/out of range.
+ *
+ * Two forms, chosen by whether a degree mark is present — not tried one after
+ * the other, because that ordering is what would make this unsafe:
+ *
+ *   "19.37697, 73.16956"                    plain decimal degrees
+ *   "19°22'37.1"N 73°10'10.4"E"             degrees-minutes-seconds
+ *
+ * A DEGREE MARK ROUTES STRAIGHT TO THE DMS PARSER AND NEVER TOUCHES THE
+ * DECIMAL PATH. `parseFloat` stops at the first character it cannot read
+ * rather than failing, so `parseFloat("19°22'37.1\"N")` silently returns 19 —
+ * the whole minutes-and-seconds part just disappears. Splitting a
+ * comma-joined DMS pair on that basis would have handed back a coordinate
+ * several kilometres from the one pasted in, with no error to say so. So any
+ * "\d°" in the text is treated as DMS from the first character, exclusively.
+ *
+ * The DMS form requires a hemisphere letter on BOTH halves. That is what
+ * removes every ambiguity in one move — which half is lat and which is lng
+ * (whichever position they are typed in), and the sign of each — so nothing
+ * here has to guess. Text with a degree mark but no hemisphere letters is
+ * refused rather than guessed at, same as the bulk sheet importer already
+ * refuses DMS entirely (see parseLatLngPair in project/importSheet.js) for
+ * the identical reason: a wrong guess lands the pin somewhere real-looking
+ * and wrong, and that is worse than asking again.
+ *
+ * @param {string} str @returns {[number, number]|null}
+ */
 function parseCoord(str) {
   if (!str) return null;
-  const p = String(str).split(',').map(s => parseFloat(s.trim()));
+  const s = String(str).trim();
+  if (/\d\s*[°º]/.test(s)) return parseDmsCoord(s);
+  const p = s.split(',').map(x => parseFloat(x.trim()));
   if (p.length !== 2 || p.some(isNaN) || Math.abs(p[0]) > 90 || Math.abs(p[1]) > 180) return null;
   return p;
 }
+
+/**
+ * One "D° M' S" H" token — minutes and seconds each optional, hemisphere
+ * mandatory. The minute mark accepts a straight or curly apostrophe/prime and
+ * the second mark a straight or curly quote/double-prime, because those are
+ * what a paste from Google Maps, Google Earth or a GPS app actually carries,
+ * not necessarily a plain ' and ".
+ */
+const DMS_TOKEN = '(\\d{1,3}(?:\\.\\d+)?)\\s*[°º]\\s*'
+  + '(?:(\\d{1,2}(?:\\.\\d+)?)\\s*[\'’′]\\s*'
+  + '(?:(\\d{1,2}(?:\\.\\d+)?)\\s*["”″])?)?'
+  + '\\s*([NSEWnsew])';
+/** Two DMS tokens, comma and/or whitespace between them, nothing else in the string. */
+const DMS_PAIR_RE = new RegExp('^\\s*' + DMS_TOKEN + '\\s*[, ]?\\s*' + DMS_TOKEN + '\\s*$');
+
+/**
+ * Parse a degrees-minutes-seconds coordinate pair. Only called once a degree
+ * mark has already been seen — see parseCoord.
+ * @param {string} s @returns {[number, number]|null}
+ */
+function parseDmsCoord(s) {
+  const m = DMS_PAIR_RE.exec(s);
+  if (!m) return null;
+  const toDeg = (deg, min, sec, hemi) => {
+    min = min ? parseFloat(min) : 0;
+    sec = sec ? parseFloat(sec) : 0;
+    if (min >= 60 || sec >= 60) return null;         // malformed, not merely unusual
+    const v = parseFloat(deg) + min / 60 + sec / 3600;
+    return /[SW]/i.test(hemi) ? -v : v;
+  };
+  const a = { deg: m[1], min: m[2], sec: m[3], h: m[4] };
+  const b = { deg: m[5], min: m[6], sec: m[7], h: m[8] };
+  const lat = /[NS]/i.test(a.h) ? a : (/[NS]/i.test(b.h) ? b : null);
+  const lng = /[EW]/i.test(a.h) ? a : (/[EW]/i.test(b.h) ? b : null);
+  if (!lat || !lng || lat === lng) return null;       // one N/S half and one E/W half, not two of a kind
+  const latV = toDeg(lat.deg, lat.min, lat.sec, lat.h);
+  const lngV = toDeg(lng.deg, lng.min, lng.sec, lng.h);
+  if (latV === null || lngV === null) return null;
+  if (Math.abs(latV) > 90 || Math.abs(lngV) > 180) return null;
+  return [latV, lngV];
+}
+
 const fmtCoord = (lat, lng) => lat.toFixed(5) + ', ' + lng.toFixed(5);
 function haversineKm(a, b, c, d) {
   const R = 6371, dLat = (c - a) * Math.PI / 180, dLng = (d - b) * Math.PI / 180;
@@ -73,4 +144,12 @@ function fmtLen(km) {
   const m = km * 1000;
   if (km < 1) return `${Math.round(m)} m`;
   return `${km.toFixed(2)} km`;
+}
+
+/* Node/test interop — harmless in the browser. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    parseCoord, parseDmsCoord, fmtCoord, haversineKm, pathLengthKm,
+    polygonAreaM2, ringPerimeterKm, areaUnits, fmtArea, fmtLen,
+  };
 }
