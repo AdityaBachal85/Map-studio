@@ -163,7 +163,15 @@ function dashModelData(card, resolve) {
     case 'stats':
       return { items: (card.items || []).map(i => ({ label: i.label || '', value: i.value || '' })) };
     case 'gauges':
-      return { items: (card.items || []).map(i => ({ cap: i.cap || '', value: i.value || '', color: col(i.color) })) };
+      // A gauge with no stored colour takes the slot its POSITION gives it,
+      // which is the rule dashGaugesHtml() draws by. Reading i.color alone sent
+      // every ring to the unresolvable-colour fallback and printed four grey
+      // rings into the file while the screen showed four different ones.
+      return {
+        items: (card.items || []).map((i, n) => ({
+          cap: i.cap || '', value: i.value || '', color: col(i.color || (n + 1)),
+        })),
+      };
     case 'table':
       return {
         columns: (card.columns || []).slice(),

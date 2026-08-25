@@ -64,8 +64,8 @@ const DASH_GALLERY = [
   ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 4, h: 5, items: [
     { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
   ['gauges', 'Score rings', 'Figures', () => ({ type: 'gauges', title: 'Scores', w: 6, h: 7, items: [
-    { cap: 'Connectivity', value: '', color: '#22C55E' },
-    { cap: 'Infrastructure', value: '', color: '#38BDF8' }] })],
+    { cap: 'Connectivity', value: '' },
+    { cap: 'Infrastructure', value: '' }] })],
   ['table', 'Table', 'Text', () => ({ type: 'table', title: 'Table', w: 5, h: 8,
     columns: ['Item', 'Value'], rows: [['', ''], ['', '']] })],
   ['list', 'List', 'Text', () => ({ type: 'list', title: 'List', w: 4, h: 7, items: [{ name: 'Item', meta: '' }] })],
@@ -115,11 +115,14 @@ function dashDefaultCards() {
       { label: 'Investment', value: '' }, { label: 'Growth', value: '' }, { label: 'Risk', value: '' }] }),
     c('access', { x: 8, y: 9, w: 4, h: 5, title: 'Key access points' }),
 
+    // No colours here: each ring takes the next viz slot, which is what keeps
+    // the board readable in both themes. Four rings on two repeated hexes also
+    // made Connectivity and Livability look like the same measurement.
     c('gauges', { x: 0, y: 14, w: 5, h: 7, title: 'Infrastructure score', items: [
-      { cap: 'Connectivity', value: '', color: '#22C55E' },
-      { cap: 'Infrastructure', value: '', color: '#38BDF8' },
-      { cap: 'Development', value: '', color: '#F5C518' },
-      { cap: 'Livability', value: '', color: '#22C55E' }] }),
+      { cap: 'Connectivity', value: '' },
+      { cap: 'Infrastructure', value: '' },
+      { cap: 'Development', value: '' },
+      { cap: 'Livability', value: '' }] }),
     c('area', { x: 5, y: 14, w: 4, h: 7, title: 'Property price trend',
       labels: ['2021', '2022', '2023', '2024', '2025'],
       seriesList: [{ name: 'Rs / sq ft', values: [], slot: 1 }] }),
@@ -285,7 +288,12 @@ function dashGaugesHtml(card) {
         + esc(g.cap || '') + ' ' + (set ? v + ' out of 100' : 'not set') + '">'
       + '<circle class="track" cx="30" cy="30" r="' + r + '" stroke-width="5"/>'
       + (set
-        ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" stroke="' + esc(g.color || '#22C55E')
+        // vizSlot() rather than a literal, so a ring drawn in one theme still
+        // reads in the other — the rule every other visual on this board
+        // already follows, and the reason a card stores a slot number and never
+        // a hex. A gauge that carries its own hex from an older board keeps it.
+        ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" stroke="'
+          + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(i + 1) : '#22C55E'))
           + '" stroke-dasharray="' + (circ * v / 100).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
         : '')
       + '<text class="dc-gauge-num" x="30" y="35">' + (set ? v : '—') + '</text></svg>'

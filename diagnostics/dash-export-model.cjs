@@ -200,6 +200,22 @@ ck('a chart series carries a resolved colour, not a slot',
 ck('a gauge carries its own hex through unchanged',
   board.cards.find(c => c.id === 'c4').data.items[0].color === '#22C55E');
 
+// A gauge with no stored colour takes the slot its POSITION gives it, which is
+// the rule dashGaugesHtml() draws by. Reading only the stored colour sent every
+// ring to the unresolvable fallback: four grey rings in the file while the
+// screen showed four different ones.
+{
+  const rings = M.dashModelData({
+    type: 'gauges',
+    items: [{ cap: 'Connectivity', value: '60' }, { cap: 'Infrastructure', value: '69' },
+      { cap: 'Development', value: '78' }],
+  }, resolveColor).items.map(i => i.color);
+  ck('an uncoloured gauge takes the slot its position gives it',
+    rings.join(',') === '#3987e5,#d95926,#199e70', rings.join(','));
+  ck('and none of them falls back to grey',
+    !rings.some(c => c === M.DASH_MODEL_FALLBACK), rings.join(','));
+}
+
 // The whole point: nothing anywhere in the model is still a CSS reference.
 const json = JSON.stringify(board);
 ck('no var() reference survives anywhere in the model', !/var\(/.test(json));
