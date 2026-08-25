@@ -89,6 +89,29 @@ function dashModelTyped(v) {
 }
 
 /**
+ * The chart module's scale rules, wherever this file is running.
+ *
+ * In the browser they are globals from js/ui/dashCharts.js; under Node they are
+ * required from that same file. Either way there is one definition of what a
+ * score is measured against — a second copy here would agree with the drawing
+ * exactly until the day somebody changed one of them.
+ *
+ * @returns {?{kinds:string[], max:function(object, number[]):number}}
+ */
+function dashModelViz() {
+  if (typeof VIZ_SCORE_KINDS !== 'undefined' && typeof vizScoreMax === 'function') {
+    return { kinds: VIZ_SCORE_KINDS, max: vizScoreMax };
+  }
+  if (typeof require === 'function') {
+    try {
+      const m = require('../ui/dashCharts.js');
+      if (m && m.VIZ_SCORE_KINDS) return { kinds: m.VIZ_SCORE_KINDS, max: m.vizScoreMax };
+    } catch (e) { /* not reachable from here; the ceiling simply is not reported */ }
+  }
+  return null;
+}
+
+/**
  * Is this card carrying anything, or is it still a placeholder?
  *
  * THE EXPORT NEEDS THIS AND THE SCREEN DOES NOT. On the board an empty card is
@@ -148,9 +171,10 @@ function dashModelCardEmpty(card) {
 function dashModelData(card, resolve) {
   const col = c => dashModelColor(c, resolve);
   switch (card.type) {
-    case 'chart':
-      return {
-        kind: card.kind || 'column',
+    case 'chart': {
+      const kind = card.kind || 'column';
+      const m = {
+        kind,
         labels: (card.labels || []).slice(),
         series: (card.seriesList || []).map(s => ({
           name: s.name || '',
@@ -158,6 +182,16 @@ function dashModelData(card, resolve) {
           color: col(s.slot),
         })),
       };
+      // A ring, a gauge and a radar are drawn as a fraction of a ceiling, so the
+      // ceiling is part of what they say. Read out of a document without it,
+      // "82" has lost the half that made it mean anything.
+      const viz = dashModelViz();
+      if (viz && viz.kinds.indexOf(kind) >= 0) {
+        const all = m.series.reduce((a, s) => a.concat(s.values.filter(v => v != null)), []);
+        m.max = viz.max(card, all);
+      }
+      return m;
+    }
     case 'stat':
       return { label: card.label || '', value: card.value || '', sub: card.sub || '' };
     case 'stats':
@@ -294,7 +328,7 @@ function dashExportModel(opts) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     dashExportModel, dashModelColor, dashModelCardEmpty, dashModelData,
-    dashModelHasValue, dashModelTyped,
+    dashModelHasValue, dashModelTyped, dashModelViz,
     DASH_MODEL_COLS, DASH_MODEL_FALLBACK, DASH_MODEL_PROMPTS,
   };
 }

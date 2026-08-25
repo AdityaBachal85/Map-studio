@@ -32,7 +32,8 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
 /** Every kind the module claims to draw. */
 const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
-  'combo', 'pie', 'donut', 'scatter', 'funnel', 'treemap'];
+  'combo', 'pie', 'donut', 'scatter', 'funnel', 'treemap',
+  'ring', 'gauge', 'radar'];
 
 (async () => {
   const b = await chromium.launch({
@@ -74,11 +75,15 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
       svg: !!h.querySelector('svg'),
       // Scatter's only mark is the dot, so it has to be in the list — leaving
       // it out reported a working chart as drawing nothing.
-      marks: h.querySelectorAll('.viz-mark, .viz-line, .viz-slice, .viz-arc, .viz-tm, .viz-dot').length,
+      marks: h.querySelectorAll('.viz-mark, .viz-line, .viz-slice, .viz-arc, .viz-tm,'
+        + ' .viz-dot, .viz-dial, .viz-web').length,
     })));
   ck('every kind draws something',
-    drawn.length === 12 && drawn.every(d => d.svg && d.marks > 0),
-    drawn.filter(d => !d.marks).map(d => d.card).join(', ') || '12 of 12');
+    drawn.length === KINDS.length && drawn.every(d => d.svg && d.marks > 0),
+    drawn.filter(d => !d.marks).map(d => d.card).join(', ')
+      || drawn.length + ' of ' + KINDS.length);
+  ck('and the gallery offers every one of them',
+    await p.evaluate(k => k.every(x => DASH_GALLERY.some(g => g[0] === x)), KINDS) === true);
 
   /* -- the reveal runs once, and geometry alone does not replay it ---------- */
 
@@ -263,6 +268,96 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
         width: Math.min(1600 - Math.max(0, r.left), r.width),
         height: Math.min(1000 - Math.max(0, r.top), r.height) };
     }) });
+
+  /* -- the score forms are read against a ceiling, not against a total ------ */
+
+  const scores = await p.evaluate(() => {
+    const site = ['Connectivity', 'Infrastructure', 'Social', 'Green cover', 'Retail'];
+    dashCards = [
+      Object.assign(dashNewCard('ring'), { id: 's1', title: 'Rings', x: 0, y: 0, w: 6, h: 9,
+        labels: site, seriesList: [{ name: 'Score', values: [82, 64, 71, 48, 57], slot: 1 }] }),
+      Object.assign(dashNewCard('gauge'), { id: 's2', title: 'Gauge', x: 6, y: 0, w: 6, h: 9,
+        labels: ['Overall'], seriesList: [{ name: 'Score', values: [74], slot: 3 }] }),
+      Object.assign(dashNewCard('radar'), { id: 's3', title: 'Radar', x: 0, y: 9, w: 6, h: 10,
+        labels: site, seriesList: [
+          { name: 'This site', values: [82, 64, 71, 48, 57], slot: 1 },
+          { name: 'District', values: [61, 72, 55, 66, 44], slot: 2 }] }),
+      Object.assign(dashNewCard('donut'), { id: 's4', title: 'Donut', x: 6, y: 9, w: 6, h: 10,
+        labels: site, seriesList: [{ name: 'Score', values: [82, 64, 71, 48, 57], slot: 1 }] }),
+    ];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard();
+    return true;
+  });
+  await p.waitForTimeout(2400);
+
+  const shapes = await p.evaluate(() => {
+    const q = (id, sel) => document.querySelectorAll('.dc-plot[data-card="' + id + '"] ' + sel);
+    return {
+      rings: q('s1', '.viz-arc').length, tracks: q('s1', '.viz-track').length,
+      dial: q('s2', '.viz-dial').length, gaugeTrack: q('s2', '.viz-track').length,
+      webs: q('s3', '.viz-web').length, webGrid: q('s3', 'path.viz-grid').length,
+      spokes: q('s3', 'line.viz-grid').length,
+    };
+  });
+  ck('a ring per category, each on its own track',
+    shapes.rings === 5 && shapes.tracks === 5, JSON.stringify(shapes));
+  ck('a gauge is one arc on one track', shapes.dial === 1 && shapes.gaugeTrack === 1);
+  ck('a radar is one closed shape per series, on a web with a spoke per axis',
+    shapes.webs === 2 && shapes.webGrid === 4 && shapes.spokes === 5, JSON.stringify(shapes));
+
+  // The ceiling. A score of 82 is 82% of 100 and not 82% of the largest number
+  // on the card — the second reading would make the best category always full.
+  const ceiling = await p.evaluate(() => {
+    const c = dashCardById('s1');
+    const arc = document.querySelector('.dc-plot[data-card="s1"] .viz-arc');
+    const r = +arc.getAttribute('r');
+    const dash = arc.getAttribute('stroke-dasharray').split(' ').map(Number);
+    return { max: vizScoreMax(c, c.seriesList[0].values),
+      frac: dash[0] / (2 * Math.PI * r) };
+  });
+  ck('a score out of 100 is drawn as a fraction of 100',
+    ceiling.max === 100 && Math.abs(ceiling.frac - 0.82) < 0.01,
+    JSON.stringify(ceiling));
+
+  const big = await p.evaluate(() => vizScoreMax({ }, [1840]));
+  ck('and above 100 the ceiling is a round number over the top value',
+    big === 2000, String(big));
+  ck('an explicit scale overrides both',
+    await p.evaluate(() => vizScoreMax({ max: 5 }, [4, 3, 5])) === 5);
+
+  // The funnel's lesson, applied. A share kind may print a percentage beside a
+  // name because the arc IS that percentage. A ring's arc is a fraction of the
+  // scale, so the same percentage beside it would be a different, contradictory
+  // number for the same category.
+  const legends = await p.evaluate(() => {
+    const read = id => [...document.querySelectorAll('.dash-card[data-card="' + id + '"] .dc-key b')]
+      .map(b => b.textContent);
+    return { ring: read('s1'), donut: read('s4'),
+      gauge: document.querySelectorAll('.dash-card[data-card="s2"] .dc-legend').length,
+      radar: [...document.querySelectorAll('.dash-card[data-card="s3"] .dc-key')].map(k => k.textContent) };
+  });
+  ck('a ring legend prints the score, not a share of the total',
+    legends.ring.join(',') === '82,64,71,48,57', legends.ring.join(','));
+  ck('a donut legend still prints the share, because that is what its arc is',
+    legends.donut.every(v => /%$/.test(v)), legends.donut.join(','));
+  ck('a gauge has no legend — it is one number, printed on its own dial',
+    legends.gauge === 0);
+  ck('a radar is keyed by series, because that is what its shapes are',
+    legends.radar.length === 2 && /This site/.test(legends.radar[0]),
+    legends.radar.join(' | '));
+
+  // The ceiling has to reach the file too: "82" read out of a document without
+  // it has lost the half that made it a score.
+  const model = await p.evaluate(() => {
+    const m = dashExportModel({ title: 'Scores' });
+    const by = k => m.cards.find(t => t.id === k);
+    return { ring: by('s1').data.max, gauge: by('s2').data.max,
+      radar: by('s3').data.max, donut: 'max' in by('s4').data };
+  });
+  ck('the export model carries the ceiling for every score form, and only those',
+    model.ring === 100 && model.gauge === 100 && model.radar === 100 && model.donut === false,
+    JSON.stringify(model));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' | ') || 'none');
 

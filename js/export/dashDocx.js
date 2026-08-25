@@ -202,6 +202,10 @@ async function dashBuildDocx(model, canvas, rects, scale) {
             series.map(s => [s.name].concat(labels.map((_, i) =>
               (s.values[i] == null ? '—' : String(s.values[i]))))), pal));
         }
+        // Scores are a fraction of a ceiling, and the table above prints only
+        // the numerator. Saying so once under the table is the difference
+        // between a score and a number.
+        if (d.max) body.push(docxP('Scored out of ' + d.max + '.', { size: 9, color: pal.dim }));
         body.push(docxP('', { spaceAfter: 200 }));
         break;
       }

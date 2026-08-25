@@ -781,6 +781,15 @@ body.dash-gesture .map-wrap { transition: none; }
 .viz-slice { stroke: var(--viz-surface); stroke-width: 2; }
 .viz-tm { stroke: none; }
 
+/* A radar's shape has to be readable through the one on top of it, so the fill
+   is a wash and the outline carries the identity. Two series at 16% each is
+   still lighter than one card border. */
+.viz-web {
+  fill-opacity: .16;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
 .viz-label {
   font-size: 10px;
   fill: var(--text);
@@ -892,6 +901,22 @@ body.dash-gesture .map-wrap { transition: none; }
   transform-origin: center;
   animation: viz-sweep 700ms cubic-bezier(.22, .8, .3, 1) both;
   animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* A dial sweeps along itself rather than turning: it has a floor on the left
+   and a ceiling on the right, and rotating it would start the needle somewhere
+   off the scale. */
+.viz-enter .viz-dial {
+  stroke-dasharray: var(--len, 600);
+  animation: viz-draw 900ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+/* The web grows out of its own centre, which is where every axis on it starts
+   from. */
+.viz-enter .viz-web {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: viz-pop 700ms cubic-bezier(.22, .8, .3, 1) both;
 }
 
 .viz-enter .viz-tm {

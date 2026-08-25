@@ -54,10 +54,95 @@ const VIZ_KINDS = [
   ['stackedColumn', 'Stacked column'], ['stackedBar', 'Stacked bar'], ['combo', 'Combo'],
   ['pie', 'Pie'], ['donut', 'Donut'], ['scatter', 'Scatter'],
   ['funnel', 'Funnel'], ['treemap', 'Treemap'],
+  ['ring', 'Rings'], ['gauge', 'Gauge'], ['radar', 'Radar'],
 ];
 
 /** Kinds that are part-to-whole: one series, one slice per category. */
 const VIZ_SHARE_KINDS = ['pie', 'donut', 'funnel', 'treemap'];
+
+/**
+ * TWO FORMS ARE DELIBERATELY ABSENT.
+ *
+ * A candlestick needs four coupled numbers per category in a fixed order —
+ * open, high, low, close — and a sankey needs a table of from/to/value links.
+ * This board's editor offers categories and series, and neither shape can be
+ * said in it. A candlestick could be faked by reading four series positionally,
+ * which means every four-series board on the app would silently become an
+ * OHLC chart the moment somebody picked the wrong kind: worse than not offering
+ * it. Both are additions to the data model first and drawings second, and
+ * neither answers a question a property connectivity board asks.
+ */
+
+/**
+ * Kinds read against a fixed ceiling rather than as a share of a total.
+ *
+ * The distinction decides what the legend is allowed to say. A share kind can
+ * print a percentage beside each name because the arc IS that percentage; a
+ * score kind cannot, because its arc is a fraction of the scale, and printing
+ * share-of-total beside it puts two different percentages for the same category
+ * on one card. The funnel already taught this lesson once.
+ */
+const VIZ_SCORE_KINDS = ['ring', 'gauge', 'radar'];
+
+/** Kinds whose colours belong to the categories rather than to the series. */
+const VIZ_CATEGORY_KEYED = ['pie', 'donut', 'funnel', 'treemap', 'ring'];
+
+/** Kinds that need only one number to say anything. */
+const VIZ_SINGLE_KINDS = ['pie', 'donut', 'funnel', 'treemap', 'ring', 'gauge'];
+
+/**
+ * Whether a card has enough numbers to be worth drawing.
+ *
+ * @param {string} kind @param {number[]} flat every finite value on the card
+ * @param {string[]} [cats]
+ * @returns {boolean}
+ */
+function vizEnough(kind, flat, cats) {
+  // Three axes is the minimum that encloses an area; two draw a line, and a
+  // radar of one axis is a dot.
+  if (kind === 'radar') return flat.length >= 3 && (cats || []).length >= 3;
+  return VIZ_SINGLE_KINDS.indexOf(kind) >= 0 ? flat.length >= 1 : flat.length >= 2;
+}
+
+/**
+ * The ceiling a score is read against.
+ *
+ * Scores on a board like this are out of 100 far more often than not, so that
+ * is the default whenever the numbers fit inside it — a connectivity score of
+ * 82 drawn as 82% of 100 is the reading everybody expects, and drawing it as
+ * 82% of a tick-rounded 90 would be both true and useless. Above 100 the scale
+ * comes from the same tick maths every axis on the board uses, so a gauge and a
+ * column of the same data agree about where the top is.
+ *
+ * @param {object} card @param {number[]} vals @returns {number}
+ */
+function vizScoreMax(card, vals) {
+  const asked = Number(card.max);
+  if (isFinite(asked) && asked > 0) return asked;
+  const top = Math.max.apply(null, vals.filter(isFinite).concat([0]));
+  if (top <= 100) return 100;
+  const t = vizTicks(0, top, 4);
+  return t[t.length - 1] || top;
+}
+
+/**
+ * A circular arc as a path, drawn clockwise from `a0` to `a1` in degrees.
+ *
+ * Degrees are measured from twelve o'clock, because that is where every dial
+ * anybody has ever read starts.
+ *
+ * @param {number} cx @param {number} cy @param {number} r
+ * @param {number} a0 @param {number} a1
+ * @returns {string}
+ */
+function vizArcPath(cx, cy, r, a0, a1) {
+  const rad = d => (d - 90) * Math.PI / 180;
+  const x0 = cx + r * Math.cos(rad(a0)), y0 = cy + r * Math.sin(rad(a0));
+  const x1 = cx + r * Math.cos(rad(a1)), y1 = cy + r * Math.sin(rad(a1));
+  const big = Math.abs(a1 - a0) > 180 ? 1 : 0;
+  return 'M' + x0.toFixed(1) + ' ' + y0.toFixed(1) + 'A' + r.toFixed(1) + ' ' + r.toFixed(1)
+    + ' 0 ' + big + ' 1 ' + x1.toFixed(1) + ' ' + y1.toFixed(1);
+}
 
 /** Kinds drawn along a horizontal value axis. */
 const VIZ_HORIZONTAL = ['bar', 'stackedBar'];
@@ -636,6 +721,185 @@ function vizTreemap(card, w, h) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Score forms — read against a ceiling, not against a total
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Concentric rings, one per category, each a fraction of the same ceiling.
+ *
+ * NOT a donut wearing a different hat. A donut divides one quantity between
+ * categories and its arcs necessarily sum to the circle; these are independent
+ * scores that happen to be drawn together, and any one of them can be full
+ * while the others are empty. That is the reading a set of site scores wants —
+ * "connectivity 82, infrastructure 64" — and the one a donut cannot give,
+ * because a donut would show 82 and 64 as 56% and 44% of each other.
+ *
+ * Every ring shares the ceiling, so the same score is the same sweep on any
+ * ring — otherwise the outer ring's greater circumference would make equal
+ * numbers look unequal, which is the failure mode this form is known for.
+ *
+ * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ */
+function vizRing(card, w, h) {
+  const f = vizFiltered(vizCategories(card), vizSeries(card));
+  const vals = (f.series[0] ? f.series[0].values : []).map(Number);
+  if (!vals.some(isFinite)) return '';
+  const max = vizScoreMax(card, vals) || 1;
+
+  const cx = w / 2, cy = h / 2;
+  const outer = Math.max(18, Math.min(w, h) / 2 - 6);
+  const n = Math.min(vals.length, 6);          // beyond six the innermost is a dot
+  const gap = 4;
+  const thick = Math.max(5, Math.min(17, (outer * 0.78) / n - gap));
+
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const r = outer - thick / 2 - i * (thick + gap);
+    if (r < thick) break;
+    const circ = 2 * Math.PI * r;
+    const frac = Math.max(0, Math.min(1, (isFinite(vals[i]) ? vals[i] : 0) / max));
+    s += '<circle class="viz-track" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1)
+      + '" r="' + r.toFixed(1) + '" style="stroke-width:' + thick.toFixed(1) + '"/>'
+      // Round caps, so a ring that is barely filled is still a mark rather than
+      // a hairline, and a full one closes on itself cleanly.
+      + '<circle class="viz-arc" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1)
+      + '" r="' + r.toFixed(1) + '" fill="none" stroke-linecap="round" style="stroke:'
+      + vizSlot(i + 1) + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '"'
+      + ' stroke-dasharray="' + (circ * frac).toFixed(2) + ' ' + (circ * (1 - frac) + 1).toFixed(2) + '"'
+      + ' transform="rotate(-90 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"/>';
+  }
+  return s;
+}
+
+/**
+ * One number on a dial.
+ *
+ * 240 degrees rather than a full circle: a ring that closes has no beginning,
+ * so the eye cannot tell 0% from 100%. An open dial has a floor on the left and
+ * a ceiling on the right and reads at a glance, which is the entire job.
+ *
+ * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ */
+function vizGauge(card, w, h) {
+  const f = vizFiltered(vizCategories(card), vizSeries(card));
+  const ser = f.series[0];
+  const vals = (ser ? ser.values : []).map(Number).filter(isFinite);
+  if (!vals.length) return '';
+  const v = vals[0];
+  const max = vizScoreMax(card, vals) || 1;
+  const frac = Math.max(0, Math.min(1, v / max));
+
+  const A0 = -120, A1 = 120;                   // from twelve o'clock, clockwise
+  const cx = w / 2;
+  // Pushed below centre: the dial's own mass sits in the upper two thirds, so
+  // centring the circle leaves the caption crowded and the top bare.
+  const cy = h / 2 + Math.min(18, h * 0.06);
+  const r = Math.max(16, Math.min(w / 2 - 10, (h - 30) / 1.55));
+  const thick = Math.max(7, Math.min(18, r * 0.24));
+
+  const label = (f.cats[0] || (ser && ser.name) || '').toString();
+  return '<path class="viz-track" d="' + vizArcPath(cx, cy, r, A0, A1)
+    + '" fill="none" stroke-linecap="round" style="stroke-width:' + thick.toFixed(1) + '"/>'
+    // Its own class, not .viz-arc: a ring's enter animation turns the whole
+    // circle about its centre, which for a circle is also its bounding box's
+    // centre. An arc's is not, so the same rotation would swing the needle out
+    // of the dial. This one sweeps along itself instead, which is what a dial
+    // does anyway.
+    + '<path class="viz-dial" d="' + vizArcPath(cx, cy, r, A0, A0 + (A1 - A0) * frac)
+    + '" fill="none" stroke-linecap="round" style="stroke:' + vizSlot(ser.slot)
+    + ';stroke-width:' + thick.toFixed(1)
+    + ';--len:' + (r * (A1 - A0) * Math.PI / 180 * frac + thick).toFixed(0) + '"/>'
+    + '<text class="viz-donut-total" x="' + cx.toFixed(1) + '" y="' + (cy + 2).toFixed(1)
+    + '" text-anchor="middle">' + vizEsc(vizNum(v)) + '</text>'
+    + '<text class="viz-donut-cap" x="' + cx.toFixed(1) + '" y="' + (cy + 18).toFixed(1)
+    + '" text-anchor="middle">' + vizEsc(label ? label : 'of ' + vizNum(max)) + '</text>'
+    // The floor and the ceiling, at the two ends of the arc. Without them the
+    // big number in the middle is just a number: 74 on a dial that is most of
+    // the way round says one thing out of 100 and quite another out of 80.
+    + '<text class="viz-tick" x="' + (cx + (r + thick * 0.9) * Math.cos((A0 - 90) * Math.PI / 180)).toFixed(1)
+    + '" y="' + (cy + (r + thick * 0.9) * Math.sin((A0 - 90) * Math.PI / 180) + 10).toFixed(1)
+    + '" text-anchor="middle">0</text>'
+    + '<text class="viz-tick" x="' + (cx + (r + thick * 0.9) * Math.cos((A1 - 90) * Math.PI / 180)).toFixed(1)
+    + '" y="' + (cy + (r + thick * 0.9) * Math.sin((A1 - 90) * Math.PI / 180) + 10).toFixed(1)
+    + '" text-anchor="middle">' + vizEsc(vizNum(max)) + '</text>';
+}
+
+/**
+ * One axis per category, one closed shape per series.
+ *
+ * The web is drawn at quarters of the same ceiling every score form on this
+ * board uses, so a point half way out is half the score — the one question a
+ * radar is read for.
+ *
+ * @param {object} card @param {number} w @param {number} h @returns {string} SVG
+ */
+function vizRadar(card, w, h) {
+  const fmt = vizFmt(card);
+  const f = vizFiltered(vizCategories(card), vizSeries(card));
+  const cats = f.cats;
+  const series = f.series.filter(s => s.values.some(isFinite));
+  if (cats.length < 3 || !series.length) return '';
+
+  const all = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
+  const max = vizScoreMax(card, all) || 1;
+  const n = cats.length;
+
+  const cx = w / 2, cy = h / 2 + 2;
+  // Room for the axis names, which sit outside the web and are the widest thing
+  // on the card.
+  const pad = fmt.xAxis ? Math.min(52, Math.max(26, w * 0.12)) : 10;
+  const R = Math.max(20, Math.min(w / 2 - pad, h / 2 - 14));
+
+  const at = (i, frac) => {
+    const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+    return [cx + R * frac * Math.cos(a), cy + R * frac * Math.sin(a)];
+  };
+  const poly = frac => cats.map((c, i) => at(i, frac).map(v => v.toFixed(1)).join(' ')).join('L');
+
+  let s = '';
+
+  if (fmt.grid) {
+    // Polygons, not circles. A circular web says the space between axes is
+    // measured, and it is not — there is nothing between one category and the
+    // next.
+    //
+    // Quarters rather than the tick values every other chart uses, because a
+    // radar carries no numbers on its rings: nothing here would say "50". The
+    // rings are only there to judge how far out a point sits, and the round
+    // tick maths collapsed a 0-100 scale to a single ring at half way.
+    [0.25, 0.5, 0.75, 1].forEach(t => {
+      s += '<path class="viz-grid" d="M' + poly(t) + 'Z" fill="none"/>';
+    });
+    s += cats.map((c, i) => '<line class="viz-grid" x1="' + cx.toFixed(1) + '" y1="' + cy.toFixed(1)
+      + '" x2="' + at(i, 1)[0].toFixed(1) + '" y2="' + at(i, 1)[1].toFixed(1) + '"/>').join('');
+  }
+
+  series.forEach(ser => {
+    const pts = cats.map((c, i) => at(i, Math.max(0, Math.min(1,
+      (isFinite(ser.values[i]) ? ser.values[i] : 0) / max))));
+    const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L') + 'Z';
+    const col = vizSlot(ser.slot);
+    s += '<path class="viz-web" d="' + d + '" style="fill:' + col + ';stroke:' + col + '"/>'
+      + pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
+        + '" r="' + (VIZ_DOT_R - 1) + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
+  });
+
+  if (fmt.xAxis) {
+    s += cats.map((c, i) => {
+      const p = at(i, 1.13);
+      // Anchored by which side of the web the axis is on, so a name on the left
+      // runs away from the shape rather than across it.
+      const dx = p[0] - cx;
+      const anchor = Math.abs(dx) < R * 0.2 ? 'middle' : (dx > 0 ? 'start' : 'end');
+      return '<text class="viz-tick" x="' + p[0].toFixed(1) + '" y="' + (p[1] + 3.5).toFixed(1)
+        + '" text-anchor="' + anchor + '">'
+        + vizEsc(c.length > 12 ? c.slice(0, 11) + '\u2026' : c) + '</text>';
+    }).join('');
+  }
+  return s;
+}
+
+/* ---------------------------------------------------------------------------
  * Drawing and hover
  * ------------------------------------------------------------------------ */
 
@@ -670,14 +934,18 @@ function dashDrawChart(host, card) {
   const kind = card.kind || 'column';
   const series = vizSeries(card);
   const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
-  const enough = VIZ_SHARE_KINDS.indexOf(kind) >= 0 ? flat.length >= 1 : flat.length >= 2;
-  if (!enough) { host.innerHTML = ''; host.dataset.viz = ''; return; }
+  if (!vizEnough(kind, flat, vizCategories(card))) {
+    host.innerHTML = ''; host.dataset.viz = ''; return;
+  }
 
   _vizUid++;
   let body;
   if (kind === 'pie' || kind === 'donut') body = vizPie(card, w, h);
   else if (kind === 'funnel') body = vizFunnel(card, w, h);
   else if (kind === 'treemap') body = vizTreemap(card, w, h);
+  else if (kind === 'ring') body = vizRing(card, w, h);
+  else if (kind === 'gauge') body = vizGauge(card, w, h);
+  else if (kind === 'radar') body = vizRadar(card, w, h);
   else body = vizCartesian(card, w, h);
 
   const sig = vizRevealSignature(card);
@@ -701,7 +969,9 @@ function dashDrawChart(host, card) {
     setTimeout(() => { if (svg && svg.isConnected) svg.classList.remove('viz-enter'); }, VIZ_ENTER_TOTAL);
   }
 
-  if (VIZ_SHARE_KINDS.indexOf(kind) < 0) vizWireHover(host, card, w, h);
+  if (VIZ_SHARE_KINDS.indexOf(kind) < 0 && VIZ_SCORE_KINDS.indexOf(kind) < 0) {
+    vizWireHover(host, card, w, h);
+  }
 }
 
 /** @returns {boolean} true when the operator has asked for less motion */
@@ -873,4 +1143,14 @@ function vizObserveSizes() {
   }
   _vizRo.disconnect();
   document.querySelectorAll('#dashGrid .dc-plot[data-card]').forEach(h => _vizRo.observe(h));
+}
+
+/* Node/test interop — harmless in the browser. Only the pure parts: the scale
+   rules are shared with the export model, and a rule with two definitions is a
+   rule that will disagree with itself. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    VIZ_KINDS, VIZ_SHARE_KINDS, VIZ_SCORE_KINDS, VIZ_CATEGORY_KEYED, VIZ_SINGLE_KINDS,
+    vizTicks, vizNum, vizEnough, vizScoreMax, vizArcPath, vizPathLen,
+  };
 }

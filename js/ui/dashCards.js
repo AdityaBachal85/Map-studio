@@ -60,6 +60,9 @@ const DASH_GALLERY = [
   ['donut', 'Donut', 'Share', () => dashChartShape('donut')],
   ['funnel', 'Funnel', 'Share', () => dashChartShape('funnel')],
   ['treemap', 'Treemap', 'Share', () => dashChartShape('treemap')],
+  ['ring', 'Rings', 'Scores', () => dashChartShape('ring')],
+  ['gauge', 'Gauge', 'Scores', () => dashChartShape('gauge')],
+  ['radar', 'Radar', 'Scores', () => dashChartShape('radar')],
   ['stat', 'KPI number', 'Figures', () => ({ type: 'stat', title: 'Metric', label: 'Metric', value: '', sub: '', w: 3, h: 5 })],
   ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 4, h: 5, items: [
     { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
@@ -231,8 +234,9 @@ function dashChartHtml(card) {
   const kind = card.kind || 'column';
   const series = vizSeries(card);
   const share = VIZ_SHARE_KINDS.indexOf(kind) >= 0;
+  const byCategory = VIZ_CATEGORY_KEYED.indexOf(kind) >= 0;
   const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
-  const enough = share ? flat.length >= 1 : flat.length >= 2;
+  const enough = vizEnough(kind, flat, vizCategories(card));
 
   // A legend is the dependable identity channel — never make the reader
   // match colours by eye. One series needs none: the title already names it.
@@ -242,19 +246,27 @@ function dashChartHtml(card) {
   // a funnel is the share of the *first* stage, which is what the bars carry. A
   // legend showing share-of-total put two different percentages for the same
   // stage on one card.
+  //
+  // A gauge needs none for the same reason: it is one number, and it is printed
+  // in the middle of its own dial at four times the legend's size.
   let legend = '';
-  const wantLegend = fmt.legend !== 'off' && enough && kind !== 'funnel'
-    && (share ? true : series.length > 1);
+  const wantLegend = fmt.legend !== 'off' && enough && kind !== 'funnel' && kind !== 'gauge'
+    && (byCategory ? true : series.length > 1);
   if (wantLegend) {
-    const keys = share
+    const keys = byCategory
       ? vizCategories(card).map((c, i) => [c, i + 1])
       : series.map(s => [s.name, s.slot]);
-    const totals = share ? (series[0] ? series[0].values.map(Number) : []) : null;
-    const sum = totals ? totals.reduce((a, b) => a + (isFinite(b) && b > 0 ? b : 0), 0) : 0;
-    legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (share ? 'right' : 'top') : fmt.legend) + '">'
+    const vals = byCategory && series[0] ? series[0].values.map(Number) : null;
+    // Only a share kind may print a percentage: on a ring the arc is a fraction
+    // of the scale, not of the total, so share-of-total beside it would be a
+    // second, different percentage for the same category. Rings show the score
+    // itself, which is the number somebody typed.
+    const sum = share && vals ? vals.reduce((a, b) => a + (isFinite(b) && b > 0 ? b : 0), 0) : 0;
+    legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (byCategory ? 'right' : 'top') : fmt.legend) + '">'
       + keys.map(([name, slot], i) =>
         '<span class="dc-key"><i style="background:' + vizSlot(slot) + '"></i>' + esc(String(name || '—'))
-        + (sum ? '<b>' + Math.round(((totals[i] > 0 ? totals[i] : 0) / sum) * 100) + '%</b>' : '')
+        + (sum ? '<b>' + Math.round(((vals[i] > 0 ? vals[i] : 0) / sum) * 100) + '%</b>'
+          : (kind === 'ring' && vals && isFinite(vals[i]) ? '<b>' + esc(vizNum(vals[i])) + '</b>' : ''))
         + '</span>').join('')
       + '</div>';
   }

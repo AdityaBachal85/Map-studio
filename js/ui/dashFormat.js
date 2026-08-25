@@ -142,10 +142,23 @@ function renderDashFormat() {
   if (isChart) {
     f += dfRow('Legend', dfSeg('legend', [['auto', 'Auto'], ['top', 'Top'], ['right', 'Right'],
       ['bottom', 'Bottom'], ['off', 'Off']], fmt.legend));
-    f += dfToggle('labels', fmt.labels, 'Data labels');
-    f += dfToggle('grid', fmt.grid, 'Gridlines');
-    f += dfToggle('xAxis', fmt.xAxis, 'Category axis');
-    f += dfToggle('yAxis', fmt.yAxis, 'Value axis');
+    // Only the toggles that do something for this kind. A "Value axis" switch on
+    // a gauge is a control that changes nothing, and a panel full of those
+    // teaches people to stop reading it.
+    const score = VIZ_SCORE_KINDS.indexOf(card.kind) >= 0;
+    const share = VIZ_SHARE_KINDS.indexOf(card.kind) >= 0;
+    if (!score) f += dfToggle('labels', fmt.labels, 'Data labels');
+    if (!share && card.kind !== 'gauge') f += dfToggle('grid', fmt.grid, 'Gridlines');
+    if (!share && card.kind !== 'gauge' && card.kind !== 'ring') {
+      f += dfToggle('xAxis', fmt.xAxis, card.kind === 'radar' ? 'Axis names' : 'Category axis');
+    }
+    if (!share && !score) f += dfToggle('yAxis', fmt.yAxis, 'Value axis');
+    if (score) {
+      // The ceiling a score is drawn against. Left blank it is 100 for anything
+      // that fits inside it, which is what a score usually means.
+      f += dfRow('Scale to', '<input type="number" min="1" data-dfnum="max" value="'
+        + (card.max == null ? '' : Number(card.max)) + '" placeholder="100">');
+    }
     if (card.kind === 'line' || card.kind === 'area' || card.kind === 'combo') {
       f += dfToggle('smooth', fmt.smooth, 'Smooth line');
     }
@@ -241,6 +254,18 @@ function dashFormatApply(card, key, v) {
     const card = dashFormatTarget();
     if (!card) return;
     const k = inp.dataset.dfnum;
+
+    // The score ceiling is not geometry. Running it through the layout clamps
+    // below would cap it at the column count, and settling the board because
+    // somebody typed a scale would move tiles for no reason.
+    if (k === 'max') {
+      const n = parseFloat(inp.value);
+      if (isFinite(n) && n > 0) card.max = n; else delete card.max;
+      dashDrawAllCharts();
+      renderDashFormat();
+      return;
+    }
+
     const min = (k === 'w' || k === 'h') ? (k === 'w' ? DASH_MIN.w : DASH_MIN.h) : 0;
     card[k] = Math.max(min, Math.min(k === 'x' || k === 'w' ? DASH_COLS : 999, +inp.value || 0));
     // Settle with this tile as the anchor, so the number you typed is the one
