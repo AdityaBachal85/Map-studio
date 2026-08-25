@@ -4678,6 +4678,11 @@ body.identify-on .leaflet-container {
    so continues at 242. Two segments stacked rather than side by side, because
    the column is 38px wide and the stack reads down.
 
+   The 242 here is the position with every slot filled. #aiBtn's slot is
+   currently empty and the whole column below it is shifted up one step by the
+   "AI reports — switched off" block at the end of this file, which is where the
+   live number comes from. Restoring #aiBtn restores this one.
+
    Built from #modeSwitch's rules, not invented beside them. This app already
    has a segmented control — Map / Dashboard / Report — and a second one in a
    different visual language is a second language to learn. The first attempt
@@ -4803,3 +4808,43 @@ body.identify-on .leaflet-container {
 /* The contour canvas itself. `will-change` because it is repainted on every
    zoom frame and is often the largest surface on the page. */
 .contour-canvas { will-change: transform; }
+
+/* ---------------------------------------------------------------------------
+   AI reports — switched off
+   ---------------------------------------------------------------------------
+   The research backend is not working, so the three buttons that reach it are
+   hidden rather than deleted. All of them open the SAME panel: "+ New research"
+   (#dtNewReport) does nothing but call openAiPanel(), and the toolbar meter
+   (#dtUsage) is a quota readout for it. One feature, three doors.
+
+   NOTHING IS REMOVED. js/ui/aiTab.js, js/services/aiReports.js and
+   js/services/aiReportLog.js all still load, and js/app.js still calls
+   initAiTab() — which is deliberate: deleting those files without also removing
+   that call would throw a ReferenceError and halt every init after it
+   (initContourPanel, initMap3dControls, initAutosave). Turning the feature back
+   on is deleting this one block.
+
+   The #dtReports / #dashExportMenu popovers share one open/close loop in
+   js/ui/appMode.js. That array is untouched on purpose: editing it to drop the
+   AI entry is how you break the Export dropdown. A hidden button cannot be
+   clicked, so its popover can never open, and the loop is left alone. */
+#aiBtn,
+#aiPanel,
+#dtUsage,
+#dtReports,
+#dtNewReport { display: none !important; }
+
+/* The right-hand map rail is a column of hard-coded offsets, 46px apart, and
+   #aiBtn held slot three at 104px. Hiding it leaves a hole in the middle of the
+   column, so everything below moves up one slot. The steps are now
+   12 / 58 / 104 / 150 / 196, with #northUpBtn continuing at 272 because
+   #dimSwitch is a two-item stack 76px tall rather than a 38px button.
+
+   These override the originals in components.css (#centerBtn) and earlier in
+   this file (#identifyBtn, #dimSwitch, #northUpBtn); restoring #aiBtn means
+   deleting this block with the one above it, and the original values apply
+   again untouched. */
+#centerBtn { top: 104px; }
+#identifyBtn { top: 150px; }
+#dimSwitch { top: 196px; }
+#northUpBtn { top: 272px; }

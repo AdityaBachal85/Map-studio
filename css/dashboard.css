@@ -146,6 +146,26 @@
 .app[data-mode="report"] #mapHistory,
 .app[data-mode="report"] #fsBtn { display: none; }
 
+/* Dashboard mode hides the same furniture, and for a sharper reason: on the
+   board it is DUPLICATED, not merely cramped.
+
+   These four cards are children of #mapWrap, and dashMapToCanvas() moves that
+   whole element into the board with appendChild — so the entire subtree rides
+   along into the map tile whether the board wants it or not.
+
+   Key Distances (#legendCard) is the worst of it: the board's own "Key access
+   points" card is built from legendRows(), the identical function that fills
+   the on-map card, so the same five places with the same distances and times
+   were printed twice on one page — once in a floating box covering roughly a
+   third of the map, once in a card beside it. The Legend (#colorKeyCard) has a
+   board card of its own now too. The title card is the sheet's job, as above.
+
+   The map tile shows the map. The cards carry the numbers. */
+.app[data-mode="dashboard"] #titleCard,
+.app[data-mode="dashboard"] #legendCard,
+.app[data-mode="dashboard"] #colorKeyCard,
+.app[data-mode="dashboard"] #contourLegendCard { display: none; }
+
 /* The studio sidebar is `position:absolute; left:0; z-index:1200` — it takes no
    part in the grid, so outside map mode it lands directly on top of the left
    nav and swallows every click meant for it. (Found the same way as the bug

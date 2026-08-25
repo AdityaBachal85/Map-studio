@@ -73,6 +73,7 @@ const DASH_GALLERY = [
   ['slicer', 'Slicer', 'Filter', () => ({ type: 'slicer', title: 'Filter', w: 3, h: 7,
     items: ['2021', '2022', '2023'], picked: [] })],
   ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 4, h: 7 })],
+  ['legend', 'Legend (live)', 'From the map', () => ({ type: 'legend', title: 'Legend', w: 4, h: 6 })],
 ];
 
 /** @param {string} kind @returns {object} a fresh chart of that kind */
@@ -114,14 +115,19 @@ function dashDefaultCards() {
       { label: 'Investment', value: '' }, { label: 'Growth', value: '' }, { label: 'Risk', value: '' }] }),
     c('access', { x: 8, y: 9, w: 4, h: 5, title: 'Key access points' }),
 
-    c('gauges', { x: 0, y: 14, w: 6, h: 7, title: 'Infrastructure score', items: [
+    c('gauges', { x: 0, y: 14, w: 5, h: 7, title: 'Infrastructure score', items: [
       { cap: 'Connectivity', value: '', color: '#22C55E' },
       { cap: 'Infrastructure', value: '', color: '#38BDF8' },
       { cap: 'Development', value: '', color: '#F5C518' },
       { cap: 'Livability', value: '', color: '#22C55E' }] }),
-    c('area', { x: 6, y: 14, w: 6, h: 7, title: 'Property price trend',
+    c('area', { x: 5, y: 14, w: 4, h: 7, title: 'Property price trend',
       labels: ['2021', '2022', '2023', '2024', '2025'],
       seriesList: [{ name: 'Rs / sq ft', values: [], slot: 1 }] }),
+    // The colour key the map tile no longer carries. Live, like Key access
+    // points — it fills itself the moment anything on the map has a colour,
+    // which is what earns it a place on a default board where most cards are
+    // waiting to be typed into.
+    c('legend', { x: 9, y: 14, w: 3, h: 7, title: 'Legend' }),
     c('text', { x: 0, y: 21, w: 6, h: 6, title: 'Executive summary',
       body: 'Type the summary that opens the report.' }),
     c('list', { x: 6, y: 21, w: 6, h: 6, title: 'Timeline (development)', items: [
@@ -353,6 +359,36 @@ function dashAccessHtml() {
     + '</div>').join('') + '</div>';
 }
 
+/**
+ * The colour key, read live from the same rows the on-map Legend card uses.
+ *
+ * Sibling of dashAccessHtml() above and typed in no more than that one is.
+ *
+ * WHY BOTH THIS AND KEY ACCESS POINTS. They answer different questions and
+ * overlap only on a map that has nothing but routes. Key access points is the
+ * measured list — what is near, how far, how long — and it only knows about
+ * routes. This is what the colours MEAN, which on a working map also covers
+ * drawn areas, marked points and contour bands, none of which legendRows()
+ * has ever seen. On a routes-only map the two do read similarly; that is the
+ * cost of having a legend at all, and it is the map that is simple, not the
+ * cards that are wrong.
+ *
+ * @returns {string} HTML
+ */
+function dashLegendHtml() {
+  const rows = (typeof colorKeyRows === 'function') ? colorKeyRows() : [];
+  const shown = rows.filter(r => !r.hidden);
+  if (!shown.length) {
+    return '<div class="dc-empty">Nothing on the map has a colour yet. '
+      + 'Draw a route or a shape and its key appears here.</div>';
+  }
+  return '<div class="dc-list">' + shown.map(r =>
+    '<div class="dc-row">'
+    + '<span class="dc-ico">' + (typeof colorKeyMark === 'function' ? colorKeyMark(r) : '') + '</span>'
+    + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.label) + '</div></div>'
+    + '</div>').join('') + '</div>';
+}
+
 /** @param {object} card @returns {string} the visual's body HTML */
 function dashCardBody(card) {
   switch (card.type) {
@@ -375,6 +411,7 @@ function dashCardBody(card) {
     case 'table': return dashTableHtml(card);
     case 'slicer': return dashSlicerHtml(card);
     case 'access': return dashAccessHtml();
+    case 'legend': return dashLegendHtml();
 
     case 'list':
       return '<div class="dc-list">' + (card.items || []).map((it, i) =>
@@ -505,9 +542,12 @@ function setDashEditing(on) {
  */
 function dashRefreshLive() {
   dashCards.forEach(c => {
-    if (c.type !== 'access') return;
+    const html = c.type === 'access' ? dashAccessHtml()
+      : c.type === 'legend' ? dashLegendHtml()
+        : null;
+    if (html === null) return;
     const body = document.querySelector('#dashGrid .dash-card[data-card="' + c.id + '"] .dc-body');
-    if (body) body.innerHTML = dashAccessHtml();
+    if (body) body.innerHTML = html;
   });
 }
 

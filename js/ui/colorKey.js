@@ -79,6 +79,33 @@ function colorKeyRows() {
  *
  * @returns {Array<object>}
  */
+/**
+ * What to call a route in the key.
+ *
+ * This used to read `r.labelText || ''`, which is empty on almost every route
+ * — a label only exists once somebody types one. An empty name left the colour
+ * with nothing to be named after, so every one of them fell through to the
+ * generic fallback below and the card printed "Road / line" five times over
+ * five different colours: a legend that names nothing is worse than no legend,
+ * because the reader stops to look at it first.
+ *
+ * The app already knows the answer. legendDerivedRow() in ui/legendTable.js
+ * names the same routes for the Key Distances card — the destination's name
+ * when one end is the site, both ends otherwise — which is why that card reads
+ * "SVPN Police Academy" while the key beside it read "Road / line". Same
+ * derivation here, so the two cards agree.
+ *
+ * @param {object} rt @returns {string}
+ */
+function colorKeyRouteName(rt) {
+  if (rt.labelText && rt.labelText.trim()) return rt.labelText.trim();
+  if (typeof locById !== 'function') return '';
+  const A = locById(rt.fromId), B = locById(rt.toId);
+  if (!A || !B) return '';
+  return A.type === 'site' ? B.name
+    : (B.type === 'site' ? A.name : A.name + ' → ' + B.name);
+}
+
 function colorKeyUnclassedRows() {
   const byColor = new Map();
 
@@ -94,7 +121,7 @@ function colorKeyUnclassedRows() {
   };
 
   if (typeof routes !== 'undefined') {
-    routes.forEach(r => { if (!r.cls) note(r.color, 'line', r.labelText || ''); });
+    routes.forEach(r => { if (!r.cls) note(r.color, 'line', colorKeyRouteName(r)); });
   }
   if (typeof geometries !== 'undefined') {
     geometries.forEach(g => {
@@ -108,9 +135,18 @@ function colorKeyUnclassedRows() {
 
   return [...byColor.entries()].map(([k, e]) => {
     const edit = colorKeyEdits[k] || {};
-    // Named after what carries it when they agree on a name, else by shape.
+    // Named after what carries it. One name is the name; two share the row and
+    // both are worth printing; beyond that the list is longer than the card and
+    // a count says more than three names and an ellipsis would.
+    //
+    // The bare shape word is the LAST resort, not the second. It used to be
+    // reached whenever a colour had no single name, which — since routes handed
+    // over empty names — was every time.
     const auto = e.names.length === 1 ? e.names[0]
-      : (e.kind === 'line' ? 'Road / line' : e.kind === 'mark' ? 'Marked point' : 'Area');
+      : e.names.length === 2 ? e.names.join(' · ')
+      : e.names.length > 2
+        ? e.names.length + (e.kind === 'line' ? ' roads' : e.kind === 'mark' ? ' points' : ' areas')
+        : (e.kind === 'line' ? 'Road / line' : e.kind === 'mark' ? 'Marked point' : 'Area');
     return {
       key: k, color: e.color, kind: e.kind,
       label: edit.label != null ? edit.label : auto,
@@ -176,6 +212,14 @@ function rebuildColorKey() {
     btn.setAttribute('aria-pressed', String(colorKeyEditing));
     btn.title = colorKeyEditing ? 'Done editing' : 'Rename rows, change colours, add your own';
   }
+
+  // The board's Legend card reads the same rows. rebuildLegend() already
+  // refreshes the board, but it is not the only way here — recolouring a shape
+  // or renaming a key row rebuilds this card alone, and without this the board
+  // keeps showing the previous colours until something else happens to redraw
+  // it. Guarded, because this file loads before the board's.
+  if (typeof dashRefreshLive === 'function' && typeof appMode === 'function'
+    && appMode() === 'dashboard') dashRefreshLive();
 }
 
 /**

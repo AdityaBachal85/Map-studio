@@ -117,6 +117,13 @@ function setAppMode(mode, opts) {
   const settle = () => {
     try { map.invalidateSize({ animate: false }); } catch (e) { /* not up yet */ }
     if (typeof scheduleRepaint === 'function') scheduleRepaint();
+    // The colour key stacks itself under the key-distances card by measuring
+    // it. Dashboard mode hides both (see css/dashboard.css), and a hidden card
+    // measures zero — positionColorKey() correctly hands the card back to the
+    // stylesheet and gives up. Coming back to map mode it is visible again but
+    // nothing recomputes, so without this it sits at its default top-right and
+    // lands on top of the card it is supposed to stack beneath.
+    if (typeof positionColorKey === 'function') positionColorKey();
   };
   requestAnimationFrame(() => { settle(); setTimeout(settle, 240); });
 
