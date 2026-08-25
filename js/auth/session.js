@@ -436,15 +436,38 @@ async function signOut() {
 }
 
 /**
- * Send anyone without a session to the sign-in page, remembering where they
- * were headed. Call only after awaiting sessionInit().
+ * The sign-in URL for someone who has arrived without a session.
+ *
+ * SIGNING IN LANDS ON THE PROJECT LIST, NOT ON THE MAP. It used to remember
+ * whatever page you were on, which sounds helpful and is not: the common case
+ * is opening the app at index.html, and remembering that put people into the
+ * studio with whichever project autosave happened to restore, rather than at
+ * the list of their work. The list is where a session starts.
+ *
+ * A destination is only worth remembering when it names something — a shared
+ * `?project=` link, or an explicit `?next=`. Those still return where they were
+ * going. Everything else falls through to login.html's own default, which is
+ * the project list.
+ *
+ * @param {string} [loginUrl] @param {string} [here] @param {string} [search]
+ * @returns {string} a relative URL, not yet version-linked
+ */
+function authSignInUrl(loginUrl, here, search) {
+  const page = here != null ? here : (location.pathname.split('/').pop() || 'index.html');
+  const q = search != null ? search : location.search;
+  const url = loginUrl || 'login.html';
+  return /[?&](project|next)=/.test(q) ? url + '?next=' + encodeURIComponent(page + q) : url;
+}
+
+/**
+ * Send anyone without a session to the sign-in page. Call only after awaiting
+ * sessionInit().
  *
  * @param {string} [loginUrl] @returns {object|null} the session, or null if redirecting
  */
 function requireSession(loginUrl) {
   if (_user) return _user;
-  const back = encodeURIComponent(location.pathname.split('/').pop() + location.search);
-  location.replace(vlink((loginUrl || 'login.html') + '?next=' + back));
+  location.replace(vlink(authSignInUrl(loginUrl)));
   return null;
 }
 

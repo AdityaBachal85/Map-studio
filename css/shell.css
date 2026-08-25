@@ -692,9 +692,114 @@
   overflow-y: auto;
 }
 
-.pj-rail-brand { display: flex; align-items: center; gap: 10px; padding: var(--sp-2) var(--sp-2) var(--sp-4); }
-.pj-rail-brand img { height: 30px; width: auto; }
+.pj-rail-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-4);
+}
+
 .pj-rail-brand .nm { font-weight: 700; letter-spacing: -.01em; }
+
+/* --------------------------------------------------------------------------
+   The brand plate
+   --------------------------------------------------------------------------
+   The DBOT mark is navy artwork with a green-and-blue counter, drawn to sit on
+   white. On this rail it was sitting on near-black, where the wordmark all but
+   disappears and only the coloured 'o' survives — the mark was there and could
+   not be read.
+
+   So it gets something to stand on. Glass rather than the solid white pill used
+   on the map and in the dashboard nav, because that is what was asked for, and
+   because a rail is chrome: a plate that admits what is behind it belongs here
+   in a way an opaque chip does not.
+
+   HIGH-KEY IN BOTH THEMES, DELIBERATELY. Glass normally takes the tint of the
+   surface it sits on — that is what .frost does everywhere else in this app.
+   Tinted to a dark rail it would hide the very wordmark it exists to show, so
+   this one is lit from white in both themes. It reads as frosted glass over a
+   dark ground rather than as a dark pane.
+   ----------------------------------------------------------------------- */
+
+.pj-brand-glass {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 12px;
+  /* A stacking context of its own, so the sheen below cannot escape it. */
+  isolation: isolate;
+  overflow: hidden;
+  /* Three layers, front to back: a warm pool at the top-left corner, a cool one
+     at the bottom-right, and the white pane they sit inside. The two pools are
+     what stop this reading as a silver chip — a frosted pane over a flat dark
+     rail has nothing to bend, so the colour has to be in the pane itself.
+     The white beneath them is thin enough to let them through and solid enough
+     that a navy wordmark still has a light ground; either alone gives you a
+     white chip or an unreadable one. */
+  --plate-ground: linear-gradient(150deg, rgba(255, 255, 255, .88), rgba(255, 255, 255, .62));
+  background:
+    radial-gradient(75% 130% at 14% 8%, rgba(255, 122, 26, .30), transparent 62%),
+    radial-gradient(75% 130% at 88% 96%, rgba(46, 155, 255, .28), transparent 62%),
+    var(--plate-ground);
+  backdrop-filter: blur(16px) saturate(220%);
+  -webkit-backdrop-filter: blur(16px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, .58);
+  /* The lit top edge is what makes a rectangle read as glass rather than as a
+     flat card: it is the highlight where a real pane catches the light. The
+     inset shadow along the bottom is the thickness of the pane. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .98),
+    inset 0 -10px 16px -12px rgba(10, 30, 60, .35),
+    /* The same two colours escaping around the pane. Hugging the plate rather
+       than pooled behind it, so the light belongs to the mark and does not
+       drift out across the words beside it. */
+    0 0 20px -5px rgba(255, 122, 26, .55),
+    0 6px 24px -6px rgba(46, 155, 255, .40),
+    0 10px 26px rgba(4, 10, 22, .45),
+    0 1px 2px rgba(4, 10, 22, .30);
+}
+
+.pj-brand-glass img { height: 24px; width: auto; display: block; }
+
+/* The specular sweep — the 'liquid' half. Parked off to one side and run once
+   on hover, not looping: a logo that shimmers on its own is a logo that pulls
+   the eye away from the list the page is actually for. */
+.pj-brand-glass::after {
+  content: '';
+  position: absolute;
+  inset: -60% -70%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+    transparent 40%, rgba(255, 255, 255, .72) 50%, transparent 60%);
+  transform: translateX(-65%);
+}
+
+.pj-rail-brand:hover .pj-brand-glass::after {
+  animation: pj-sheen 900ms var(--ease-out, cubic-bezier(.22, .8, .3, 1)) 1;
+}
+
+@keyframes pj-sheen { to { transform: translateX(65%); } }
+
+/* Glass off (Preferences → Appearance) means the compositor stops re-sampling
+   what is behind every pane. The plate keeps its job — the mark still needs a
+   light ground — and gives up the part that costs something. */
+body.no-glass .pj-brand-glass {
+  /* Only the ground goes solid. The two pools are painted into the pane rather
+     than sampled from behind it, so they cost nothing with the filter off and
+     the plate keeps its character instead of falling back to a white chip. */
+  --plate-ground: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.no-glass .pj-brand-glass::after,
+body.reduce-motion .pj-brand-glass::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-rail-brand:hover .pj-brand-glass::after { animation: none; }
+}
 
 .pj-new {
   display: flex;

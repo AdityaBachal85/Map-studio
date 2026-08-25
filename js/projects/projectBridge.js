@@ -131,8 +131,10 @@ function projectBridgeGuard() {
   if (typeof authMode !== 'function' || authMode() !== 'supabase') return false;
   if (typeof currentUser === 'function' && currentUser()) return false;
 
-  const here = location.pathname.split('/').pop() || 'index.html';
-  location.replace(vlink('login.html?next=' + encodeURIComponent(here + location.search)));
+  // authSignInUrl() decides whether this page is worth coming back to. A bare
+  // index.html is not: signing in belongs at the project list, not in the studio
+  // with whatever autosave last restored. A ?project= link still returns here.
+  location.replace(vlink(authSignInUrl('login.html')));
   return true;
 }
 
