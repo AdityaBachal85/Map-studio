@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0194-blue)
+![Version](https://img.shields.io/badge/version-v6.0195-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,52 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0194 (latest)
+## 🆕 New in v6.0195 (latest)
+
+### Every slice can be its own colour
+
+**The circular charts had no colour control at all.** A pie, a donut, a ring
+stack, a funnel and a treemap each draw one mark per *category* out of a single
+series, so "the series colour" cannot describe them — five slices cannot all be
+blue — and every one of them took the palette slot its **position** happened to
+land on. Meanwhile the panel went on offering them the series swatch, so the one
+colour control those five charts had was a control that set a value the chart
+never read. There is now a swatch per category, unfolded, on all five; the
+series swatch is no longer offered where it does nothing.
+
+The legend swatch follows the slice, so the key agrees with the picture it is
+the key to, and the export model resolves the slice colours to literals — so
+the PDF, PowerPoint and Word writers all get what is on the screen instead of
+re-deriving the rule three times and drifting.
+
+**A filter no longer throws the colours away.** `vizFiltered()` rebuilds each
+series rather than copying it, and `hex` and the per-point colours were not
+carried over — switching on a slicer reverted every custom colour on the board.
+The indices move too, so the map is remapped rather than passed through: after a
+filter the third category is no longer at index three.
+
+### The ring chart reads as rings
+
+The tracks used the same ink as a gridline — 11%, which is a hairline at 1px and
+a **solid grey disc at 17**. Five of them stacked and the tracks became the
+loudest thing on the card, with the data sitting on top as short coloured
+commas. They have their own lighter token now, and the gap between rings scales
+with the band instead of being a flat 4px against a 17px ring (81% coverage,
+which is why they merged). The hole in the middle carries the average against
+the same ceiling the rings are drawn to, rather than nothing.
+
+A funnel's rows also reserved a flat 46px for a label that is 55px wide at three
+digits and a percentage, so the longest row — always the last — ran off the card.
+
+### A crosshair could stick to a chart for good
+
+Redraw a chart in the window between the pointer physically leaving it and the
+browser dispatching `pointerleave`, and the redraw tore down the listener that
+leave was queued against — so it was never delivered — then replayed the stale
+position onto the fresh marks. Nothing was coming to clear it, and an export
+taken afterwards had a crosshair frozen across the picture.
+
+## 🆕 New in v6.0194
 
 ### The chart controls do what Excel's do
 

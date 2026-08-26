@@ -198,20 +198,32 @@ function dfCurrentColour(card, key) {
 function dfPointColours(card, ser, si) {
   const cats = card.labels || [];
   if (!cats.length) return '';
-  // Behind a disclosure: most charts never want this, and eight more swatches
-  // per series would undo the tidying the single trigger just bought.
   const pts = ser.points || {};
   const set = Object.keys(pts).filter(k => pts[k]).length;
+
+  // WHETHER THIS IS THE COLOUR CONTROL OR AN EXTRA ONE DEPENDS ON THE CHART.
+  // A pie, donut, ring, funnel or treemap draws one mark per category out of a
+  // single series, so the series swatch above cannot say anything about them —
+  // five slices cannot all be blue — and these swatches are the ONLY way to
+  // colour those charts. Folding them away behind a disclosure was the whole
+  // complaint: the colours were unreachable. On a bar or a line the series
+  // swatch does the everyday job and this is the exception, so it stays folded.
+  const byCat = typeof VIZ_CATEGORY_KEYED !== 'undefined'
+    && VIZ_CATEGORY_KEYED.indexOf(card.kind) >= 0;
+
+  const rows = cats.map((c, i) =>
+    dfRow(String(c || ((byCat ? 'Slice ' : 'Point ') + (i + 1))),
+      '<div class="df-point-row">'
+      + dfSwatches('pt:' + si + ':' + i,
+        pts[i] || (byCat ? (i + 1) : (ser.hex || ser.slot || (si + 1))))
+      + (pts[i] ? '<button type="button" class="df-clear" data-df="ptclear:' + si + ':' + i
+        + '" data-v="1" title="Back to the palette">&times;</button>' : '')
+      + '</div>')).join('');
+
+  if (byCat) return '<div class="df-points df-points-open">' + rows + '</div>';
   return '<details class="df-points"' + (set ? ' open' : '') + '>'
     + '<summary>Individual bars' + (set ? ' \u00b7 ' + set : '') + '</summary>'
-    + cats.map((c, i) =>
-      dfRow(String(c || ('Point ' + (i + 1))),
-        '<div class="df-point-row">'
-        + dfSwatches('pt:' + si + ':' + i, pts[i] || ser.hex || ser.slot || (si + 1))
-        + (pts[i] ? '<button type="button" class="df-clear" data-df="ptclear:' + si + ':' + i
-          + '" data-v="1" title="Back to the series colour">&times;</button>' : '')
-        + '</div>')).join('')
-    + '</details>';
+    + rows + '</details>';
 }
 
 /** Whether the pane had a column last time, so its opening can be noticed. */
@@ -278,7 +290,8 @@ function renderDashFormat() {
           : '') + '</div>'
         + '<div class="dc-input df-input" data-card="' + card.id + '" data-bind="seriesList.' + i
         + '.values" contenteditable="true" spellcheck="false">' + esc((s.values || []).join(', ')) + '</div>'
-        + dfSwatches('slot:' + i, s.hex || s.slot || (i + 1))
+        + (VIZ_CATEGORY_KEYED.indexOf(card.kind) >= 0
+          ? '' : dfSwatches('slot:' + i, s.hex || s.slot || (i + 1)))
         + dfPointColours(card, s, i)
         + '</div>').join('')
       + '<button class="df-add" data-df="addSeries" data-v="1">+ Add a series</button>'

@@ -262,8 +262,11 @@ function dashChartHtml(card) {
     // A series carries its own colour when one was chosen, so the swatch beside
     // the name matches the line on the chart. Without this the legend went on
     // showing the palette slot underneath a custom colour.
+    // A CATEGORY CARRIES ITS OWN COLOUR TOO, NOW. Keyed by position, this
+    // printed the palette slot beside a slice that had been recoloured — a key
+    // that disagrees with the picture it is the key to.
     const keys = byCategory
-      ? vizCategories(card).map((c, i) => [c, i + 1])
+      ? vizCategories(card).map((c, i) => [c, vizCatColour(series[0], i)])
       : series.map(s => [s.name, s.hex || s.slot]);
     const vals = byCategory && series[0] ? series[0].values.map(Number) : null;
     // Only a share kind may print a percentage: on a ring the arc is a fraction
@@ -274,7 +277,7 @@ function dashChartHtml(card) {
     legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (byCategory ? 'right' : 'top') : fmt.legend) + '">'
       + keys.map(([name, slot], i) =>
         '<span class="dc-key"><i style="background:'
-        + (/^#[0-9a-f]{6}$/i.test(String(slot)) ? esc(String(slot)) : vizSlot(slot))
+        + (/^(#[0-9a-f]{6}|var\(--viz-\d\))$/i.test(String(slot)) ? esc(String(slot)) : vizSlot(slot))
         + '"></i>' + esc(String(name || '—'))
         + (sum ? '<b>' + Math.round(((vals[i] > 0 ? vals[i] : 0) / sum) * 100) + '%</b>'
           : (kind === 'ring' && vals && isFinite(vals[i]) ? '<b>' + esc(vizNum(vals[i])) + '</b>' : ''))

@@ -252,6 +252,34 @@ function vizColour(ser, i) {
 }
 
 /**
+ * What colour is THIS SLICE — for the forms whose colours belong to the
+ * categories rather than to the series.
+ *
+ * A pie, a donut, a ring stack, a funnel and a treemap all draw one mark per
+ * category out of a single series, so "the series colour" is not a thing any of
+ * them can use: five slices cannot all be blue. Every one of them therefore
+ * took `vizSlot(i + 1)` — the palette slot its POSITION happened to land on —
+ * and there was no way to change it. Worse, the panel still offered them the
+ * series swatch beside the numbers, so the one colour control those five charts
+ * had was a control that did nothing at all.
+ *
+ * Same storage as a bar's own colour: the sparse `points` map on the first
+ * series, keyed by category index. One mechanism, one setter, one path into the
+ * export — a second parallel one would be two things to keep in step.
+ *
+ * @param {object} ser the series the marks come from
+ * @param {number} i the category's index, AFTER any slicer filtering
+ * @returns {string} a CSS colour
+ */
+function vizCatColour(ser, i) {
+  if (ser && ser.points) {
+    const p = ser.points[i];
+    if (/^#[0-9a-f]{6}$/i.test(String(p || ''))) return String(p);
+  }
+  return vizSlot(i + 1);
+}
+
+/**
  * Compact a number for an axis tick or a label.
  * @param {number} n @returns {string}
  */
@@ -360,7 +388,21 @@ function vizFiltered(cats, series) {
   if (!idx.length) return { cats, series };
   return {
     cats: idx.map(i => cats[i]),
-    series: series.map(s => ({ name: s.name, slot: s.slot, values: idx.map(i => s.values[i]) })),
+    // REBUILT, NOT COPIED — so everything the series carries has to be carried
+    // over by hand, and anything forgotten here silently disappears the moment
+    // a slicer is switched on. `hex` and `points` were forgotten: filtering a
+    // board reverted every custom colour on it to the palette slot, which reads
+    // as the colours being lost rather than as the filter doing it.
+    //
+    // The per-point colours are remapped to their new positions rather than
+    // passed through, because after a filter the third category is no longer at
+    // index three — passing them through would repaint the wrong bar.
+    series: series.map(s => {
+      const pts = {};
+      if (s.points) idx.forEach((from, to) => { if (s.points[from]) pts[to] = s.points[from]; });
+      return { name: s.name, slot: s.slot, hex: s.hex,
+        values: idx.map(i => s.values[i]), points: pts };
+    }),
   };
 }
 
@@ -788,6 +830,7 @@ function vizPie(card, w, h) {
   const total = vals.reduce((a, b) => a + b, 0);
   if (!total) return '';
 
+  const ser = f.series[0];
   const donut = (card.kind || 'donut') === 'donut';
   const cx = w / 2, cy = h / 2;
   const R = Math.max(20, Math.min(w, h) / 2 - 8);
@@ -803,7 +846,7 @@ function vizPie(card, w, h) {
       const frac = v / total;
       const len = Math.max(0, circ * frac - VIZ_GAP);
       s += '<circle class="viz-arc" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1)
-        + '" fill="none" stroke-linecap="butt" style="stroke:' + vizSlot(i + 1)
+        + '" fill="none" stroke-linecap="butt" style="stroke:' + vizCatColour(ser, i)
         + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '" stroke-dasharray="' + len.toFixed(2) + ' '
         + (circ - len).toFixed(2) + '" stroke-dashoffset="' + (-circ * acc).toFixed(2)
         + '" transform="rotate(-90 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"/>';
@@ -823,7 +866,7 @@ function vizPie(card, w, h) {
         + 'L' + (cx + R * Math.cos(a0)).toFixed(1) + ' ' + (cy + R * Math.sin(a0)).toFixed(1)
         + 'A' + R.toFixed(1) + ' ' + R.toFixed(1) + ' 0 ' + big + ' 1 '
         + (cx + R * Math.cos(a1)).toFixed(1) + ' ' + (cy + R * Math.sin(a1)).toFixed(1)
-        + 'Z" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>';
+        + 'Z" style="fill:' + vizCatColour(ser, i) + ';--i:' + i + '"/>';
     });
   }
 
@@ -851,7 +894,13 @@ function vizFunnel(card, w, h) {
   const rowH = Math.min(46, h / vals.length);
   const top = (h - rowH * vals.length) / 2;
   const labelW = 92;
-  const iw = Math.max(20, w - labelW - 46);
+  // Measured from the longest string that will actually be written, not from a
+  // flat 46px guess: "30 · 300%" is 55px and ran off the right edge of the card
+  // — the same defect as a bar's label past the plot, in the one chart whose
+  // labels were never routed through the placement rule.
+  const wide = vals.reduce((m, v, i) => Math.max(m,
+    (vizNum(v) + (i ? ' \u00b7 ' + Math.round((v / vals[0]) * 100) + '%' : '')).length), 0);
+  const iw = Math.max(20, w - labelW - (vizFmt(card).labels ? wide * 5.6 + 14 : 12));
   // The stage names are the category axis and stay; only the numbers are the
   // data labels the panel's switch controls.
   const labels = vizFmt(card).labels;
@@ -860,7 +909,7 @@ function vizFunnel(card, w, h) {
     const bw = Math.max(2, (v / max) * iw);
     const y = top + i * rowH;
     return '<rect class="viz-mark viz-mark-h" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
-      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>'
+      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizCatColour(f.series[0], i) + ';--i:' + i + '"/>'
       + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (y + rowH / 2 + 3.5).toFixed(1)
       + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>'
       + (labels
@@ -887,6 +936,7 @@ function vizTreemap(card, w, h) {
   const total = items.reduce((a, b) => a + b.v, 0);
   if (!total) return '';
 
+  const ser = f.series[0];
   let s = '';
   let x = 0, y = 0, availW = w, availH = h, rest = total;
   // The tile's name is what tells you which rectangle you are looking at; the
@@ -902,7 +952,7 @@ function vizTreemap(card, w, h) {
 
     s += '<rect class="viz-tm" x="' + (x + VIZ_GAP / 2).toFixed(1) + '" y="' + (y + VIZ_GAP / 2).toFixed(1)
       + '" width="' + Math.max(0, bw - VIZ_GAP).toFixed(1) + '" height="' + Math.max(0, bh - VIZ_GAP).toFixed(1)
-      + '" rx="4" style="fill:' + vizSlot(it.slot) + ';--i:' + i + '"/>';
+      + '" rx="4" style="fill:' + vizCatColour(ser, it.slot - 1) + ';--i:' + i + '"/>';
 
     // Only label a tile the text actually fits in: a clipped label that loses
     // its first and last characters is worse than no label.
@@ -947,11 +997,19 @@ function vizRing(card, w, h) {
   if (!vals.some(isFinite)) return '';
   const max = vizScoreMax(card, vals) || 1;
 
+  const ser = f.series[0];
   const cx = w / 2, cy = h / 2;
   const outer = Math.max(18, Math.min(w, h) / 2 - 6);
   const n = Math.min(vals.length, 6);          // beyond six the innermost is a dot
-  const gap = 4;
-  const thick = Math.max(5, Math.min(17, (outer * 0.78) / n - gap));
+  // THE GAP IS WHAT MAKES THEM RINGS. At a flat 4px against a 17px band the
+  // rings covered 81% of the radius they were spread over, so five of them
+  // merged into one grey disc with the data sitting on it as short coloured
+  // commas — the whole reason this read as a stack of nested brackets instead
+  // of a chart. Half the band, so the negative space scales with them:
+  //   n * (thick + gap) = budget,  gap = thick / 2  ->  thick = budget / (n * 1.5)
+  const budget = outer * 0.78;
+  const thick = Math.max(5, Math.min(17, budget / (n * 1.5)));
+  const gap = thick / 2;
 
   let s = '';
   for (let i = 0; i < n; i++) {
@@ -965,9 +1023,27 @@ function vizRing(card, w, h) {
       // a hairline, and a full one closes on itself cleanly.
       + '<circle class="viz-arc" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1)
       + '" r="' + r.toFixed(1) + '" fill="none" stroke-linecap="round" style="stroke:'
-      + vizSlot(i + 1) + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '"'
+      + vizCatColour(ser, i) + ';stroke-width:' + thick.toFixed(1) + ';--i:' + i + '"'
       + ' stroke-dasharray="' + (circ * frac).toFixed(2) + ' ' + (circ * (1 - frac) + 1).toFixed(2) + '"'
       + ' transform="rotate(-90 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')"/>';
+  }
+
+  // THE HOLE WAS DEAD SPACE, and that is most of what made this read as a set
+  // of nested brackets rather than as a chart. Every ring form worth copying
+  // puts the one-number summary in the middle — the donut beside it already
+  // does — and on a card of scores that number is the average of them, read
+  // against the same ceiling every ring on the card is drawn against.
+  //
+  // Only when the hole can actually hold it: an innermost ring at six
+  // categories leaves a gap a two-digit number would sit outside.
+  const scored = vals.filter(isFinite);
+  const hole = outer - thick / 2 - (n - 1) * (thick + gap) - thick / 2;
+  if (scored.length > 1 && hole >= 26) {
+    const avg = scored.reduce((a, b) => a + b, 0) / scored.length;
+    s += '<text class="viz-donut-total" x="' + cx.toFixed(1) + '" y="' + (cy + 1).toFixed(1)
+      + '" text-anchor="middle">' + vizEsc(vizNum(Math.round(avg * 10) / 10)) + '</text>'
+      + '<text class="viz-donut-cap" x="' + cx.toFixed(1) + '" y="' + (cy + 16).toFixed(1)
+      + '" text-anchor="middle">avg of ' + vizEsc(vizNum(max)) + '</text>';
   }
   return s;
 }
@@ -1311,7 +1387,21 @@ function vizWireHover(host, card, w, h) {
   // tile is dragged, the window is resized — and the new crosshair would then
   // wait for a movement that never comes, because the pointer has not moved.
   // Replaying the last position puts it back where the reader left it.
-  if (host._vizAt) move(host._vizAt);
+  //
+  // BUT ONLY IF THE POINTER IS STILL THERE. `_vizAt` is cleared by `leave`, and
+  // between the pointer physically leaving and the browser dispatching
+  // pointerleave there is a window in which it is still set. A redraw landing in
+  // that window tears down the listener the pending leave was queued against —
+  // so the leave is never delivered — and then replays the stale position onto
+  // the fresh marks. The crosshair sticks to the chart for good: no further
+  // movement over that host is coming to clear it, and an export taken
+  // afterwards has a crosshair frozen across the picture. Asking the document
+  // what is actually under that point costs one hit test and closes the window.
+  if (host._vizAt) {
+    const under = document.elementFromPoint(host._vizAt.clientX, host._vizAt.clientY);
+    if (under && host.contains(under)) move(host._vizAt);
+    else { host._vizAt = null; leave(); }
+  }
 }
 
 /** Redraw every chart on the board, measuring each host as it goes. */

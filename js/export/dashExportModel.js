@@ -100,12 +100,16 @@ function dashModelTyped(v) {
  */
 function dashModelViz() {
   if (typeof VIZ_SCORE_KINDS !== 'undefined' && typeof vizScoreMax === 'function') {
-    return { kinds: VIZ_SCORE_KINDS, max: vizScoreMax };
+    return { kinds: VIZ_SCORE_KINDS, max: vizScoreMax,
+      byCat: typeof VIZ_CATEGORY_KEYED !== 'undefined' ? VIZ_CATEGORY_KEYED : [] };
   }
   if (typeof require === 'function') {
     try {
       const m = require('../ui/dashCharts.js');
-      if (m && m.VIZ_SCORE_KINDS) return { kinds: m.VIZ_SCORE_KINDS, max: m.vizScoreMax };
+      if (m && m.VIZ_SCORE_KINDS) {
+        return { kinds: m.VIZ_SCORE_KINDS, max: m.vizScoreMax,
+          byCat: m.VIZ_CATEGORY_KEYED || [] };
+      }
     } catch (e) { /* not reachable from here; the ceiling simply is not reported */ }
   }
   return null;
@@ -198,6 +202,14 @@ function dashModelData(card, resolve) {
             : null,
         })),
       };
+
+      // WHAT COLOUR IS SLICE THREE — answered here rather than left for each
+      // writer to work out. A pie, donut, ring, funnel or treemap draws one
+      // mark per CATEGORY out of a single series, so the `color` above — the
+      // series' own — describes none of them, and a writer reading it would
+      // paint all five slices the same. Resolved to literals in category order,
+      // so PDF, PowerPoint and Word all get the picture that is on the screen
+      // without re-deriving the rule three times and drifting.
       // A ring, a gauge and a radar are drawn as a fraction of a ceiling, so the
       // ceiling is part of what they say. Read out of a document without it,
       // "82" has lost the half that made it mean anything.
@@ -205,6 +217,14 @@ function dashModelData(card, resolve) {
       if (viz && viz.kinds.indexOf(kind) >= 0) {
         const all = m.series.reduce((a, s) => a.concat(s.values.filter(v => v != null)), []);
         m.max = viz.max(card, all);
+      }
+      // Off the same handle, so this reports the same thing under Node as it
+      // does in the browser. Read straight off the global it would have been
+      // browser-only, and the headless suite would have been testing a model
+      // the export never actually produces.
+      if (viz && viz.byCat && viz.byCat.indexOf(kind) >= 0) {
+        const pts = (m.series[0] && m.series[0].points) || {};
+        m.sliceColors = m.labels.map((lb, i) => pts[i] || col(i + 1));
       }
       return m;
     }

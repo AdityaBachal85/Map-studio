@@ -87,12 +87,15 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
 
   /* -- the reveal runs once, and geometry alone does not replay it ---------- */
 
-  await p.evaluate(() => {
+  // Read in the SAME call that draws. Split across two round trips there is a
+  // window in which the observer can redraw the board — and a redraw with the
+  // same numbers deliberately does NOT replay, so the class is gone before the
+  // second call arrives and a working reveal is reported as broken.
+  const afterData = await p.evaluate(() => {
     dashCardById('k0').seriesList[0].values = [5, 9, 14, 20, 26];
     dashDrawAllCharts();
+    return document.querySelector('.dc-plot[data-card="k0"] svg').classList.contains('viz-enter');
   });
-  const afterData = await p.evaluate(() =>
-    document.querySelector('.dc-plot[data-card="k0"] svg').classList.contains('viz-enter'));
   ck('new numbers replay the reveal', afterData === true);
 
   await p.waitForTimeout(2000);
@@ -250,9 +253,19 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
         .every(c => c.style.display === 'none'), null, { timeout: 4000 });
   } catch (e) { left = false; }
   ck('and they leave with the pointer', left,
-    left ? '' : await p.evaluate(() =>
-      [...document.querySelectorAll('.dc-plot[data-card="k2"] .viz-hit')]
-        .map(c => c.style.display || 'unset').join(',')));
+    left ? '' : await p.evaluate(() => {
+      const h = document.querySelector('.dc-plot[data-card="k2"]');
+      const u = document.elementFromPoint(10, 10);
+      return JSON.stringify({
+        disp: [...h.querySelectorAll('.viz-hit')].map(c => c.style.display || 'unset'),
+        hits: h.querySelectorAll('.viz-hit').length,
+        svgs: h.querySelectorAll('svg').length,
+        at: h._vizAt ? 'set' : 'null',
+        rect: (r => ({ l: Math.round(r.left), t: Math.round(r.top),
+          w: Math.round(r.width), h: Math.round(r.height) }))(h.getBoundingClientRect()),
+        under: u ? u.tagName + '.' + (u.getAttribute('class') || '') : 'none',
+      });
+    }));
 
   /* -- the crosshair and the marks read one geometry ------------------------ */
 
@@ -683,6 +696,224 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
   });
   ck('and a point colour reaches the export model, so it survives into the file',
     /12b886/i.test(inFile), inFile);
+
+  /* -- a slice can be given its own colour, on every circular form ---------- */
+
+  // THESE FIVE HAD NO COLOUR CONTROL AT ALL. A pie, a donut, a ring stack, a
+  // funnel and a treemap each draw one mark per category out of a single
+  // series, so "the series colour" cannot describe them — five slices cannot
+  // all be blue — and every one of them took vizSlot(i + 1), the palette slot
+  // its POSITION happened to land on. Meanwhile the panel went on offering them
+  // the series swatch, so the one colour control they had did nothing.
+  const CAT_KINDS = ['ring', 'donut', 'pie', 'funnel', 'treemap'];
+  const CAT_MARK = { ring: '.viz-arc', donut: '.viz-arc', pie: '.viz-slice',
+    funnel: '.viz-mark', treemap: '.viz-tm' };
+
+  const slices = await p.evaluate(([kinds, marks]) => {
+    const pts = { 0: '#e03131', 2: '#7048e8', 4: '#0ca678' };
+    dashCards = kinds.map((k, i) => Object.assign(dashNewCard(k), {
+      id: 'z' + i, title: k, x: (i % 2) * 6, y: Math.floor(i / 2) * 9, w: 6, h: 9,
+      labels: ['2021', '2022', '2023', '2024', '2025'],
+      seriesList: [{ name: 'Value', values: [10, 20, 15, 25, 30], slot: 1,
+        points: Object.assign({}, pts) }],
+    }));
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const out = {};
+    kinds.forEach((k, i) => {
+      const card = document.querySelector('.dash-card[data-card="z' + i + '"]');
+      const host = card.querySelector('.dc-plot');
+      // A treemap sorts its tiles by value, so the third RECTANGLE is not the
+      // third category — read the colours back by name, the way a reader does.
+      const marksByCat = {};
+      if (k === 'treemap') {
+        [...host.querySelectorAll('.viz-tm')].forEach((m, j) => {
+          const nm = host.querySelectorAll('.viz-tm-name')[j];
+          marksByCat[nm ? nm.textContent : j] = m.style.fill;
+        });
+      }
+      out[k] = {
+        fills: [...host.querySelectorAll(marks[k])].map(m => m.style.fill || m.style.stroke),
+        byCat: marksByCat,
+        keys: [...card.querySelectorAll('.dc-key i')].map(el => el.style.background),
+      };
+    });
+    return out;
+  }, [CAT_KINDS, CAT_MARK]);
+
+  const rgb = h => 'rgb(' + [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(', ') + ')';
+  const WANT = [rgb('#e03131'), null, rgb('#7048e8'), null, rgb('#0ca678')];
+  const missed = CAT_KINDS.filter(k => {
+    const f = slices[k].fills;
+    if (f.length !== 5) return true;
+    return WANT.some((w, i) => w && f[i] !== w);
+  });
+  ck('a slice takes the colour it was given, on every circular form',
+    // The treemap is read by name below — its rectangles are in value order.
+    missed.filter(k => k !== 'treemap').length === 0,
+    JSON.stringify(missed) + ' ' + JSON.stringify(slices.pie.fills));
+  ck('and a treemap tile follows its category rather than its position',
+    slices.treemap.byCat['2021'] === rgb('#e03131')
+      && slices.treemap.byCat['2023'] === rgb('#7048e8')
+      && slices.treemap.byCat['2025'] === rgb('#0ca678'),
+    JSON.stringify(slices.treemap.byCat));
+  // A key that disagrees with the picture it is the key to is worse than none.
+  const keyOff = CAT_KINDS.filter(k => {
+    const ks = slices[k].keys;
+    if (!ks.length) return false;                 // a funnel has no legend
+    return WANT.some((w, i) => w && ks[i] !== w);
+  });
+  ck('the legend swatch follows the slice, not the palette slot',
+    keyOff.length === 0, JSON.stringify(keyOff) + ' ' + JSON.stringify(slices.ring.keys));
+  ck('and the ones left alone still take the palette in order',
+    slices.pie.fills[1] !== slices.pie.fills[3]
+      && /var\(--viz-|rgb/.test(slices.pie.fills[1]), slices.pie.fills.join(' '));
+
+  // THE FILE HAS TO AGREE WITH THE SCREEN, which is the whole reason the export
+  // model exists. `color` on the series describes none of these five — a pie's
+  // slices are not the series' colour — so a writer reading it would paint every
+  // slice the same. The model answers "what colour is slice three" itself, and
+  // the answer is checked against the mark actually on the card.
+  const modelSlices = await p.evaluate(([kinds, marks]) => {
+    // The resolver is INJECTED — the model may not touch the DOM, so a call
+    // without one reports grey for every palette slot. That is what the real
+    // export passes (dashExport.js), and a test that leaves it out is testing a
+    // model the export never builds.
+    const cs = getComputedStyle(document.documentElement);
+    const m = dashExportModel({ title: 'Slices',
+      resolveColor: name => cs.getPropertyValue(name).trim() });
+    const out = {};
+    kinds.forEach((k, i) => {
+      const host = document.querySelector('.dc-plot[data-card="z' + i + '"]');
+      const drawn = [...host.querySelectorAll(marks[k])].map(el => el.style.fill || el.style.stroke);
+      const said = (m.cards.find(c => c.id === 'z' + i).data || {}).sliceColors;
+      out[k] = { drawn: drawn, said: said };
+    });
+    return out;
+  }, [CAT_KINDS, CAT_MARK]);
+  // The drawing writes `var(--viz-N)` so it follows the theme; the file cannot
+  // carry a custom property, so the model resolves it. Compared after resolving.
+  const asHex = await p.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const out = {};
+    for (let n = 1; n <= 8; n++) out['var(--viz-' + n + ')'] = cs.getPropertyValue('--viz-' + n).trim().toLowerCase();
+    return out;
+  });
+  const norm = v => {
+    const s2 = String(v || '').trim().toLowerCase();
+    if (asHex[s2]) return asHex[s2];
+    const m2 = s2.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+    return m2 ? '#' + [1, 2, 3].map(i => (+m2[i]).toString(16).padStart(2, '0')).join('') : s2;
+  };
+  const disagree = CAT_KINDS.filter(k => {
+    const said = modelSlices[k].said;
+    if (!said || said.length !== 5) return true;
+    // The treemap draws in value order, so only the set has to match there.
+    if (k === 'treemap') {
+      return said.map(norm).sort().join() !== modelSlices[k].drawn.map(norm).sort().join();
+    }
+    return said.map(norm).join() !== modelSlices[k].drawn.map(norm).join();
+  });
+  ck('the export model says the same colours the card is drawn in',
+    disagree.length === 0,
+    JSON.stringify(disagree) + ' ' + JSON.stringify(modelSlices.ring));
+  ck('and a chart whose colours belong to its series is not given a slice list',
+    await p.evaluate(() => {
+      dashCards = dashCards.concat([Object.assign(dashNewCard('column'), { id: 'zz', x: 0, y: 60, w: 6, h: 8,
+        labels: ['a', 'b'], seriesList: [{ name: 'S', values: [1, 2], slot: 1 }] })]);
+      renderDashboard();
+      return 'sliceColors' in (dashExportModel({ title: 'x' }).cards.find(c => c.id === 'zz').data);
+    }) === false);
+
+  /* -- and a filter does not throw the colours away ------------------------- */
+
+  // vizFiltered() REBUILDS each series rather than copying it, so everything a
+  // series carries has to be carried over by hand — and `hex` and `points` were
+  // not. Switching on a slicer reverted every custom colour on the board to its
+  // palette slot, which reads as the colours being lost rather than as the
+  // filter doing it. The indices move too: after a filter the third category is
+  // no longer at index three, so the map is remapped rather than passed through.
+  const filtered = await p.evaluate(() => {
+    const cats = ['2021', '2022', '2023', '2024', '2025'];
+    const c = Object.assign(dashNewCard('column'), { id: 'fl', title: 'Filter', x: 0, y: 0, w: 8, h: 8,
+      labels: cats, seriesList: [{ name: 'V', values: [10, 20, 15, 25, 30],
+        hex: '#123456', points: { 0: '#e03131', 3: '#0ca678' } }] });
+    dashCards = [c];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const fills = () => [...document.querySelectorAll('.dc-plot[data-card="fl"] .viz-mark')]
+      .map(m => m.style.fill);
+    const before = fills();
+    // Drop 2022, so 2024 — which was index 3 — becomes index 2.
+    const real = dashFilter;
+    dashFilter = () => new Set(['2021', '2023', '2024', '2025']);
+    dashDrawAllCharts();
+    const after = fills();
+    dashFilter = real;
+    dashDrawAllCharts();
+    return { before: before, after: after, restored: fills() };
+  });
+  const RED = rgb('#e03131'), GREEN = rgb('#0ca678'), SER = rgb('#123456');
+  ck('a filtered chart keeps the series colour it was given',
+    filtered.after.length === 4 && filtered.after[1] === SER && filtered.after[3] === SER,
+    filtered.after.join(' '));
+  ck('and each point colour moves with its own category',
+    filtered.after[0] === RED && filtered.after[2] === GREEN,
+    filtered.after.join(' '));
+  ck('clearing the filter puts them all back where they were',
+    filtered.restored.join() === filtered.before.join(),
+    filtered.restored.join(' '));
+
+  /* -- the funnel's numbers fit on the funnel ------------------------------- */
+
+  // The only labelled chart whose text never went through the placement rule:
+  // it reserved a flat 46px for a string that is 55px wide at three digits and
+  // a percentage, so the longest row — always the last one — ran off the card.
+  const funnelFit = await p.evaluate(() => {
+    dashCards = [Object.assign(dashNewCard('funnel'), { id: 'fn', title: 'Funnel', x: 0, y: 0, w: 7, h: 9,
+      labels: ['2021', '2022', '2023', '2024', '2025'],
+      seriesList: [{ name: 'V', values: [10, 20, 15, 25, 30], slot: 1 }], fmt: { labels: true } })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const host = document.querySelector('.dc-plot[data-card="fn"]');
+    const vb = host.querySelector('svg').viewBox.baseVal;
+    return [...host.querySelectorAll('.viz-label')].map(t => {
+      const b = t.getBBox();
+      return { t: t.textContent, over: b.x + b.width > vb.width + 0.5 };
+    });
+  });
+  ck('no funnel row is labelled off the edge of its own card',
+    funnelFit.length === 5 && funnelFit.every(l => !l.over),
+    funnelFit.filter(l => l.over).map(l => l.t).join(', ') || 'all 5 fit');
+
+  /* -- a ring reads as rings, and its middle says something ----------------- */
+
+  const rings = await p.evaluate(() => {
+    dashCards = [Object.assign(dashNewCard('ring'), { id: 'rg', title: 'Scores', x: 0, y: 0, w: 6, h: 9,
+      labels: ['Connectivity', 'Infrastructure', 'Social', 'Green cover', 'Retail'],
+      seriesList: [{ name: 'Score', values: [9, 7, 8, 6, 9], slot: 1 }] })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const host = document.querySelector('.dc-plot[data-card="rg"]');
+    const tr = [...host.querySelectorAll('.viz-track')];
+    const r = tr.map(t => +t.getAttribute('r'));
+    const thick = parseFloat(getComputedStyle(tr[0]).strokeWidth);
+    return { n: tr.length, step: r[0] - r[1], thick: thick,
+      trackInk: getComputedStyle(tr[0]).stroke,
+      gridInk: getComputedStyle(document.documentElement).getPropertyValue('--viz-grid').trim(),
+      mid: (host.querySelector('.viz-donut-total') || {}).textContent,
+      cap: (host.querySelector('.viz-donut-cap') || {}).textContent };
+  });
+  // At a flat 4px gap against a 17px band the rings covered 81% of the radius
+  // they were spread over and merged into one grey disc.
+  ck('the gap between rings is real negative space, not a hairline',
+    rings.step - rings.thick >= rings.thick * 0.4,
+    'band ' + rings.thick.toFixed(1) + ', gap ' + (rings.step - rings.thick).toFixed(1));
+  ck('and a track is lighter than a gridline, because it is 17 times as wide',
+    /0\.0[0-6]/.test(rings.trackInk), rings.trackInk + ' vs grid ' + rings.gridInk);
+  ck('the hole in the middle carries the summary rather than nothing',
+    rings.mid === '7.8' && /of 10$/.test(rings.cap || ''),
+    JSON.stringify(rings.mid) + ' / ' + JSON.stringify(rings.cap));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' | ') || 'none');
 

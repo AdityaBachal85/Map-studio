@@ -383,6 +383,45 @@ const SCENE = [
   ck('and only a bar that has one offers a way back to the series colour',
     pointsUi.clears === 1, String(pointsUi.clears));
 
+  // A PIE HAS NO SERIES COLOUR, so the swatches are not an override of one —
+  // they are the only colour control it has, and folding them away behind a
+  // disclosure made the colours of five chart kinds unreachable. The series
+  // swatch above them is worse than useless on those kinds: it is a control
+  // that sets a value the chart never reads.
+  const catUi = await p.evaluate(() => {
+    const board = dashCards;
+    const look = kind => {
+      const c = Object.assign(dashNewCard(kind), { id: 'cc', title: kind, x: 0, y: 0, w: 8, h: 8,
+        labels: ['North', 'East', 'South'], seriesList: [{ name: 'S', values: [4, 9, 6], slot: 1 }] });
+      dashCards = [c];
+      dashEditing = true; dashSelectedId = 'cc';
+      renderDashboard(); renderDashFormat();
+      const pane = document.getElementById('dashFormat');
+      const series = pane.querySelector('.df-series');
+      return {
+        folded: !!pane.querySelector('details.df-points'),
+        open: !!pane.querySelector('.df-points-open'),
+        swatches: pane.querySelectorAll('[data-dfpick^="pt:0:"]').length,
+        seriesSwatch: series ? series.querySelectorAll('[data-dfpick^="slot:"]').length : -1,
+      };
+    };
+    const out = { pie: look('pie'), ring: look('ring'), treemap: look('treemap'),
+      column: look('column') };
+    dashEditing = false; dashSelectedId = null;
+    dashCards = board;
+    renderDashboard(); dashLayoutApply();
+    return out;
+  });
+  ck('a pie, a ring and a treemap show a swatch per category, unfolded',
+    ['pie', 'ring', 'treemap'].every(k => catUi[k].open && !catUi[k].folded && catUi[k].swatches === 3),
+    JSON.stringify(catUi));
+  ck('and none of them is offered a series colour it would ignore',
+    ['pie', 'ring', 'treemap'].every(k => catUi[k].seriesSwatch === 0),
+    ['pie', 'ring', 'treemap'].map(k => k + ':' + catUi[k].seriesSwatch).join(' '));
+  ck('a column still leads with its series colour and folds the rest away',
+    catUi.column.seriesSwatch === 1 && catUi.column.folded && !catUi.column.open,
+    JSON.stringify(catUi.column));
+
   /* -- the top bar is a toolbar, not a map with buttons on it --------------- */
 
   // The search box in the bar is the MAP's search box, re-parented rather than
