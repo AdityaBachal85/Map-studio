@@ -983,6 +983,160 @@ body.dash-gesture .map-wrap { transition: none; }
 #dashGrid.exporting .dash-tile { box-shadow: none; }
 
 /* --------------------------------------------------------------------------
+   The report look: filled header bars, tables, comment and rating blocks
+   --------------------------------------------------------------------------
+   A quiet uppercase caption in muted ink is right for a screen you are working
+   in and wrong for a sheet somebody reads at arm's length across a desk. The
+   filled bar is what separates one block from the next in every printed
+   connectivity report, so it is offered per card rather than imposed: the board
+   you build in and the sheet you hand over are the same board.
+
+   TWO TONES, BOTH WHITE ON DARK, BOTH CLEARING AA. Navy is #0A1E3C — 14.9:1
+   against white — and the green is slot six, #008300, at 4.8:1. The tone is
+   never the only thing carrying meaning: the bar always has its title in it.
+   ----------------------------------------------------------------------- */
+
+.dash-card.headed > .dc-head {
+  margin: -13px -13px 10px;
+  padding: 8px 13px;
+  border-radius: 12px 12px 0 0;
+  background: var(--navy);
+}
+
+.dash-card.head-green > .dc-head { background: var(--viz-6); }
+
+.dash-card.headed > .dc-head .dc-title,
+.dash-card.headed > .dc-head .dc-grip { color: #fff; }
+.dash-card.headed > .dc-head .dc-title { opacity: 1; }
+
+/* The tools sit on the bar in edit mode, so they need to be legible on it. */
+.dash-card.headed > .dc-head .dc-btn { color: rgba(255, 255, 255, .85); }
+.dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
+
+/* -- the table reading of a live list ------------------------------------- */
+
+.dc-tbl-wrap { overflow-x: auto; }
+
+.dc-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.dc-tbl th,
+.dc-tbl td {
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.dc-tbl thead th {
+  font: 700 9px/1 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 6px;
+}
+
+/* Zebra rather than a rule per row: on a sheet of twelve distances the stripe
+   is what keeps the eye on one line all the way across, and it is one paint
+   instead of twelve hairlines.
+
+   An ink wash, not --surface-2. That token is a translucent glass tint — white
+   at 72% in the light theme — so over a white card it was a stripe the exact
+   colour of the card. The stripe has to be a step DOWN from whatever it sits
+   on, in either theme, which is what a low-alpha ink gives and a surface token
+   cannot. */
+.dc-tbl tbody tr:nth-child(odd) { background: rgba(16, 32, 60, .045); }
+:root:not([data-theme="light"]) .dc-tbl tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, .045);
+}
+:root[data-theme="dark"] .dc-tbl tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, .045);
+}
+
+.dc-tbl tbody th {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Numbers line up under each other or the column is not a column. */
+.dc-tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.dc-tbl tbody td.num { color: var(--text); font-weight: 600; }
+
+/* -- the closing comment -------------------------------------------------- */
+
+.dc-comment { display: flex; gap: 12px; align-items: flex-start; height: 100%; }
+
+.dc-comment-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  width: 74px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-align: center;
+}
+
+.dc-comment-mark span {
+  font: 700 8.5px/1.25 var(--font, inherit);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.dc-comment .dc-text { flex: 1; min-width: 0; }
+
+/* -- the closing rating --------------------------------------------------- */
+
+.dc-rating { display: flex; gap: 14px; align-items: center; height: 100%; }
+.dc-rating-main { flex: 1; min-width: 0; }
+
+.dc-rating-cap {
+  font: 700 11px/1.3 var(--font, inherit);
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.dc-rating-note { font-size: 10.5px; line-height: 1.45; color: var(--text-2); }
+
+/* The badge is the one place on the board where a number is allowed to be
+   loud: it is the answer the whole sheet was built to give. */
+.dc-rating-badge {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--viz-6);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-rating-badge b { font: 800 26px/1 var(--font, inherit); }
+.dc-rating-badge span { font: 700 13px/1 var(--font, inherit); opacity: .82; }
+
+/* Nothing typed is not a score of zero — an empty badge says so rather than
+   printing a number nobody chose. */
+.dc-rating-badge.empty { background: var(--surface-2); color: var(--text-2); }
+
+.dc-rating-in { max-width: 74px; margin-top: 6px; }
+
+/* --------------------------------------------------------------------------
    The export menu's ground switch
    ----------------------------------------------------------------------- */
 

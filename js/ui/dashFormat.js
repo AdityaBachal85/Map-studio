@@ -37,7 +37,9 @@ function dashFormatTarget() {
 function dfScoreCeiling(card) {
   const nums = card.type === 'gauges'
     ? (card.items || []).map(i => Number(i.value)).filter(isFinite)
-    : (card.seriesList || []).reduce((a, s) => a.concat((s.values || []).map(Number).filter(isFinite)), []);
+    : card.type === 'rating'
+      ? [Number(card.value)].filter(isFinite)
+      : (card.seriesList || []).reduce((a, s) => a.concat((s.values || []).map(Number).filter(isFinite)), []);
   const inferred = typeof vizScoreMax === 'function' ? vizScoreMax({}, nums) : 100;
   return dfRow('Scored out of', '<input type="number" min="1" data-dfnum="max" value="'
     + (card.max == null ? '' : Number(card.max)) + '" placeholder="' + inferred + '">');
@@ -157,6 +159,18 @@ function renderDashFormat() {
   /* ---- format ---- */
   let f = '';
   f += dfToggle('title', card.fmt ? card.fmt.title !== false : true, 'Title bar');
+
+  // How the title reads. A quiet caption is right for a screen you are working
+  // in; a filled bar is what separates one block from the next on a sheet read
+  // at arm's length. Both tones are white on dark and both clear AA.
+  if (!card.fmt || card.fmt.title !== false) {
+    f += dfRow('Header', dfSeg('head', [['plain', 'Quiet'], ['bar', 'Bar']],
+      (card.fmt && card.fmt.head) === 'bar' ? 'bar' : 'plain'));
+    if (card.fmt && card.fmt.head === 'bar') {
+      f += dfRow('Bar tone', dfSeg('headTone', [['navy', 'Navy'], ['green', 'Green']],
+        card.fmt.headTone === 'green' ? 'green' : 'navy'));
+    }
+  }
   if (isChart) {
     f += dfRow('Legend', dfSeg('legend', [['auto', 'Auto'], ['top', 'Top'], ['right', 'Right'],
       ['bottom', 'Bottom'], ['off', 'Off']], fmt.legend));
@@ -187,8 +201,14 @@ function renderDashFormat() {
   // A drive time is traffic on one day; a distance is the road. The minute is
   // opt-in for that reason — see dashAccessHtml().
   if (card.type === 'access') {
+    // Both readings are kept: a list is scanned, a table is compared. The table
+    // is also the accessible one — real headers a screen reader can announce.
+    f += dfRow('Read as', dfSeg('asTable', [['list', 'List'], ['table', 'Table']],
+      (card.fmt && card.fmt.asTable) ? 'table' : 'list'));
     f += dfToggle('time', !!(card.fmt && card.fmt.time), 'Travel time');
   }
+
+  if (card.type === 'rating') f += dfScoreCeiling(card);
 
   if (card.type === 'legend') {
     f += dfRow('Placement', dfSeg('onMap', [['card', 'A card'], ['map', 'On the map']],
@@ -241,6 +261,11 @@ function dashFormatApply(card, key, v) {
     case 'xAxis': card.fmt.xAxis = v === '1'; return;
     case 'yAxis': card.fmt.yAxis = v === '1'; return;
     case 'time': card.fmt.time = v === '1'; return;
+    case 'head': card.fmt.head = v === 'bar' ? 'bar' : 'plain'; return;
+    case 'headTone': card.fmt.headTone = v === 'green' ? 'green' : 'navy'; return;
+    case 'asTable':
+      if (v === 'table') card.fmt.asTable = true; else delete card.fmt.asTable;
+      return;
     case 'smooth': card.fmt.smooth = v === '1'; return;
     case 'plain': card.fmt.plain = v === '1'; return;
 

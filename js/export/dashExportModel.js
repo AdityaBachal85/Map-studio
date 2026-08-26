@@ -149,6 +149,10 @@ function dashModelCardEmpty(card) {
       return !(card.items || []).length;
     // The two live cards are empty only when the map is: they are never typed
     // into, so an empty one is a statement about the map, not a to-do.
+    case 'comment':
+      return !dashModelTyped(card.body);
+    case 'rating':
+      return !dashModelHasValue(card.value);
     case 'access':
       return !(card._rows || []).length;
     case 'legend':
@@ -254,6 +258,23 @@ function dashModelData(card, resolve) {
           label: r.label || '', kind: r.kind || 'area', color: col(r.color),
         })),
       };
+
+    case 'comment':
+      // Its own type rather than a text card, so a writer can give it the block
+      // it has on the sheet instead of a loose paragraph.
+      return { label: 'Location comment', body: dashModelTyped(card.body) ? card.body : '' };
+
+    case 'rating': {
+      const set = dashModelHasValue(card.value);
+      const v = set ? Number(card.value) : null;
+      const viz = dashModelViz();
+      return {
+        label: card.label || '',
+        note: dashModelTyped(card.body) ? card.body : '',
+        value: v,
+        max: viz ? viz.max(card, set ? [v] : []) : 10,
+      };
+    }
     default:
       return {};
   }

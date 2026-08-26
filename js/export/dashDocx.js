@@ -209,6 +209,20 @@ async function dashBuildDocx(model, canvas, rects, scale) {
         body.push(docxP('', { spaceAfter: 200 }));
         break;
       }
+      case 'comment':
+        if (d.body) body.push(docxP(d.body, { size: 10, spaceAfter: 200 }));
+        break;
+
+      case 'rating':
+        // The badge is a graphic; in a document the same fact is a sentence,
+        // which is also the half somebody can edit.
+        body.push(docxP((d.label ? d.label + ' \u2014 ' : '')
+          + (d.value == null ? 'not rated' : d.value + ' out of ' + (d.max || 10)),
+          { size: 11, bold: true }));
+        if (d.note) body.push(docxP(d.note, { size: 9, color: pal.dim, spaceAfter: 200 }));
+        else body.push(docxP('', { spaceAfter: 200 }));
+        break;
+
       case 'slicer':
         body.push(docxP((d.picked && d.picked.length ? d.picked : d.items || []).join(', '),
           { size: 9, color: pal.dim, spaceAfter: 200 }));

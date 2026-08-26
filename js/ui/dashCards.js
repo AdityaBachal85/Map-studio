@@ -77,6 +77,12 @@ const DASH_GALLERY = [
     items: ['2021', '2022', '2023'], picked: [] })],
   ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 4, h: 7 })],
   ['legend', 'Legend (live)', 'From the map', () => ({ type: 'legend', title: 'Legend', w: 4, h: 6 })],
+  ['comment', 'Location comment', 'Text', () => ({ type: 'comment', title: 'Location comment',
+    body: 'Type the closing read on the location.', w: 8, h: 5,
+    fmt: { head: 'bar', headTone: 'green' } })],
+  ['rating', 'Overall rating', 'Figures', () => ({ type: 'rating', title: 'Overall rating',
+    label: 'Villa funding (location perspective)', value: '', body: '', w: 4, h: 5,
+    fmt: { head: 'bar', headTone: 'navy' } })],
 ];
 
 /** @param {string} kind @returns {object} a fresh chart of that kind */
@@ -403,6 +409,26 @@ function dashAccessHtml(card) {
       ? 'Measuring ' + drawn + ' route' + (drawn === 1 ? '' : 's') + '…<span class="dc-hint"> distances appear here once the routing service answers.</span>'
       : 'No routes yet.<span class="dc-hint"> Draw one in the Routes tab and it appears here.</span>') + '</div>';
   }
+  // Two readings of the same rows, and both are kept because they answer
+  // different questions. The list is scanned — "is the station near?" — and the
+  // table is compared, column against column, which is what a printed sheet of
+  // approximate distances is for. It is also the accessible reading: a real
+  // table has headers a screen reader can announce.
+  if (card && card.fmt && card.fmt.asTable) {
+    return '<div class="dc-tbl-wrap"><table class="dc-tbl"><thead><tr>'
+      + '<th scope="col">Place</th><th scope="col" class="num">Distance</th>'
+      + (showTime ? '<th scope="col" class="num">Time</th>' : '')
+      + '</tr></thead><tbody>'
+      + rows.map(r => '<tr>'
+        + '<th scope="row"><span class="dc-ico">'
+        + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
+        + esc(r.name) + '</th>'
+        + '<td class="num">' + esc(r.km) + '</td>'
+        + (showTime ? '<td class="num">' + esc(r.min && r.min !== '\u2014' ? r.min : '') + '</td>' : '')
+        + '</tr>').join('')
+      + '</tbody></table></div>';
+  }
+
   return '<div class="dc-list">' + rows.map(r =>
     '<div class="dc-row">'
     + '<span class="dc-ico">' + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
@@ -485,6 +511,41 @@ function dashCardBody(card) {
         + (dashEditing ? '<button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>' : '')
         + '</div>';
 
+    case 'comment':
+      // Icon, label, paragraph — the block that closes a connectivity sheet.
+      // The label is fixed rather than editable: it is the thing that makes the
+      // block recognisable across every report, and a card whose label can say
+      // anything is just a text card.
+      return '<div class="dc-comment">'
+        + '<div class="dc-comment-mark" aria-hidden="true">'
+        + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"'
+        + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>'
+        + '</svg><span>Location comment</span></div>'
+        + dashField(card, 'body', card.body, 'dc-text') + '</div>';
+
+    case 'rating': {
+      // One number, large, against its ceiling — the "8/10" that closes the
+      // sheet. Read from the same vizScoreMax() every other score on the board
+      // uses, so the rating and the rings cannot disagree about what ten means.
+      const raw = card.value;
+      const set = raw !== '' && raw != null && isFinite(Number(raw));
+      const v = set ? Number(raw) : null;
+      const max = (typeof vizScoreMax === 'function'
+        ? vizScoreMax(card, set ? [v] : []) : 10) || 10;
+      return '<div class="dc-rating">'
+        + '<div class="dc-rating-main">'
+        + dashField(card, 'label', card.label, 'dc-rating-cap')
+        + dashField(card, 'body', card.body, 'dc-rating-note')
+        + '</div>'
+        + '<div class="dc-rating-badge' + (set ? '' : ' empty') + '">'
+        + '<b>' + (set ? esc(vizNum(v)) : '\u2014') + '</b>'
+        + '<span>/' + max + '</span>'
+        + '</div>'
+        + (dashEditing ? dashField(card, 'value', set ? String(v) : '', 'dc-input dc-rating-in') : '')
+        + '</div>';
+    }
+
     case 'text':
     default:
       return dashField(card, 'body', card.body, 'dc-text');
@@ -498,6 +559,15 @@ function dashCardEl(card) {
     + (card.id === dashSelectedId && dashEditing ? ' selected' : '');
   el.dataset.card = card.id;
   if (card.fmt && card.fmt.plain) el.classList.add('plain');
+  // A filled header bar rather than a quiet caption. On a printed sheet the
+  // bar is what separates one block from the next at arm's length, where a
+  // 9.5px uppercase label in muted ink is invisible. Two tones only, both of
+  // them white on dark and both clearing AA, so the bar can carry a title
+  // without the title carrying the meaning of the colour on its own.
+  if (card.fmt && card.fmt.head === 'bar') {
+    el.classList.add('headed');
+    el.classList.add('head-' + (card.fmt.headTone === 'green' ? 'green' : 'navy'));
+  }
 
   const titleOn = !card.fmt || card.fmt.title !== false;
 

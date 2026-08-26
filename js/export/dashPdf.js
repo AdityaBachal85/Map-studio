@@ -227,6 +227,46 @@ function dashPdfCard(page, tile, box, pal) {
       break;
     }
 
+    case 'comment':
+      if (d.body) {
+        pdfParagraph(page, d.body, {
+          x: box.x + pad, y, size: 9, color: pal.ink, width: innerW,
+          maxLines: Math.max(1, Math.floor(room() / 12)),
+        });
+      }
+      break;
+
+    case 'rating': {
+      // The number is the answer the sheet was built to give, so it is drawn at
+      // the size that says so rather than as another line of body text.
+      const badge = d.value == null ? '\u2014' : String(d.value);
+      const ceiling = '/' + (d.max || 10);
+      const bw = pdfTextWidth(badge, 22, true) + pdfTextWidth(ceiling, 11, true) + 20;
+      const bh = 34;
+      const bx = box.x + box.w - pad - bw;
+      // Square, because pdfRect draws rectangles — a radius argument would be
+      // silently ignored and the badge would only look wrong in the file.
+      pdfRect(page, d.value == null ? pal.rule : pal.accent, bx, y, bw, bh);
+      pdfText(page, badge, { x: bx + 10, y: y + 9, size: 22, bold: true,
+        color: d.value == null ? pal.dim : '#FFFFFF', width: bw });
+      pdfText(page, ceiling, { x: bx + 10 + pdfTextWidth(badge, 22, true) + 1, y: y + 18,
+        size: 11, bold: true, color: d.value == null ? pal.faint : '#FFFFFF', width: bw });
+
+      const textW = Math.max(40, innerW - bw - 12);
+      if (d.label) {
+        pdfText(page, d.label, { x: box.x + pad, y, size: 9.5, bold: true,
+          color: pal.ink, width: textW });
+        y += 14;
+      }
+      if (d.note) {
+        pdfParagraph(page, d.note, {
+          x: box.x + pad, y, size: 8.5, color: pal.dim, width: textW,
+          maxLines: Math.max(1, Math.floor((bottom - y) / 11)),
+        });
+      }
+      break;
+    }
+
     case 'list': {
       const items = d.items || [];
       let drawn = 0;

@@ -16,6 +16,16 @@
       /* Geist Mono, so the coordinate and distance readouts belong to the same
          family as the rest of the interface instead of reading as a borrowed
          terminal font. */
+      /* The interface family, as a token.
+         38 rules across this project write `font: 700 11px/1 var(--font, inherit)`
+         and every one of them was invalid, because --font was never defined and
+         the fallback `inherit` is not a font-family a shorthand accepts. An
+         invalid shorthand is dropped whole, so those rules were setting no
+         weight, no size and no line-height — they inherited, silently, and
+         looked like a design decision. Gauge captions, treemap labels, chart
+         labels, the visual gallery's caption and the score numbers were all in
+         that set. Defining it makes them mean what they say. */
+      --font: 'Geist', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
       --mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       --sbw: 396px;
       --r: 13px;
