@@ -330,7 +330,9 @@ function dashGaugesHtml(card) {
         // already follows, and the reason a card stores a slot number and never
         // a hex. A gauge that carries its own hex from an older board keeps it.
         ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" stroke="'
-          + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(i + 1) : '#22C55E'))
+          // A stored hex from an older board wins; then a slot the operator
+          // picked; then the slot this ring's position gives it.
+          + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(g.slot || (i + 1)) : '#22C55E'))
           + '" stroke-dasharray="' + (circ * frac).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
         : '')
       + '<text class="dc-gauge-num" x="30" y="35">' + (set ? vizNum(v) : '—') + '</text></svg>'
@@ -566,7 +568,8 @@ function dashCardEl(card) {
   // without the title carrying the meaning of the colour on its own.
   if (card.fmt && card.fmt.head === 'bar') {
     el.classList.add('headed');
-    el.classList.add('head-' + (card.fmt.headTone === 'green' ? 'green' : 'navy'));
+    const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
+    el.classList.add(/^[1-8]$/.test(tone) ? 'head-slot-' + tone : 'head-navy');
   }
 
   const titleOn = !card.fmt || card.fmt.title !== false;
@@ -590,6 +593,53 @@ function dashCardEl(card) {
   return el;
 }
 
+/**
+ * The on-map legend's size, and the handle that changes it.
+ *
+ * A legend that cannot be resized is a legend that either crowds the map or
+ * cannot fit its own longest name. CSS `resize` gives a real grip for nothing,
+ * but the browser forgets the size the moment the element is rebuilt — so the
+ * result is written back onto the card, where it travels with the project.
+ *
+ * The observer is bound once and re-pointed, rather than one per render: a new
+ * ResizeObserver per rebuild is a leak, and this element is rebuilt on every
+ * board change.
+ *
+ * @param {?object} card the legend card that is on the map, or null
+ */
+let _dashLegendRo = null;
+function dashSizeMapLegend(card) {
+  const key = document.getElementById('colorKeyCard');
+  if (!key) return;
+
+  if (!card) {
+    if (_dashLegendRo) _dashLegendRo.disconnect();
+    key.style.width = '';
+    key.style.height = '';
+    return;
+  }
+
+  if (card.mapW) key.style.width = card.mapW + 'px';
+  if (card.mapH) key.style.height = card.mapH + 'px';
+
+  if (typeof ResizeObserver !== 'function') return;
+  if (!_dashLegendRo) {
+    _dashLegendRo = new ResizeObserver(entries => {
+      const e = entries[0];
+      if (!e || !_dashLegendRo._card) return;
+      // Only what the grip actually produced. Writing back a size the
+      // stylesheet chose would freeze the card at its own default the first
+      // time the board rendered.
+      if (!e.target.style.width && !e.target.style.height) return;
+      _dashLegendRo._card.mapW = Math.round(e.contentRect.width);
+      _dashLegendRo._card.mapH = Math.round(e.contentRect.height);
+    });
+  }
+  _dashLegendRo._card = card;
+  _dashLegendRo.disconnect();
+  _dashLegendRo.observe(key);
+}
+
 /** Redraw the canvas. */
 function renderDashboard() {
   const grid = document.getElementById('dashGrid');
@@ -603,9 +653,10 @@ function renderDashboard() {
   // a box over the map and in a card beside it. One class turns that off for
   // the one case where it was asked for, and it is set from the cards rather
   // than from a preference so a project carries its own answer.
-  const legendOnMap = dashCards.some(c => c.type === 'legend' && c.onMap);
+  const onMapLegend = dashCards.find(c => c.type === 'legend' && c.onMap);
   const shell = document.querySelector('.app');
-  if (shell) shell.classList.toggle('legend-on-map', legendOnMap);
+  if (shell) shell.classList.toggle('legend-on-map', !!onMapLegend);
+  dashSizeMapLegend(onMapLegend || null);
 
   // The map lives on the canvas and must survive the rebuild, so it is lifted
   // out before the wipe rather than being innerHTML'd away.

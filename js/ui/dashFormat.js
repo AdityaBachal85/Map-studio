@@ -167,8 +167,24 @@ function renderDashFormat() {
     f += dfRow('Header', dfSeg('head', [['plain', 'Quiet'], ['bar', 'Bar']],
       (card.fmt && card.fmt.head) === 'bar' ? 'bar' : 'plain'));
     if (card.fmt && card.fmt.head === 'bar') {
-      f += dfRow('Bar tone', dfSeg('headTone', [['navy', 'Navy'], ['green', 'Green']],
-        card.fmt.headTone === 'green' ? 'green' : 'navy'));
+      // Navy first because it is the default and the one most bars want, then
+      // the same eight slots every other colour on this board is chosen from.
+      // The ink on the bar follows its luminance, so a light slot is a usable
+      // choice rather than an unreadable one.
+      const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
+      f += dfRow('Bar colour',
+        '<div class="df-sw-row">'
+        + '<button type="button" class="dc-sw' + (tone === 'navy' ? ' on' : '')
+        + '" data-df="headTone" data-v="navy" style="background:var(--navy)"'
+        + ' title="Navy" aria-label="Navy"></button>'
+        + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
+          '<button type="button" class="dc-sw' + (tone === String(n) ? ' on' : '')
+          // The swatch previews the bar it will produce, not the raw slot —
+          // otherwise you pick a bright hue and get a deep one.
+          + '" data-df="headTone" data-v="' + n
+          + '" style="background:color-mix(in srgb, var(--viz-' + n + ') 60%, var(--navy))"'
+          + ' title="Colour ' + n + '" aria-label="Colour ' + n + '"></button>').join('')
+        + '</div>');
     }
   }
   if (isChart) {
@@ -192,7 +208,15 @@ function renderDashFormat() {
   }
   // The score-rings card is not a `chart`, so it missed the branch above
   // entirely — and it is the card most likely to be scored out of ten.
-  if (card.type === 'gauges') f += dfScoreCeiling(card);
+  if (card.type === 'gauges') {
+    f += dfScoreCeiling(card);
+    // The rings had no colour control at all: they took the slot their position
+    // gave them and that was the end of it, while every chart series beside
+    // them had swatches. Same control, same eight slots.
+    (card.items || []).forEach((g, i) => {
+      f += dfRow(g.cap || ('Ring ' + (i + 1)), dfSwatches('gslot:' + i, g.slot || (i + 1)));
+    });
+  }
 
   // Where the legend lives. On the map is the layout every printed connectivity
   // sheet uses — the key sits in a corner of the drawing it explains, not in a
@@ -247,6 +271,16 @@ function dashFormatApply(card, key, v) {
     return;
   }
 
+  const gslot = key.match(/^gslot:(\d+)$/);
+  if (gslot) {
+    const g = card.items && card.items[+gslot[1]];
+    // A stored hex from an older board would win over the slot for ever, so
+    // picking a colour clears it — otherwise the swatch would do nothing and
+    // look broken.
+    if (g) { g.slot = +v; delete g.color; }
+    return;
+  }
+
   switch (key) {
     case 'kind': card.kind = v; return;
     // Not a fmt flag: it moves the card off the board entirely, so it lives on
@@ -262,7 +296,10 @@ function dashFormatApply(card, key, v) {
     case 'yAxis': card.fmt.yAxis = v === '1'; return;
     case 'time': card.fmt.time = v === '1'; return;
     case 'head': card.fmt.head = v === 'bar' ? 'bar' : 'plain'; return;
-    case 'headTone': card.fmt.headTone = v === 'green' ? 'green' : 'navy'; return;
+    case 'headTone':
+      // 'green' is the old two-tone spelling; slot six is the same green.
+      card.fmt.headTone = v === 'green' ? '6' : (/^[1-8]$/.test(v) ? v : 'navy');
+      return;
     case 'asTable':
       if (v === 'table') card.fmt.asTable = true; else delete card.fmt.asTable;
       return;

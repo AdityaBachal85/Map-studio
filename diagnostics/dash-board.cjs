@@ -278,6 +278,81 @@ const SCENE = [
         && getComputedStyle(document.getElementById('colorKeyCard')).display === 'none';
     }, moved.id) === true);
 
+  /* -- colour is a choice, and every choice is legible ---------------------- */
+
+  // A header bar can take any of the eight palette slots, and several of those
+  // hues are far too light to carry 9.5px type: white on slot one is 4.3:1 and
+  // navy on it is 3.8:1, so NEITHER ink reaches AA and picking between them by
+  // luminance only chooses the less bad one. The bar is therefore the slot mixed
+  // into navy, which keeps the hue and guarantees the ink. This measures it.
+  const bars = await p.evaluate(() => {
+    const c = dashCards.find(x => x.type === 'text') || dashCards[0];
+    const lin = v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+    const out = {};
+    ['navy', '1', '2', '3', '4', '5', '6', '7', '8'].forEach(t => {
+      c.fmt = Object.assign({}, c.fmt, { head: 'bar', headTone: t });
+      renderDashboard();
+      const head = document.querySelector('.dash-card[data-card="' + c.id + '"] .dc-head');
+      const bg = getComputedStyle(head).backgroundColor;
+      // color-mix() computes to color(srgb r g b) with 0-1 channels, not rgb().
+      const nums = (bg.match(/[0-9.]+/g) || []).map(Number);
+      const ch = /^color\(/.test(bg) ? nums.slice(0, 3).map(v => v * 255) : nums.slice(0, 3);
+      const L = 0.2126 * lin(ch[0]) + 0.7152 * lin(ch[1]) + 0.0722 * lin(ch[2]);
+      out[t] = { ratio: Math.round((1.05 / (L + 0.05)) * 100) / 100,
+        ink: getComputedStyle(head.querySelector('.dc-title')).color };
+    });
+    delete c.fmt.head;
+    renderDashboard();
+    return out;
+  });
+  const worst = Object.keys(bars).reduce((a, k) => Math.min(a, bars[k].ratio), 99);
+  ck('every header bar clears AA against its own title',
+    worst >= 4.5, 'worst ' + worst + ':1');
+  ck('and the title is white on all of them, so one rule covers every tone',
+    Object.keys(bars).every(k => bars[k].ink === 'rgb(255, 255, 255)'),
+    Object.keys(bars).filter(k => bars[k].ink !== 'rgb(255, 255, 255)').join(',') || 'all white');
+
+  // The rings had no colour control at all — they took the slot their position
+  // gave them while every chart series beside them had swatches.
+  ck('a score ring takes the colour it was given, not the one its position implies',
+    await p.evaluate(() => {
+      const g = dashCards.find(x => x.type === 'gauges');
+      g.items = [{ cap: 'A', value: '9', slot: 5 }, { cap: 'B', value: '7' }];
+      renderDashboard();
+      const strokes = [...document.querySelectorAll('.dash-card[data-card="' + g.id + '"] .dc-gauge .val')]
+        .map(c => c.getAttribute('stroke'));
+      return strokes[0] === 'var(--viz-5)' && strokes[1] === 'var(--viz-2)';
+    }) === true);
+
+  // A legend that cannot be resized either crowds the map or cannot fit its own
+  // longest name. The browser forgets the size on every rebuild, so it is
+  // written back onto the card.
+  const sized = await p.evaluate(async () => {
+    const c = dashCards.find(x => x.type === 'legend');
+    c.onMap = true;
+    renderDashboard();
+    const key = document.getElementById('colorKeyCard');
+    // Read, do not hold: getComputedStyle returns a live view, so a reference
+    // taken here reports the state at the END of this function rather than at
+    // the moment it was taken.
+    const resize = getComputedStyle(key).resize;
+    key.style.width = '268px';
+    key.style.height = '188px';
+    await new Promise(r => setTimeout(r, 320));
+    const remembered = { w: c.mapW, h: c.mapH };
+    renderDashboard();
+    await new Promise(r => setTimeout(r, 200));
+    const back = document.getElementById('colorKeyCard');
+    const reapplied = back.style.width + ' ' + back.style.height;
+    delete c.onMap;
+    renderDashboard();
+    return { resize, remembered, reapplied };
+  });
+  ck('the on-map legend has a real resize grip', sized.resize === 'both', sized.resize);
+  ck('and the size it was dragged to survives a rebuild',
+    sized.remembered.w === 268 && sized.reapplied === '268px 188px',
+    JSON.stringify(sized));
+
   /* -- the gallery does not stand on the board ------------------------------ */
 
   // #dashAdd is absolutely positioned at the bottom of the grid, and the grid

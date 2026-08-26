@@ -181,7 +181,22 @@
   top: 14px;
   right: auto;
   bottom: auto;
+  /* A real grip, for nothing. `resize` needs a scroll container to act on,
+     which `overflow: auto` provides — and which also means a legend narrowed
+     past its longest name scrolls rather than clipping it. The size is written
+     back onto the card by dashSizeMapLegend(), because the browser forgets it
+     the moment the element is rebuilt. */
+  resize: both;
+  overflow: auto;
+  min-width: 140px;
+  min-height: 70px;
+  max-width: 60%;
+  max-height: 80%;
 }
+
+/* The grip is a UA widget and it is chrome. It is not drawn into a capture
+   anyway, but on the board it should not read as part of the legend. */
+.map-wrap.capturing #colorKeyCard { resize: none; overflow: hidden; }
 
 /* The grip and the edit pencil are for arranging it on a live map; on the board
    they are chrome in a deliverable. */
@@ -1003,7 +1018,23 @@ body.dash-gesture .map-wrap { transition: none; }
   background: var(--navy);
 }
 
-.dash-card.head-green > .dc-head { background: var(--viz-6); }
+/* THE BAR IS THE SLOT, DEEPENED — NOT THE SLOT ITSELF.
+   The palette is a categorical set chosen to be told apart against a card, and
+   several of its hues are far too light to carry 9.5px type. Slot one is the
+   sharp case: white on it is 4.3:1 and navy on it is 3.8:1, so NEITHER ink
+   reaches AA and choosing between them by luminance only picks the less bad
+   one. Mixing 60% of the hue into navy keeps the colour recognisably itself and
+   makes every bar dark enough for white — the worst case is slot four's amber
+   at 4.7:1, and every other slot is better than that. A header bar wants a deep
+   tone anyway; that is what the reference sheets use. */
+.dash-card.head-slot-1 > .dc-head { background: color-mix(in srgb, var(--viz-1) 60%, var(--navy)); }
+.dash-card.head-slot-2 > .dc-head { background: color-mix(in srgb, var(--viz-2) 60%, var(--navy)); }
+.dash-card.head-slot-3 > .dc-head { background: color-mix(in srgb, var(--viz-3) 60%, var(--navy)); }
+.dash-card.head-slot-4 > .dc-head { background: color-mix(in srgb, var(--viz-4) 60%, var(--navy)); }
+.dash-card.head-slot-5 > .dc-head { background: color-mix(in srgb, var(--viz-5) 60%, var(--navy)); }
+.dash-card.head-slot-6 > .dc-head { background: color-mix(in srgb, var(--viz-6) 60%, var(--navy)); }
+.dash-card.head-slot-7 > .dc-head { background: color-mix(in srgb, var(--viz-7) 60%, var(--navy)); }
+.dash-card.head-slot-8 > .dc-head { background: color-mix(in srgb, var(--viz-8) 60%, var(--navy)); }
 
 .dash-card.headed > .dc-head .dc-title,
 .dash-card.headed > .dc-head .dc-grip { color: #fff; }
@@ -1012,6 +1043,8 @@ body.dash-gesture .map-wrap { transition: none; }
 /* The tools sit on the bar in edit mode, so they need to be legible on it. */
 .dash-card.headed > .dc-head .dc-btn { color: rgba(255, 255, 255, .85); }
 .dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
+
+
 
 /* -- the table reading of a live list ------------------------------------- */
 
