@@ -334,7 +334,11 @@ function dashGaugesHtml(card) {
         // reads in the other — the rule every other visual on this board
         // already follows, and the reason a card stores a slot number and never
         // a hex. A gauge that carries its own hex from an older board keeps it.
-        ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" stroke="'
+        // --len is the full circumference, which is what the enter animation
+        // sweeps the arc in from. Emitted here because the geometry is here;
+        // the stylesheet has no way to know a ring's radius.
+        ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" style="--len:'
+          + circ.toFixed(1) + ';--i:' + i + '" stroke="'
           // A stored hex from an older board wins; then a slot the operator
           // picked; then the slot this ring's position gives it.
           + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(g.slot || (i + 1)) : '#22C55E'))

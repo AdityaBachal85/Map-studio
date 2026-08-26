@@ -284,6 +284,34 @@ const SCENE = [
         && getComputedStyle(document.getElementById('colorKeyCard')).display === 'none';
     }, moved.id) === true);
 
+  /* -- the top bar is a toolbar, not a map with buttons on it --------------- */
+
+  // The search box in the bar is the MAP's search box, re-parented rather than
+  // duplicated. It arrives dressed for a map: 46px tall, with a 30px drop
+  // shadow made to lift it off imagery and a 36px circular button on the end.
+  // In a row of 32px controls that reads as a floating pill dropped on the
+  // toolbar — and being the tallest thing in the row, it set the bar's height.
+  const bar = await p.evaluate(() => {
+    const el = document.getElementById('dashTop');
+    const inner = document.querySelector('#dashTopSearch .inner');
+    const btn = document.getElementById('dashExportBtn');
+    return {
+      barH: Math.round(el.getBoundingClientRect().height),
+      searchH: Math.round(inner.getBoundingClientRect().height),
+      btnH: Math.round(btn.getBoundingClientRect().height),
+      shadow: getComputedStyle(inner).boxShadow,
+      slotAnchored: getComputedStyle(document.getElementById('dashTopSearch')).position,
+    };
+  });
+  ck('the search field is the same height as the buttons beside it',
+    bar.searchH === bar.btnH, bar.searchH + ' vs ' + bar.btnH);
+  ck('and it does not float above the bar it is sitting in',
+    bar.shadow === 'none', bar.shadow);
+  ck('the bar is sized by its contents, not by a pill that used to be taller',
+    bar.barH <= bar.searchH + 14, bar.barH + 'px around a ' + bar.searchH + 'px control');
+  ck('and the results list has something to hang from',
+    bar.slotAnchored === 'relative', bar.slotAnchored);
+
   /* -- colour is a choice, and every choice is legible ---------------------- */
 
   // A header bar can take any of the eight palette slots, and several of those

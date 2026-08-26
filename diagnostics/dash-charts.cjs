@@ -359,6 +359,69 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
     model.ring === 100 && model.gauge === 100 && model.radar === 100 && model.donut === false,
     JSON.stringify(model));
 
+  /* -- the figures arrive too ----------------------------------------------- */
+
+  // The charts have had an entrance since the bklit pass and the numbers beside
+  // them did not, so on a board whose loudest visual is a row of score rings the
+  // charts arrived and the scores just sat there.
+  const figures = await p.evaluate(() => {
+    dashCards = [
+      Object.assign(dashNewCard('column'), { id: 'f1', x: 0, y: 0, w: 5, h: 7,
+        labels: ['a', 'b', 'c'], seriesList: [{ name: 'S', values: [4, 8, 6], slot: 1 }] }),
+      Object.assign(dashNewCard('gauges'), { id: 'f2', x: 5, y: 0, w: 5, h: 7,
+        items: [{ cap: 'Connectivity', value: '10' }, { cap: 'Infrastructure', value: '9' }] }),
+      Object.assign(dashNewCard('rating'), { id: 'f3', x: 0, y: 7, w: 4, h: 5, value: '8', label: 'Overall' }),
+      Object.assign(dashNewCard('stat'), { id: 'f4', x: 4, y: 7, w: 3, h: 5, label: 'Trips', value: '1,840' }),
+    ];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply();
+    const anim = sel => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el).animationName : 'missing';
+    };
+    return {
+      chart: anim('.dc-plot[data-card="f1"] .viz-mark'),
+      ring: anim('.dash-card[data-card="f2"] .dc-gauge .val'),
+      badge: anim('.dash-card[data-card="f3"] .dc-rating-badge'),
+      kpi: anim('.dash-card[data-card="f4"] .dc-stat-val'),
+    };
+  });
+  ck('a score ring sweeps in like the chart beside it',
+    figures.ring === 'viz-draw', figures.ring);
+  ck('the rating badge lands', figures.badge === 'viz-pop', figures.badge);
+  ck('and a KPI figure rises rather than bouncing', figures.kpi === 'dashIn', figures.kpi);
+
+  // THE EXPORT GUARANTEE, for the figures as well as the charts. Every keyframe
+  // is `from`-only and every element is emitted in its final state, so an
+  // export that freezes the animation loses nothing — which is what makes it
+  // safe to rasterise a board mid-entrance.
+  const frozen = await p.evaluate(() => {
+    const grid = document.getElementById('dashGrid');
+    const ringSel = '.dash-card[data-card="f2"] .dc-gauge .val';
+    const before = document.querySelector(ringSel).getAttribute('stroke-dasharray');
+    grid.classList.add('exporting');
+    const names = ['.dash-card[data-card="f2"] .dc-gauge .val',
+      '.dash-card[data-card="f3"] .dc-rating-badge',
+      '.dash-card[data-card="f4"] .dc-stat-val']
+      .map(s => getComputedStyle(document.querySelector(s)).animationName);
+    const after = document.querySelector(ringSel).getAttribute('stroke-dasharray');
+    grid.classList.remove('exporting');
+    return { names, same: before === after };
+  });
+  ck('an export freezes every one of them',
+    frozen.names.every(n => n === 'none'), frozen.names.join(','));
+  ck('and freezing changes nothing about what is drawn', frozen.same === true);
+
+  ck('reduced motion switches them off rather than taking a second path',
+    await p.evaluate(() => {
+      document.body.classList.add('reduce-motion');
+      const n = ['.dash-card[data-card="f2"] .dc-gauge .val',
+        '.dash-card[data-card="f3"] .dc-rating-badge']
+        .map(s => getComputedStyle(document.querySelector(s)).animationName);
+      document.body.classList.remove('reduce-motion');
+      return n.every(x => x === 'none');
+    }) === true);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' | ') || 'none');
 
   await b.close();

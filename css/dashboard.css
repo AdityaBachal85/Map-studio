@@ -53,7 +53,10 @@
    not the stylesheet's. */
 .app[data-mode="dashboard"] {
   grid-template-columns: 210px minmax(0, 1fr) 0;
-  grid-template-rows: 58px auto;
+  /* 44, not 58. The row was sized around the map's 46px search pill back when
+     that pill came into the bar wearing its map styling; the controls in it are
+     32px and the bar had 26px of air it was not using. */
+  grid-template-rows: 44px auto;
   grid-template-areas:
     "nav  top    fmt"
     "nav  canvas fmt";
@@ -444,6 +447,68 @@
   box-shadow: var(--elev-1);
 }
 
+/* --------------------------------------------------------------------------
+   The search box, wearing the toolbar rather than the map
+   --------------------------------------------------------------------------
+   This is the MAP's search box, re-parented into the bar rather than
+   duplicated — one element, one set of handlers, one results list. It arrives
+   dressed for a map: position:absolute at left:calc(var(--sbw) + 12px), 300px
+   wide, a 46px pill with a 30px drop shadow made to lift it off imagery, and a
+   36px circular button on the end.
+
+   In a row of 30px controls that reads as a floating pill somebody dropped on
+   the toolbar, and because it is the tallest thing in the flex row it was
+   setting the bar's height too. None of that styling is wrong on the map. It
+   is simply not what this is here.
+
+   Relative, not static: the results list is absolutely positioned against this
+   box, and a static parent would send it to the nearest positioned ancestor
+   instead — which is the whole header. */
+#dashTopSearch {
+  /* The anchor for the results list. The search box itself is `position: static`
+     in this mode (see the rule further down that re-homes it), so without a
+     positioned parent here the results panel would hang off whatever ancestor
+     happened to be positioned — the app shell — and land nowhere near the
+     field it belongs to. */
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 120px;
+  /* Wide enough for a full place name, not so wide it becomes the bar. */
+  max-width: 420px;
+}
+
+#dashTopSearch .search-box .inner {
+  height: 32px;
+  padding: 0 3px 0 2px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  /* No lift. Nothing in a toolbar floats. */
+  box-shadow: none;
+}
+
+#dashTopSearch #searchInput { font-size: 12px; }
+
+#dashTopSearch #searchBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+#dashTopSearch #searchBtn:hover { transform: none; filter: brightness(1.06); box-shadow: none; }
+#dashTopSearch .sIconBtn { width: 28px; height: 28px; }
+
+/* The results list still belongs to the search box, so it hangs off the bar
+   rather than being clipped by it. */
+#dashTopSearch .search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 1400;
+}
+
 .dt-spacer { flex: 1; }
 
 /* A hairline between the search and the controls, so the bar reads as two
@@ -623,7 +688,9 @@
    element, same handlers, same results list — re-homed, not rebuilt. */
 .app[data-mode="dashboard"] #searchBox {
   position: static;
-  width: min(420px, 42vw);
+  /* The slot sizes it — one number, in #dashTopSearch above, rather than a
+     second one here that has to be kept in step with it. */
+  width: 100%;
   transform: none;
 }
 
@@ -2080,6 +2147,62 @@ body.dash-gesture { cursor: grabbing; user-select: none; }
   from { opacity: 0; transform: translateY(7px); }
   to { opacity: 1; transform: none; }
 }
+
+/* --------------------------------------------------------------------------
+   The figures arrive too
+   --------------------------------------------------------------------------
+   The charts have had an entrance since the bklit pass and the numbers beside
+   them did not, so on a board whose loudest visual is a row of score rings the
+   charts arrived and the scores just sat there. These are the same discipline:
+   every keyframe is `from`-only and every element is drawn in its final state,
+   so switching the animation off is the same thing as finishing it. That is
+   what makes them safe to rasterise into a PDF and makes reduced motion a
+   no-op rather than a second code path.
+
+   Reusing viz-draw, viz-pop and viz-fade rather than writing four more: the
+   board should arrive with one rhythm, not with each card doing its own thing.
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A score ring sweeps in along itself, like the gauge dial — it is the same
+     shape making the same statement. Staggered, so four scores read as four
+     answers rather than one flash. */
+  .app[data-mode="dashboard"] .dc-gauge .val {
+    stroke-dasharray: var(--len, 200);
+    animation: viz-draw 900ms cubic-bezier(.4, 0, .2, 1) both;
+    animation-delay: calc(120ms + var(--i, 0) * 90ms);
+  }
+
+  /* The badge is the answer the sheet was built to give, so it lands last and
+     lands with weight. */
+  .app[data-mode="dashboard"] .dc-rating-badge {
+    transform-origin: center;
+    animation: viz-pop 460ms cubic-bezier(.34, 1.4, .64, 1) both;
+    animation-delay: 220ms;
+  }
+
+  /* KPI figures rise into place rather than popping: they are read, not
+     watched, and a number that bounces is a number you look at twice. */
+  .app[data-mode="dashboard"] .dc-stat-val,
+  .app[data-mode="dashboard"] .dc-gauge-num {
+    animation: dashIn 420ms cubic-bezier(.16, 1, .3, 1) both;
+    animation-delay: 180ms;
+  }
+}
+
+/* An export rasterises whatever is on screen at that instant, so anything
+   caught mid-entrance would be exported half-arrived. Every keyframe above is
+   `from`-only, which makes switching them off the same as finishing them. */
+#dashGrid.exporting .dc-gauge .val,
+#dashGrid.exporting .dc-rating-badge,
+#dashGrid.exporting .dc-stat-val,
+#dashGrid.exporting .dc-gauge-num { animation: none !important; }
+
+/* The operator's own preference, which is not the same question as the OS's. */
+body.reduce-motion .dc-gauge .val,
+body.reduce-motion .dc-rating-badge,
+body.reduce-motion .dc-stat-val,
+body.reduce-motion .dc-gauge-num { animation: none !important; }
 
 /* Small buttons the sheet uses for add/remove. Deliberately reusing the legend
    card's .legend-x so the two editable surfaces feel like one product. */
