@@ -954,6 +954,48 @@ body.dash-gesture .map-wrap { transition: none; }
 #dashGrid.exporting .map-wrap,
 #dashGrid.exporting .dash-tile { box-shadow: none; }
 
+/* --------------------------------------------------------------------------
+   The export menu's ground switch
+   ----------------------------------------------------------------------- */
+
+.dt-ground {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.dt-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.dt-seg button {
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  opacity: .72;
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+
+.dt-seg button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  opacity: 1;
+}
+
 /* Hover marks: the point the crosshair is actually reading, on every series at
    once. The crosshair alone tells you which category; these tell you which
    value on which line, which is the question a multi-series chart raises. */

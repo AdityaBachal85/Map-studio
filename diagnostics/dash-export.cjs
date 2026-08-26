@@ -125,6 +125,50 @@ function zipText(buf, entries, name) {
     return fs.readFileSync(file);
   };
 
+  /* ---- the ground, and the air around it ---------------------------------- */
+
+  // The board never touches anything on screen — the nav rail is to its left,
+  // the window to its right. Captured on its own it went straight to the edge
+  // of the file, and the map, which is normally the top-left tile, came out
+  // bleeding off two sides of the page.
+  const framed = await p.evaluate(async () => {
+    setPref('exportTheme', 'light');
+    const cv = await dashRenderBoard(1);
+    const grid = document.getElementById('dashGrid').getBoundingClientRect();
+    const rects = cv._dashRects || {};
+    const xs = Object.keys(rects).map(k => rects[k].x);
+    const ys = Object.keys(rects).map(k => rects[k].y);
+    return {
+      pad: cv.width - Math.round(grid.width),
+      ground: cv._dashGround, theme: cv._dashTheme,
+      minX: Math.min.apply(null, xs), minY: Math.min.apply(null, ys),
+    };
+  });
+  ck('the exported board has air around it rather than bleeding to the edge',
+    framed.pad >= 40, framed.pad + 'px of canvas beyond the board');
+  ck('and every card rect moved with it, so the crops still land on the cards',
+    framed.minX >= 20 && framed.minY >= 20,
+    'nearest card at ' + framed.minX + ',' + framed.minY);
+  ck('a light export is drawn on white', framed.ground === '#FFFFFF', framed.ground);
+
+  // One theme per file. The writers draw their own text cards while the
+  // pictorial ones are cropped from the bitmap, so if the two ever disagree the
+  // result is a white page with the map on it as a black rectangle.
+  const darkOne = await p.evaluate(async () => {
+    setPref('exportTheme', 'dark');
+    const cv = await dashRenderBoard(1);
+    const pal = dashPdfPalette();
+    const g = cv.getContext('2d').getImageData(4, 4, 1, 1).data;
+    setPref('exportTheme', 'light');
+    return { ground: cv._dashGround, corner: [g[0], g[1], g[2]], page: pal.page, ink: pal.ink };
+  });
+  ck('a dark export is drawn on the board\u2019s own dark ground',
+    darkOne.corner[0] < 40 && darkOne.corner[1] < 40 && darkOne.corner[2] < 60,
+    JSON.stringify(darkOne.corner));
+  ck('and the document writer agrees with the capture about which theme it is',
+    darkOne.page !== '#FFFFFF' && darkOne.ink !== '#12202F',
+    darkOne.page + ' / ' + darkOne.ink);
+
   /* ---- what the rasteriser actually paints -------------------------------- */
 
   // A card's drop shadow came out of html2canvas as a flat 11%-grey slab about

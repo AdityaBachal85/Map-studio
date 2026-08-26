@@ -285,19 +285,38 @@ function dashChartHtml(card) {
   return legend + '<div class="dc-plot" data-card="' + card.id + '"></div>' + empty;
 }
 
-/** @param {object} card @returns {string} HTML */
+/**
+ * @param {object} card @returns {string} HTML
+ *
+ * THE CEILING IS NOT 100 UNLESS SOMEBODY SAYS SO. This card used to divide
+ * every score by a hardcoded hundred, so a site rated 8, 9 and 10 — which is
+ * how these are rated — drew three rings each about a tenth full, under three
+ * large correct-looking numbers. The number said 10 and the ring said 10%.
+ *
+ * The ceiling now comes from vizScoreMax(), the same rule the ring, gauge and
+ * radar chart kinds are drawn by, so one card cannot disagree with another
+ * about what a score is out of.
+ */
 function dashGaugesHtml(card) {
-  return '<div class="dc-gauges">' + (card.items || []).map((g, i) => {
+  const items = card.items || [];
+  const nums = items.map(g => Number(g.value)).filter(isFinite);
+  const max = (typeof vizScoreMax === 'function' ? vizScoreMax(card, nums) : 100) || 1;
+
+  return '<div class="dc-gauges">' + items.map((g, i) => {
     // An unset gauge reads "—" with an empty ring, not "0". A zero is a score
     // somebody chose; showing one nobody typed puts a number in a client's
     // report that came from the app rather than from the analyst.
     const raw = g.value;
     const set = raw !== '' && raw != null && isFinite(Number(raw));
-    const v = set ? Math.max(0, Math.min(100, Number(raw))) : 0;
+    const v = set ? Number(raw) : 0;
+    // The arc is clamped; the number is not. A score typed above the ceiling is
+    // a full ring and the figure somebody actually typed — silently rewriting
+    // it to the ceiling would hide the mistake rather than show it.
+    const frac = set ? Math.max(0, Math.min(1, v / max)) : 0;
     const r = 24, circ = 2 * Math.PI * r;
     return '<div class="dc-gauge">'
       + '<svg viewBox="0 0 60 60" width="62" height="62" role="img" aria-label="'
-        + esc(g.cap || '') + ' ' + (set ? v + ' out of 100' : 'not set') + '">'
+        + esc(g.cap || '') + ' ' + (set ? v + ' out of ' + max : 'not set') + '">'
       + '<circle class="track" cx="30" cy="30" r="' + r + '" stroke-width="5"/>'
       + (set
         // vizSlot() rather than a literal, so a ring drawn in one theme still
@@ -306,9 +325,9 @@ function dashGaugesHtml(card) {
         // a hex. A gauge that carries its own hex from an older board keeps it.
         ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" stroke="'
           + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(i + 1) : '#22C55E'))
-          + '" stroke-dasharray="' + (circ * v / 100).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
+          + '" stroke-dasharray="' + (circ * frac).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
         : '')
-      + '<text class="dc-gauge-num" x="30" y="35">' + (set ? v : '—') + '</text></svg>'
+      + '<text class="dc-gauge-num" x="30" y="35">' + (set ? vizNum(v) : '—') + '</text></svg>'
       + dashField(card, 'items.' + i + '.cap', g.cap, 'dc-gauge-cap')
       + (dashEditing ? dashField(card, 'items.' + i + '.value', set ? String(v) : '', 'dc-input') : '')
       + '</div>';

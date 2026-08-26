@@ -280,7 +280,10 @@ function dashPptxCropData(canvas, x, y, w, h) {
   c.width = Math.max(1, Math.round(w));
   c.height = Math.max(1, Math.round(h));
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#FFFFFF';
+  // The board's own ground, not white: a rounded card's transparent corners have
+  // no alpha to fall back on in a JPEG, and white notches show on a dark board.
+  ctx.fillStyle = (canvas && canvas._dashGround)
+    || (typeof dashExportGround === 'function' ? dashExportGround() : '#FFFFFF');
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(canvas, Math.round(x), Math.round(y), Math.round(w), Math.round(h), 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', DASH_JPEG_Q);

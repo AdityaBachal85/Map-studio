@@ -179,6 +179,76 @@ const SCENE = [
   ck('and the colour key is re-stacked under Key Distances rather than on top of it',
     back.stacked === true || back.stacked === 'n/a', JSON.stringify(back));
 
+  /* -- a score is out of ten unless somebody says otherwise ----------------- */
+
+  // Back onto the board: the test above left the app in map mode, where the
+  // gallery has no height and every clearance check below would pass without
+  // measuring anything.
+  await p.evaluate(() => setAppMode('dashboard'));
+  await p.waitForTimeout(1800);
+
+  // The rings divided every score by a hardcoded hundred, so a site rated 8, 9
+  // and 10 — which is how these are rated — drew three rings each about a tenth
+  // full under three large correct-looking numbers. The number said 10 and the
+  // ring said 10%.
+  const rings = await p.evaluate(() => {
+    const g = dashCards.find(c => c.type === 'gauges');
+    g.items = [{ cap: 'Connectivity', value: '10' }, { cap: 'Infrastructure', value: '9' },
+      { cap: 'Development', value: '8' }, { cap: 'Livability', value: '10' }];
+    delete g.max;
+    renderDashboard();
+    const arcs = [...document.querySelectorAll('.dash-card[data-card="' + g.id + '"] .dc-gauge .val')];
+    const circ = 2 * Math.PI * 24;
+    return { id: g.id, fracs: arcs.map(a => +(parseFloat(a.getAttribute('stroke-dasharray')) / circ).toFixed(2)) };
+  });
+  ck('ten out of ten is a full ring, not a tenth of one',
+    rings.fracs.length === 4 && rings.fracs[0] === 1 && Math.abs(rings.fracs[2] - 0.8) < 0.02,
+    JSON.stringify(rings.fracs));
+
+  ck('and a hundred-point card still reads against a hundred',
+    await p.evaluate(id => {
+      const g = dashCardById(id);
+      g.items = [{ cap: 'A', value: '82' }, { cap: 'B', value: '64' }];
+      renderDashboard();
+      const a = document.querySelector('.dash-card[data-card="' + id + '"] .dc-gauge .val');
+      return Math.abs(parseFloat(a.getAttribute('stroke-dasharray')) / (2 * Math.PI * 24) - 0.82) < 0.02;
+    }, rings.id) === true);
+
+  ck('an explicit ceiling overrides the guess',
+    await p.evaluate(id => {
+      const g = dashCardById(id);
+      g.max = 20;
+      g.items = [{ cap: 'A', value: '10' }];
+      renderDashboard();
+      const a = document.querySelector('.dash-card[data-card="' + id + '"] .dc-gauge .val');
+      return Math.abs(parseFloat(a.getAttribute('stroke-dasharray')) / (2 * Math.PI * 24) - 0.5) < 0.02;
+    }, rings.id) === true);
+
+  /* -- the gallery does not stand on the board ------------------------------ */
+
+  // #dashAdd is absolutely positioned at the bottom of the grid, and the grid
+  // used to reserve a fixed two spare rows for it. The gallery wraps, so its
+  // height depends on how many kinds there are — at three rows it was taller
+  // than the space reserved and grew upward over the cards.
+  await p.evaluate(() => setDashEditing(true));
+  await p.waitForTimeout(700);
+  const gallery = await p.evaluate(() => {
+    const grid = document.getElementById('dashGrid');
+    const add = document.getElementById('dashAdd');
+    const ar = add.getBoundingClientRect();
+    const over = [...grid.querySelectorAll('.dash-card')].filter(el => {
+      const r = el.getBoundingClientRect();
+      return !(r.bottom <= ar.top || r.top >= ar.bottom || r.right <= ar.left || r.left >= ar.right);
+    }).length;
+    return { addH: Math.round(ar.height), over,
+      insideGrid: ar.bottom <= grid.getBoundingClientRect().bottom + 1 };
+  });
+  ck('the visual gallery covers no card, however many rows it wraps to',
+    gallery.over === 0 && gallery.addH > 40, JSON.stringify(gallery));
+  ck('and the board still ends below it', gallery.insideGrid === true);
+  await p.evaluate(() => setDashEditing(false));
+  await p.waitForTimeout(500);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

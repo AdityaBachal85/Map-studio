@@ -44,12 +44,15 @@ const DASH_PDF_FOOTER = 22;
 const DASH_PICTORIAL = ['map', 'chart', 'gauges', 'slicer'];
 
 /**
- * Colours for the document, read from the live theme.
+ * Colours for the document.
  *
- * A board built in dark mode is a dark board, and a page printed dark is a page
- * that empties a toner cartridge to say what white paper says for nothing. The
- * document is always light; only the accent is taken from the theme, so a
- * DBOT-orange board still prints DBOT orange.
+ * Paper is white, and a page printed dark empties a toner cartridge to say what
+ * white paper says for nothing — so light is the default and stays it. But a
+ * board is not always destined for paper, and a deck that is dark wants a file
+ * that is dark, so this follows dashExportTheme() rather than deciding alone.
+ *
+ * The accent comes from the live theme either way, so a DBOT-orange board
+ * prints DBOT orange.
  *
  * @returns {object}
  */
@@ -60,6 +63,24 @@ function dashPdfPalette() {
       return v || '';
     } catch (e) { return ''; }
   };
+  const accent = read('--orange') || '#FF7A1A';
+
+  // The writer draws its own text cards while the pictorial ones are cropped
+  // from the board bitmap, so this has to answer the same question the capture
+  // did. When they disagreed the result was a white page with the map and every
+  // chart on it as black rectangles — one document, two themes.
+  if (typeof dashExportTheme === 'function' && dashExportTheme() === 'dark') {
+    return {
+      ink: '#EAF0F9',
+      dim: '#98A6BC',
+      faint: '#6B7A92',
+      rule: '#243044',
+      card: '#0E1728',
+      cardEdge: '#26344A',
+      page: '#070C16',
+      accent,
+    };
+  }
   return {
     ink: '#12202F',
     dim: '#5C6B7E',
@@ -68,7 +89,7 @@ function dashPdfPalette() {
     card: '#FFFFFF',
     cardEdge: '#E3E9F0',
     page: '#FFFFFF',
-    accent: read('--orange') || '#FF7A1A',
+    accent,
   };
 }
 
@@ -134,9 +155,12 @@ function dashPdfCrop(canvas, x, y, w, h, quality) {
   c.width = Math.max(1, Math.round(w));
   c.height = Math.max(1, Math.round(h));
   const ctx = c.getContext('2d');
-  // White under it: a card with a transparent corner radius would otherwise
-  // come out black in a JPEG, which has no alpha channel to fall back on.
-  ctx.fillStyle = '#FFFFFF';
+  // The page's own ground under it: a card with a transparent corner radius
+  // would otherwise come out black in a JPEG, which has no alpha channel to
+  // fall back on. White would do that job on a light page and leave four white
+  // notches around every card on a dark one.
+  ctx.fillStyle = (canvas && canvas._dashGround)
+    || (typeof dashExportGround === 'function' ? dashExportGround() : '#FFFFFF');
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(canvas, Math.round(x), Math.round(y), Math.round(w), Math.round(h),
     0, 0, c.width, c.height);

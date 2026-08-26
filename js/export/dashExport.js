@@ -28,6 +28,47 @@ const DASH_JPEG_Q = 0.92;
 const DASH_EXPORT_GROUND = '#FFFFFF';
 
 /**
+ * Quiet around the board, in CSS pixels.
+ *
+ * On screen the board never touches anything: the nav rail is to its left and
+ * the window to its right, so it always has air. Captured on its own it went
+ * straight to the edge of the file, and the map — which is usually the tile in
+ * the top-left corner — came out bleeding off two sides of the page. This is
+ * the margin the screen was giving it for free.
+ */
+const DASH_EXPORT_PAD = 26;
+
+/**
+ * Which way this export comes out.
+ *
+ * @returns {'light'|'dark'}
+ */
+function dashExportTheme() {
+  const t = typeof getPref === 'function' ? getPref('exportTheme') : 'light';
+  return t === 'dark' ? 'dark' : 'light';
+}
+
+/**
+ * The ground the file is drawn on.
+ *
+ * White for a light export rather than the light theme's own --bg0: paper is
+ * white, and the cards carry a border of their own so they still read as cards
+ * against it. A dark export takes the theme's real background, because there is
+ * no equivalent convention to appeal to — the honest answer is "what the board
+ * actually looks like".
+ *
+ * @returns {string}
+ */
+function dashExportGround() {
+  if (dashExportTheme() === 'light') return DASH_EXPORT_GROUND;
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--bg0').trim();
+    if (v) return v;
+  } catch (e) { /* fall through */ }
+  return '#070C16';
+}
+
+/**
  * Elements html2canvas must not draw.
  *
  * The map because it is painted in afterwards at a higher resolution; the rest
@@ -133,27 +174,38 @@ async function dashRenderBoard(scale) {
   if (wasEditing && typeof setDashEditing === 'function') setDashEditing(false);
   grid.classList.add('exporting');
 
-  // A DELIVERABLE IS PRINTED ON PAPER, AND PAPER IS WHITE.
+  // ONE THEME PER FILE, AND THE OPERATOR PICKS IT.
   //
   // The board follows the app's theme, and the app is usually dark. The PDF
-  // draws its text cards itself and so drew them light, but the pictorial cards
-  // are cropped from THIS bitmap — so a dark-mode export came out as a white
-  // page with the map and every chart sitting on it as black rectangles. Two
-  // themes in one document, which reads as a mistake because it is one.
+  // draws its text cards itself, so before this it drew them light while the
+  // pictorial cards were cropped from a dark bitmap — a white page with the map
+  // and every chart sitting on it as black rectangles. Two themes in one
+  // document, which reads as a mistake because it is one.
   //
-  // The app already has a complete light theme and it is one attribute, so the
-  // capture borrows it rather than a second set of export-only colours being
-  // invented and kept in step by hand. Restored in the `finally` below, and the
-  // frame after the swap is waited for so the browser has actually restyled
-  // before anything is measured or drawn.
+  // The fix then was to force light everywhere. That is right for paper and
+  // wrong for a board built to be read on a screen, so it is now a choice: the
+  // whole capture, and every writer's palette, follow dashExportTheme(). What
+  // must not happen is the two disagreeing again.
+  //
+  // The app already has both themes and it is one attribute, so the capture
+  // borrows one rather than a second set of export-only colours being invented
+  // and kept in step by hand. Restored in the `finally` below, and the frame
+  // after the swap is waited for so the browser has actually restyled before
+  // anything is measured or drawn.
   const themeWas = document.documentElement.dataset.theme;
-  document.documentElement.dataset.theme = 'light';
+  document.documentElement.dataset.theme = dashExportTheme();
 
   // Let the layout, the charts and the theme swap settle before measuring.
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 260)));
 
   const rect = grid.getBoundingClientRect();
   const W = Math.round(rect.width), H = Math.round(grid.scrollHeight || rect.height);
+  const ground = dashExportGround();
+  // The board is composed onto a slightly larger canvas so it has air around
+  // it. Every rectangle below is shifted by the same amount, because the PDF
+  // and the deck crop cards out of this bitmap by those rectangles and a rect
+  // that disagrees with the pixels by 26px cuts a card's title off.
+  const pad = DASH_EXPORT_PAD;
 
   // Where every tile sits on the bitmap about to be made. Measured here, from
   // the settled layout, rather than recomputed from the grid constants later:
@@ -163,8 +215,8 @@ async function dashRenderBoard(scale) {
   const note = (id, el) => {
     const r = el.getBoundingClientRect();
     rects[id] = {
-      x: (r.left - rect.left) * scale,
-      y: (r.top - rect.top + grid.scrollTop) * scale,
+      x: (r.left - rect.left + pad) * scale,
+      y: (r.top - rect.top + grid.scrollTop + pad) * scale,
       w: r.width * scale, h: r.height * scale,
     };
   };
@@ -176,10 +228,12 @@ async function dashRenderBoard(scale) {
 
   try {
     const shot = await html2canvas(grid, {
-      // White, not the light theme's own --bg0 (#EDF1F7). The reports these
-      // sit alongside are on white, and the cards carry a border of their own,
-      // so they still read as cards against it.
-      backgroundColor: DASH_EXPORT_GROUND,
+      // For a light export, white rather than the light theme's own --bg0
+      // (#EDF1F7): the reports these sit alongside are on white, and the cards
+      // carry a border of their own, so they still read as cards against it.
+      // For a dark one there is no such convention, so it is the board's real
+      // ground — see dashExportGround().
+      backgroundColor: ground,
       scale,
       width: W,
       height: H,
@@ -197,10 +251,27 @@ async function dashRenderBoard(scale) {
       // the correct statement: a navigation rail is not part of a deliverable.
       ignoreElements: el => DASH_EXPORT_SKIP.indexOf(el.id) >= 0,
     });
-    const map = await dashPaintMap(shot.getContext('2d'), rect, scale);
-    shot._dashRects = rects;
-    shot._dashMap = map;
-    return shot;
+    // Composed onto a larger ground, so the board has the air the screen gave
+    // it for free. Done here rather than by padding #dashGrid, because padding
+    // the grid would move every tile and the board on screen is not what is
+    // being changed.
+    const out = document.createElement('canvas');
+    out.width = shot.width + Math.round(pad * scale) * 2;
+    out.height = shot.height + Math.round(pad * scale) * 2;
+    const g = out.getContext('2d');
+    g.fillStyle = ground;
+    g.fillRect(0, 0, out.width, out.height);
+    g.drawImage(shot, Math.round(pad * scale), Math.round(pad * scale));
+
+    // The map is painted against a board rect shifted by the same margin, so it
+    // lands on the tile the rects above describe rather than beside it.
+    const map = await dashPaintMap(g,
+      { left: rect.left - pad, top: rect.top - pad }, scale);
+    out._dashRects = rects;
+    out._dashMap = map;
+    out._dashGround = ground;
+    out._dashTheme = dashExportTheme();
+    return out;
   } finally {
     grid.classList.remove('exporting');
     if (themeWas) document.documentElement.dataset.theme = themeWas;
@@ -427,13 +498,36 @@ const DASH_EXPORT_ITEMS = [
   const menu = document.getElementById('dashExportMenu');
   if (!btn || !menu) return;
 
-  menu.innerHTML = '<h4>Export the board</h4>' + DASH_EXPORT_ITEMS.map(i =>
-    '<div class="dt-rep" role="menuitem"><div class="dt-rep-main">'
-    + '<div class="dt-rep-name">' + esc(i[1]) + '</div>'
-    + '<div class="dt-rep-meta">' + esc(i[2]) + '</div></div>'
-    + '<a href="#" data-dexp="' + i[0] + '">Save</a></div>').join('');
+  /* The ground every format comes out on. At the top of the menu rather than in
+     Preferences, because it is a property of the file being saved and the
+     decision is made at the moment of saving — not a setting somebody goes
+     looking for afterwards, having already sent the wrong one. */
+  const draw = () => {
+    const t = dashExportTheme();
+    menu.innerHTML = '<h4>Export the board</h4>'
+      + '<div class="dt-ground">'
+      + '<span>Ground</span>'
+      + '<div class="dt-seg" role="group" aria-label="Export background">'
+      + [['light', 'Light'], ['dark', 'Dark']].map(([v, lbl]) =>
+        '<button type="button" data-dground="' + v + '"' + (t === v ? ' class="on"' : '')
+        + ' aria-pressed="' + (t === v) + '">' + lbl + '</button>').join('')
+      + '</div></div>'
+      + DASH_EXPORT_ITEMS.map(i =>
+        '<div class="dt-rep" role="menuitem"><div class="dt-rep-main">'
+        + '<div class="dt-rep-name">' + esc(i[1]) + '</div>'
+        + '<div class="dt-rep-meta">' + esc(i[2]) + '</div></div>'
+        + '<a href="#" data-dexp="' + i[0] + '">Save</a></div>').join('');
+  };
+  draw();
 
   menu.addEventListener('click', e => {
+    const g = e.target.closest('[data-dground]');
+    if (g) {
+      e.preventDefault();
+      if (typeof setPref === 'function') setPref('exportTheme', g.dataset.dground);
+      draw();                       // the menu stays open: this is not the save
+      return;
+    }
     const a = e.target.closest('[data-dexp]');
     if (!a) return;
     e.preventDefault();

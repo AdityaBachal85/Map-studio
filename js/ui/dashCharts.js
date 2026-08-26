@@ -117,9 +117,21 @@ function vizEnough(kind, flat, cats) {
  * @param {object} card @param {number[]} vals @returns {number}
  */
 function vizScoreMax(card, vals) {
-  const asked = Number(card.max);
+  const asked = Number(card && card.max);
   if (isFinite(asked) && asked > 0) return asked;
-  const top = Math.max.apply(null, vals.filter(isFinite).concat([0]));
+  const nums = (vals || []).filter(isFinite);
+  const top = Math.max.apply(null, nums.concat([0]));
+  // Ten first. A site is scored out of ten far more often than out of a
+  // hundred on a board like this — "8/10" is how the rating reads on every
+  // deck these end up in — and a hidden ceiling of 100 drew a 10 as a tenth of
+  // a ring, which is what the report showed.
+  //
+  // Inferred rather than fixed, because a hundred-point card must still work.
+  // The inference can be wrong in exactly one case: every score on a
+  // hundred-point card happens to be ten or less, which means every one of them
+  // is terrible. `card.max` is the way out of it, and it is a field on the
+  // card, not a hidden rule.
+  if (nums.length && top <= 10) return 10;
   if (top <= 100) return 100;
   const t = vizTicks(0, top, 4);
   return t[t.length - 1] || top;

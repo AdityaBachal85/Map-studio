@@ -139,7 +139,20 @@ function dashLayoutApply(skipId) {
 
   // Two spare rows past the last tile, so there is always somewhere to drag to.
   const bottom = dashTiles().reduce((n, t) => Math.max(n, t.y + t.h), 0);
-  grid.style.height = ((bottom + 2) * m.stepY - DASH_GAP).toFixed(1) + 'px';
+  let height = (bottom + 2) * m.stepY - DASH_GAP;
+
+  // Then room for the gallery, which is absolutely positioned at the bottom of
+  // the board. Its height is not a constant: it wraps, so it depends on how
+  // many kinds there are and how wide the board is. Two spare rows was a guess
+  // that held until the gallery reached three rows, at which point it grew
+  // upward over the cards instead of down into empty space.
+  //
+  // Measured rather than estimated. The gallery's height depends on the board's
+  // width and not on its height, so reading it here cannot chase its own tail.
+  const add = document.getElementById('dashAdd');
+  if (add && add.offsetParent) height += add.offsetHeight + DASH_GAP;
+
+  grid.style.height = height.toFixed(1) + 'px';
 
   dashMapResized();
 }

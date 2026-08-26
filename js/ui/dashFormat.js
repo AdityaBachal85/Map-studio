@@ -25,6 +25,24 @@ function dashFormatTarget() {
 }
 
 /** @param {string} label @param {string} body @returns {string} a pane section */
+/**
+ * The ceiling a score is drawn against.
+ *
+ * Blank is not "no scale" — it is the inferred one, which is ten when every
+ * score fits inside ten and a hundred otherwise. The placeholder says which,
+ * so an empty field is never a mystery.
+ *
+ * @param {object} card @returns {string} HTML
+ */
+function dfScoreCeiling(card) {
+  const nums = card.type === 'gauges'
+    ? (card.items || []).map(i => Number(i.value)).filter(isFinite)
+    : (card.seriesList || []).reduce((a, s) => a.concat((s.values || []).map(Number).filter(isFinite)), []);
+  const inferred = typeof vizScoreMax === 'function' ? vizScoreMax({}, nums) : 100;
+  return dfRow('Scored out of', '<input type="number" min="1" data-dfnum="max" value="'
+    + (card.max == null ? '' : Number(card.max)) + '" placeholder="' + inferred + '">');
+}
+
 function dfSection(label, body) {
   return '<section class="df-sec"><h4>' + esc(label) + '</h4>' + body + '</section>';
 }
@@ -153,16 +171,14 @@ function renderDashFormat() {
       f += dfToggle('xAxis', fmt.xAxis, card.kind === 'radar' ? 'Axis names' : 'Category axis');
     }
     if (!share && !score) f += dfToggle('yAxis', fmt.yAxis, 'Value axis');
-    if (score) {
-      // The ceiling a score is drawn against. Left blank it is 100 for anything
-      // that fits inside it, which is what a score usually means.
-      f += dfRow('Scale to', '<input type="number" min="1" data-dfnum="max" value="'
-        + (card.max == null ? '' : Number(card.max)) + '" placeholder="100">');
-    }
+    if (score) f += dfScoreCeiling(card);
     if (card.kind === 'line' || card.kind === 'area' || card.kind === 'combo') {
       f += dfToggle('smooth', fmt.smooth, 'Smooth line');
     }
   }
+  // The score-rings card is not a `chart`, so it missed the branch above
+  // entirely — and it is the card most likely to be scored out of ten.
+  if (card.type === 'gauges') f += dfScoreCeiling(card);
   f += dfToggle('plain', !!(card.fmt && card.fmt.plain), 'Transparent card');
   html += dfSection('Format', f);
 
@@ -261,7 +277,10 @@ function dashFormatApply(card, key, v) {
     if (k === 'max') {
       const n = parseFloat(inp.value);
       if (isFinite(n) && n > 0) card.max = n; else delete card.max;
-      dashDrawAllCharts();
+      // A chart redraws into its existing host; the score-rings card IS its
+      // markup, so it has to be rebuilt. Redrawing charts alone left the rings
+      // showing the old ceiling.
+      if (card.type === 'gauges') renderDashboard(); else dashDrawAllCharts();
       renderDashFormat();
       return;
     }

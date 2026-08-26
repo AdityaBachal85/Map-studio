@@ -15,6 +15,10 @@ const PREF_DEFAULTS = {
   // paper; this is for building one and seeing what you are going to hand
   // over, without putting the map studio into a theme you do not want it in.
   boardLight: false,      // force light while the dashboard is open
+  // Which way a file comes out. White is the default because a deliverable is
+  // printed on paper and paper is white — but a board built to be read on a
+  // screen, in a deck that is dark, is a real case and used to be impossible.
+  exportTheme: 'light',   // 'light' | 'dark' — the ground every export is drawn on
   reduceMotion: false,    // minimise animations
   unitDistance: 'auto',   // 'auto' | 'km' | 'm' | 'mi'
   unitArea: 'auto',       // 'auto' | 'm2' | 'sqft' | 'acres' | 'hectares' | 'km2'
