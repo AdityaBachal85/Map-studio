@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0196-blue)
+![Version](https://img.shields.io/badge/version-v6.0197-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,41 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0196 (latest)
+## 🆕 New in v6.0197 (latest)
+
+### Bold, italic, underline and a highlighter, on any text on a card
+
+Select words in a title, a summary, a comment, a table cell or a list row and a
+small bar comes up over them: **B** / *I* / <u>U</u> / ~~S~~, five highlighter
+inks and one to lift the highlight off, and a button to clear the lot. The marks
+stack, they stay on the card when the board is not being edited, and they travel
+into the project file.
+
+**The board's other fields are deliberately left alone.** `labels`, a series'
+values and the slicer's items are comma lists read back and split — a `<b>` in
+the middle of one is not emphasis, it is a corrupted number — so those never
+offer the bar and never store a mark.
+
+**Exports get the words, not the tags.** Every prose field reaches the export
+model flattened, so nothing prints `<b>` into a PDF, and the same text is
+carried again as *runs* that each know their own marks — ready for the two
+formats that can set bold on part of a paragraph, and for the PDF, where
+Helvetica-Bold is one of the fourteen faces every reader already has.
+
+Storing markup means storing something that gets written back into the page, so
+everything goes through a sanitiser first. The tag set is tiny — the four marks,
+a highlight, a colour, a line break — and unknown tags are unwrapped to their
+text, so a paste from Word keeps its words and loses its layout. The one
+exception is tags that are dropped whole: unwrapping a `<script>` never ran it,
+but it did put the source code on the card where a sentence should be.
+
+The sanitiser parses into an inert document rather than assigning to a detached
+`<div>`. `innerHTML` on a detached element does not run a script — the check
+everyone makes — but it *does* start loading an image, so `<img src=x
+onerror=…>` fired its handler while the sanitiser was still deciding whether to
+keep the tag. The cleaner was the hole.
+
+## 🆕 New in v6.0196
 
 ### The funnel chart is a funnel
 

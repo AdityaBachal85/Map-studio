@@ -261,7 +261,12 @@ function renderDashFormat() {
 
   const isChart = card.type === 'chart';
   const fmt = isChart ? vizFmt(card) : null;
-  let html = '<div class="df-head"><b>' + esc(card.title || 'Visual') + '</b>'
+  // The pane's header names the card; it is a label, not the card's own title,
+  // so it takes the words without the marks — escaping the markup would print
+  // "<b>" at the top of the pane.
+  const paneName = typeof dashRichPlain === 'function'
+    ? dashRichPlain(card.title || '') : String(card.title || '');
+  let html = '<div class="df-head"><b>' + esc(paneName || 'Visual') + '</b>'
     + '<span>' + esc(isChart ? (VIZ_KINDS.find(k => k[0] === card.kind) || ['', card.kind])[1] : card.type) + '</span></div>';
 
   /* ---- visual type ---- */

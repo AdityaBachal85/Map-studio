@@ -221,10 +221,21 @@ function dashText(v) {
   return s === '' ? '—' : esc(s);
 }
 
-/** @param {object} card @param {string} path @param {string} v @param {string} cls */
+/**
+ * @param {object} card @param {string} path @param {string} v @param {string} cls
+ *
+ * A prose field renders the marks it stores; a parsed one is escaped as it
+ * always was. `dc-input` is the marker, because that is already what the board
+ * calls a field whose text is read back and split rather than shown — a `<b>`
+ * in the middle of a comma list of numbers is not emphasis, it is a corrupted
+ * number. Everything stored has been through the sanitiser on the way in.
+ */
 function dashField(card, path, v, cls) {
+  const s = String(v == null ? '' : v);
+  const rich = typeof dashRichField === 'function' && dashRichField(cls);
+  const body = s === '' ? '—' : (rich ? dashRichClean(s) : esc(s));
   return '<div class="' + cls + '" data-card="' + card.id + '" data-bind="' + path + '"'
-    + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + dashText(v) + '</div>';
+    + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + body + '</div>';
 }
 
 /**
@@ -606,8 +617,13 @@ function dashCardEl(card) {
     (titleOn
       ? '<div class="dc-head">'
         + (dashEditing ? '<span class="dc-grip" aria-hidden="true"></span>' : '')
+        // Through the sanitiser, not through esc(): a title is a field somebody
+        // types into like any other, and escaping it printed "<b>" at the top
+        // of the card instead of setting the word bold.
         + '<div class="dc-title" data-card="' + card.id + '" data-bind="title"'
-          + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + esc(card.title || '') + '</div>'
+          + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>'
+          + (typeof dashRichClean === 'function' ? dashRichClean(card.title || '') : esc(card.title || ''))
+          + '</div>'
         + '<div class="dc-tools">'
           + '<button class="dc-btn" data-act="dup" title="Duplicate" aria-label="Duplicate this visual">'
             + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>'
@@ -670,6 +686,10 @@ function dashSizeMapLegend(card) {
 
 /** Redraw the canvas. */
 function renderDashboard() {
+  // The formatting bar belongs to an editable field. Turning editing off does
+  // not move the pointer or change the selection, so nothing else was going to
+  // tell it to go — it sat over a board nobody could type into.
+  if (!dashEditing && typeof dashRichHide === 'function') dashRichHide();
   const grid = document.getElementById('dashGrid');
   if (!grid) return;
 
@@ -807,6 +827,14 @@ function dashCommit(el) {
   if (!card) return;
   const text = el.textContent.trim();
   const path = el.dataset.bind;
+  // A prose field stores what it looks like; a parsed one stores its words. The
+  // placeholder is a rendering of empty, not a value — committing it would turn
+  // every untouched field into a card that literally says "—".
+  const rich = typeof dashRichField === 'function' && dashRichField(el.className)
+    && path !== 'labels' && path !== 'slicerItems';
+  const val = rich
+    ? (text === '' || text === '\u2014' ? '' : dashRichClean(el.innerHTML).trim())
+    : text;
 
   if (path === 'labels' || path === 'slicerItems') {
     const parts = text.split(',').map(s => s.trim()).filter(s => s !== '');
@@ -833,7 +861,7 @@ function dashCommit(el) {
   // An em-dash is what an empty field is *shown* as; storing it back would turn
   // the placeholder into content, and the next edit would start by deleting a
   // character nobody typed.
-  node[last] = text === '—' ? '' : text;
+  node[last] = text === '—' ? '' : val;
 }
 
 (function wireDashboard() {

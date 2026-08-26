@@ -57,6 +57,104 @@ function dashModelColor(c, resolve) {
  *  rather than as a confident wrong answer. */
 const DASH_MODEL_FALLBACK = '#8A94A6';
 
+/**
+ * The words out of a marked-up field, with no DOM.
+ *
+ * This file runs under Node as well as in the browser — that is the point of it
+ * — so it cannot reach for a `<div>` to do this. The tag set a card may store
+ * is tiny and fixed (see js/ui/dashRichText.js), which is what makes stripping
+ * it with a regex honest rather than the usual mistake.
+ *
+ * @param {*} v @returns {string} the text, with breaks as newlines
+ */
+function dashModelPlain(v) {
+  const s = String(v == null ? '' : v);
+  // An ampersand is markup too. Skipping on "no angle brackets" left
+  // "Kalyan &amp; Shil" in a document as those five characters, because a field
+  // holding an entity and no tag took the fast path out.
+  if (s.indexOf('<') < 0 && s.indexOf('&') < 0) return s;
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * The same text, split into runs that each carry their own marks.
+ *
+ * A writer that can set bold on part of a paragraph — Word and PowerPoint both
+ * can, and a PDF gets Helvetica-Bold for nothing because it is one of the
+ * fourteen built-in faces — needs to know WHICH part. Flattening first and
+ * bolding nothing is a document that has quietly lost what somebody marked.
+ *
+ * Depth-counted rather than nested: a run is described by which marks are open
+ * over it, so `<b>a<i>b</i></b>` gives two runs and not a tree.
+ *
+ * @param {*} v @returns {Array<{text:string,b:boolean,i:boolean,u:boolean,s:boolean,hi:?string,fg:?string}>}
+ */
+function dashModelRuns(v) {
+  const src = String(v == null ? '' : v);
+  const TAG = { b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', s: 's', strike: 's', del: 's' };
+  // ONE STACK, NOT A MARK COUNTER AND A SEPARATE INK STACK. A tag can be both:
+  // highlighting a phrase that is already bold does not wrap it, it puts the
+  // background straight onto the `<b>`, so `<b style="background-color: …">` is
+  // a bold AND a highlight opened by the same tag and closed by the same tag.
+  // Tracked apart, the ink was only ever read off a `<span>` and a highlight
+  // over bold text reached the file as plain bold.
+  const stack = [];
+  const out = [];
+
+  const push = t => {
+    if (t === '') return;
+    let hi = null, fg = null;
+    const on = { b: false, i: false, u: false, s: false };
+    for (let n = 0; n < stack.length; n++) {
+      const e = stack[n];
+      if (e.k) on[e.k] = true;
+      if (e.hi) hi = e.hi;
+      if (e.fg) fg = e.fg;
+    }
+    const run = { text: t, b: on.b, i: on.i, u: on.u, s: on.s, hi: hi, fg: fg };
+    const last = out[out.length - 1];
+    // Merged where the marks match, so `<b>a</b><b>b</b>` is one run and a
+    // writer does not emit two adjacent identical formatting blocks.
+    if (last && last.b === run.b && last.i === run.i && last.u === run.u
+      && last.s === run.s && last.hi === run.hi && last.fg === run.fg) {
+      last.text += t;
+      return;
+    }
+    out.push(run);
+  };
+
+  let at = 0;
+  src.replace(/<\/?([a-z]+)([^>]*)>/gi, (m, rawName, attrs, idx) => {
+    push(dashModelPlain(src.slice(at, idx)));
+    at = idx + m.length;
+    const name = rawName.toLowerCase();
+    if (name === 'br') { push('\n'); return m; }
+    if (m.charAt(1) === '/') {
+      // Pop back to the matching open, so a stray close cannot unwind the lot.
+      for (let n = stack.length - 1; n >= 0; n--) {
+        if (stack[n].tag === name) { stack.splice(n, 1); break; }
+      }
+      return m;
+    }
+    if (/\/>\s*$/.test(m)) return m;                  // self-closing, nothing to open
+    const hiM = /background-color\s*:\s*([^;"']+)/i.exec(attrs);
+    const fgM = /(?:^|[;"'\s])color\s*:\s*([^;"']+)/i.exec(attrs);
+    const k = TAG[name] || null;
+    const hi = hiM ? hiM[1].trim() : (name === 'mark' ? '#fff3a3' : null);
+    if (!k && !hi && !fgM) return m;                   // a tag that says nothing
+    stack.push({ tag: name, k: k, hi: hi, fg: fgM ? fgM[1].trim() : null });
+    return m;
+  });
+  push(dashModelPlain(src.slice(at)));
+  return out;
+}
+
 /** @param {*} v @returns {boolean} is this a value somebody actually typed? */
 function dashModelHasValue(v) {
   if (v == null) return false;
@@ -229,7 +327,12 @@ function dashModelData(card, resolve) {
       return m;
     }
     case 'stat':
-      return { label: card.label || '', value: card.value || '', sub: card.sub || '' };
+      // FLATTENED, because a writer that is handed "<b>1,840</b>" prints those
+      // tags. `runs` carries the same text with its marks intact for the two
+      // formats that can set bold on part of a paragraph.
+      return { label: dashModelPlain(card.label), value: dashModelPlain(card.value),
+        sub: dashModelPlain(card.sub),
+        runs: { label: dashModelRuns(card.label), sub: dashModelRuns(card.sub) } };
     case 'stats':
       return { items: (card.items || []).map(i => ({ label: i.label || '', value: i.value || '' })) };
     case 'gauges':
@@ -239,20 +342,30 @@ function dashModelData(card, resolve) {
       // rings into the file while the screen showed four different ones.
       return {
         items: (card.items || []).map((i, n) => ({
-          cap: i.cap || '', value: i.value || '', color: col(i.color || (n + 1)),
+          cap: dashModelPlain(i.cap), value: dashModelPlain(i.value), color: col(i.color || (n + 1)),
         })),
       };
     case 'table':
+      // A native PowerPoint or Word table takes strings; a cell handed markup
+      // would print the tags inside the cell.
       return {
-        columns: (card.columns || []).slice(),
-        rows: (card.rows || []).map(r => (r || []).slice()),
+        columns: (card.columns || []).map(dashModelPlain),
+        rows: (card.rows || []).map(r => (r || []).map(dashModelPlain)),
+        runs: {
+          columns: (card.columns || []).map(dashModelRuns),
+          rows: (card.rows || []).map(r => (r || []).map(dashModelRuns)),
+        },
       };
     case 'list':
-      return { items: (card.items || []).map(i => ({ name: i.name || '', meta: i.meta || '' })) };
+      return { items: (card.items || []).map(i => ({
+        name: dashModelPlain(i.name), meta: dashModelPlain(i.meta),
+        runs: { name: dashModelRuns(i.name), meta: dashModelRuns(i.meta) },
+      })) };
     case 'text':
       // The prompt goes no further than the screen: a writer asking for the
       // body of an untouched card gets nothing, and renders it as empty.
-      return { body: dashModelTyped(card.body) ? card.body : '' };
+      return { body: dashModelTyped(card.body) ? dashModelPlain(card.body) : '',
+        runs: dashModelTyped(card.body) ? dashModelRuns(card.body) : [] };
     case 'slicer':
       return { items: (card.items || []).slice(), picked: (card.picked || []).slice() };
     case 'access': {
@@ -294,15 +407,17 @@ function dashModelData(card, resolve) {
     case 'comment':
       // Its own type rather than a text card, so a writer can give it the block
       // it has on the sheet instead of a loose paragraph.
-      return { label: 'Location comment', body: dashModelTyped(card.body) ? card.body : '' };
+      return { label: 'Location comment',
+        body: dashModelTyped(card.body) ? dashModelPlain(card.body) : '',
+        runs: dashModelTyped(card.body) ? dashModelRuns(card.body) : [] };
 
     case 'rating': {
       const set = dashModelHasValue(card.value);
       const v = set ? Number(card.value) : null;
       const viz = dashModelViz();
       return {
-        label: card.label || '',
-        note: dashModelTyped(card.body) ? card.body : '',
+        label: dashModelPlain(card.label),
+        note: dashModelTyped(card.body) ? dashModelPlain(card.body) : '',
         value: v,
         max: viz ? viz.max(card, set ? [v] : []) : 10,
       };
@@ -349,7 +464,8 @@ function dashExportModel(opts) {
     return {
       id: c.id,
       type: c.type,
-      title: c.title || '',
+      title: dashModelPlain(c.title),
+      titleRuns: dashModelRuns(c.title),
       x: c.x | 0, y: c.y | 0, w: c.w | 0, h: c.h | 0,
       isEmpty: dashModelCardEmpty(withRows),
       data: dashModelData(withRows, resolve),
@@ -387,7 +503,7 @@ function dashExportModel(opts) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     dashExportModel, dashModelColor, dashModelCardEmpty, dashModelData,
-    dashModelHasValue, dashModelTyped, dashModelViz,
+    dashModelHasValue, dashModelTyped, dashModelViz, dashModelPlain, dashModelRuns,
     DASH_MODEL_COLS, DASH_MODEL_FALLBACK, DASH_MODEL_PROMPTS,
   };
 }

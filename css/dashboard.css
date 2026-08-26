@@ -2358,3 +2358,78 @@ body.reduce-motion .dc-gauge-num { animation: none !important; }
   border-radius: 3px;
 }
 #rsHead [contenteditable]:focus { outline: 2px solid #FFD166; outline-offset: 2px; border-radius: 4px; }
+
+/* ---------------------------------------------------------------------------
+ * The text formatting bar
+ *
+ * Floating over the selection rather than parked in the format pane: the pane
+ * is 268px away from the words being marked, and a control you have to look
+ * away from to reach is one you stop using. Fixed positioning, because it is
+ * placed from viewport coordinates.
+ * ------------------------------------------------------------------------ */
+
+.rich-bar {
+  position: fixed;
+  z-index: 2400;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(9, 18, 35, .18);
+}
+.rich-bar.open { display: flex; }
+
+.rich-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.rich-bar button:hover { background: var(--surface-2); }
+.rich-bar button.on { background: var(--accent); color: #fff; }
+
+.rich-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+/* The inks are the mark itself, so they are shown rather than named. */
+.rich-ink { min-width: 24px; padding: 0 3px; }
+.rich-ink i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+/* A swatch of "no colour" has to say so — an empty square reads as white. */
+.rich-ink-off i {
+  background:
+    linear-gradient(to top left, transparent calc(50% - 1px),
+      var(--danger, #d64545) calc(50% - 1px), var(--danger, #d64545) calc(50% + 1px),
+      transparent calc(50% + 1px));
+}
+
+/* The marks as they read on a card. `mark` and a highlighted span carry the
+   reader's ink, not the theme's, so they keep dark text on a light wash in both
+   themes — a highlight that inverts is not a highlight. */
+.dash-card mark,
+.dash-card span[style*="background"] {
+  color: #14243d;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.dash-card mark { background: #fff3a3; }
