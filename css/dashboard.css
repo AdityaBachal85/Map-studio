@@ -1103,6 +1103,12 @@ body.dash-gesture .map-wrap { transition: none; }
 .dash-card.head-slot-7 > .dc-head { background: color-mix(in srgb, var(--viz-7) 60%, var(--navy)); }
 .dash-card.head-slot-8 > .dc-head { background: color-mix(in srgb, var(--viz-8) 60%, var(--navy)); }
 
+/* A colour chosen outside the palette, deepened by the same rule — the ink on
+   a bar must not depend on where the hue came from. */
+.dash-card.head-custom > .dc-head {
+  background: color-mix(in srgb, var(--head-hue, var(--navy)) 60%, var(--navy));
+}
+
 /* Room between the title and whatever sits at the end of the bar. Without it a
    title that filled the width ran straight into the remove button — the bar
    read as "INFRASTRUCTURE SCOREX". */
@@ -1117,6 +1123,42 @@ body.dash-gesture .map-wrap { transition: none; }
 .dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
 
 
+
+/* -- the colour trigger ---------------------------------------------------- */
+
+/* One swatch, not nine. A score card with four rings meant four rows of nine
+   squares — thirty-six of them, most of the pane, to say four things — and it
+   asked people to learn a second colour interface when the map has had a proper
+   picker all along. This opens that one. */
+.df-sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+
+.df-sw-btn:hover { border-color: var(--accent); }
+.df-sw-btn.on { border-color: var(--accent); color: var(--accent); }
+
+.df-sw-btn i {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  /* A hairline, so white and near-white swatches are still a shape. */
+  box-shadow: inset 0 0 0 1px rgba(10, 30, 60, .22);
+}
+
+.df-sw-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.df-bar-tone { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* -- the custom colour well ----------------------------------------------- */
 
@@ -1153,30 +1195,38 @@ body.dash-gesture .map-wrap { transition: none; }
 
 /* -- alignment ------------------------------------------------------------ */
 
-/* The title is shrink-to-fit by default so the rest of the header stays a grab
-   area. Alignment needs it to own the row instead, which is also what stops a
+/* Two settings, not one. The title and the body align separately, because a
+   centred header bar over a left-read paragraph is a real layout and coupling
+   them made that impossible.
+
+   The title is shrink-to-fit by default so the rest of the header stays a grab
+   area. Aligning it needs it to own the row instead, which is also what stops a
    long title running into the tools at the right-hand end — "INFRASTRUCTURE
    SCORE" and the close button were touching on a narrow card. */
-.dash-card.align-center > .dc-head .dc-title,
-.dash-card.align-right > .dc-head .dc-title {
+.dash-card.talign-center > .dc-head .dc-title,
+.dash-card.talign-right > .dc-head .dc-title {
   flex: 1;
   min-width: 0;
 }
 
-.dash-card.align-center > .dc-head .dc-title { text-align: center; }
-.dash-card.align-right > .dc-head .dc-title { text-align: right; }
+.dash-card.talign-center > .dc-head .dc-title { text-align: center; }
+.dash-card.talign-right > .dc-head .dc-title { text-align: right; }
 
-.dash-card.align-center .dc-text,
-.dash-card.align-center .dc-rating-cap,
-.dash-card.align-center .dc-rating-note { text-align: center; }
+.dash-card.balign-center .dc-text,
+.dash-card.balign-center .dc-rating-cap,
+.dash-card.balign-center .dc-rating-note,
+.dash-card.balign-center .dc-gauge-cap,
+.dash-card.balign-center .dc-stat-label { text-align: center; }
 
-.dash-card.align-right .dc-text,
-.dash-card.align-right .dc-rating-cap,
-.dash-card.align-right .dc-rating-note { text-align: right; }
+.dash-card.balign-right .dc-text,
+.dash-card.balign-right .dc-rating-cap,
+.dash-card.balign-right .dc-rating-note,
+.dash-card.balign-right .dc-gauge-cap,
+.dash-card.balign-right .dc-stat-label { text-align: right; }
 
 /* Justify is offered for prose only. On a list of place names it would space
    out four words across a card and call it typography. */
-.dash-card.align-justify .dc-text { text-align: justify; }
+.dash-card.balign-justify .dc-text { text-align: justify; }
 
 /* -- the table reading of a live list ------------------------------------- */
 
@@ -2167,8 +2217,12 @@ body.dash-gesture { cursor: grabbing; user-select: none; }
   /* A score ring sweeps in along itself, like the gauge dial — it is the same
      shape making the same statement. Staggered, so four scores read as four
      answers rather than one flash. */
+  /* NO stroke-dasharray HERE. The ring's own dasharray is what makes a 9 a
+     nine-tenths arc — "135.7 150.8" on the element — and a CSS declaration
+     beats a presentation attribute, so setting it to the full circumference
+     here drew every score as a closed circle. A 9 and a 10 became the same
+     picture. Only the offset is animated; the arc stays the arc. */
   .app[data-mode="dashboard"] .dc-gauge .val {
-    stroke-dasharray: var(--len, 200);
     animation: viz-draw 900ms cubic-bezier(.4, 0, .2, 1) both;
     animation-delay: calc(120ms + var(--i, 0) * 90ms);
   }

@@ -359,6 +359,31 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
     model.ring === 100 && model.gauge === 100 && model.radar === 100 && model.donut === false,
     JSON.stringify(model));
 
+  /* -- a score ring is its score, not a closed circle ----------------------- */
+
+  // The enter animation set stroke-dasharray to the full circumference so it
+  // had something to sweep along — and a CSS declaration beats a presentation
+  // attribute, so it overrode the arc that MAKES a 9 a nine-tenths ring. Every
+  // score drew as a closed circle: a 9 and a 10 were the same picture. Only the
+  // offset may be animated.
+  const arcs = await p.evaluate(() => {
+    dashCards = [Object.assign(dashNewCard('gauges'), { id: 'r9', x: 0, y: 0, w: 7, h: 7,
+      items: [{ cap: 'Ten', value: '10' }, { cap: 'Nine', value: '9' },
+        { cap: 'Eight', value: '8' }, { cap: 'Five', value: '5' }] })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply();
+    return [...document.querySelectorAll('.dash-card[data-card="r9"] .dc-gauge .val')].map(c => {
+      const d = getComputedStyle(c).strokeDasharray.match(/[0-9.]+/g).map(Number);
+      return Math.round((d[0] / d[1]) * 100) / 100;
+    });
+  });
+  ck('every score draws its own fraction of the ring',
+    arcs.length === 4 && arcs[0] === 1 && Math.abs(arcs[1] - 0.9) < 0.02
+      && Math.abs(arcs[2] - 0.8) < 0.02 && Math.abs(arcs[3] - 0.5) < 0.02,
+    JSON.stringify(arcs));
+  ck('so a nine and a ten are not the same picture',
+    arcs[0] - arcs[1] > 0.05, arcs[0] + ' vs ' + arcs[1]);
+
   /* -- the figures arrive too ----------------------------------------------- */
 
   // The charts have had an entrance since the bklit pass and the numbers beside

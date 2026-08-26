@@ -575,18 +575,26 @@ function dashCardEl(card) {
   // 9.5px uppercase label in muted ink is invisible. Two tones only, both of
   // them white on dark and both clearing AA, so the bar can carry a title
   // without the title carrying the meaning of the colour on its own.
-  // Left, centred or right — for the title and the body together, because a
-  // centred heading over left-ragged text reads as a mistake rather than as two
-  // decisions.
-  const align = card.fmt && card.fmt.align;
-  if (align === 'center' || align === 'right' || align === 'justify') {
-    el.classList.add('align-' + align);
-  }
+  // Title and body align independently. They were coupled at first — a centred
+  // heading over left-ragged text reads as a mistake rather than as two
+  // decisions — but a centred bar over a left-read paragraph is a real layout,
+  // and it is the operator's call to make, not one to make for them.
+  const ta = card.fmt && card.fmt.align;
+  if (ta === 'center' || ta === 'right') el.classList.add('talign-' + ta);
+  const ba = card.fmt && card.fmt.alignBody;
+  if (ba === 'center' || ba === 'right' || ba === 'justify') el.classList.add('balign-' + ba);
 
   if (card.fmt && card.fmt.head === 'bar') {
     el.classList.add('headed');
     const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
-    el.classList.add(/^[1-8]$/.test(tone) ? 'head-slot-' + tone : 'head-navy');
+    if (/^#[0-9a-f]{6}$/i.test(tone)) {
+      // A colour chosen outside the palette. Deepened the same way the slots
+      // are, in the same place, so one rule decides how dark a bar is.
+      el.classList.add('head-custom');
+      el.style.setProperty('--head-hue', tone);
+    } else {
+      el.classList.add(/^[1-8]$/.test(tone) ? 'head-slot-' + tone : 'head-navy');
+    }
   }
 
   const titleOn = !card.fmt || card.fmt.title !== false;

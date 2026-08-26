@@ -284,6 +284,31 @@ const SCENE = [
         && getComputedStyle(document.getElementById('colorKeyCard')).display === 'none';
     }, moved.id) === true);
 
+  /* -- title and body align separately -------------------------------------- */
+
+  ck('a card can centre its title and leave its body alone',
+    await p.evaluate(() => {
+      const c = dashCards.find(x => x.type === 'text') || dashCards[0];
+      c.fmt = Object.assign({}, c.fmt, { align: 'center' });
+      delete c.fmt.alignBody;
+      renderDashboard();
+      const el = document.querySelector('.dash-card[data-card="' + c.id + '"]');
+      return el.classList.contains('talign-center') && !el.className.match(/balign-/);
+    }) === true);
+
+  ck('and align its body without moving the title',
+    await p.evaluate(() => {
+      const c = dashCards.find(x => x.type === 'text') || dashCards[0];
+      c.fmt = Object.assign({}, c.fmt, { alignBody: 'right' });
+      delete c.fmt.align;
+      renderDashboard();
+      const el = document.querySelector('.dash-card[data-card="' + c.id + '"]');
+      const t = el.querySelector('.dc-title');
+      delete c.fmt.alignBody;
+      renderDashboard();
+      return el.classList.contains('balign-right') && getComputedStyle(t).textAlign !== 'right';
+    }) === true);
+
   /* -- the top bar is a toolbar, not a map with buttons on it --------------- */
 
   // The search box in the bar is the MAP's search box, re-parented rather than

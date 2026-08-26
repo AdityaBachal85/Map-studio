@@ -72,36 +72,75 @@ function dfToggle(key, on, label) {
 }
 
 /**
- * The colour control: eight palette slots, then anything at all.
+ * Resolve whatever a card stored into a literal colour.
  *
- * THE SLOTS ARE NOT A LIMITATION, THEY ARE A FEATURE, AND THE CUSTOM FIELD
- * GIVES IT UP. A slot is a number, so a board built in dark mode still reads in
- * light — the palette has a value for each theme and the card stores neither.
- * A custom colour is one hex, in both themes, chosen against whichever one
- * happened to be on screen. That is a real trade and the pane says so rather
- * than letting people find out later.
+ * @param {number|string} now a slot number or a hex
+ * @returns {string} a hex
+ */
+function dfResolveColour(now) {
+  if (/^#[0-9a-f]{6}$/i.test(String(now))) return String(now).toLowerCase();
+  const n = Math.max(1, Math.min(8, Math.round(Number(now) || 1)));
+  try {
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue('--viz-' + n).trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+  } catch (e) { /* fall through */ }
+  return '#3987e5';
+}
+
+/**
+ * The colour control: one swatch that opens the app's own picker.
  *
- * `<input type="color">` rather than a hand-built HSV square: it is the
- * platform's own picker, which brings the gradient area, the hue slider and —
- * on the browsers that have it — the eyedropper, for no code and no bugs.
+ * IT USED TO BE NINE SWATCHES IN A ROW, AND THAT DOES NOT SCALE. A score card
+ * with four rings meant four rows of nine, which is thirty-six squares and most
+ * of the pane, to say four things. It also asked people to learn a second
+ * colour interface: the map has had a proper picker for a long time — presets,
+ * then a full gradient area with a hue slider, hex and RGB fields and an
+ * eyedropper — and the board was offering a strip of eight instead.
+ *
+ * So this is that picker, anchored to a swatch. One control, the same gesture
+ * everywhere in the app, and the whole palette plus any colour at all behind
+ * one click rather than a row that could only ever hold the eight.
  *
  * @param {string} key @param {number|string} now a slot number, or a hex
  * @returns {string} HTML
  */
 function dfSwatches(key, now) {
-  const hex = /^#[0-9a-f]{6}$/i.test(String(now)) ? String(now) : '';
-  return '<div class="df-sw-row">' + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
-    '<button type="button" class="dc-sw' + (!hex && n === Number(now) ? ' on' : '') + '" data-df="' + key
-    + '" data-v="' + n + '" style="background:var(--viz-' + n + ')" title="Colour ' + n
-    + '" aria-label="Colour ' + n + '"></button>').join('')
-    + '<label class="dc-sw dc-sw-custom' + (hex ? ' on' : '') + '"'
-    + ' style="background:' + (hex || 'transparent') + '"'
-    + ' title="Custom colour — fixed in both themes">'
-    + '<input type="color" data-dfcolor="' + key + '" value="' + (hex || '#0a1e3c') + '">'
-    + '</label>'
-    + '</div>'
-    + (hex ? '<p class="df-note df-note-warn">' + esc(hex)
-      + ' is used in both themes. A palette colour adapts; this one will not.</p>' : '');
+  const hex = dfResolveColour(now);
+  const custom = /^#[0-9a-f]{6}$/i.test(String(now));
+  return '<button type="button" class="df-sw-btn" data-dfpick="' + esc(key) + '"'
+    + ' aria-haspopup="dialog" aria-expanded="false"'
+    + ' title="' + esc(hex) + (custom ? ' \u2014 a chosen colour, fixed in both themes' : ' \u2014 a palette colour, which adapts to the theme') + '">'
+    + '<i style="background:' + esc(hex) + '"></i>'
+    + '<span>' + esc(custom ? hex : 'Colour ' + Math.max(1, Math.min(8, Math.round(Number(now) || 1)))) + '</span>'
+    + '</button>';
+}
+
+/**
+ * What the card currently holds for one colour key.
+ *
+ * The keys are the same strings dashFormatApply() writes back through, so the
+ * read and the write cannot drift apart into two different ideas of where a
+ * series' colour lives.
+ *
+ * @param {object} card @param {string} key @returns {number|string}
+ */
+function dfCurrentColour(card, key) {
+  const ser = key.match(/^slot:(\d+)$/);
+  if (ser) {
+    const s = (card.seriesList || [])[+ser[1]];
+    return s ? (s.hex || s.slot || (+ser[1] + 1)) : 1;
+  }
+  if (key === 'headTone') {
+    const t = card.fmt && card.fmt.headTone;
+    return (t == null || t === 'navy') ? 1 : t;
+  }
+  const ring = key.match(/^gslot:(\d+)$/);
+  if (ring) {
+    const g = (card.items || [])[+ring[1]];
+    return g ? (g.color || g.slot || (+ring[1] + 1)) : 1;
+  }
+  return 1;
 }
 
 /** Whether the pane had a column last time, so its opening can be noticed. */
@@ -197,18 +236,15 @@ function renderDashFormat() {
       // The ink on the bar follows its luminance, so a light slot is a usable
       // choice rather than an unreadable one.
       const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
+      // Navy stays a named choice — it is the default and the one most bars
+      // want — and everything else goes through the same picker as every other
+      // colour on the board.
       f += dfRow('Bar colour',
-        '<div class="df-sw-row">'
-        + '<button type="button" class="dc-sw' + (tone === 'navy' ? ' on' : '')
-        + '" data-df="headTone" data-v="navy" style="background:var(--navy)"'
-        + ' title="Navy" aria-label="Navy"></button>'
-        + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
-          '<button type="button" class="dc-sw' + (tone === String(n) ? ' on' : '')
-          // The swatch previews the bar it will produce, not the raw slot —
-          // otherwise you pick a bright hue and get a deep one.
-          + '" data-df="headTone" data-v="' + n
-          + '" style="background:color-mix(in srgb, var(--viz-' + n + ') 60%, var(--navy))"'
-          + ' title="Colour ' + n + '" aria-label="Colour ' + n + '"></button>').join('')
+        '<div class="df-bar-tone">'
+        + '<button type="button" class="df-sw-btn' + (tone === 'navy' ? ' on' : '')
+        + '" data-df="headTone" data-v="navy" title="Navy">'
+        + '<i style="background:var(--navy)"></i><span>Navy</span></button>'
+        + dfSwatches('headTone', /^[1-8]$/.test(tone) ? Number(tone) : 1)
         + '</div>');
     }
   }
@@ -243,14 +279,18 @@ function renderDashFormat() {
     });
   }
 
-  // Left, centred, right — and justify only where there is prose to justify.
-  // On a list of place names justify would space four words across a card and
-  // call it typography.
+  // Two settings, not one: a centred header bar over a left-read paragraph is a
+  // real layout, and coupling them made it impossible. Justify is offered on the
+  // body only and only where there is prose to justify — on a list of place
+  // names it would space four words across a card and call it typography.
   {
-    const now = (card.fmt && card.fmt.align) || 'left';
-    const opts = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
-    if (card.type === 'text' || card.type === 'comment') opts.push(['justify', 'Justify']);
-    f += dfRow('Align', dfSeg('align', opts, now));
+    const three = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
+    if (!card.fmt || card.fmt.title !== false) {
+      f += dfRow('Title align', dfSeg('align', three, (card.fmt && card.fmt.align) || 'left'));
+    }
+    const bodyOpts = (card.type === 'text' || card.type === 'comment')
+      ? three.concat([['justify', 'Justify']]) : three;
+    f += dfRow('Text align', dfSeg('alignBody', bodyOpts, (card.fmt && card.fmt.alignBody) || 'left'));
   }
 
   // Where the legend lives. On the map is the layout every printed connectivity
@@ -336,10 +376,16 @@ function dashFormatApply(card, key, v) {
     case 'align':
       if (v === 'left') delete card.fmt.align; else card.fmt.align = v;
       return;
+    case 'alignBody':
+      if (v === 'left') delete card.fmt.alignBody; else card.fmt.alignBody = v;
+      return;
     case 'head': card.fmt.head = v === 'bar' ? 'bar' : 'plain'; return;
     case 'headTone':
-      // 'green' is the old two-tone spelling; slot six is the same green.
-      card.fmt.headTone = v === 'green' ? '6' : (/^[1-8]$/.test(v) ? v : 'navy');
+      // 'green' is the old two-tone spelling; slot six is the same green. A hex
+      // from the picker is kept as-is — the bar deepens it in CSS either way.
+      card.fmt.headTone = v === 'green' ? '6'
+        : (/^#[0-9a-f]{6}$/i.test(v) ? String(v).toLowerCase()
+          : (/^[1-8]$/.test(v) ? v : 'navy'));
       return;
     case 'asTable':
       if (v === 'table') card.fmt.asTable = true; else delete card.fmt.asTable;
@@ -380,22 +426,27 @@ function dashFormatApply(card, key, v) {
   if (!host) return;
 
   host.addEventListener('click', e => {
+    // The colour swatch opens the app's own picker rather than applying
+    // anything itself — same component, same gesture, as the map.
+    const pick = e.target.closest('[data-dfpick]');
+    if (pick) {
+      e.preventDefault();
+      const card = dashFormatTarget();
+      if (!card || typeof openColorPresets !== 'function') return;
+      const key = pick.dataset.dfpick;
+      openColorPresets(pick, dfResolveColour(dfCurrentColour(card, key)), hex => {
+        dashFormatApply(card, key, hex);
+        renderDashboard();
+        renderDashFormat();
+      });
+      return;
+    }
+
     const b = e.target.closest('[data-df]');
     if (!b) return;
     const card = dashFormatTarget();
     if (!card) return;
     dashFormatApply(card, b.dataset.df, b.dataset.v);
-    renderDashboard();
-  });
-
-  // `input` rather than `change`: the OS picker streams while you drag, and a
-  // colour you cannot see until you let go is a colour you pick twice.
-  host.addEventListener('input', e => {
-    const c = e.target.closest('[data-dfcolor]');
-    if (!c) return;
-    const card = dashFormatTarget();
-    if (!card) return;
-    dashFormatApply(card, c.dataset.dfcolor, c.value);
     renderDashboard();
   });
 
