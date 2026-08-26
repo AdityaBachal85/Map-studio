@@ -259,9 +259,12 @@ function dashChartHtml(card) {
   const wantLegend = fmt.legend !== 'off' && enough && kind !== 'funnel' && kind !== 'gauge'
     && (byCategory ? true : series.length > 1);
   if (wantLegend) {
+    // A series carries its own colour when one was chosen, so the swatch beside
+    // the name matches the line on the chart. Without this the legend went on
+    // showing the palette slot underneath a custom colour.
     const keys = byCategory
       ? vizCategories(card).map((c, i) => [c, i + 1])
-      : series.map(s => [s.name, s.slot]);
+      : series.map(s => [s.name, s.hex || s.slot]);
     const vals = byCategory && series[0] ? series[0].values.map(Number) : null;
     // Only a share kind may print a percentage: on a ring the arc is a fraction
     // of the scale, not of the total, so share-of-total beside it would be a
@@ -270,7 +273,9 @@ function dashChartHtml(card) {
     const sum = share && vals ? vals.reduce((a, b) => a + (isFinite(b) && b > 0 ? b : 0), 0) : 0;
     legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (byCategory ? 'right' : 'top') : fmt.legend) + '">'
       + keys.map(([name, slot], i) =>
-        '<span class="dc-key"><i style="background:' + vizSlot(slot) + '"></i>' + esc(String(name || '—'))
+        '<span class="dc-key"><i style="background:'
+        + (/^#[0-9a-f]{6}$/i.test(String(slot)) ? esc(String(slot)) : vizSlot(slot))
+        + '"></i>' + esc(String(name || '—'))
         + (sum ? '<b>' + Math.round(((vals[i] > 0 ? vals[i] : 0) / sum) * 100) + '%</b>'
           : (kind === 'ring' && vals && isFinite(vals[i]) ? '<b>' + esc(vizNum(vals[i])) + '</b>' : ''))
         + '</span>').join('')
@@ -566,6 +571,14 @@ function dashCardEl(card) {
   // 9.5px uppercase label in muted ink is invisible. Two tones only, both of
   // them white on dark and both clearing AA, so the bar can carry a title
   // without the title carrying the meaning of the colour on its own.
+  // Left, centred or right — for the title and the body together, because a
+  // centred heading over left-ragged text reads as a mistake rather than as two
+  // decisions.
+  const align = card.fmt && card.fmt.align;
+  if (align === 'center' || align === 'right' || align === 'justify') {
+    el.classList.add('align-' + align);
+  }
+
   if (card.fmt && card.fmt.head === 'bar') {
     el.classList.add('headed');
     const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
@@ -656,6 +669,9 @@ function renderDashboard() {
   const onMapLegend = dashCards.find(c => c.type === 'legend' && c.onMap);
   const shell = document.querySelector('.app');
   if (shell) shell.classList.toggle('legend-on-map', !!onMapLegend);
+  // The class alone is not enough: the card's visibility is written inline by
+  // rebuildColorKey(), so it has to be asked again now the answer has changed.
+  if (typeof rebuildColorKey === 'function') rebuildColorKey();
   dashSizeMapLegend(onMapLegend || null);
 
   // The map lives on the canvas and must survive the rebuild, so it is lifted

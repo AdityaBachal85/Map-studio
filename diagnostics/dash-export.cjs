@@ -198,7 +198,8 @@ function zipText(buf, entries, name) {
     return { worst, at, col, w: cv.width };
   });
   ck('no slab of flat grey is painted over the cards',
-    slab.worst < slab.w * 0.1, slab.worst + 'px at y=' + slab.at);
+    slab.worst < slab.w * 0.1,
+    slab.worst + 'px at y=' + slab.at + ' shade ' + slab.col);
 
   /* ---- PDF ---------------------------------------------------------------- */
 

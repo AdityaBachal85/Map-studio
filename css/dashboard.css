@@ -1036,6 +1036,11 @@ body.dash-gesture .map-wrap { transition: none; }
 .dash-card.head-slot-7 > .dc-head { background: color-mix(in srgb, var(--viz-7) 60%, var(--navy)); }
 .dash-card.head-slot-8 > .dc-head { background: color-mix(in srgb, var(--viz-8) 60%, var(--navy)); }
 
+/* Room between the title and whatever sits at the end of the bar. Without it a
+   title that filled the width ran straight into the remove button — the bar
+   read as "INFRASTRUCTURE SCOREX". */
+.dash-card.headed > .dc-head .dc-title { padding-right: 6px; }
+
 .dash-card.headed > .dc-head .dc-title,
 .dash-card.headed > .dc-head .dc-grip { color: #fff; }
 .dash-card.headed > .dc-head .dc-title { opacity: 1; }
@@ -1045,6 +1050,66 @@ body.dash-gesture .map-wrap { transition: none; }
 .dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
 
 
+
+/* -- the custom colour well ----------------------------------------------- */
+
+/* The native colour input is the platform's own picker — gradient area, hue
+   slider, and the eyedropper on the browsers that have one — so the swatch is
+   a label wrapped around it and the input itself is invisible. */
+.dc-sw-custom {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  /* A chequer, so "no custom colour" reads as empty rather than as black. */
+  background-image:
+    linear-gradient(45deg, var(--border-strong) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-strong) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border-strong) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border-strong) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.dc-sw-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The trade a custom colour makes is worth saying out loud, not discovering. */
+.df-note-warn { color: var(--warn, var(--accent)); }
+
+/* -- alignment ------------------------------------------------------------ */
+
+/* The title is shrink-to-fit by default so the rest of the header stays a grab
+   area. Alignment needs it to own the row instead, which is also what stops a
+   long title running into the tools at the right-hand end — "INFRASTRUCTURE
+   SCORE" and the close button were touching on a narrow card. */
+.dash-card.align-center > .dc-head .dc-title,
+.dash-card.align-right > .dc-head .dc-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-card.align-center > .dc-head .dc-title { text-align: center; }
+.dash-card.align-right > .dc-head .dc-title { text-align: right; }
+
+.dash-card.align-center .dc-text,
+.dash-card.align-center .dc-rating-cap,
+.dash-card.align-center .dc-rating-note { text-align: center; }
+
+.dash-card.align-right .dc-text,
+.dash-card.align-right .dc-rating-cap,
+.dash-card.align-right .dc-rating-note { text-align: right; }
+
+/* Justify is offered for prose only. On a list of place names it would space
+   out four words across a card and call it typography. */
+.dash-card.align-justify .dc-text { text-align: justify; }
 
 /* -- the table reading of a live list ------------------------------------- */
 

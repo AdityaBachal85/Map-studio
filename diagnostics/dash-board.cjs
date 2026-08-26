@@ -231,6 +231,12 @@ const SCENE = [
   // in a card beside it. So moving the legend back onto the map has to take the
   // card away in the same breath, or the defect returns.
   const moved = await p.evaluate(() => {
+    // With the map's OWN colour-key switch off, which is its default. That is
+    // the case that was broken: the stylesheet un-hid the card, but
+    // rebuildColorKey() writes an inline display and an inline style wins, so
+    // the board asked for the legend and nothing appeared.
+    const tgl = document.getElementById('colorKeyTgl');
+    if (tgl) { tgl.checked = false; if (typeof rebuildColorKey === 'function') rebuildColorKey(); }
     const c = dashCards.find(x => x.type === 'legend');
     c.onMap = true;
     renderDashboard();

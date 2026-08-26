@@ -198,7 +198,15 @@ function rebuildColorKey() {
   colorKeyRebuilding = false;
 
   const tgl = document.getElementById('colorKeyTgl');
-  const wanted = (!tgl || tgl.checked) && (rows.length || colorKeyEditing);
+  // THE BOARD CAN ASK FOR THIS CARD TOO.
+  //
+  // A Legend card set to "On the map" un-hides #colorKeyCard from the
+  // stylesheet — but this line writes an INLINE display, and an inline style
+  // beats any rule. So with the map's own colour-key switch off, which is its
+  // default, the board asked for the legend and nothing appeared. The switch is
+  // one way of wanting it; the board is another.
+  const wanted = ((!tgl || tgl.checked) && (rows.length || colorKeyEditing))
+    || (colorKeyWantedByBoard() && rows.length > 0);
   card.style.display = wanted ? '' : 'none';
   card.classList.toggle('editing', colorKeyEditing);
 
@@ -231,6 +239,21 @@ function rebuildColorKey() {
  * card is dragged — once somebody has placed it, moving it is the app being
  * wrong, not helpful.
  */
+/**
+ * Has the board asked for the colour key to be on the map?
+ *
+ * Read off the class renderDashboard() sets rather than from dashCards, so this
+ * file keeps knowing nothing about the board's data — it only needs the answer,
+ * and the answer is already on the document.
+ *
+ * @returns {boolean}
+ */
+function colorKeyWantedByBoard() {
+  const shell = document.querySelector('.app');
+  return !!(shell && shell.classList.contains('legend-on-map')
+    && shell.dataset.mode === 'dashboard');
+}
+
 function positionColorKey() {
   const card = colorKeyCard();
   if (!card || card._moved) return;

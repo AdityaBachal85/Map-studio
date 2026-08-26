@@ -71,12 +71,37 @@ function dfToggle(key, on, label) {
     + '"><i></i>' + esc(label) + '</button>';
 }
 
-/** The eight colour slots. @param {string} key @param {number} now */
+/**
+ * The colour control: eight palette slots, then anything at all.
+ *
+ * THE SLOTS ARE NOT A LIMITATION, THEY ARE A FEATURE, AND THE CUSTOM FIELD
+ * GIVES IT UP. A slot is a number, so a board built in dark mode still reads in
+ * light — the palette has a value for each theme and the card stores neither.
+ * A custom colour is one hex, in both themes, chosen against whichever one
+ * happened to be on screen. That is a real trade and the pane says so rather
+ * than letting people find out later.
+ *
+ * `<input type="color">` rather than a hand-built HSV square: it is the
+ * platform's own picker, which brings the gradient area, the hue slider and —
+ * on the browsers that have it — the eyedropper, for no code and no bugs.
+ *
+ * @param {string} key @param {number|string} now a slot number, or a hex
+ * @returns {string} HTML
+ */
 function dfSwatches(key, now) {
+  const hex = /^#[0-9a-f]{6}$/i.test(String(now)) ? String(now) : '';
   return '<div class="df-sw-row">' + [1, 2, 3, 4, 5, 6, 7, 8].map(n =>
-    '<button type="button" class="dc-sw' + (n === now ? ' on' : '') + '" data-df="' + key
+    '<button type="button" class="dc-sw' + (!hex && n === Number(now) ? ' on' : '') + '" data-df="' + key
     + '" data-v="' + n + '" style="background:var(--viz-' + n + ')" title="Colour ' + n
-    + '" aria-label="Colour ' + n + '"></button>').join('') + '</div>';
+    + '" aria-label="Colour ' + n + '"></button>').join('')
+    + '<label class="dc-sw dc-sw-custom' + (hex ? ' on' : '') + '"'
+    + ' style="background:' + (hex || 'transparent') + '"'
+    + ' title="Custom colour — fixed in both themes">'
+    + '<input type="color" data-dfcolor="' + key + '" value="' + (hex || '#0a1e3c') + '">'
+    + '</label>'
+    + '</div>'
+    + (hex ? '<p class="df-note df-note-warn">' + esc(hex)
+      + ' is used in both themes. A palette colour adapts; this one will not.</p>' : '');
 }
 
 /** Whether the pane had a column last time, so its opening can be noticed. */
@@ -143,7 +168,7 @@ function renderDashFormat() {
           : '') + '</div>'
         + '<div class="dc-input df-input" data-card="' + card.id + '" data-bind="seriesList.' + i
         + '.values" contenteditable="true" spellcheck="false">' + esc((s.values || []).join(', ')) + '</div>'
-        + dfSwatches('slot:' + i, s.slot || (i + 1))
+        + dfSwatches('slot:' + i, s.hex || s.slot || (i + 1))
         + '</div>').join('')
       + '<button class="df-add" data-df="addSeries" data-v="1">+ Add a series</button>'
       + '<p class="df-note">Comma-separated. Paste a row straight from a spreadsheet.</p>');
@@ -214,8 +239,18 @@ function renderDashFormat() {
     // gave them and that was the end of it, while every chart series beside
     // them had swatches. Same control, same eight slots.
     (card.items || []).forEach((g, i) => {
-      f += dfRow(g.cap || ('Ring ' + (i + 1)), dfSwatches('gslot:' + i, g.slot || (i + 1)));
+      f += dfRow(g.cap || ('Ring ' + (i + 1)), dfSwatches('gslot:' + i, g.color || g.slot || (i + 1)));
     });
+  }
+
+  // Left, centred, right — and justify only where there is prose to justify.
+  // On a list of place names justify would space four words across a card and
+  // call it typography.
+  {
+    const now = (card.fmt && card.fmt.align) || 'left';
+    const opts = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
+    if (card.type === 'text' || card.type === 'comment') opts.push(['justify', 'Justify']);
+    f += dfRow('Align', dfSeg('align', opts, now));
   }
 
   // Where the legend lives. On the map is the layout every printed connectivity
@@ -264,20 +299,23 @@ function renderDashFormat() {
 function dashFormatApply(card, key, v) {
   card.fmt = card.fmt || {};
 
+  const isHex = /^#[0-9a-f]{6}$/i.test(String(v));
+
   const slot = key.match(/^slot:(\d+)$/);
   if (slot) {
     const s = card.seriesList && card.seriesList[+slot[1]];
-    if (s) s.slot = +v;
+    if (!s) return;
+    // One or the other, never both: a stored hex wins over a slot wherever it
+    // is read, so leaving one behind makes the swatches look broken.
+    if (isHex) { s.hex = String(v).toLowerCase(); } else { s.slot = +v; delete s.hex; }
     return;
   }
 
   const gslot = key.match(/^gslot:(\d+)$/);
   if (gslot) {
     const g = card.items && card.items[+gslot[1]];
-    // A stored hex from an older board would win over the slot for ever, so
-    // picking a colour clears it — otherwise the swatch would do nothing and
-    // look broken.
-    if (g) { g.slot = +v; delete g.color; }
+    if (!g) return;
+    if (isHex) { g.color = String(v).toLowerCase(); } else { g.slot = +v; delete g.color; }
     return;
   }
 
@@ -295,6 +333,9 @@ function dashFormatApply(card, key, v) {
     case 'xAxis': card.fmt.xAxis = v === '1'; return;
     case 'yAxis': card.fmt.yAxis = v === '1'; return;
     case 'time': card.fmt.time = v === '1'; return;
+    case 'align':
+      if (v === 'left') delete card.fmt.align; else card.fmt.align = v;
+      return;
     case 'head': card.fmt.head = v === 'bar' ? 'bar' : 'plain'; return;
     case 'headTone':
       // 'green' is the old two-tone spelling; slot six is the same green.
@@ -344,6 +385,17 @@ function dashFormatApply(card, key, v) {
     const card = dashFormatTarget();
     if (!card) return;
     dashFormatApply(card, b.dataset.df, b.dataset.v);
+    renderDashboard();
+  });
+
+  // `input` rather than `change`: the OS picker streams while you drag, and a
+  // colour you cannot see until you let go is a colour you pick twice.
+  host.addEventListener('input', e => {
+    const c = e.target.closest('[data-dfcolor]');
+    if (!c) return;
+    const card = dashFormatTarget();
+    if (!card) return;
+    dashFormatApply(card, c.dataset.dfcolor, c.value);
     renderDashboard();
   });
 

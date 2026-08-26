@@ -183,7 +183,10 @@ function dashModelData(card, resolve) {
         series: (card.seriesList || []).map(s => ({
           name: s.name || '',
           values: (s.values || []).map(v => (dashModelHasValue(v) ? Number(v) : null)),
-          color: col(s.slot),
+          // A colour chosen outside the palette is already a literal; a slot
+          // has to be resolved. The file has to agree with the screen either
+          // way, which is the whole reason this model exists.
+          color: /^#[0-9a-f]{6}$/i.test(String(s.hex || '')) ? String(s.hex).toLowerCase() : col(s.slot),
         })),
       };
       // A ring, a gauge and a radar are drawn as a fraction of a ceiling, so the

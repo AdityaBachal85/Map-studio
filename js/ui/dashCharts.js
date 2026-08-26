@@ -221,6 +221,21 @@ function vizSlot(slot) {
 }
 
 /**
+ * What to paint one series with.
+ *
+ * A custom hex wins over the slot, because that is what choosing one means.
+ * Everything downstream — marks, dots, gradients, the legend swatch, the export
+ * model — goes through here, so there is one answer to "what colour is this
+ * series" rather than eight places that each decide.
+ *
+ * @param {object} ser a series from vizSeries()
+ * @returns {string} a CSS colour
+ */
+function vizColour(ser) {
+  return (ser && ser.hex) ? ser.hex : vizSlot(ser && ser.slot);
+}
+
+/**
  * Compact a number for an axis tick or a label.
  * @param {number} n @returns {string}
  */
@@ -288,6 +303,10 @@ function vizSeries(card) {
       name: s.name || ('Series ' + (i + 1)),
       values: (s.values || []).map(Number),
       slot: s.slot || (i + 1),
+      // A colour chosen outside the palette. Carried separately from the slot
+      // so the slot survives untouched underneath it — clearing the custom
+      // colour puts the series back where it was rather than at slot one.
+      hex: /^#[0-9a-f]{6}$/i.test(String(s.hex || '')) ? String(s.hex) : '',
     }));
   }
   const legacySlot = typeof card.series === 'number' ? card.series : 1;
@@ -469,7 +488,7 @@ function vizCartesian(card, w, h) {
         if (!isFinite(v)) return '';
         const y = vOf(v), top = Math.min(y, zero), hgt = Math.max(1, Math.abs(zero - y));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(series[0].slot)
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(series[0])
           + ';--i:' + i + '"/>';
       }).join('');
     }
@@ -477,7 +496,7 @@ function vizCartesian(card, w, h) {
     lineSeries.forEach(ser => {
       const pts = ser.values.map((v, i) => (isFinite(v) ? [cOf(i), vOf(v)] : null)).filter(Boolean);
       if (!pts.length) return;
-      const col = vizSlot(ser.slot);
+      const col = vizColour(ser);
       if (kind !== 'scatter' && pts.length > 1) {
         const d = fmt.smooth ? vizSmoothPath(pts) : 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
         if (kind === 'area') {
@@ -514,7 +533,7 @@ function vizCartesian(card, w, h) {
         if (!v) return;
         const a = vOf(acc), b = vOf(acc + v);
         acc += v;
-        const col = vizSlot(ser.slot);
+        const col = vizColour(ser);
         // The 2px gap is what separates one segment from the next — negative
         // space, not a border drawn around the mark.
         if (horiz) {
@@ -543,12 +562,12 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(p, zero), width = Math.max(1, Math.abs(zero - p));
           return '<path class="viz-mark" d="' + vizBarPath(+left.toFixed(1), +(cOf(i) + off - bw / 2).toFixed(1),
-            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizSlot(ser.slot)
+            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizColour(ser)
             + ';--i:' + i + '"/>';
         }
         const top = Math.min(p, zero), hgt = Math.max(1, Math.abs(zero - p));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) + off - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizSlot(ser.slot)
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(ser)
           + ';--i:' + i + '"/>';
       }).join('');
 
@@ -818,7 +837,7 @@ function vizGauge(card, w, h) {
     // of the dial. This one sweeps along itself instead, which is what a dial
     // does anyway.
     + '<path class="viz-dial" d="' + vizArcPath(cx, cy, r, A0, A0 + (A1 - A0) * frac)
-    + '" fill="none" stroke-linecap="round" style="stroke:' + vizSlot(ser.slot)
+    + '" fill="none" stroke-linecap="round" style="stroke:' + vizColour(ser)
     + ';stroke-width:' + thick.toFixed(1)
     + ';--len:' + (r * (A1 - A0) * Math.PI / 180 * frac + thick).toFixed(0) + '"/>'
     + '<text class="viz-donut-total" x="' + cx.toFixed(1) + '" y="' + (cy + 2).toFixed(1)
@@ -890,7 +909,7 @@ function vizRadar(card, w, h) {
     const pts = cats.map((c, i) => at(i, Math.max(0, Math.min(1,
       (isFinite(ser.values[i]) ? ser.values[i] : 0) / max))));
     const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L') + 'Z';
-    const col = vizSlot(ser.slot);
+    const col = vizColour(ser);
     s += '<path class="viz-web" d="' + d + '" style="fill:' + col + ';stroke:' + col + '"/>'
       + pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
         + '" r="' + (VIZ_DOT_R - 1) + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
@@ -1026,7 +1045,7 @@ function vizWireHover(host, card, w, h) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     c.setAttribute('class', 'viz-hit');
     c.setAttribute('r', String(VIZ_DOT_R + 1));
-    c.style.fill = vizSlot(ser.slot);
+    c.style.fill = vizColour(ser);
     c.style.display = 'none';
     svg.appendChild(c);
     return c;
@@ -1068,7 +1087,7 @@ function vizWireHover(host, card, w, h) {
 
     tip.hidden = false;
     tip.innerHTML = '<em>' + vizEsc(cats[best]) + '</em>' + series.map(s =>
-      '<span><i style="background:' + vizSlot(s.slot) + '"></i>'
+      '<span><i style="background:' + vizColour(s) + '"></i>'
       + (series.length > 1 ? vizEsc(s.name) + ' ' : '')
       + '<b>' + vizEsc(vizNum(s.values[best])) + '</b></span>').join('');
 
