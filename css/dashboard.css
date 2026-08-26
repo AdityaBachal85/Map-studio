@@ -1000,11 +1000,19 @@ body.dash-gesture .map-wrap { transition: none; }
   animation-delay: calc(var(--i, 0) * 45ms);
 }
 
-/* Horizontal forms — bar, stacked bar, funnel — grow from the value axis on
-   the left, which is where their zero is. */
+/* Horizontal forms — bar, stacked bar — grow from the value axis on the left,
+   which is where their zero is. */
 .viz-enter .viz-mark-h,
 .viz-enter[data-horiz] .viz-mark {
   transform-origin: left;
+  animation-name: viz-widen;
+}
+
+/* A funnel is centred on its own axis, so its stages open outward from the
+   middle. Growing them from the left would slide the whole shape sideways into
+   place, which is a different chart arriving. */
+.viz-enter .viz-mark-c {
+  transform-origin: center;
   animation-name: viz-widen;
 }
 

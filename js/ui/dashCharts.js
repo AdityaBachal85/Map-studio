@@ -888,35 +888,66 @@ function vizPie(card, w, h) {
 /** Funnel — stages down the page, each a share of the first. */
 function vizFunnel(card, w, h) {
   const f = vizFiltered(vizCategories(card), vizSeries(card));
-  const vals = (f.series[0] ? f.series[0].values : []).map(Number).filter(isFinite);
+  const ser = f.series[0];
+  const vals = (ser ? ser.values : []).map(Number).filter(isFinite);
   if (!vals.length) return '';
+  const n = vals.length;
   const max = Math.max.apply(null, vals) || 1;
-  const rowH = Math.min(46, h / vals.length);
-  const top = (h - rowH * vals.length) / 2;
-  const labelW = 92;
-  // Measured from the longest string that will actually be written, not from a
-  // flat 46px guess: "30 · 300%" is 55px and ran off the right edge of the card
-  // — the same defect as a bar's label past the plot, in the one chart whose
-  // labels were never routed through the placement rule.
-  const wide = vals.reduce((m, v, i) => Math.max(m,
-    (vizNum(v) + (i ? ' \u00b7 ' + Math.round((v / vals[0]) * 100) + '%' : '')).length), 0);
-  const iw = Math.max(20, w - labelW - (vizFmt(card).labels ? wide * 5.6 + 14 : 12));
-  // The stage names are the category axis and stay; only the numbers are the
-  // data labels the panel's switch controls.
   const labels = vizFmt(card).labels;
 
+  const rowH = Math.min(54, h / n);
+  const top = (h - rowH * n) / 2;
+  const labelW = 92;
+  // Room on the right for any number that will not fit inside its own stage.
+  const wide = vals.reduce((m, v, i) => Math.max(m,
+    (vizNum(v) + (i ? ' \u00b7 ' + Math.round((v / vals[0]) * 100) + '%' : '')).length), 0);
+  const iw = Math.max(24, w - labelW - (labels ? wide * 5.6 + 14 : 12));
+  const cx = labelW + iw / 2;
+
+  const halfOf = v => Math.max(1.5, (v / max) * iw / 2);
+  const gap = Math.min(5, rowH * 0.13);
+
   return vals.map((v, i) => {
-    const bw = Math.max(2, (v / max) * iw);
-    const y = top + i * rowH;
-    return '<rect class="viz-mark viz-mark-h" x="' + labelW + '" y="' + (y + 5).toFixed(1) + '" width="' + bw.toFixed(1)
-      + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizCatColour(f.series[0], i) + ';--i:' + i + '"/>'
-      + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (y + rowH / 2 + 3.5).toFixed(1)
-      + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>'
-      + (labels
-        ? '<text class="viz-label" x="' + (labelW + bw + 6).toFixed(1) + '" y="'
-          + (y + rowH / 2 + 3.5).toFixed(1) + '">' + vizEsc(vizNum(v))
-          + (i ? ' · ' + Math.round((v / vals[0]) * 100) + '%' : '') + '</text>'
-        : '');
+    const a = halfOf(v);
+    // The stage below is what this one narrows TO. The last has nothing under
+    // it, so it keeps its own width and comes out square — tapering it to a
+    // neck would draw a value that is not in the data.
+    const b = halfOf(i < n - 1 ? vals[i + 1] : v);
+
+    const y0 = top + i * rowH, y1 = y0 + rowH;
+    // The gap is cut out of the row, so the widths are read at the edges the
+    // shape actually has rather than at the row's — otherwise every stage is
+    // drawn a little wider than its value.
+    const t = (gap / 2) / rowH;
+    const hTop = a + (b - a) * t;
+    const hBot = a + (b - a) * (1 - t);
+    const yTop = y0 + gap / 2, yBot = y1 - gap / 2;
+
+    const d = 'M' + (cx - hTop).toFixed(1) + ' ' + yTop.toFixed(1)
+      + 'L' + (cx + hTop).toFixed(1) + ' ' + yTop.toFixed(1)
+      + 'L' + (cx + hBot).toFixed(1) + ' ' + yBot.toFixed(1)
+      + 'L' + (cx - hBot).toFixed(1) + ' ' + yBot.toFixed(1) + 'Z';
+
+    const mid = (y0 + y1) / 2;
+    let out = '<path class="viz-mark viz-mark-c" d="' + d + '" style="fill:'
+      + vizCatColour(ser, i) + ';--i:' + i + '"/>'
+      + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (mid + 3.5).toFixed(1)
+      + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>';
+
+    if (labels) {
+      // Inside the stage where the stage can hold it, and out to the right where
+      // it cannot — the same rule the bars follow. A narrow stage with a number
+      // half outside it is worse than a number beside it.
+      const txt = vizNum(v) + (i ? ' \u00b7 ' + Math.round((v / vals[0]) * 100) + '%' : '');
+      const room = txt.length * 5.6 + 14;
+      const fits = Math.min(hTop, hBot) * 2 >= room;
+      out += fits
+        ? '<text class="viz-label viz-label-in" x="' + cx.toFixed(1) + '" y="' + (mid + 3.5).toFixed(1)
+          + '" text-anchor="middle">' + vizEsc(txt) + '</text>'
+        : '<text class="viz-label" x="' + (cx + Math.max(hTop, hBot) + 7).toFixed(1) + '" y="'
+          + (mid + 3.5).toFixed(1) + '">' + vizEsc(txt) + '</text>';
+    }
+    return out;
   }).join('');
 }
 
@@ -1397,11 +1428,46 @@ function vizWireHover(host, card, w, h) {
   // movement over that host is coming to clear it, and an export taken
   // afterwards has a crosshair frozen across the picture. Asking the document
   // what is actually under that point costs one hit test and closes the window.
-  if (host._vizAt) {
-    const under = document.elementFromPoint(host._vizAt.clientX, host._vizAt.clientY);
-    if (under && host.contains(under)) move(host._vizAt);
+  //
+  // The question is WHERE THE POINTER IS NOW, and `_vizAt` cannot answer it —
+  // it is the position the pointer was at when it was last over this chart, so
+  // hit-testing that point always lands back inside this chart and always says
+  // yes. Hence the one document-level tracker: it is the only thing on the page
+  // that knows where the pointer actually is.
+  vizTrackPointer();
+  if (host._vizAt && VIZ_POINTER.x >= 0) {
+    const under = document.elementFromPoint(VIZ_POINTER.x, VIZ_POINTER.y);
+    // Replayed at the live position rather than the stored one, so a redraw
+    // while the reader is moving along the chart puts the crosshair where they
+    // are rather than where they were a frame ago.
+    if (under && host.contains(under)) move({ clientX: VIZ_POINTER.x, clientY: VIZ_POINTER.y });
     else { host._vizAt = null; leave(); }
   }
+}
+
+/** Where the pointer is, for the replay above. -1 until it first moves. */
+const VIZ_POINTER = { x: -1, y: -1 };
+let _vizPointerOn = false;
+
+/**
+ * Follow the pointer at the document, once.
+ *
+ * A chart only hears about the pointer while it is over that chart, which is
+ * exactly the wrong window: the case that matters is a redraw landing just
+ * after the pointer has left, in the gap before `pointerleave` is delivered.
+ * The redraw removes the listener that leave was queued against — so it never
+ * arrives — and the chart is left with its crosshair on. Nothing is coming to
+ * clear it, and an export taken afterwards has one frozen across the picture.
+ *
+ * Capture phase, so it is seen wherever it happens; passive, so it never holds
+ * up a scroll.
+ */
+function vizTrackPointer() {
+  if (_vizPointerOn) return;
+  _vizPointerOn = true;
+  document.addEventListener('pointermove', e => {
+    VIZ_POINTER.x = e.clientX; VIZ_POINTER.y = e.clientY;
+  }, { passive: true, capture: true });
 }
 
 /** Redraw every chart on the board, measuring each host as it goes. */

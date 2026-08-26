@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0195-blue)
+![Version](https://img.shields.io/badge/version-v6.0196-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,42 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0195 (latest)
+## 🆕 New in v6.0196 (latest)
+
+### The funnel chart is a funnel
+
+It drew **left-aligned rounded rectangles of varying length** — which is a
+horizontal bar chart with a percentage after each number, and is what the
+gallery had offered under the name "Funnel" since the day it was added.
+
+A funnel is centred on its own axis and each stage narrows to the one below it,
+so the whole reads as a single tapering shape rather than a row of bars. Each
+stage is now a trapezoid whose upper edge is its own value and whose lower edge
+is the next stage's, drawn about one centre line. The last stage comes out
+square, because there is nothing below it to narrow to — tapering it to a neck
+would draw a value that is not in the data.
+
+Its numbers sit inside the stage where the stage can hold them and out to the
+right where it cannot, which is the same rule the bars follow. Stages open from
+the middle on entry; growing them from the left slid the whole shape sideways
+into place, which is a different chart arriving.
+
+### A crosshair could stick to a chart for good
+
+Chased down properly this time. A chart only hears about the pointer while the
+pointer is over that chart — which is exactly the wrong window, because the case
+that matters is a redraw landing just *after* it has left, in the gap before
+`pointerleave` is delivered. The redraw removes the listener that leave was
+queued against, so it never arrives, and the chart keeps its crosshair. Nothing
+is coming to clear it, and an export taken afterwards has one frozen across the
+picture.
+
+There is now one document-level pointer tracker, because it is the only thing on
+the page that knows where the pointer actually is. The first attempt at this
+hit-tested the *stored* position — which is by definition inside the chart, so
+it always said yes and changed nothing.
+
+## 🆕 New in v6.0195
 
 ### Every slice can be its own colour
 

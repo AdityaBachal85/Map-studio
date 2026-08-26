@@ -886,6 +886,62 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
     funnelFit.length === 5 && funnelFit.every(l => !l.over),
     funnelFit.filter(l => l.over).map(l => l.t).join(', ') || 'all 5 fit');
 
+  // IT WAS NOT A FUNNEL. It drew left-aligned rounded rectangles of decreasing
+  // length — which is a horizontal bar chart with a percentage after each
+  // number, and is what the gallery offered under the name "Funnel" from the
+  // day it was added. A funnel is centred on its own axis and each stage
+  // narrows to the one below it, so the whole reads as a single tapering shape.
+  //
+  // Asserted on the geometry rather than on a screenshot: every stage symmetric
+  // about ONE centre line, and each stage's lower edge the same width as the
+  // next stage's upper edge — which is what makes it continuous rather than a
+  // stack of separate trapezoids.
+  const shape = await p.evaluate(() => {
+    dashCards = [Object.assign(dashNewCard('funnel'), { id: 'fs', title: 'Stages', x: 0, y: 0, w: 7, h: 10,
+      labels: ['Enquiries', 'Site visits', 'Shortlisted', 'Offers', 'Booked'],
+      seriesList: [{ name: 'V', values: [1200, 780, 410, 190, 86], slot: 1 }], fmt: { labels: true } })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    return [...document.querySelectorAll('.dc-plot[data-card="fs"] .viz-mark')].map(m => {
+      // M x0 y0 L x1 y0 L x2 y1 L x3 y1 Z
+      const nums = (m.getAttribute('d') || '').match(/-?[0-9.]+/g).map(Number);
+      return { topL: nums[0], topR: nums[2], botR: nums[4], botL: nums[6],
+        yTop: nums[1], yBot: nums[5] };
+    });
+  });
+  const mids = shape.map(s => (s.topL + s.topR) / 2);
+  const wTop = shape.map(s => s.topR - s.topL);
+  const wBot = shape.map(s => s.botR - s.botL);
+  ck('a funnel is five stages, not five bars',
+    shape.length === 5 && shape.every(s => Math.abs((s.topL + s.topR) / 2 - (s.botL + s.botR) / 2) < 0.6),
+    shape.length + ' stages');
+  ck('every stage is centred on the same axis',
+    Math.max.apply(null, mids) - Math.min.apply(null, mids) < 0.6,
+    mids.map(m => m.toFixed(1)).join(' '));
+  // Read down the whole chain — top, bottom, top, bottom — which has to narrow
+  // the whole way. NOT "bottom of one equals top of the next": the gap is cut
+  // out of each row and the widths are read at the edges the shape actually
+  // has, so the two edges either side of a gap straddle the next stage's
+  // nominal width rather than meeting it exactly. That is the taper being
+  // continuous THROUGH the gap, and demanding equality asserted the opposite.
+  const chain = shape.reduce((a, s, i) => a.concat([wTop[i], wBot[i]]), []);
+  ck('and it narrows the whole way down, through the gaps as well as the stages',
+    chain.every((v, i) => i === 0 || v <= chain[i - 1] + 0.01),
+    chain.map(v => v.toFixed(0)).join(' > '));
+  ck('the last stage is square, because there is nothing below it to narrow to',
+    Math.abs(wBot[4] - wTop[4]) < 0.6, wTop[4].toFixed(1) + ' -> ' + wBot[4].toFixed(1));
+  // Growing a centred shape from its left edge slides it sideways into place,
+  // which is a different chart arriving rather than this one.
+  ck('and its stages open from the middle rather than sliding in from the left',
+    await p.evaluate(() => {
+      const c = dashCardById('fs');
+      c.seriesList[0].values = [1400, 900, 500, 220, 90];
+      dashDrawAllCharts();
+      const m = document.querySelector('.dc-plot[data-card="fs"] .viz-mark');
+      const cs = getComputedStyle(m);
+      return cs.animationName + '|' + cs.transformOrigin.split(' ')[0];
+    }).then(r => /^viz-widen\|/.test(r) && !/\|0px/.test(r)));
+
   /* -- a ring reads as rings, and its middle says something ----------------- */
 
   const rings = await p.evaluate(() => {
