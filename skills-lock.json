@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "skills": {
+    "mapbox-android-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-android-patterns/SKILL.md",
+      "computedHash": "44386c50435cea1ed3b4eca6a8acc5fbcf91e03456a478750e54c68c6dc72539"
+    },
+    "mapbox-cartography": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-cartography/SKILL.md",
+      "computedHash": "53601b0955c1d07c86f6e0408bf05c0dae5c52d69b038d47e382976b7377d88a"
+    },
+    "mapbox-data-visualization-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-data-visualization-patterns/SKILL.md",
+      "computedHash": "e31986d5a0a878211479eb52b0646cd280b7e3c39cd00f4b09e7f658e88b781d"
+    },
+    "mapbox-flutter-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-flutter-patterns/SKILL.md",
+      "computedHash": "f67df6d6160fc404b62b9b7888e40f0ec3f037e6d39358ad4f67751ba595696b"
+    },
+    "mapbox-geospatial-operations": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-geospatial-operations/SKILL.md",
+      "computedHash": "9edd54aac79f953cb61b980c15b87e52fbe628d22d43940cc2fd98b825d5c154"
+    },
+    "mapbox-google-maps-migration": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-google-maps-migration/SKILL.md",
+      "computedHash": "686d49eaccc0f9d0a78f89173c9cbdecc6ab7a12fdbd5994b02e7a6b37197722"
+    },
+    "mapbox-ios-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-ios-patterns/SKILL.md",
+      "computedHash": "9f22fc8540fcd45ec253bb4191bb01988e9bc749890757755d7b445016667a66"
+    },
+    "mapbox-location-grounding": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-location-grounding/SKILL.md",
+      "computedHash": "056d549a99df6fe891f5eaf17ab39c28df0ce484b83f1bdd7642ae13d598821c"
+    },
+    "mapbox-maplibre-migration": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-maplibre-migration/SKILL.md",
+      "computedHash": "c3a4506e5f97a7215cd8ce50b200befb847341e8a3e3af8ec02454107aec2b0f"
+    },
+    "mapbox-mcp-devkit-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-mcp-devkit-patterns/SKILL.md",
+      "computedHash": "06cb980beb990ed8b92062a40a394f67ce1dcc991f91cea1ef2f5bb973f8e1a9"
+    },
+    "mapbox-mcp-runtime-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-mcp-runtime-patterns/SKILL.md",
+      "computedHash": "1fd127a79a02894f4353fc109540ad7b6eb5a26730a1cfd6e5dd4e8e0cb2a560"
+    },
+    "mapbox-navigation-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-navigation-patterns/SKILL.md",
+      "computedHash": "8ba386900481d12705485856057a68396544aa3d820b366be5febcdd4b443724"
+    },
+    "mapbox-search-integration": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-search-integration/SKILL.md",
+      "computedHash": "3e50654eb228ced02403a3bd37166bdec7f34ad1857f6abad6b31840c8376eb6"
+    },
+    "mapbox-search-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-search-patterns/SKILL.md",
+      "computedHash": "158189eeaefceddfb02e191612e705e9049138b98ffa9c9a9253fcf4c5fe98d1"
+    },
+    "mapbox-store-locator-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-store-locator-patterns/SKILL.md",
+      "computedHash": "82dc82111a8f42fe84977c4574cc45352845eba6e8170a6965a4d86194682953"
+    },
+    "mapbox-style-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-style-patterns/SKILL.md",
+      "computedHash": "ed8908002221a48262aa2811c9f8ba19bd884c155ba050cb5ea65abd9bc82641"
+    },
+    "mapbox-style-quality": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-style-quality/SKILL.md",
+      "computedHash": "f15c2874eb42e857f831a20186879be33a3d41e8032f1d0ed32488d36f496950"
+    },
+    "mapbox-token-security": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-token-security/SKILL.md",
+      "computedHash": "8b5ca17883a52ccfb1c9cc3ad2a07f1628e9285372568dd2c10df1e12a93d5b6"
+    },
+    "mapbox-web-integration-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-web-integration-patterns/SKILL.md",
+      "computedHash": "936a51260ab4a1da35ae146dde7a2e420599eafec23f2a99725033ffc76a0af0"
+    },
+    "mapbox-web-performance-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-web-performance-patterns/SKILL.md",
+      "computedHash": "d44a8b74714c43ecad1bed4755c86b2319934797719e8fab8ed2bf50bd8b7878"
+    }
+  }
+}
