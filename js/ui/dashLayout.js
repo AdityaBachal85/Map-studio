@@ -51,7 +51,13 @@ let dashDrag = null;
 
 /** @returns {object[]} every tile on the canvas, map included */
 function dashTiles() {
-  return [dashMapTile].concat(dashCards.filter(c => c.slot !== 'side' || true));
+  return [dashMapTile].concat(dashCards.filter(c => {
+    // A legend that has been moved onto the map is not a tile any more, and
+    // leaving its box on the board would be a hole where a card used to be.
+    // It stays while the board is being edited, so the way back is visible.
+    if (c.type === 'legend' && c.onMap && !dashEditing) return false;
+    return true;
+  }));
 }
 
 /** @param {object} t @returns {object} the minimum size for that tile */

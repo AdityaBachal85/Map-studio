@@ -230,8 +230,14 @@ function dashModelData(card, resolve) {
       // Only this card, and only because THIS card invented the columns. A
       // table the operator typed keeps every column they made, empty or not:
       // withdrawing one of those would be editing their work.
-      const rows = (card._rows || []).map(r => [r.name || '', r.km || '', r.min || '']);
-      const cols = ['Place', 'Distance', 'Time'];
+      // Time is opt-in, for the reason given on dashAccessHtml(): a drive time
+      // is a measurement of traffic on one day and goes stale; a distance does
+      // not. The card and the file agree about it, so a board showing km only
+      // does not become a PDF with a Time column in it.
+      const wantTime = !!(card.fmt && card.fmt.time);
+      const rows = (card._rows || []).map(r =>
+        wantTime ? [r.name || '', r.km || '', r.min || ''] : [r.name || '', r.km || '']);
+      const cols = wantTime ? ['Place', 'Distance', 'Time'] : ['Place', 'Distance'];
       const keep = cols.map((c, i) => i === 0 || rows.some(r => {
         const v = String(r[i] == null ? '' : r[i]).trim();
         return v && v !== '—' && v !== '-';

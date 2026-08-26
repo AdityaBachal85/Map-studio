@@ -179,6 +179,21 @@ function renderDashFormat() {
   // The score-rings card is not a `chart`, so it missed the branch above
   // entirely — and it is the card most likely to be scored out of ten.
   if (card.type === 'gauges') f += dfScoreCeiling(card);
+
+  // Where the legend lives. On the map is the layout every printed connectivity
+  // sheet uses — the key sits in a corner of the drawing it explains, not in a
+  // panel beside it — and board mode hides the on-map card by default because
+  // for a while it was showing the same rows twice.
+  // A drive time is traffic on one day; a distance is the road. The minute is
+  // opt-in for that reason — see dashAccessHtml().
+  if (card.type === 'access') {
+    f += dfToggle('time', !!(card.fmt && card.fmt.time), 'Travel time');
+  }
+
+  if (card.type === 'legend') {
+    f += dfRow('Placement', dfSeg('onMap', [['card', 'A card'], ['map', 'On the map']],
+      card.onMap ? 'map' : 'card'));
+  }
   f += dfToggle('plain', !!(card.fmt && card.fmt.plain), 'Transparent card');
   html += dfSection('Format', f);
 
@@ -214,12 +229,18 @@ function dashFormatApply(card, key, v) {
 
   switch (key) {
     case 'kind': card.kind = v; return;
+    // Not a fmt flag: it moves the card off the board entirely, so it lives on
+    // the card itself and travels with the project.
+    case 'onMap':
+      if (v === 'map') card.onMap = true; else delete card.onMap;
+      return;
     case 'legend': card.fmt.legend = v; return;
     case 'title': card.fmt.title = v === '1'; return;
     case 'labels': card.fmt.labels = v === '1'; return;
     case 'grid': card.fmt.grid = v === '1'; return;
     case 'xAxis': card.fmt.xAxis = v === '1'; return;
     case 'yAxis': card.fmt.yAxis = v === '1'; return;
+    case 'time': card.fmt.time = v === '1'; return;
     case 'smooth': card.fmt.smooth = v === '1'; return;
     case 'plain': card.fmt.plain = v === '1'; return;
 

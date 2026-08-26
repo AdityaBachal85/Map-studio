@@ -383,7 +383,15 @@ function dashSlicerHtml(card) {
  *
  * @returns {string} HTML
  */
-function dashAccessHtml() {
+function dashAccessHtml(card) {
+  // Distance only, unless somebody asks for the time.
+  //
+  // A drive time is a measurement of traffic on the day the router was asked,
+  // and it goes stale in a way a distance does not — 17 min is true at 11am and
+  // wrong at 6pm, while 1.1 km is true for as long as the road exists. So the
+  // column that survives in a document handed to a client is the kilometre, and
+  // the minute is opt-in.
+  const showTime = !!(card && card.fmt && card.fmt.time);
   const rows = (typeof legendRows === 'function') ? legendRows() : [];
   if (!rows.length) {
     // A drawn route with no distance yet is still measuring (or the routing
@@ -399,7 +407,8 @@ function dashAccessHtml() {
     '<div class="dc-row">'
     + '<span class="dc-ico">' + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
     + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.name) + '</div></div>'
-    + '<div class="dc-row-meta">' + esc(r.km) + (r.min && r.min !== '—' ? ' · ' + esc(r.min) : '') + '</div>'
+    + '<div class="dc-row-meta">' + esc(r.km)
+      + (showTime && r.min && r.min !== '\u2014' ? ' \u00b7 ' + esc(r.min) : '') + '</div>'
     + '</div>').join('') + '</div>';
 }
 
@@ -419,7 +428,15 @@ function dashAccessHtml() {
  *
  * @returns {string} HTML
  */
-function dashLegendHtml() {
+function dashLegendHtml(card) {
+  // Placed on the map instead. The tile is dropped from the layout when the
+  // board is not being edited — see dashTiles() — so this is only ever read by
+  // whoever is building the board, and it exists so the switch back is where
+  // the switch away was.
+  if (card && card.onMap) {
+    return '<div class="dc-empty">On the map.'
+      + '<span class="dc-hint"> Move it back with Placement in the Format pane.</span></div>';
+  }
   const rows = (typeof colorKeyRows === 'function') ? colorKeyRows() : [];
   const shown = rows.filter(r => !r.hidden);
   if (!shown.length) {
@@ -454,8 +471,8 @@ function dashCardBody(card) {
     case 'gauges': return dashGaugesHtml(card);
     case 'table': return dashTableHtml(card);
     case 'slicer': return dashSlicerHtml(card);
-    case 'access': return dashAccessHtml();
-    case 'legend': return dashLegendHtml();
+    case 'access': return dashAccessHtml(card);
+    case 'legend': return dashLegendHtml(card);
 
     case 'list':
       return '<div class="dc-list">' + (card.items || []).map((it, i) =>
@@ -511,6 +528,15 @@ function renderDashboard() {
   if (!dashCards.length) dashCards = dashDefaultCards();
   dashMigrateCards(dashCards);
 
+  // The on-map legend is #colorKeyCard, which board mode hides by default —
+  // the whole point of hiding it was that the same rows were printed twice, in
+  // a box over the map and in a card beside it. One class turns that off for
+  // the one case where it was asked for, and it is set from the cards rather
+  // than from a preference so a project carries its own answer.
+  const legendOnMap = dashCards.some(c => c.type === 'legend' && c.onMap);
+  const shell = document.querySelector('.app');
+  if (shell) shell.classList.toggle('legend-on-map', legendOnMap);
+
   // The map lives on the canvas and must survive the rebuild, so it is lifted
   // out before the wipe rather than being innerHTML'd away.
   const wrap = document.getElementById('mapWrap');
@@ -519,7 +545,11 @@ function renderDashboard() {
   grid.innerHTML = '';
   if (mapWasHere) grid.appendChild(wrap);
 
-  dashCards.forEach(c => grid.appendChild(dashCardEl(c)));
+  // dashTiles(), not dashCards: a legend that has moved onto the map is not a
+  // tile any more, and rendering its box anyway left an empty card sitting
+  // where the layout engine had already stopped positioning one.
+  const placed = new Set(dashTiles().map(t => t.id));
+  dashCards.forEach(c => { if (placed.has(c.id)) grid.appendChild(dashCardEl(c)); });
 
   if (dashEditing) {
     const add = document.createElement('div');
@@ -586,8 +616,8 @@ function setDashEditing(on) {
  */
 function dashRefreshLive() {
   dashCards.forEach(c => {
-    const html = c.type === 'access' ? dashAccessHtml()
-      : c.type === 'legend' ? dashLegendHtml()
+    const html = c.type === 'access' ? dashAccessHtml(c)
+      : c.type === 'legend' ? dashLegendHtml(c)
         : null;
     if (html === null) return;
     const body = document.querySelector('#dashGrid .dash-card[data-card="' + c.id + '"] .dc-body');

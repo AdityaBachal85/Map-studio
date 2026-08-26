@@ -224,6 +224,60 @@ const SCENE = [
       return Math.abs(parseFloat(a.getAttribute('stroke-dasharray')) / (2 * Math.PI * 24) - 0.5) < 0.02;
     }, rings.id) === true);
 
+  /* -- the legend can move onto the map ------------------------------------- */
+
+  // Board mode hides every on-map overlay card, and it does that for a reason:
+  // the same rows were being printed twice, once in a box over the map and once
+  // in a card beside it. So moving the legend back onto the map has to take the
+  // card away in the same breath, or the defect returns.
+  const moved = await p.evaluate(() => {
+    const c = dashCards.find(x => x.type === 'legend');
+    c.onMap = true;
+    renderDashboard();
+    dashLayoutApply();
+    const key = document.getElementById('colorKeyCard');
+    const mw = document.getElementById('mapWrap').getBoundingClientRect();
+    const kr = key.getBoundingClientRect();
+    return {
+      id: c.id,
+      shown: getComputedStyle(key).display !== 'none',
+      insideMap: kr.left >= mw.left - 2 && kr.top >= mw.top - 2
+        && kr.right <= mw.right + 2 && kr.bottom <= mw.bottom + 2,
+      card: !!document.querySelector('.dash-card[data-card="' + c.id + '"]'),
+      tiled: dashTiles().some(t => t.id === c.id),
+    };
+  });
+  ck('the legend can sit on the map instead of beside it',
+    moved.shown === true && moved.insideMap === true, JSON.stringify(moved));
+  ck('and its card leaves the board, so no row is printed twice',
+    moved.card === false && moved.tiled === false, JSON.stringify(moved));
+
+  // The map is excluded from the board's html2canvas pass and painted by
+  // captureMapHiRes instead, so an overlay on it only reaches the file if that
+  // renderer's furniture pass draws it.
+  ck('and it reaches the export, which paints the map separately',
+    await p.evaluate(() => {
+      const wrap = document.getElementById('mapWrap');
+      wrap.classList.add('capturing');
+      const key = document.getElementById('colorKeyCard');
+      const vis = getComputedStyle(key).display !== 'none';
+      const shadow = getComputedStyle(key).boxShadow;
+      wrap.classList.remove('capturing');
+      // No shadow into the capture: html2canvas draws box-shadow as a hard
+      // offset slab, which is the defect that put a grey rectangle across the
+      // board's right-hand column.
+      return vis && (shadow === 'none' || !shadow);
+    }) === true);
+
+  ck('switching it back restores the card',
+    await p.evaluate(id => {
+      const c = dashCardById(id);
+      delete c.onMap;
+      renderDashboard();
+      return !!document.querySelector('.dash-card[data-card="' + id + '"]')
+        && getComputedStyle(document.getElementById('colorKeyCard')).display === 'none';
+    }, moved.id) === true);
+
   /* -- the gallery does not stand on the board ------------------------------ */
 
   // #dashAdd is absolutely positioned at the bottom of the grid, and the grid

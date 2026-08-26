@@ -172,12 +172,24 @@ ck('the live access card was filled from the map, not from stored values',
   ck('and its cells go with it, so rows still match the header',
     untimed.rows[0].length === untimed.columns.length, JSON.stringify(untimed.rows[0]));
 
-  const timed = M.dashExportModel({
+  // Time is opt-in now. A drive time is traffic on the day the router was
+  // asked and goes stale; a distance does not, so the kilometre is what
+  // survives into a document and the minute is asked for.
+  const noTime = M.dashExportModel({
     cards: [{ id: 'a', type: 'access', title: 'Key access', x: 0, y: 0, w: 4, h: 5 }],
     mapTile: null, resolveColor,
     liveRows: { access: [{ name: 'SVPN Police Academy', km: '0.6 km', min: '2 min' }] },
   }).cards[0].data;
-  ck('a column with even one real value is kept',
+  ck('a timed route still prints kilometres only until the time is asked for',
+    noTime.columns.join(',') === 'Place,Distance', noTime.columns.join(','));
+
+  const timed = M.dashExportModel({
+    cards: [{ id: 'a', type: 'access', title: 'Key access', x: 0, y: 0, w: 4, h: 5,
+      fmt: { time: true } }],
+    mapTile: null, resolveColor,
+    liveRows: { access: [{ name: 'SVPN Police Academy', km: '0.6 km', min: '2 min' }] },
+  }).cards[0].data;
+  ck('and once it is, a column with even one real value is kept',
     timed.columns.join(',') === 'Place,Distance,Time', timed.columns.join(','));
 }
 

@@ -166,6 +166,34 @@
 .app[data-mode="dashboard"] #colorKeyCard,
 .app[data-mode="dashboard"] #contourLegendCard { display: none; }
 
+/* Except when the board has asked for it.
+   A printed connectivity sheet puts its key in a corner of the drawing it
+   explains, not in a panel beside it, and that is the layout being matched. The
+   duplication this block exists to stop cannot come back with it: the Legend
+   card drops out of the layout in the same breath — see dashTiles() — so the
+   rows are still on the page exactly once.
+
+   Top-left, not the stylesheet's own top-right: the map's control rail owns the
+   right-hand edge, and the key would sit under it. */
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard {
+  display: block;
+  left: 14px;
+  top: 14px;
+  right: auto;
+  bottom: auto;
+}
+
+/* The grip and the edit pencil are for arranging it on a live map; on the board
+   they are chrome in a deliverable. */
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard .legend-edit,
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard .grip { display: none; }
+
+/* And no drop shadow into the capture. html2canvas does not render box-shadow
+   the way a browser does — it came out as a hard offset slab beside the box,
+   the same defect that put a grey rectangle across the board's right-hand
+   column. The card has a border; on a printed sheet nothing floats anyway. */
+.map-wrap.capturing #colorKeyCard { box-shadow: none; }
+
 /* The studio sidebar is `position:absolute; left:0; z-index:1200` — it takes no
    part in the grid, so outside map mode it lands directly on top of the left
    nav and swallows every click meant for it. (Found the same way as the bug
