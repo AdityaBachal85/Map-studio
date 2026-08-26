@@ -87,6 +87,18 @@ const VIZ_SCORE_KINDS = ['ring', 'gauge', 'radar'];
 /** Kinds whose colours belong to the categories rather than to the series. */
 const VIZ_CATEGORY_KEYED = ['pie', 'donut', 'funnel', 'treemap', 'ring'];
 
+/**
+ * Kinds that have always printed their numbers, whatever the toggle said.
+ *
+ * A funnel is a list of stages with a value against each and a treemap writes
+ * its value under the name inside the tile — both drew that text unconditionally
+ * while the panel showed them a "Data labels" switch, so the switch was a
+ * control that did nothing. Rather than take the numbers away by default, the
+ * default follows the drawing: on for these two, off everywhere else, and the
+ * switch is live either way.
+ */
+const VIZ_SELF_LABEL_KINDS = ['funnel', 'treemap'];
+
 /** Kinds that need only one number to say anything. */
 const VIZ_SINGLE_KINDS = ['pie', 'donut', 'funnel', 'treemap', 'ring', 'gauge'];
 
@@ -231,7 +243,11 @@ function vizSlot(slot) {
  * @param {object} ser a series from vizSeries()
  * @returns {string} a CSS colour
  */
-function vizColour(ser) {
+function vizColour(ser, i) {
+  if (ser && ser.points && i != null) {
+    const p = ser.points[i];
+    if (/^#[0-9a-f]{6}$/i.test(String(p || ''))) return String(p);
+  }
   return (ser && ser.hex) ? ser.hex : vizSlot(ser && ser.slot);
 }
 
@@ -279,7 +295,9 @@ function vizFmt(card) {
   const f = (card && card.fmt) || {};
   return {
     legend: f.legend || 'auto',
-    labels: !!f.labels,
+    labels: f.labels === undefined
+      ? VIZ_SELF_LABEL_KINDS.indexOf(card && card.kind) >= 0
+      : !!f.labels,
     grid: f.grid !== false,
     xAxis: f.xAxis !== false,
     yAxis: f.yAxis !== false,
@@ -307,6 +325,10 @@ function vizSeries(card) {
       // so the slot survives untouched underneath it — clearing the custom
       // colour puts the series back where it was rather than at slot one.
       hex: /^#[0-9a-f]{6}$/i.test(String(s.hex || '')) ? String(s.hex) : '',
+      // And per-point overrides, sparse: `{2: '#e03131'}` colours the third bar
+      // and leaves the rest on the series colour. This is what "highlight the
+      // one year that matters" needs, and it is how every spreadsheet does it.
+      points: (s.points && typeof s.points === 'object') ? s.points : null,
     }));
   }
   const legacySlot = typeof card.series === 'number' ? card.series : 1;
@@ -375,6 +397,99 @@ function vizSmoothPath(pts) {
       + ',' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
   }
   return d;
+}
+
+/**
+ * A value label on a bar, placed where it can actually be read.
+ *
+ * OUTSIDE THE END IF IT FITS, INSIDE IT IF IT DOES NOT. The axis is scaled to
+ * the data, so the largest bar always reaches the plot's edge — which means the
+ * one label people most want to read was the one always falling off the side.
+ * On a five-bar chart of 10/20/15/25/30 the 30 simply was not there.
+ *
+ * Inside, the label sits on the bar's own colour, so it is white. That is the
+ * one place text in this module leaves the ink tokens, for the same reason the
+ * treemap's labels do: white clears every hue in the palette and a dark label
+ * disappears into half of them.
+ *
+ * @param {number} v the value @param {number} end pixel of the bar's data end
+ * @param {number} zero pixel of its baseline @param {number} mid across the bar
+ * @param {boolean} horiz @param {object} box plot bounds {x0,y0,iw,ih}
+ * @returns {string} one SVG <text>
+ */
+function vizBarLabel(v, end, zero, mid, horiz, box) {
+  const txt = vizNum(v);
+  // How much of the plot the label needs beyond the bar's end, along the axis
+  // the bar grows on: a string's width across, one line's height up.
+  const room = horiz ? (txt.length * 5.6 + 7) : 16;
+
+  // WHICH WAY IS OUT, IN SCREEN PIXELS — not which way is up in the data. A
+  // column that grows upward has its end ABOVE its baseline, so `end - zero` is
+  // negative for a positive value; reading that as "a bar pointing backwards"
+  // put every column's label on the wrong side of its own bar end, and sent the
+  // tallest one clean off the top of the drawing at y = -10. A bar of exactly
+  // zero has no direction of its own, so it takes the chart's: right, or up.
+  const out = end === zero ? (horiz ? 1 : -1) : (end > zero ? 1 : -1);
+  const limit = horiz
+    ? (out > 0 ? box.x0 + box.iw : box.x0)
+    : (out > 0 ? box.y0 + box.ih : box.y0);
+  const fits = Math.abs(limit - end) >= room;
+  const cls = fits ? 'viz-label' : 'viz-label viz-label-in';
+
+  if (horiz) {
+    // Anchored at the end it is written from, so the string grows away from the
+    // bar when it is outside and back along it when it is in.
+    return { txt: txt, cls: cls, x: end + room * 0.55 * (fits ? 1 : -1) * out, y: mid + 3.5,
+      anchor: (fits ? out : -out) > 0 ? 'start' : 'end',
+      // A crowded horizontal label has nowhere to go along its own bar, so it
+      // steps across the bars instead.
+      px: 0, py: fits ? -1 : 0 };
+  }
+  // Text hangs from its baseline, so the two cases are not one number negated:
+  // clearing a bar end upward needs 6px, sitting inside it below needs 13.
+  const dy = fits ? (out < 0 ? -6 : 15) : (out < 0 ? 13 : -5);
+  return { txt: txt, cls: cls, x: mid, y: end + dy, anchor: 'middle',
+    px: 0, py: fits ? (out < 0 ? -1 : 1) : 0 };
+}
+
+/**
+ * Lay the data labels down, and move the ones that land on each other.
+ *
+ * WITHOUT THIS THE LABELS WERE THE DEFECT THEY WERE MEANT TO CURE. Two lines
+ * running close together printed both numbers in the same few pixels; a combo's
+ * bar label and its line label met above the bar; a radar of small numbers piled
+ * every series into a knot. Each of those was read as "the labels are broken",
+ * and each of them is one problem: two marks near each other, two numbers in one
+ * place.
+ *
+ * Not a solver — placed in order, and anything overlapping something already
+ * down steps along its own escape direction and tries again. A label that still
+ * collides after two steps is drawn anyway: overlapping is bad, and silently
+ * dropping a number off a chart is worse.
+ *
+ * @param {object[]} bits placements from vizBarLabel and the series passes
+ * @returns {string} SVG
+ */
+function vizLabelLayer(bits) {
+  const boxOf = b => {
+    const w = String(b.txt).length * 5.6 + 2;
+    const x0 = b.anchor === 'start' ? b.x : (b.anchor === 'end' ? b.x - w : b.x - w / 2);
+    return [x0, b.y - 9.5, x0 + w, b.y + 2.5];
+  };
+  const hits = (a, c) => a[0] < c[2] - 1 && c[0] < a[2] - 1 && a[1] < c[3] - 1 && c[1] < a[3] - 1;
+
+  const down = [];
+  return bits.map(b => {
+    let box = boxOf(b);
+    for (let n = 0; n < 2 && down.some(d => hits(box, d)); n++) {
+      if (!b.px && !b.py) break;                 // pinned — a stack segment
+      b = Object.assign({}, b, { x: b.x + b.px * 12, y: b.y + b.py * 12 });
+      box = boxOf(b);
+    }
+    down.push(box);
+    return '<text class="' + b.cls + '" x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1)
+      + '" text-anchor="' + b.anchor + '">' + vizEsc(b.txt) + '</text>';
+  }).join('');
 }
 
 /* ---------------------------------------------------------------------------
@@ -488,12 +603,21 @@ function vizCartesian(card, w, h) {
         if (!isFinite(v)) return '';
         const y = vOf(v), top = Math.min(y, zero), hgt = Math.max(1, Math.abs(zero - y));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(series[0])
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(series[0], i)
           + ';--i:' + i + '"/>';
       }).join('');
+      // The combo's bar series had no labels at all: the label pass below runs
+      // over `lineSeries`, which is every series EXCEPT this one.
+      if (fmt.labels) {
+        series[0].values.forEach((v, i) => {
+          if (!isFinite(v)) return;
+          labelBits.push(vizBarLabel(v, vOf(v), zero, cOf(i), horiz,
+            { x0: x0, y0: y0, iw: iw, ih: ih }));
+        });
+      }
     }
 
-    lineSeries.forEach(ser => {
+    lineSeries.forEach((ser, li) => {
       const pts = ser.values.map((v, i) => (isFinite(v) ? [cOf(i), vOf(v)] : null)).filter(Boolean);
       if (!pts.length) return;
       const col = vizColour(ser);
@@ -513,13 +637,35 @@ function vizCartesian(card, w, h) {
       // A ring in the surface colour keeps a dot legible where it crosses the
       // line or another dot — a stroke around the mark would be ink that is
       // not data.
+      // The dots take a per-point colour where one was set; the line itself
+      // cannot — a line is one stroke and colouring "point three" of it would
+      // mean choosing which of its two segments changed.
       s += pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
-        + '" r="' + VIZ_DOT_R + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
+        + '" r="' + VIZ_DOT_R + '" style="fill:' + vizColour(ser, i) + ';--i:' + i + '"/>').join('');
       if (fmt.labels) {
+        // ABOVE, THEN BELOW, THEN ABOVE. Every series labelled above its own
+        // point, so wherever two lines ran close together their numbers printed
+        // on top of each other — and lines run close together for a living.
+        // Alternating by series separates the two-line case, which is the one
+        // that actually arises, without a collision solver.
+        //
+        // Then clamped: a point sitting on the axis has nothing below it and a
+        // point at the top of the plot has nothing above, so a label that would
+        // leave the drawing goes to the other side of its dot instead.
         ser.values.forEach((v, i) => {
           if (!isFinite(v)) return;
-          labelBits.push('<text class="viz-label" x="' + cOf(i).toFixed(1) + '" y="'
-            + (vOf(v) - 9).toFixed(1) + '" text-anchor="middle">' + vizEsc(vizNum(v)) + '</text>');
+          // The higher point takes the space above, the lower one the space
+          // below. Alternating by series index instead put the label of the
+          // LOW point above it and the label of the HIGH point below it, which
+          // is the one arrangement guaranteed to meet in the middle.
+          const others = lineSeries.map(o => o.values[i]).filter(isFinite);
+          const up = !others.length || v >= Math.max.apply(null, others) || v > Math.min.apply(null, others);
+          const py = vOf(v);
+          let y = py + (up ? -9 : 15);
+          if (y - 9.5 < y0) y = py + 15;
+          if (y + 2.5 > y0 + ih) y = py - 9;
+          labelBits.push({ txt: vizNum(v), cls: 'viz-label', x: cOf(i), y: y,
+            anchor: 'middle', px: 0, py: up ? -1 : 1 });
         });
       }
     });
@@ -533,7 +679,23 @@ function vizCartesian(card, w, h) {
         if (!v) return;
         const a = vOf(acc), b = vOf(acc + v);
         acc += v;
-        const col = vizColour(ser);
+        const col = vizColour(ser, i);
+
+        // A stack's label goes in the middle of its own segment, not at the end
+        // of the bar — the end is the total, and a number there would be read as
+        // this segment's. Only where the segment is thick enough to hold it: a
+        // 6px sliver with a number half outside it is worse than no number.
+        if (fmt.labels) {
+          const span = Math.abs(b - a);
+          if (span > 15) {
+            labelBits.push({ txt: vizNum(v), cls: 'viz-label viz-label-in',
+              x: horiz ? (a + b) / 2 : cOf(i),
+              y: (horiz ? cOf(i) : (a + b) / 2) + 3.5,
+              // Pinned: a stack's label means "this segment", so moving it off
+              // the segment would be moving it onto a neighbour's.
+              anchor: 'middle', px: 0, py: 0 });
+          }
+        }
         // The 2px gap is what separates one segment from the next — negative
         // space, not a border drawn around the mark.
         if (horiz) {
@@ -562,28 +724,26 @@ function vizCartesian(card, w, h) {
         if (horiz) {
           const left = Math.min(p, zero), width = Math.max(1, Math.abs(zero - p));
           return '<path class="viz-mark" d="' + vizBarPath(+left.toFixed(1), +(cOf(i) + off - bw / 2).toFixed(1),
-            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizColour(ser)
+            +width.toFixed(1), +bw.toFixed(1), VIZ_BAR_RADIUS, 'right') + '" style="fill:' + vizColour(ser, i)
             + ';--i:' + i + '"/>';
         }
         const top = Math.min(p, zero), hgt = Math.max(1, Math.abs(zero - p));
         return '<path class="viz-mark" d="' + vizBarPath(+(cOf(i) + off - bw / 2).toFixed(1), +top.toFixed(1),
-          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(ser)
+          +bw.toFixed(1), +hgt.toFixed(1), VIZ_BAR_RADIUS, 'top') + '" style="fill:' + vizColour(ser, i)
           + ';--i:' + i + '"/>';
       }).join('');
 
       if (fmt.labels) {
         ser.values.forEach((v, i) => {
           if (!isFinite(v)) return;
-          const p = vOf(v);
-          labelBits.push(horiz
-            ? '<text class="viz-label" x="' + (p + 5).toFixed(1) + '" y="' + (cOf(i) + off + 3.5).toFixed(1) + '">' + vizEsc(vizNum(v)) + '</text>'
-            : '<text class="viz-label" x="' + (cOf(i) + off).toFixed(1) + '" y="' + (p - 6).toFixed(1) + '" text-anchor="middle">' + vizEsc(vizNum(v)) + '</text>');
+          labelBits.push(vizBarLabel(v, vOf(v), zero, cOf(i) + off, horiz,
+            { x0: x0, y0: y0, iw: iw, ih: ih }));
         });
       }
     });
   }
 
-  s += labelBits.join('');
+  s += vizLabelLayer(labelBits);
 
   /* ---- category labels, thinned to whatever fits ---- */
   if (fmt.xAxis) {
@@ -692,6 +852,9 @@ function vizFunnel(card, w, h) {
   const top = (h - rowH * vals.length) / 2;
   const labelW = 92;
   const iw = Math.max(20, w - labelW - 46);
+  // The stage names are the category axis and stay; only the numbers are the
+  // data labels the panel's switch controls.
+  const labels = vizFmt(card).labels;
 
   return vals.map((v, i) => {
     const bw = Math.max(2, (v / max) * iw);
@@ -700,9 +863,11 @@ function vizFunnel(card, w, h) {
       + '" height="' + Math.max(6, rowH - 12).toFixed(1) + '" rx="4" style="fill:' + vizSlot(i + 1) + ';--i:' + i + '"/>'
       + '<text class="viz-tick" x="' + (labelW - 8) + '" y="' + (y + rowH / 2 + 3.5).toFixed(1)
       + '" text-anchor="end">' + vizEsc(String(f.cats[i] || '')) + '</text>'
-      + '<text class="viz-label" x="' + (labelW + bw + 6).toFixed(1) + '" y="'
-      + (y + rowH / 2 + 3.5).toFixed(1) + '">' + vizEsc(vizNum(v))
-      + (i ? ' · ' + Math.round((v / vals[0]) * 100) + '%' : '') + '</text>';
+      + (labels
+        ? '<text class="viz-label" x="' + (labelW + bw + 6).toFixed(1) + '" y="'
+          + (y + rowH / 2 + 3.5).toFixed(1) + '">' + vizEsc(vizNum(v))
+          + (i ? ' · ' + Math.round((v / vals[0]) * 100) + '%' : '') + '</text>'
+        : '');
   }).join('');
 }
 
@@ -724,6 +889,9 @@ function vizTreemap(card, w, h) {
 
   let s = '';
   let x = 0, y = 0, availW = w, availH = h, rest = total;
+  // The tile's name is what tells you which rectangle you are looking at; the
+  // number under it is the data label, and that is the half the switch owns.
+  const labels = vizFmt(card).labels;
 
   items.forEach((it, i) => {
     const last = i === items.length - 1;
@@ -741,8 +909,10 @@ function vizTreemap(card, w, h) {
     if (bw > 58 && bh > 30) {
       s += '<text class="viz-tm-name" x="' + (x + 8).toFixed(1) + '" y="' + (y + 18).toFixed(1) + '">'
         + vizEsc(it.name.length > 14 ? it.name.slice(0, 13) + '…' : it.name) + '</text>'
-        + '<text class="viz-tm-val" x="' + (x + 8).toFixed(1) + '" y="' + (y + 33).toFixed(1) + '">'
-        + vizEsc(vizNum(it.v)) + '</text>';
+        + (labels
+          ? '<text class="viz-tm-val" x="' + (x + 8).toFixed(1) + '" y="' + (y + 33).toFixed(1) + '">'
+            + vizEsc(vizNum(it.v)) + '</text>'
+          : '');
     }
 
     if (horiz) { x += bw; availW -= bw; } else { y += bh; availH -= bh; }
@@ -905,7 +1075,7 @@ function vizRadar(card, w, h) {
       + '" x2="' + at(i, 1)[0].toFixed(1) + '" y2="' + at(i, 1)[1].toFixed(1) + '"/>').join('');
   }
 
-  series.forEach(ser => {
+  series.forEach((ser, si) => {
     const pts = cats.map((c, i) => at(i, Math.max(0, Math.min(1,
       (isFinite(ser.values[i]) ? ser.values[i] : 0) / max))));
     const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L') + 'Z';
@@ -913,6 +1083,29 @@ function vizRadar(card, w, h) {
     s += '<path class="viz-web" d="' + d + '" style="fill:' + col + ';stroke:' + col + '"/>'
       + pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
         + '" r="' + (VIZ_DOT_R - 1) + '" style="fill:' + col + ';--i:' + i + '"/>').join('');
+
+    // A radar's rings carry no numbers, so without labels the only way to read
+    // a point is to judge how far out it sits — which is fine for comparing two
+    // shapes and useless for reading one value.
+    if (fmt.labels) {
+      s += cats.map((c, i) => {
+        const v = ser.values[i];
+        if (!isFinite(v)) return '';
+        // PUSHED OUT BY PIXELS, NOT BY A FRACTION OF THE RADIUS. A fixed
+        // fraction is a shrinking gap: near the middle of the web 0.07 of R is
+        // a few pixels, so a card of small numbers piled every label from every
+        // series into one knot at the centre — the point at 2.4 and the point
+        // at 6 printed over each other. A pixel offset is the same gap wherever
+        // the vertex lands, and each series takes its own step out along the
+        // spoke, so two series meeting on one axis stack instead of collide.
+        const frac = Math.max(0, Math.min(1, v / max));
+        const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+        const d = R * frac + 13 + si * 13;
+        return '<text class="viz-label" x="' + (cx + d * Math.cos(a)).toFixed(1)
+          + '" y="' + (cy + d * Math.sin(a) + 3.5).toFixed(1)
+          + '" text-anchor="middle">' + vizEsc(vizNum(v)) + '</text>';
+      }).join('');
+    }
   });
 
   if (fmt.xAxis) {

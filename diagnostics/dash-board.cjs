@@ -309,6 +309,80 @@ const SCENE = [
       return el.classList.contains('balign-right') && getComputedStyle(t).textAlign !== 'right';
     }) === true);
 
+  // THE CONTROL ITSELF, not what it sets. It read "Left / Centre / Right" in
+  // words, which is three times the width of the icon strip every other
+  // application puts there and reads as a sentence rather than a control. Four
+  // rules with one of them short is the alignment glyph everywhere from Word to
+  // Figma, and it needs no reading at all.
+  const align = await p.evaluate(() => {
+    const c = dashCards.find(x => x.type === 'text') || dashCards[0];
+    dashEditing = true; dashSelectedId = c.id;
+    renderDashboard(); renderDashFormat();
+    const seg = document.querySelector('#dashFormat [data-df="alignBody"]').closest('.df-seg');
+    const btns = [...seg.querySelectorAll('button')];
+    return {
+      icons: seg.classList.contains('df-seg-icons'),
+      words: btns.some(b => /left|centre|right/i.test(b.textContent)),
+      glyphs: btns.filter(b => b.querySelector('svg path[d]')).length,
+      // An icon with no accessible name is a control only a sighted user who
+      // already knows the convention can operate.
+      named: btns.every(b => (b.getAttribute('aria-label') || '').trim().length > 2
+        && (b.getAttribute('title') || '').trim().length > 2),
+      // Four rules per glyph, and no two of the three alike — one path reused
+      // for all three would look like a control and set three different things.
+      paths: [...new Set(btns.map(b => b.querySelector('svg path').getAttribute('d')))].length,
+      rules: btns.every(b => (b.querySelector('svg path').getAttribute('d').match(/M/g) || []).length === 4),
+    };
+  });
+  ck('alignment is set with glyphs rather than with the words for them',
+    align.icons === true && align.words === false && align.glyphs >= 3, JSON.stringify(align));
+  ck('each glyph is four rules and no two of them are the same drawing',
+    align.paths >= 3 && align.rules === true, align.paths + ' distinct');
+  ck('and every one of them still says what it is',
+    align.named === true);
+
+  /* -- a single bar can be given its own colour ----------------------------- */
+
+  // Excel's "format data point", which had no equivalent here: colour lived on
+  // the series, so calling out one category meant splitting it into a series of
+  // its own — changing the chart's shape in order to change one bar's hue.
+  // Behind a disclosure because most charts never want it and eight more
+  // swatches per series would undo the tidying the single trigger just bought.
+  const pointsUi = await p.evaluate(() => {
+    // Borrowed, then given back: every section after this one reads the board
+    // this suite has been building since the top, so a section that leaves its
+    // own fixture in place breaks whatever is written below it.
+    const board = dashCards;
+    const c = Object.assign(dashNewCard('column'), { id: 'pc', title: 'Points', x: 0, y: 0, w: 10, h: 8,
+      labels: ['North', 'East', 'South'], seriesList: [{ name: 'S', values: [4, 9, 6], slot: 1 }] });
+    dashCards = [c];
+    dashEditing = true; dashSelectedId = 'pc';
+    renderDashboard(); renderDashFormat();
+    const d = document.querySelector('#dashFormat details.df-points');
+    const shut = d && !d.open;
+    const rows = d ? [...d.querySelectorAll('.df-row > span, .df-row > label')].map(x => x.textContent.trim()) : [];
+    dashFormatApply(c, 'pt:0:1', '#e03131');
+    renderDashFormat();
+    const d2 = document.querySelector('#dashFormat details.df-points');
+    const out = { shut: shut, rows: rows, openNow: !!(d2 && d2.open),
+      summary: d2 ? d2.querySelector('summary').textContent : '',
+      clears: d2 ? d2.querySelectorAll('[data-df^="ptclear:"]').length : -1 };
+    dashFormatApply(c, 'ptclear:0:1', '1');
+    dashEditing = false; dashSelectedId = null;
+    dashCards = board;
+    renderDashboard(); dashLayoutApply();
+    return out;
+  });
+  ck('every category gets a swatch of its own, named after the category',
+    pointsUi.rows.join() === 'North,East,South', pointsUi.rows.join(' '));
+  ck('folded away until it is used, and open once it is',
+    pointsUi.shut === true && pointsUi.openNow === true,
+    'shut ' + pointsUi.shut + ' / open ' + pointsUi.openNow);
+  ck('the summary says how many bars were given their own colour',
+    /1/.test(pointsUi.summary), JSON.stringify(pointsUi.summary));
+  ck('and only a bar that has one offers a way back to the series colour',
+    pointsUi.clears === 1, String(pointsUi.clears));
+
   /* -- the top bar is a toolbar, not a map with buttons on it --------------- */
 
   // The search box in the bar is the MAP's search box, re-parented rather than

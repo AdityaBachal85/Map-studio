@@ -187,6 +187,15 @@ function dashModelData(card, resolve) {
           // has to be resolved. The file has to agree with the screen either
           // way, which is the whole reason this model exists.
           color: /^#[0-9a-f]{6}$/i.test(String(s.hex || '')) ? String(s.hex).toLowerCase() : col(s.slot),
+          // Per-point overrides, resolved the same way. A bar the operator
+          // coloured to say "look at this one" has to say it in the file too.
+          points: (s.points && Object.keys(s.points).length)
+            ? Object.keys(s.points).reduce((a, k) => {
+              const v = String(s.points[k] || '');
+              if (/^#[0-9a-f]{6}$/i.test(v)) a[k] = v.toLowerCase();
+              return a;
+            }, {})
+            : null,
         })),
       };
       // A ring, a gauge and a radar are drawn as a fraction of a ceiling, so the

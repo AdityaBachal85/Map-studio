@@ -237,11 +237,22 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
 
   // Stepped, so the pointer actually crosses the card's edge. A single jump
   // from inside to outside leaves the browser with no boundary to report.
+  //
+  // Then POLLED, not slept on. `mouse.move` resolves when the input is
+  // delivered, not when the page has handled it, and under SwiftShader the
+  // pointerleave that hides these can land after a fixed wait has expired — so
+  // a sleep here reports a working teardown as broken about one run in three.
   await p.mouse.move(10, 10, { steps: 8 });
-  await p.waitForTimeout(200);
-  ck('and they leave with the pointer',
-    await p.evaluate(() => [...document.querySelectorAll('.dc-plot[data-card="k2"] .viz-hit')]
-      .every(c => c.style.display === 'none')) === true);
+  let left = true;
+  try {
+    await p.waitForFunction(() =>
+      [...document.querySelectorAll('.dc-plot[data-card="k2"] .viz-hit')]
+        .every(c => c.style.display === 'none'), null, { timeout: 4000 });
+  } catch (e) { left = false; }
+  ck('and they leave with the pointer', left,
+    left ? '' : await p.evaluate(() =>
+      [...document.querySelectorAll('.dc-plot[data-card="k2"] .viz-hit')]
+        .map(c => c.style.display || 'unset').join(',')));
 
   /* -- the crosshair and the marks read one geometry ------------------------ */
 
@@ -446,6 +457,232 @@ const KINDS = ['column', 'bar', 'line', 'area', 'stackedColumn', 'stackedBar',
       document.body.classList.remove('reduce-motion');
       return n.every(x => x === 'none');
     }) === true);
+
+  /* -- the data-label switch is live on every kind that offers it ----------- */
+
+  // THE SWITCH USED TO BE A LIE ON HALF THE BOARD. Six of the fifteen kinds
+  // drew nothing when it was on — the stacks, the combo's bar series and the
+  // radar — and two more (funnel, treemap) drew their numbers whatever it said,
+  // so turning it off did nothing either. A control that changes nothing is
+  // worse than an absent one: it teaches people to stop reading the panel.
+  //
+  // Ring and gauge are the two deliberate absences, and the assertion below is
+  // that they do not OFFER the control rather than that they ignore it: a ring
+  // prints its score in the legend beside it and a gauge prints it in the
+  // middle of its own dial, so a second copy on the arc would be the same
+  // number twice.
+  // Every part scoped: `host .viz-label, .viz-inlabel` is TWO selectors, and the
+  // second one matches the whole document. Written unscoped this reported a
+  // gauge as carrying fifteen data labels — every label on the board.
+  const LABEL_SEL = ['.viz-label', '.viz-inlabel', '.viz-tm-val'];
+  const labelled = await p.evaluate(([kinds, sel]) => {
+    dashCards = kinds.map((k, i) => Object.assign(dashNewCard(k), {
+      id: 'L' + i, title: k, x: (i % 2) * 12, y: Math.floor(i / 2) * 9, w: 12, h: 9,
+      labels: ['North', 'East', 'South', 'West', 'Central'],
+      seriesList: [
+        { name: 'Trips', values: [12, 30, 22, 41, 35], slot: 1 },
+        { name: 'Cost', values: [8, 14, 26, 19, 30], slot: 2 },
+      ],
+      fmt: { labels: true },
+    }));
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const out = {};
+    kinds.forEach((k, i) => {
+      const host = document.querySelector('.dc-plot[data-card="L' + i + '"]');
+      out[k] = host ? sel.reduce((n, q) => n + host.querySelectorAll(q).length, 0) : -1;
+    });
+    return out;
+  }, [KINDS, LABEL_SEL]);
+  const noLabels = KINDS.filter(k => k !== 'ring' && k !== 'gauge' && !labelled[k]);
+  ck('every kind that offers data labels draws them when they are on',
+    noLabels.length === 0, noLabels.join(', ') || JSON.stringify(labelled));
+
+  const labelsOff = await p.evaluate(([kinds, sel]) => {
+    dashCards.forEach(c => { c.fmt.labels = false; });
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const out = {};
+    kinds.forEach((k, i) => {
+      const host = document.querySelector('.dc-plot[data-card="L' + i + '"]');
+      out[k] = host ? sel.reduce((n, q) => n + host.querySelectorAll(q).length, 0) : -1;
+    });
+    return out;
+  }, [KINDS, LABEL_SEL]);
+  const stuckOn = KINDS.filter(k => labelsOff[k] > 0);
+  ck('and switching them off takes them away again, on every one of those kinds',
+    stuckOn.length === 0, stuckOn.join(', ') || 'all clear');
+
+  // A funnel and a treemap print their numbers unless told not to, because they
+  // always did — the switch was made live without taking anything away from a
+  // board that already existed.
+  const defaults = await p.evaluate(() => [vizFmt({ kind: 'funnel' }).labels,
+    vizFmt({ kind: 'treemap' }).labels, vizFmt({ kind: 'column' }).labels,
+    vizFmt({ kind: 'funnel', fmt: { labels: false } }).labels]);
+  ck('a funnel and a treemap keep their numbers by default',
+    JSON.stringify(defaults) === '[true,true,false,false]', JSON.stringify(defaults));
+
+  ck('and a ring and a gauge are not offered the switch at all',
+    await p.evaluate(() => {
+      const pane = document.getElementById('dashFormat');
+      const offered = k => {
+        dashCards = [Object.assign(dashNewCard(k), { id: 'q', x: 0, y: 0, w: 8, h: 8,
+          labels: ['a', 'b'], seriesList: [{ name: 'S', values: [7, 9], slot: 1 }] })];
+        dashEditing = true; dashSelectedId = 'q';
+        renderDashboard(); renderDashFormat();
+        return !!pane.querySelector('[data-df="labels"]');
+      };
+      const out = [offered('ring'), offered('gauge'), offered('column'), offered('radar')];
+      dashEditing = false; dashSelectedId = null;
+      return JSON.stringify(out);
+    }) === '[false,false,true,true]');
+
+  /* -- the biggest number's label is the one that gets clipped -------------- */
+
+  // The axis always scales to the data, so the tallest bar's top IS the top of
+  // the plot and a label six pixels above it is six pixels outside the drawing.
+  // That is not an edge case — it is the largest value on every chart, i.e. the
+  // one number a reader looks for first. It was landing 3px past the edge.
+  const clipped = await p.evaluate(() => {
+    dashCards = [
+      Object.assign(dashNewCard('column'), { id: 'c1', title: 'Up', x: 0, y: 0, w: 10, h: 9,
+        labels: ['a', 'b', 'c', 'd'], seriesList: [{ name: 'S', values: [4, 9, 20, 6], slot: 1 }],
+        fmt: { labels: true } }),
+      Object.assign(dashNewCard('bar'), { id: 'c2', title: 'Across', x: 10, y: 0, w: 10, h: 9,
+        labels: ['a', 'b', 'c', 'd'], seriesList: [{ name: 'S', values: [4, 9, 20, 6], slot: 1 }],
+        fmt: { labels: true } }),
+    ];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const read = id => {
+      const host = document.querySelector('.dc-plot[data-card="' + id + '"]');
+      const svg = host.querySelector('svg');
+      const vb = svg.viewBox.baseVal;
+      return [...host.querySelectorAll('.viz-label')].map(t => {
+        const b = t.getBBox();
+        return { txt: t.textContent, inside: t.classList.contains('viz-label-in'),
+          out: b.x < -0.5 || b.y < -0.5 || b.x + b.width > vb.width + 0.5
+            || b.y + b.height > vb.height + 0.5 };
+      });
+    };
+    return { col: read('c1'), bar: read('c2') };
+  });
+  const escaped = clipped.col.concat(clipped.bar).filter(l => l.out);
+  ck('no data label is drawn outside its own chart',
+    clipped.col.length === 4 && clipped.bar.length === 4 && escaped.length === 0,
+    escaped.map(l => l.txt).join(', ') || (clipped.col.length + '+' + clipped.bar.length + ' labels'));
+  ck('the biggest bar carries its number inside itself, the rest outside',
+    clipped.col.filter(l => l.inside).map(l => l.txt).join() === '20'
+      && clipped.bar.filter(l => l.inside).map(l => l.txt).join() === '20',
+    JSON.stringify(clipped.col.map(l => l.txt + (l.inside ? '*' : ''))));
+
+  // The other direction. A column below the axis grows DOWN the screen, so
+  // every offset in the placement rule flips — and a rule written as "up is
+  // negative" reads a negative bar as an upward one and labels it above the
+  // axis, beside a bar that is not there.
+  const negative = await p.evaluate(() => {
+    dashCards = [Object.assign(dashNewCard('column'), { id: 'n1', title: 'Swing', x: 0, y: 0, w: 12, h: 9,
+      labels: ['a', 'b', 'c', 'd'], seriesList: [{ name: 'S', values: [8, -6, 3, -11], slot: 1 }],
+      fmt: { labels: true } })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const host = document.querySelector('.dc-plot[data-card="n1"]');
+    const c = dashCardById('n1');
+    const f = vizFrame(c, Math.round(host.clientWidth), Math.round(host.clientHeight));
+    const vb = host.querySelector('svg').viewBox.baseVal;
+    return [...host.querySelectorAll('.viz-label')].map((t, i) => {
+      const b = t.getBBox();
+      return { v: c.seriesList[0].values[i], mid: b.y + b.height / 2, zero: f.vOf(0),
+        out: b.y < -0.5 || b.y + b.height > vb.height + 0.5 };
+    });
+  });
+  ck('a bar below the axis is labelled below the axis, and still on the drawing',
+    negative.length === 4 && negative.every(l => l.out === false)
+      && negative.every(l => (l.v > 0) === (l.mid < l.zero)),
+    JSON.stringify(negative.map(l => l.v + '@' + Math.round(l.mid) + '/' + Math.round(l.zero))));
+
+  /* -- and no two of them are printed in the same place --------------------- */
+
+  // TWO LINES RUNNING CLOSE TOGETHER IS THE NORMAL CASE, NOT AN EDGE ONE. Every
+  // series labelled above its own point, so wherever the numbers were close the
+  // two labels printed on top of each other — which is what "the data labels
+  // are not working" looks like from the outside. Measured, not eyeballed: the
+  // rendered boxes are read back and checked against each other.
+  const overlaps = await p.evaluate(() => {
+    const kinds = ['column', 'bar', 'line', 'area', 'scatter', 'combo'];
+    // Deliberately cruel numbers: two series whose values sit within a pixel or
+    // two of each other at four of the five categories.
+    dashCards = kinds.map((k, i) => Object.assign(dashNewCard(k), {
+      id: 'o' + i, title: k, x: (i % 2) * 6, y: Math.floor(i / 2) * 8, w: 6, h: 8,
+      labels: ['Station', 'School', 'Hospital', 'Mall', 'Airport'],
+      seriesList: [
+        { name: 'Distance', values: [2.4, 5.1, 12.8, 3.6, 27.5], slot: 1 },
+        { name: 'Drive', values: [2.9, 5.4, 13.1, 3.9, 28.0], slot: 3 },
+      ],
+      fmt: { labels: true },
+    }));
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const bad = {};
+    kinds.forEach((k, i) => {
+      const host = document.querySelector('.dc-plot[data-card="o' + i + '"]');
+      const boxes = [...host.querySelectorAll('.viz-label')].map(t => {
+        const b = t.getBBox();
+        return { t: t.textContent, x0: b.x, y0: b.y, x1: b.x + b.width, y1: b.y + b.height };
+      });
+      const clash = [];
+      for (let a = 0; a < boxes.length; a++) {
+        for (let c = a + 1; c < boxes.length; c++) {
+          const u = boxes[a], w = boxes[c];
+          if (u.x0 < w.x1 - 1 && w.x0 < u.x1 - 1 && u.y0 < w.y1 - 1 && w.y0 < u.y1 - 1) {
+            clash.push(u.t + '/' + w.t);
+          }
+        }
+      }
+      if (clash.length) bad[k] = clash;
+    });
+    return bad;
+  });
+  ck('no two data labels are printed over each other, even on series that touch',
+    Object.keys(overlaps).length === 0, JSON.stringify(overlaps));
+
+  /* -- one bar can be a different colour from the bar beside it ------------- */
+
+  // Excel's "format data point". Colour lived on the series, so the only way to
+  // call out one category was to split it into a series of its own — which
+  // changes the chart's shape to change one bar's hue.
+  const points = await p.evaluate(() => {
+    // Its own board: every section above replaces dashCards, so reaching back
+    // for a card an earlier one made is a test that breaks when a test is added.
+    const c = Object.assign(dashNewCard('column'), { id: 'c1', title: 'Up', x: 0, y: 0, w: 10, h: 9,
+      labels: ['a', 'b', 'c', 'd'], seriesList: [{ name: 'S', values: [4, 9, 20, 6], slot: 1 }],
+      fmt: { labels: true } });
+    dashCards = [c];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    renderDashboard(); dashLayoutApply(); dashDrawAllCharts();
+    const fills = () => [...document.querySelectorAll('.dc-plot[data-card="c1"] .viz-mark')]
+      .map(m => m.style.fill);
+    const before = fills();
+    dashFormatApply(c, 'pt:0:2', '#e03131');
+    dashDrawAllCharts();
+    const after = fills();
+    dashFormatApply(c, 'ptclear:0:2', '1');
+    dashDrawAllCharts();
+    return { before, after, cleared: fills(), stored: JSON.stringify(c.seriesList[0].points || {}) };
+  });
+  // `style.fill` reads back as the browser's normal form, not as it was written.
+  ck('a point colour repaints exactly one bar',
+    /^rgb\(\s*224,\s*49,\s*49\s*\)$/.test(points.after[2])
+      && points.after.filter((f, i) => i !== 2 && f === points.before[i]).length === 3,
+    points.after.join(' '));
+  ck('and clearing it hands that bar back to the series',
+    points.cleared.join() === points.before.join(), points.cleared.join(' '));
+  const inFile = await p.evaluate(() => {
+    dashFormatApply(dashCardById('c1'), 'pt:0:1', '#12b886');
+    const m = dashExportModel({ title: 'Points' });
+    return JSON.stringify((m.cards.find(t => t.id === 'c1').data.series[0] || {}).points || null);
+  });
+  ck('and a point colour reaches the export model, so it survives into the file',
+    /12b886/i.test(inFile), inFile);
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' | ') || 'none');
 

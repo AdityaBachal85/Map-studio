@@ -906,6 +906,17 @@ body.dash-gesture .map-wrap { transition: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* A value label that had to go inside its own bar, because there was no room
+   outside it. Same reasoning as .viz-inlabel below — white clears every hue in
+   the palette, and a dark label disappears into half of them. */
+.viz-label-in {
+  fill: #fff;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, .22);
+  stroke-width: 2px;
+}
+
 /* A label sitting *inside* a coloured fill is the one place text may leave the
    ink tokens: white clears every slot in the palette, and the alternative is a
    dark label vanishing into slot 7. */
@@ -1123,6 +1134,59 @@ body.dash-gesture .map-wrap { transition: none; }
 .dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
 
 
+
+/* -- per-point colours ----------------------------------------------------- */
+
+/* Folded away: most charts never colour an individual bar, and eight more
+   swatches per series would undo the tidying the single trigger just bought.
+   Opened automatically when any point is set, so it can never hide something
+   somebody has already done. */
+.df-points { margin-top: 6px; }
+
+.df-points > summary {
+  cursor: pointer;
+  padding: 4px 2px;
+  font: 600 10.5px/1 var(--font, inherit);
+  letter-spacing: .02em;
+  color: var(--text-2);
+  list-style: none;
+}
+
+.df-points > summary::-webkit-details-marker { display: none; }
+.df-points > summary::before { content: '\25B8 '; display: inline-block; transition: transform .15s ease; }
+.df-points[open] > summary::before { transform: rotate(90deg); }
+.df-points > summary:hover { color: var(--accent); }
+
+.df-point-row { display: flex; align-items: center; gap: 5px; }
+
+.df-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.df-clear:hover { background: var(--danger-soft, var(--surface-2)); color: var(--danger); }
+
+/* -- alignment glyphs ------------------------------------------------------ */
+
+.df-seg-icons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Square, so four of them read as a toolbar rather than as four words that
+     happen to be pictures. */
+  padding: 4px 0;
+  min-width: 34px;
+}
+
+.df-seg-icons button svg { display: block; }
 
 /* -- the colour trigger ---------------------------------------------------- */
 

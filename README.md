@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0189-blue)
+![Version](https://img.shields.io/badge/version-v6.0194-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,41 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0151 (latest)
+## 🆕 New in v6.0194 (latest)
+
+### The chart controls do what Excel's do
+
+**Data labels reach every chart now.** The switch was a lie on more than half
+the board: the stacked forms, the combo's bar series and the radar drew nothing
+when it was on, and the funnel and treemap drew their numbers whatever it said —
+so turning it off did nothing either. All twelve kinds that offer the switch
+obey it. A ring and a gauge do not offer it, because a ring prints its score in
+the legend beside it and a gauge prints it in the middle of its own dial.
+
+**And the labels stay on the drawing.** The axis always scales to the data, so
+the tallest bar's top *is* the top of the plot — a label six pixels above it is
+six pixels outside the chart, and that is the largest number on the card, the
+one a reader looks for first. It now goes inside the bar in white when there is
+no room outside it. A column below the axis is labelled below the axis.
+
+**No two numbers are printed in the same place.** Two lines running close
+together is the normal case, not an edge one, and every series labelled above
+its own point — so wherever the values were close the two labels overprinted.
+The higher point takes the space above and the lower one the space below, and
+anything still colliding steps out of the way. A radar's labels are pushed out
+by pixels rather than by a fraction of the radius, so a card of small numbers no
+longer knots every label at the centre.
+
+**Any single bar can be given its own colour** — Excel's *format data point*.
+Colour lived on the series, so calling out one category meant splitting it into
+a series of its own: changing the chart's shape in order to change one bar's
+hue. There is now a swatch per category behind a disclosure on each series, a
+way back to the series colour, and the choice travels into every export.
+
+**Alignment is set with glyphs**, four rules with one of them short, the way
+every other application does it — not with the words "Left / Centre / Right".
+
+## 🆕 New in v6.0151
 
 ### The board shows each thing once
 

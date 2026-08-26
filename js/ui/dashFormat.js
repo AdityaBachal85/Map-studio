@@ -64,6 +64,37 @@ function dfSeg(key, opts, now) {
     + (String(o[0]) === String(now) ? ' class="on"' : '') + '>' + esc(o[1]) + '</button>').join('') + '</div>';
 }
 
+/**
+ * The alignment glyphs — the four every editor draws, as four stacked rules
+ * whose lengths say which edge is flush.
+ *
+ * Words in a segmented control cost the width of the words; "Left / Centre /
+ * Right / Justify" does not fit a 268px pane and wraps. The glyph is also the
+ * thing people already recognise from every other editor they use, so it is
+ * read faster than the word it replaces.
+ */
+const DF_ALIGN_GLYPH = {
+  left: 'M3 5h14M3 9h9M3 13h14M3 17h9',
+  center: 'M3 5h14M5.5 9h9M3 13h14M5.5 17h9',
+  right: 'M3 5h14M8 9h9M3 13h14M8 17h9',
+  justify: 'M3 5h14M3 9h14M3 13h14M3 17h14',
+};
+
+/**
+ * A segmented control of icons rather than words.
+ * @param {string} key @param {Array} opts pairs of [value, accessible label]
+ * @param {string} now
+ */
+function dfSegIcons(key, opts, now) {
+  return '<div class="df-seg df-seg-icons" role="group">' + opts.map(o =>
+    '<button type="button" data-df="' + key + '" data-v="' + esc(o[0]) + '"'
+    + (String(o[0]) === String(now) ? ' class="on"' : '')
+    + ' title="' + esc(o[1]) + '" aria-label="' + esc(o[1]) + '">'
+    + '<svg viewBox="0 0 20 22" width="15" height="16" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.8" stroke-linecap="round"><path d="'
+    + (DF_ALIGN_GLYPH[o[0]] || DF_ALIGN_GLYPH.left) + '"/></svg></button>').join('') + '</div>';
+}
+
 /** @param {string} key @param {boolean} on @param {string} label */
 function dfToggle(key, on, label) {
   return '<button type="button" class="df-tgl' + (on ? ' on' : '') + '" data-df="' + key
@@ -131,6 +162,12 @@ function dfCurrentColour(card, key) {
     const s = (card.seriesList || [])[+ser[1]];
     return s ? (s.hex || s.slot || (+ser[1] + 1)) : 1;
   }
+  const pt = key.match(/^pt:(\d+):(\d+)$/);
+  if (pt) {
+    const ser = (card.seriesList || [])[+pt[1]];
+    if (!ser) return 1;
+    return (ser.points && ser.points[+pt[2]]) || ser.hex || ser.slot || (+pt[1] + 1);
+  }
   if (key === 'headTone') {
     const t = card.fmt && card.fmt.headTone;
     return (t == null || t === 'navy') ? 1 : t;
@@ -141,6 +178,40 @@ function dfCurrentColour(card, key) {
     return g ? (g.color || g.slot || (+ring[1] + 1)) : 1;
   }
   return 1;
+}
+
+/**
+ * A colour per bar, the way a spreadsheet does it.
+ *
+ * The series colour answers "which series is this"; a point colour answers
+ * "look at this one" — the year that matters, the outlier, the site being sold.
+ * They are different questions and a chart that can only answer the first makes
+ * people rebuild the chart in Excel to answer the second.
+ *
+ * Sparse, so a chart with one point coloured stores one point. Clearing a point
+ * removes the key rather than writing the series colour into it, or the series
+ * colour would stop following the series.
+ *
+ * @param {object} card @param {object} ser @param {number} si series index
+ * @returns {string} HTML
+ */
+function dfPointColours(card, ser, si) {
+  const cats = card.labels || [];
+  if (!cats.length) return '';
+  // Behind a disclosure: most charts never want this, and eight more swatches
+  // per series would undo the tidying the single trigger just bought.
+  const pts = ser.points || {};
+  const set = Object.keys(pts).filter(k => pts[k]).length;
+  return '<details class="df-points"' + (set ? ' open' : '') + '>'
+    + '<summary>Individual bars' + (set ? ' \u00b7 ' + set : '') + '</summary>'
+    + cats.map((c, i) =>
+      dfRow(String(c || ('Point ' + (i + 1))),
+        '<div class="df-point-row">'
+        + dfSwatches('pt:' + si + ':' + i, pts[i] || ser.hex || ser.slot || (si + 1))
+        + (pts[i] ? '<button type="button" class="df-clear" data-df="ptclear:' + si + ':' + i
+          + '" data-v="1" title="Back to the series colour">&times;</button>' : '')
+        + '</div>')).join('')
+    + '</details>';
 }
 
 /** Whether the pane had a column last time, so its opening can be noticed. */
@@ -208,6 +279,7 @@ function renderDashFormat() {
         + '<div class="dc-input df-input" data-card="' + card.id + '" data-bind="seriesList.' + i
         + '.values" contenteditable="true" spellcheck="false">' + esc((s.values || []).join(', ')) + '</div>'
         + dfSwatches('slot:' + i, s.hex || s.slot || (i + 1))
+        + dfPointColours(card, s, i)
         + '</div>').join('')
       + '<button class="df-add" data-df="addSeries" data-v="1">+ Add a series</button>'
       + '<p class="df-note">Comma-separated. Paste a row straight from a spreadsheet.</p>');
@@ -256,7 +328,10 @@ function renderDashFormat() {
     // teaches people to stop reading it.
     const score = VIZ_SCORE_KINDS.indexOf(card.kind) >= 0;
     const share = VIZ_SHARE_KINDS.indexOf(card.kind) >= 0;
-    if (!score) f += dfToggle('labels', fmt.labels, 'Data labels');
+    // A radar's rings carry no numbers, so it wants labels as much as any
+    // cartesian chart does. A ring prints its value in the legend and a gauge
+    // prints it in the middle of its own dial, so those two do not.
+    if (!score || card.kind === 'radar') f += dfToggle('labels', fmt.labels, 'Data labels');
     if (!share && card.kind !== 'gauge') f += dfToggle('grid', fmt.grid, 'Gridlines');
     if (!share && card.kind !== 'gauge' && card.kind !== 'ring') {
       f += dfToggle('xAxis', fmt.xAxis, card.kind === 'radar' ? 'Axis names' : 'Category axis');
@@ -284,13 +359,13 @@ function renderDashFormat() {
   // body only and only where there is prose to justify — on a list of place
   // names it would space four words across a card and call it typography.
   {
-    const three = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
+    const three = [['left', 'Align left'], ['center', 'Align centre'], ['right', 'Align right']];
     if (!card.fmt || card.fmt.title !== false) {
-      f += dfRow('Title align', dfSeg('align', three, (card.fmt && card.fmt.align) || 'left'));
+      f += dfRow('Title', dfSegIcons('align', three, (card.fmt && card.fmt.align) || 'left'));
     }
     const bodyOpts = (card.type === 'text' || card.type === 'comment')
       ? three.concat([['justify', 'Justify']]) : three;
-    f += dfRow('Text align', dfSeg('alignBody', bodyOpts, (card.fmt && card.fmt.alignBody) || 'left'));
+    f += dfRow('Text', dfSegIcons('alignBody', bodyOpts, (card.fmt && card.fmt.alignBody) || 'left'));
   }
 
   // Where the legend lives. On the map is the layout every printed connectivity
@@ -340,6 +415,26 @@ function dashFormatApply(card, key, v) {
   card.fmt = card.fmt || {};
 
   const isHex = /^#[0-9a-f]{6}$/i.test(String(v));
+
+  const pt = key.match(/^pt:(\d+):(\d+)$/);
+  if (pt) {
+    const ser = (card.seriesList || [])[+pt[1]];
+    if (!ser) return;
+    ser.points = ser.points || {};
+    // A slot number here would have to be resolved every time it was read, in
+    // both themes, for one bar. A point colour is a literal.
+    ser.points[+pt[2]] = isHex ? String(v).toLowerCase() : dfResolveColour(v);
+    return;
+  }
+  const ptc = key.match(/^ptclear:(\d+):(\d+)$/);
+  if (ptc) {
+    const ser = (card.seriesList || [])[+ptc[1]];
+    if (ser && ser.points) {
+      delete ser.points[+ptc[2]];
+      if (!Object.keys(ser.points).length) delete ser.points;
+    }
+    return;
+  }
 
   const slot = key.match(/^slot:(\d+)$/);
   if (slot) {
