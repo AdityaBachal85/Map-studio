@@ -262,6 +262,31 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   // A label is a chip floating beside a pin, so snapping it costs nothing a
   // reader can see. A pin IS its coordinate, so it is deliberately left alone —
   // moving one half a pixel to sharpen it would be moving the thing it marks.
+  // A FRACTIONAL FONT SIZE IS THE SECOND WAY TO GET SOFT TEXT. The chip size
+  // came from `11.5 * pct / 100`, so the labels were drawn at 11.5px, 12.5px,
+  // 10.35px — whatever the slider produced. Measured across sizes, 12.5px came
+  // out at 25.5% mid-tone pixels against about 21.5% at 12px and 13px: real,
+  // and unpredictable, because it depends where the fraction lands relative to
+  // the hinting grid. Rounded, it cannot land badly at all.
+  const sizes = await p.evaluate(() => [...document.querySelectorAll('.label-badge')]
+    .map(el => parseFloat(getComputedStyle(el).fontSize)));
+  ck('every label is set at a whole pixel size, so none is hinted onto a fraction',
+    sizes.length > 0 && sizes.every(v => Math.abs(v - Math.round(v)) < 0.001),
+    sizes.join(', ') + 'px');
+
+  // -webkit-font-smoothing lives on `body` as `antialiased`, which on macOS
+  // turns subpixel rendering OFF for everything under it. That is a deliberate
+  // look for a paragraph and the wrong one for an 11px chip over imagery. The
+  // property does nothing on Windows or Linux, so what is asserted here is that
+  // the override is PRESENT — the visual result of it is only observable on a
+  // Mac, and this suite does not run on one.
+  ck('and the chips ask for subpixel rendering back, whatever body says',
+    await p.evaluate(() => {
+      const el = document.querySelector('.label-badge');
+      const v = getComputedStyle(el).webkitFontSmoothing;
+      return v === 'auto' || v === '' || v == null;
+    }) === true);
+
   ck('and the pins are not snapped, because a pin is where something is',
     await p.evaluate(() => {
       const el = document.querySelector('.bb-pin, .leaflet-marker-icon');

@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0198-blue)
+![Version](https://img.shields.io/badge/version-v6.0199-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,39 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0198 (latest)
+## 🆕 New in v6.0199 (latest)
+
+### Map labels, the other two reasons they looked soft
+
+Snapping them to the pixel grid in v6.0198 was real but not the whole story.
+Two more, found by measuring glyph edges rather than by looking:
+
+**`body` sets `-webkit-font-smoothing: antialiased`.** On macOS that switches
+subpixel (LCD) rendering **off** and draws every glyph in greyscale. On a
+paragraph of interface text it is a deliberate look — lighter, less bloated. On
+an 11px chip over aerial imagery it is the difference between sharp and soft.
+The chips ask for it back now, scoped to them, so the rest of the app's
+typography is untouched.
+
+That property does nothing on Windows or Linux — which is exactly why this took
+three passes to find. Every measurement taken here showed subpixel antialiasing
+already active, because on this platform there was nothing switching it off. It
+is reasoned from the CSS, and it is the one change in this release whose visual
+result cannot be confirmed except on a Mac.
+
+**The chip size was fractional.** It came from `11.5 × pct / 100`, so labels
+were drawn at 11.5px, 12.5px, 10.35px — whatever the slider produced. Measured
+across sizes, 12.5px came out at 25.5% mid-tone edge pixels against about 21.5%
+at 12px and 13px. Real, and unpredictable, because it depends where the fraction
+falls relative to the hinting grid. Rounded to whole pixels, it cannot fall
+badly at all.
+
+Three things that turned out **not** to be the cause, each measured and
+discarded rather than "fixed": `will-change: transform` on the labels (62.0% vs
+61.5% coloured edge pixels — no difference), positioning by `transform` versus
+`left`/`top` (byte-identical output), and layer promotion generally.
+
+## 🆕 New in v6.0198
 
 ### Some map labels looked blurry and the ones beside them did not
 
