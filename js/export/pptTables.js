@@ -91,10 +91,17 @@ function addColorKey(slide, key, ctx, log) {
   // class, a dot for a point, a square for an area. "The red line" and "the red
   // block" are different things on the map, and a legend that renders both as
   // the same filled cell throws that away.
-  const mark = kind => (kind === 'line' ? '▬' : kind === 'mark' ? '●' : '■');
+  // A row that was given its own symbol uses it; one that was not falls back to
+  // what its kind implies, exactly as it always did. The characters are the
+  // same set the card offers — see CK_SHAPES in js/ui/colorKey.js — because a
+  // second list here is a second list to forget to update.
+  const SHAPE = { line: '▬', dash: '▬', area: '▬', dot: '●', ring: '○',
+    square: '■', triangle: '▲', diamond: '◆', star: '★' };
+  const mark = r => SHAPE[r.shape]
+    || (r.kind === 'line' ? '▬' : r.kind === 'mark' ? '●' : '■');
 
   slide.addTable(key.rows.map(r => ([
-    { text: mark(r.kind), options: { color: hex(r.color), fontSize: 11, align: 'center' } },
+    { text: mark(r), options: { color: hex(r.color), fontSize: 11, align: 'center' } },
     { text: String(r.label ?? ''), options: { align: 'left' } },
   ])), {
     x: lx, y: ly + 0.3, w: lw, colW,

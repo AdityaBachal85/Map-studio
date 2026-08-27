@@ -4112,7 +4112,79 @@ div.sub {
    block" are different things on the map. */
 .ck-line { width: 20px; height: 4px; border-radius: 2px; }
 .ck-area { width: 17px; height: 12px; border-radius: 3px; opacity: .78; }
-.ck-dot  { width: 11px; height: 11px; border-radius: 50%; }
+
+/* A dash is three bars, not a repeating gradient: html2canvas draws a repeating
+   gradient as a solid strip, which would make the exported legend say something
+   different from the one on screen. */
+.ck-dash {
+  display: flex;
+  gap: 3px;
+  width: 21px;
+  /* Flatter and wider than a solid line's 4px, because three 4x5 blocks with
+     rounded corners are three DOTS — which is a different legend entry. At 3px
+     tall the pieces are twice as wide as they are high and read as dashes. */
+  height: 3px;
+  background: none !important;
+}
+.ck-dash i { flex: 1; border-radius: 1px; }
+
+/* The point shapes are characters, because the same mark has to survive the
+   screen, html2canvas, and the PowerPoint and Word writers — and those last two
+   can only put text in a cell. Sized by font, coloured by `color`. */
+.ck-glyph {
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", sans-serif;
+}
+.ck-glyph.ck-dot,
+.ck-glyph.ck-ring { font-size: 14px; }
+.ck-glyph.ck-star { font-size: 15px; }
+
+/* Sits between the swatch and the name, and only while the card is editable. */
+.ck-shape {
+  flex: none;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-solid);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.ck-shape:hover { color: var(--accent); border-color: var(--accent); }
+
+.ck-shapes {
+  position: fixed;
+  z-index: 2600;
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  /* OPAQUE. `--surface` is the glass token on this card, so the popover came up
+     see-through and the legend rows underneath read straight through the
+     shapes you were trying to choose between. */
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 30px rgba(9, 18, 35, .28);
+}
+.ck-shapes button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+}
+.ck-shapes button:hover { background: var(--surface-2); }
+.ck-shapes button.on { border-color: var(--accent); background: var(--surface-2); }
 
 .ck-label {
   flex: 1;

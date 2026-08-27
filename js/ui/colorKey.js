@@ -53,12 +53,14 @@ function colorKeyRows() {
       color: e.color || r.color,
       label: e.label != null ? e.label : r.label,
       kind: r.kind,
+      shape: e.shape || null,
       hidden: !!e.hidden,
       extra: false,
     };
   });
   const extra = colorKeyExtras.map((x, i) => ({
-    key: 'x' + i, color: x.color, label: x.label, kind: x.kind || 'area', hidden: false, extra: true,
+    key: 'x' + i, color: x.color, label: x.label, kind: x.kind || 'area',
+    shape: x.shape || null, hidden: false, extra: true,
   }));
   return auto.concat(colorKeyUnclassedRows(), extra)
     .filter(r => colorKeyEditing || !r.hidden);
@@ -148,7 +150,7 @@ function colorKeyUnclassedRows() {
         ? e.names.length + (e.kind === 'line' ? ' roads' : e.kind === 'mark' ? ' points' : ' areas')
         : (e.kind === 'line' ? 'Road / line' : e.kind === 'mark' ? 'Marked point' : 'Area');
     return {
-      key: k, color: e.color, kind: e.kind,
+      key: k, color: e.color, kind: e.kind, shape: edit.shape || null,
       label: edit.label != null ? edit.label : auto,
       hidden: !!edit.hidden, extra: false,
     };
@@ -163,11 +165,141 @@ function colorKeyUnclassedRows() {
  *
  * @param {object} r @returns {string}
  */
+/**
+ * The symbols a legend row may be drawn with.
+ *
+ * `[id, glyph, name]`. The glyph is what the PowerPoint and Word writers put in
+ * the cell — they cannot draw a CSS shape, and pptTables.js was already using
+ * these three characters for the three fixed kinds, so this is that idea with
+ * the choice opened up rather than a second scheme beside it.
+ *
+ * Deliberately a small set, and deliberately these ones: a legend mark is read
+ * at 11 pixels over aerial imagery, and shapes that differ only in a corner
+ * radius are not telling anybody anything at that size.
+ */
+const CK_SHAPES = [
+  ['line', '\u25ac', 'Line'],
+  ['dash', '\u25ac', 'Dashed line'],
+  ['area', '\u25ac', 'Area'],
+  ['dot', '\u25cf', 'Dot'],
+  ['ring', '\u25cb', 'Ring'],
+  ['square', '\u25a0', 'Square'],
+  ['triangle', '\u25b2', 'Triangle'],
+  ['diamond', '\u25c6', 'Diamond'],
+  ['star', '\u2605', 'Star'],
+];
+
+/** The bar shapes — drawn as a strip, not as a character. */
+const CK_BAR_SHAPES = ['line', 'dash', 'area'];
+
+/**
+ * Which symbol this row is drawn with.
+ *
+ * A row that was never given one falls back to what its kind implies, so a map
+ * that predates this choice looks exactly as it did.
+ *
+ * @param {object} r a row from colorKeyRows() @returns {string} a shape id
+ */
+function colorKeyShapeOf(r) {
+  const s = r && r.shape;
+  if (s && CK_SHAPES.some(x => x[0] === s)) return s;
+  return r && r.kind === 'line' ? 'line' : (r && r.kind === 'mark' ? 'dot' : 'area');
+}
+
+/**
+ * One legend mark.
+ *
+ * The point shapes are characters rather than CSS, because the same mark has to
+ * survive four renderers: the screen, html2canvas for the picture exports, and
+ * the PowerPoint and Word writers, which can only place text in a cell. A
+ * clip-path triangle looks right in exactly one of those four.
+ *
+ * The dash is three spans rather than a repeating gradient for the same reason
+ * — html2canvas draws a repeating gradient as a solid bar, which is to say as a
+ * DIFFERENT legend entry from the one on screen.
+ *
+ * @param {object} r @returns {string} HTML
+ */
 function colorKeyMark(r) {
   const c = esc(r.color);
-  if (r.kind === 'line') return '<span class="ck-mark ck-line" style="background:' + c + '"></span>';
-  if (r.kind === 'mark') return '<span class="ck-mark ck-dot" style="background:' + c + '"></span>';
-  return '<span class="ck-mark ck-area" style="background:' + c + '"></span>';
+  const s = colorKeyShapeOf(r);
+  if (s === 'dash') {
+    return '<span class="ck-mark ck-dash">'
+      + '<i style="background:' + c + '"></i><i style="background:' + c + '"></i>'
+      + '<i style="background:' + c + '"></i></span>';
+  }
+  if (CK_BAR_SHAPES.indexOf(s) >= 0) {
+    return '<span class="ck-mark ck-' + s + '" style="background:' + c + '"></span>';
+  }
+  const g = (CK_SHAPES.find(x => x[0] === s) || CK_SHAPES[3])[1];
+  return '<span class="ck-mark ck-glyph ck-' + s + '" style="color:' + c + '">' + g + '</span>';
+}
+
+/** The character shown ON the shape button — what this row is set to now. */
+function colorKeySymbolGlyph(r) {
+  const s = colorKeyShapeOf(r);
+  if (s === 'line') return '\u2500';
+  if (s === 'dash') return '\u254c';
+  if (s === 'area') return '\u25ac';
+  return (CK_SHAPES.find(x => x[0] === s) || CK_SHAPES[3])[1];
+}
+
+/** The open symbol popover, so a second click closes it rather than stacking. */
+let ckShapePop = null;
+
+/** @returns {void} take the symbol popover down */
+function closeColorKeyShapes() {
+  if (ckShapePop) { ckShapePop.remove(); ckShapePop = null; }
+}
+
+/**
+ * Offer the symbols, anchored to the button that asked.
+ *
+ * Drawn in the row's own colour, because the question is "which of these do I
+ * want THIS row to be" — a grid of grey shapes makes you imagine the answer
+ * instead of showing it.
+ *
+ * @param {HTMLElement} btn @param {object} row @param {function(string):void} onPick
+ */
+function openColorKeyShapes(btn, row, onPick) {
+  closeColorKeyShapes();
+  const now = colorKeyShapeOf(row);
+  const pop = document.createElement('div');
+  pop.className = 'ck-shapes';
+  pop.setAttribute('role', 'listbox');
+  pop.setAttribute('aria-label', 'Legend symbol');
+  pop.innerHTML = CK_SHAPES.map(([id, , name]) =>
+    '<button type="button" role="option" data-shape="' + id + '"'
+    + (id === now ? ' class="on" aria-selected="true"' : ' aria-selected="false"')
+    + ' title="' + esc(name) + '" aria-label="' + esc(name) + '">'
+    + colorKeyMark({ color: row.color, kind: row.kind, shape: id })
+    + '</button>').join('');
+  document.body.appendChild(pop);
+
+  const r = btn.getBoundingClientRect();
+  const w = pop.offsetWidth || 150, h = pop.offsetHeight || 120;
+  // Clamped, and flipped above the button when there is no room below it: this
+  // card lives at the bottom of the map as often as not.
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+  pop.style.top = (r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : r.top - h - 6) + 'px';
+
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('button[data-shape]');
+    if (!b) return;
+    e.stopPropagation();
+    onPick(b.dataset.shape);
+    closeColorKeyShapes();
+  });
+  // Next click anywhere else closes it. Deferred, or the click that opened it
+  // would close it again on the way back up.
+  setTimeout(() => {
+    document.addEventListener('pointerdown', function off(ev) {
+      if (pop.contains(ev.target)) return;
+      document.removeEventListener('pointerdown', off);
+      closeColorKeyShapes();
+    });
+  }, 0);
+  ckShapePop = pop;
 }
 
 /** Draw the card from the current rows. */
@@ -188,6 +320,13 @@ function rebuildColorKey() {
     '<div class="ck-row' + (r.hidden ? ' ck-off' : '') + '" data-ck-key="' + esc(r.key) + '">'
     + '<button class="ck-sw" ' + (colorKeyEditing ? '' : 'disabled ')
       + 'title="' + (colorKeyEditing ? 'Change this colour' : '') + '">' + colorKeyMark(r) + '</button>'
+    // Its own button rather than a second thing on the swatch: changing a
+    // colour is the everyday action and stays one click, and choosing a symbol
+    // — which most rows never do — does not get to slow it down.
+    + (colorKeyEditing
+      ? '<button class="ck-shape" title="Choose this symbol" aria-label="Choose this symbol">'
+        + colorKeySymbolGlyph(r) + '</button>'
+      : '')
     + '<span class="ck-label"' + (colorKeyEditing ? ' contenteditable="true" spellcheck="false"' : '')
       + '>' + esc(r.label) + '</span>'
     + (colorKeyEditing
@@ -356,6 +495,18 @@ function resetColorKey() {
         { hidden: !(colorKeyEdits[key] || {}).hidden });
       rebuildColorKey();
       if (typeof markDirty === 'function') markDirty();
+      return;
+    }
+
+    if (e.target.closest('.ck-shape') && colorKeyEditing) {
+      const row = colorKeyRows().find(x => x.key === key);
+      if (!row) return;
+      openColorKeyShapes(e.target.closest('.ck-shape'), row, shape => {
+        if (isExtra) colorKeyExtras[+key.slice(1)].shape = shape;
+        else colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key], { shape: shape });
+        rebuildColorKey();
+        if (typeof markDirty === 'function') markDirty();
+      });
       return;
     }
 

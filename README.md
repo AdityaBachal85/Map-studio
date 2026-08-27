@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0199-blue)
+![Version](https://img.shields.io/badge/version-v6.0200-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,35 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0199 (latest)
+## 🆕 New in v6.0200 (latest)
+
+### Every legend row can pick its own symbol
+
+The mark carried half the meaning and none of the choice: a line class got a
+bar, a point got a dot, an area got a block, and that was the end of it. So two
+different things drawn in the same colour could not be told apart in the key —
+and a reader holding a printed sheet has nothing else to go on.
+
+While the key is being edited each row now has a small button beside its
+swatch, which opens **nine symbols** — line, dashed line, area, dot, ring,
+square, triangle, diamond, star — drawn in that row's own colour, with the one
+it currently uses marked. It is a separate button rather than a second thing on
+the swatch, because changing a colour is the everyday action and stays one
+click; choosing a symbol, which most rows never do, does not get to slow it
+down.
+
+A row nobody has chosen for still takes the shape its kind implies, so a map
+made before this looks exactly as it did. The choice saves with the project, and
+travels: the board's Legend card and the PowerPoint writer both draw it.
+
+**Why the point shapes are characters and the dash is three spans.** The same
+mark has to survive four renderers — the screen, html2canvas for the picture
+exports, and the PowerPoint and Word writers, which can only put text in a cell.
+A `clip-path` triangle looks right in exactly one of those four, and a dashed
+line built from a repeating gradient comes out of html2canvas as a *solid* bar,
+which is to say as a different legend entry from the one on screen.
+
+## 🆕 New in v6.0199
 
 ### Map labels, the other two reasons they looked soft
 

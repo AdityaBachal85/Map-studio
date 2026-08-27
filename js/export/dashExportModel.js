@@ -398,9 +398,13 @@ function dashModelData(card, resolve) {
       };
     }
     case 'legend':
+      // `shape` alongside `kind`, not instead of it: kind is what the thing IS
+      // on the map, shape is what somebody chose to draw it as, and a writer
+      // that predates the choice keeps working off kind.
       return {
         rows: (card._rows || []).map(r => ({
-          label: r.label || '', kind: r.kind || 'area', color: col(r.color),
+          label: dashModelPlain(r.label), kind: r.kind || 'area',
+          shape: r.shape || null, color: col(r.color),
         })),
       };
 
