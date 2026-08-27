@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0197-blue)
+![Version](https://img.shields.io/badge/version-v6.0198-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,34 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0197 (latest)
+## 🆕 New in v6.0198 (latest)
+
+### Some map labels looked blurry and the ones beside them did not
+
+Not a rendering fault — just where each one landed. `projectPin()` returns a
+projected coordinate, which is fractional nearly always, and text laid down part
+of a pixel off its own grid is resampled. At 0.02 of a pixel off nobody can
+tell; at 0.41 off it reads as visibly soft. So one map at one zoom gave a crisp
+*BGR Logistics Park* (0.00, −0.01) directly beside a soft *Global Complex
+Warehouse* (0.00, 0.41):
+
+| label | x | y | |
+|---|---|---|---|
+| Candor Logistics Park | 0.02 | −0.14 | crisp |
+| BGR Logistics Park | 0.00 | −0.01 | crisp |
+| K Square Logistical Park | **0.39** | −0.05 | blurry |
+| FM Logistic India | 0.00 | **0.35** | blurry |
+| Global Complex Warehouse | 0.00 | **0.41** | blurry |
+
+Labels are snapped to whole pixels now. The pins never had the problem, because
+their own positions already came out whole — which is why the markers always
+looked sharp while the text next to them did not.
+
+**The pins are deliberately left unsnapped.** A label is a chip floating beside
+a pin, so moving it half a pixel costs nothing anybody can see. A pin *is* its
+coordinate, and nudging one to sharpen it would be moving the thing it marks.
+
+## 🆕 New in v6.0197
 
 ### Bold, italic, underline and a highlighter, on any text on a card
 

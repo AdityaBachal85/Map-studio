@@ -131,7 +131,21 @@
           const pin = projectPin(e.anchor);
           const ox = (e.labelPinned ? e.labelOffset.x : (e._autoOffsetX != null ? e._autoOffsetX : e.labelOffset.x));
           const oy = (e.labelPinned ? e.labelOffset.y : (e._autoOffsetY != null ? e._autoOffsetY : e.labelOffset.y));
-          e._labelEl.style.transform = `translate(${pin.x + ox}px, ${pin.y + oy}px)`;
+          // ROUNDED TO WHOLE PIXELS, and this is the whole reason some labels
+          // looked soft and the one beside them looked sharp. `projectPin()`
+          // returns a projected coordinate, which is fractional almost always,
+          // and text laid down half a pixel off its own grid is resampled: at
+          // 0.0-0.15 off nobody can tell, at 0.35-0.5 off it reads as blurry.
+          // So the same map, at the same zoom, gave a crisp "BGR Logistics
+          // Park" (0.00, -0.01) next to a soft "Global Complex Warehouse"
+          // (0.00, 0.41) — which looks like a rendering fault and is really
+          // just where each one happened to land.
+          //
+          // The pins never had it because their own positions come out whole.
+          // Snapping costs at most half a pixel of placement accuracy, which is
+          // invisible, against text that is legibly sharper everywhere.
+          e._labelEl.style.transform =
+            `translate(${Math.round(pin.x + ox)}px, ${Math.round(pin.y + oy)}px)`;
         });
         // Via-point dots: pin them exactly on their coordinate (bottom-center of the dot)
         routes.forEach(rt => {

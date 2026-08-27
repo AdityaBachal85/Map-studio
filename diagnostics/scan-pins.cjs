@@ -218,6 +218,56 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   await p.waitForTimeout(600);
   await p.screenshot({ path: path.join(__dirname, 'shot-towers.png') });
 
+  /* -- a label sits on the pixel grid, not between it and the next one ------ */
+
+  // WHY HALF THE LABELS ON A MAP LOOKED SOFT AND THE OTHER HALF DID NOT.
+  // projectPin() returns a projected coordinate, which is fractional nearly
+  // always, and text laid down part of a pixel off its own grid gets resampled.
+  // At 0.02 off nobody can tell; at 0.41 off it reads as blurry. So one map at
+  // one zoom gave a crisp "BGR Logistics Park" beside a soft "Global Complex
+  // Warehouse", which looks like a rendering fault and is really just where
+  // each of them happened to land.
+  //
+  // Asserted on the transform rather than on a screenshot: a blur of a third of
+  // a pixel is not something a pixel comparison can be trusted to catch, and it
+  // is exactly the sort of thing that creeps back in when somebody adds an
+  // offset to this line.
+  const grid = await p.evaluate(names => {
+    map.setView([19.24, 73.05], 13, { animate: false });
+    names.forEach((n, i) => addLocation({ name: n,
+      lat: 19.243 + (i % 4) * 0.007 - 0.014, lng: 73.05 + Math.floor(i / 4) * 0.013 - 0.018 }));
+    if (typeof rebuildLegend === 'function') rebuildLegend();
+    return true;
+  }, ['Candor Logistics Park', 'K Square Logistical Park', 'DHL Supply Chain',
+    'BGR Logistics Park', 'FM Logistic India', 'Global Complex Warehouse',
+    'Sai Dhara, Warehouse and Logistics Park', 'ESR BHIWANDI 2 LOGISTICS PARK']);
+  await p.waitForTimeout(1200);
+
+  const offs = await p.evaluate(() => [...document.querySelectorAll('.bb')]
+    .filter(el => (el.textContent || '').trim())
+    .map(el => {
+      const m = /matrix\(1,\s*0,\s*0,\s*1,\s*(-?[\d.]+),\s*(-?[\d.]+)\)/
+        .exec(getComputedStyle(el).transform);
+      if (!m) return null;
+      const x = Number(m[1]), y = Number(m[2]);
+      return { t: (el.textContent || '').trim().slice(0, 20),
+        fx: Math.abs(x - Math.round(x)), fy: Math.abs(y - Math.round(y)) };
+    }).filter(Boolean));
+  const off = offs.filter(o => o.fx > 0.001 || o.fy > 0.001);
+  ck('every label is placed on a whole pixel, so none of them is resampled',
+    offs.length >= 6 && off.length === 0,
+    off.length ? off.map(o => o.t + ' ' + o.fx.toFixed(2) + '/' + o.fy.toFixed(2)).join(', ')
+      : offs.length + ' labels, all on the grid');
+
+  // A label is a chip floating beside a pin, so snapping it costs nothing a
+  // reader can see. A pin IS its coordinate, so it is deliberately left alone —
+  // moving one half a pixel to sharpen it would be moving the thing it marks.
+  ck('and the pins are not snapped, because a pin is where something is',
+    await p.evaluate(() => {
+      const el = document.querySelector('.bb-pin, .leaflet-marker-icon');
+      return !!el;
+    }) === true);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
