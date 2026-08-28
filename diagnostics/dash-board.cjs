@@ -438,7 +438,9 @@ const SCENE = [
     const read = n => ({ bg: n.style.background || n.style.backgroundColor, ink: n.style.color });
     const pane = document.getElementById('dashFormat');
     const out = {
-      head: read(el.querySelector('thead tr')),
+      // `.dc-headrow`, not `thead tr`: in edit mode the first row of the thead
+      // is the spreadsheet's column-tab strip, and the header proper is second.
+      head: read(el.querySelector('.dc-headrow')),
       rows: trs.map(read),
       // THE COMPUTED COLOUR OF THE TEXT, not the attribute written on the row.
       // `.dc-th` and `.dc-td` each set a colour of their own and a rule beats an

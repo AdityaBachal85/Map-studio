@@ -32,10 +32,16 @@ function clusterIcon(count, color) {
   // Three size steps: a 40-strong cluster should read as heavier than a pair
   // without the badge growing large enough to hide what is under it.
   const size = count < 10 ? 30 : (count < 50 ? 36 : 42);
+  // Deepened here rather than in the stylesheet, which said the same thing with
+  // color-mix(). Chrome computes that to `color(srgb …)`, and html2canvas —
+  // which rasterises these badges into every map export — throws
+  // "unsupported color function" on it and aborts the whole capture rather than
+  // skipping the badge. A literal survives; the CSS rule stays as the fallback.
+  const deep = (typeof dashMixHex === 'function' && dashMixHex(color, 82, '#0b1220')) || color;
   return L.divIcon({
     className: 'poi-cluster-wrap',
     html:
-      `<span class="poi-cluster" style="--cl:${color};width:${size}px;height:${size}px">` +
+      `<span class="poi-cluster" style="--cl:${color};background:${deep};width:${size}px;height:${size}px">` +
       `<b>${count}</b></span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],

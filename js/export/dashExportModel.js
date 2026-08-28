@@ -129,12 +129,37 @@ function dashModelRuns(v) {
     out.push(run);
   };
 
+  // A LIST IS A MARKER AND A LINE BREAK, not a structure the writers each model
+  // separately. Word can be told to number a paragraph properly, PowerPoint has
+  // its own bullet flag and the PDF writer has neither — so three writers would
+  // mean three implementations and three ways for the same list to come out
+  // differently. The marker is real text in every one of them, which is what
+  // the legend's symbols already are and for the same reason.
+  const lists = [];
+
   let at = 0;
   src.replace(/<\/?([a-z]+)([^>]*)>/gi, (m, rawName, attrs, idx) => {
     push(dashModelPlain(src.slice(at, idx)));
     at = idx + m.length;
     const name = rawName.toLowerCase();
     if (name === 'br') { push('\n'); return m; }
+    if (name === 'ul' || name === 'ol') {
+      if (m.charAt(1) === '/') lists.pop();
+      else lists.push({ ordered: name === 'ol', n: 0 });
+      return m;
+    }
+    if (name === 'li') {
+      if (m.charAt(1) === '/') return m;
+      const L = lists[lists.length - 1];
+      if (L) L.n++;
+      // No leading break before the first item: the list starts where the text
+      // before it ended, and an empty first line reads as a mistake.
+      const first = !!L && L.n === 1 && !out.length;
+      const indent = '   '.repeat(Math.max(0, lists.length - 1));
+      push((first ? '' : '\n') + indent
+        + (L && L.ordered ? L.n + '. ' : '\u2022 '));
+      return m;
+    }
     if (m.charAt(1) === '/') {
       // Pop back to the matching open, so a stray close cannot unwind the lot.
       for (let n = stack.length - 1; n >= 0; n--) {
@@ -307,6 +332,55 @@ function dashModelNum(v, f) {
   return f ? (f.prefix || '') + body + (f.suffix || '') : body;
 }
 
+/**
+ * Every styled cell of a table, resolved through cell → column → card.
+ *
+ * WHY FLATTEN. The screen resolves three levels every time it draws a cell, and
+ * so could each writer — but then PDF, PowerPoint and Word would each carry
+ * their own copy of the precedence rule, and the day one of them drifted the
+ * three files would quietly disagree about what the same table looks like.
+ * Resolved once, here, where it is also testable without a browser.
+ *
+ * Sparse: only cells that actually carry something appear, so a plain table
+ * costs nothing.
+ *
+ * @param {object} card @returns {object} keyed 'row:col', row −1 being the header
+ */
+function dashModelCells(card) {
+  const out = {};
+  const rowN = (card.rows || []).length, colN = (card.columns || []).length;
+  const KEYS = ['align', 'size', 'fill', 'ink', 'bd', 'bdc'];
+  const read = (r, c, k) => {
+    const cs = card.cellStyle && card.cellStyle[r + ':' + c];
+    if (cs && cs[k] != null) return cs[k];
+    const col = card.colStyle && card.colStyle[c];
+    if (col && col[k] != null) return col[k];
+    // The older per-column alignment, so a board saved before the selection
+    // model existed exports the way it was left.
+    if (k === 'align' && card.colAlign && card.colAlign[c]) return card.colAlign[c];
+    const all = card.tableStyle;
+    if (all && all[k] != null) return all[k];
+    return undefined;
+  };
+  for (let r = -1; r < rowN; r++) {
+    for (let c = 0; c < colN; c++) {
+      const cell = {};
+      KEYS.forEach(k => {
+        const v = read(r, c, k);
+        if (v == null) return;
+        if (k === 'fill' || k === 'ink' || k === 'bdc') {
+          const hex = dashModelHex(v);
+          if (hex) cell[k] = hex;
+        } else if (k === 'size') {
+          if (isFinite(v)) cell[k] = +v;
+        } else cell[k] = String(v);
+      });
+      if (Object.keys(cell).length) out[r + ':' + c] = cell;
+    }
+  }
+  return out;
+}
+
 function dashModelData(card, resolve) {
   const col = c => dashModelColor(c, resolve);
   switch (card.type) {
@@ -420,6 +494,25 @@ function dashModelData(card, resolve) {
         // The chosen text colour, or null where the writer should work out a
         // readable one from the fill itself.
         rowInk: (card.rows || []).map((r, i) => dashModelHex((card.rowInk || {})[i])),
+        // EVERY CELL, FLATTENED. PowerPoint and Word both take alignment, a
+        // point size, a fill and per-edge borders on a table cell, so all four
+        // survive the trip — but neither has a notion of "this column, and
+        // anything added to it later". The three levels the screen resolves
+        // through are collapsed here into one answer per cell, so a writer
+        // never has to know the rule and the three files cannot disagree about
+        // it. Row −1 is the header, keyed the same way as on the card.
+        cells: dashModelCells(card),
+        // Geometry, in the pixels the screen used. A writer scales them into
+        // its own units; absent means "share the width evenly", which is what
+        // every writer already did.
+        colW: (card.columns || []).map((c, i) => {
+          const w = (card.colW || {})[i];
+          return (w != null && isFinite(w)) ? +w : null;
+        }),
+        rowH: (card.rows || []).map((r, i) => {
+          const h = (card.rowH || {})[i];
+          return (h != null && isFinite(h)) ? +h : null;
+        }),
       };
     case 'list':
       return { items: (card.items || []).map(i => ({
@@ -573,7 +666,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     dashExportModel, dashModelColor, dashModelCardEmpty, dashModelData,
     dashModelHasValue, dashModelTyped, dashModelViz, dashModelPlain, dashModelRuns,
-    dashModelHex, dashModelNum,
+    dashModelHex, dashModelNum, dashModelCells,
     DASH_MODEL_COLS, DASH_MODEL_FALLBACK, DASH_MODEL_PROMPTS,
   };
 }

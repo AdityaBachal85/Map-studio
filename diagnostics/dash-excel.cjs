@@ -313,7 +313,9 @@ async function typeInto(p, sel, value) {
   // just written: the .dc-th div sets its own colour and beat inheritance, and
   // asserting on the attribute is exactly how that shipped green once already.
   const head = await p.evaluate(() => {
-    const tr = document.querySelector('#dashGrid thead tr');
+    // `.dc-headrow`, not `thead tr`: the first row of the thead in edit mode is
+    // the column-tab strip that the spreadsheet frame adds.
+    const tr = document.querySelector('#dashGrid .dc-headrow');
     const th = document.querySelector('#dashGrid .dc-th');
     return { ink: getComputedStyle(th).color, fill: getComputedStyle(tr).backgroundColor };
   });

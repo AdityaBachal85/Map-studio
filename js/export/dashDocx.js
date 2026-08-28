@@ -76,25 +76,60 @@ function docxTable(columns, rows, pal, fills) {
   const shd = h => (h ? '<w:shd w:val="clear" w:color="auto" w:fill="'
     + String(h).replace('#', '').toUpperCase() + '"/>' : '');
   const inkOn = h => (typeof dashInkOn === 'function' ? dashInkOn(h) : null);
-  const cell = (text, o, fill) => '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>'
-    + shd(fill) + '</w:tcPr>'
-    + docxP(text, Object.assign({ spaceAfter: 0 }, o)) + '</w:tc>';
   const f = fills || {};
+  const cells = f.cells || {};
+  const hex6 = h => String(h).replace('#', '').toUpperCase();
+
+  // PER-CELL BORDERS. Word takes them on the cell, which is where Excel's
+  // border tool puts them; the table-level w:tblBorders below is the card's
+  // Rules preset and stays the default underneath. A cell that names an edge
+  // overrides it, and one that names none inherits.
+  const tcBorders = st => {
+    if (!st || !st.bd) return '';
+    const col = hex6(st.bdc || (typeof DASH_BORDER_INK === 'string' ? DASH_BORDER_INK : '#7f8fad'));
+    const one = (tag, on) => '<w:' + tag + ' w:val="' + (on ? 'single' : 'nil')
+      + '" w:sz="' + (on ? 12 : 0) + '" w:space="0" w:color="' + col + '"/>';
+    return '<w:tcBorders>' + one('top', st.bd.indexOf('t') >= 0)
+      + one('left', st.bd.indexOf('l') >= 0)
+      + one('bottom', st.bd.indexOf('b') >= 0)
+      + one('right', st.bd.indexOf('r') >= 0) + '</w:tcBorders>';
+  };
+  // Word wants twips for a column width: 1px at 96dpi is 15 twips.
+  const tcW = w => (w != null && isFinite(w)
+    ? '<w:tcW w:w="' + Math.round(w * 15) + '" w:type="dxa"/>'
+    : '<w:tcW w:w="0" w:type="auto"/>');
+
+  const cell = (text, o, fill, st, w) => '<w:tc><w:tcPr>' + tcW(w)
+    + shd((st && st.fill) || fill) + tcBorders(st) + '</w:tcPr>'
+    + docxP(text, Object.assign({ spaceAfter: 0 }, o,
+      // What the cell itself says beats what its row says — the same precedence
+      // the screen resolves, already flattened for us by dashModelCells().
+      st && st.align ? { align: st.align === 'center' ? 'center' : st.align } : null,
+      st && st.size ? { size: +st.size } : null,
+      st && st.ink ? { color: st.ink } : null)) + '</w:tc>';
+
   const headFill = f.head || null;
   const rowFill = f.rows || [];
   const rowInk = f.inks || [];
+  const colW = f.colW || [];
   const head = columns && columns.length
     ? '<w:tr><w:trPr><w:tblHeader/></w:trPr>'
-      + columns.map(c => cell(String(c).toUpperCase(),
-        { bold: true, size: 8, color: f.headInk || inkOn(headFill) || pal.faint }, headFill)).join('')
+      + columns.map((c, i) => cell(String(c).toUpperCase(),
+        { bold: true, size: 8, color: f.headInk || inkOn(headFill) || pal.faint },
+        headFill, cells['-1:' + i], colW[i])).join('')
       + '</w:tr>'
     : '';
   const body = rows.map((r, ri) => {
     const fill = rowFill[ri] || null;
     const ink = rowInk[ri] || inkOn(fill);
-    return '<w:tr>'
+    // A row height Word will honour rather than shrink back to the text.
+    const h = (f.rowH || [])[ri];
+    const trPr = (h != null && isFinite(h))
+      ? '<w:trPr><w:trHeight w:val="' + Math.round(h * 15) + '" w:hRule="atLeast"/></w:trPr>' : '';
+    return '<w:tr>' + trPr
       + (r || []).map((c, i) => cell(c,
-        { size: 9, color: ink || (i === 0 ? pal.ink : pal.dim) }, fill)).join('')
+        { size: 9, color: ink || (i === 0 ? pal.ink : pal.dim) },
+        fill, cells[ri + ':' + i], colW[i])).join('')
       + '</w:tr>';
   }).join('');
   return '<w:tbl><w:tblPr>'
@@ -204,7 +239,8 @@ async function dashBuildDocx(model, canvas, rects, scale) {
       case 'access':
       case 'table':
         body.push(docxTable(d.columns, d.rows, pal,
-          { head: d.headFill, rows: d.rowFill, headInk: d.headInk, inks: d.rowInk }));
+          { head: d.headFill, rows: d.rowFill, headInk: d.headInk, inks: d.rowInk,
+            cells: d.cells, colW: d.colW, rowH: d.rowH }));
         body.push(docxP('', { spaceAfter: 200 }));
         break;
       case 'chart': {

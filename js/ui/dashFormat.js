@@ -23,6 +23,13 @@
  * kilometres are the same picture without axis titles, and a board of Indian
  * property prices reads as nonsense in the compact 27.5K default.
  *
+ * THE TABLE'S CONTROLS ACT ON A SELECTION, not on a fixed target. There used to
+ * be one alignment row per column here, which grew with the data, could not say
+ * "these three cells", and had no answer at all for a single row. A spreadsheet
+ * settles that once: select, then format what is selected. The selection lives
+ * in ui/dashTable.js along with the sheet's other behaviour — paste, copy,
+ * column widths, row heights — and this file is only the controls over it.
+ *
  * WHAT IS NOT. There is no query engine and no formula language — data is typed
  * or pasted or read from the map. That is the honest boundary of this tool, and
  * it is stated in the pane rather than hidden behind a disabled button.
@@ -62,6 +69,98 @@ function dfNumberFormat(card) {
       + '<input type="text" data-dftext="numSuffix" value="'
       + esc(f.numSuffix || '') + '" placeholder="km" size="4">'
       + '</div>');
+}
+
+/**
+ * Everything that acts on the selected cells.
+ *
+ * ONE CONTROL PER DECISION, whatever shape the target is. Selecting a column
+ * tab, a row number, a rectangle of cells or the whole sheet all end up here,
+ * and the same alignment button serves all four — which is the thing a
+ * per-column pane could never do.
+ *
+ * `dashSelValue` returns undefined where the selected cells disagree, so a
+ * mixed selection shows no button pressed rather than lying about the first
+ * cell it found.
+ *
+ * @param {object} card @returns {string} HTML
+ */
+function dfTableSelection(card) {
+  if (typeof dashSelBox !== 'function') return '';
+  const box = dashSelBox(card);
+  if (!box) {
+    return dfSection('Selection',
+      '<p class="df-note">Click a cell, a column letter or a row number to format it. '
+      + 'Drag across cells for a block, or use the corner box for the whole table.</p>');
+  }
+  const n = (box.bottom - box.top + 1) * (box.right - box.left + 1);
+  const where = n === 1
+    ? 'Cell ' + dashColName(box.left) + (box.top < 0 ? ' header' : ' ' + (box.top + 1))
+    : dashColName(box.left) + (box.top < 0 ? 'H' : String(box.top + 1))
+      + ' : ' + dashColName(box.right) + (box.bottom < 0 ? 'H' : String(box.bottom + 1))
+      + '  \u00b7  ' + n + ' cells';
+
+  const al = dashSelValue(card, 'align') || 'left';
+  const sz = dashSelValue(card, 'size');
+  const bd = dashSelValue(card, 'bd') || '';
+  const fill = dashSelValue(card, 'fill');
+  const ink = dashSelValue(card, 'ink');
+
+  let h = '<p class="df-note df-selwhat">' + esc(where) + '</p>';
+  h += dfRow('Align', dfSegIcons('selalign',
+    [['left', 'Align left'], ['center', 'Align centre'], ['right', 'Align right']], al));
+  h += dfRow('Font size', '<input type="number" min="7" max="48" step="1" data-dfsel="size" value="'
+    + (sz != null ? +sz : '') + '" placeholder="auto">');
+  // A one-shot transform of what is stored, not a text-transform: a CSS one
+  // looks right on screen and exports the original shouting into the file.
+  h += dfRow('Case', '<div class="df-seg">'
+    + '<button type="button" data-dfcase="upper" title="ANDHERI EAST">AB</button>'
+    + '<button type="button" data-dfcase="lower" title="andheri east">ab</button>'
+    + '<button type="button" data-dfcase="proper" title="Andheri East">Ab</button>'
+    + '</div>');
+  // DRAWN, NOT SPELT. The obvious glyphs for these — \u2594 \u2581 \u258f \u2595 — are a
+  // thin mark floating in a 12px box with nothing to place it against, so at
+  // this size "top" and "bottom" are the same smudge. A square with one edge
+  // inked says which edge without the reader having to work it out.
+  const bdIcon = edges => '<svg viewBox="0 0 14 14" width="13" height="13" aria-hidden="true">'
+    + '<rect x="1.5" y="1.5" width="11" height="11" fill="none" stroke="currentColor"'
+    + ' stroke-width="1" opacity=".28"/>'
+    + [['t', 'M1.5 1.5H12.5'], ['r', 'M12.5 1.5V12.5'], ['b', 'M1.5 12.5H12.5'], ['l', 'M1.5 1.5V12.5']]
+      .filter(e => edges.indexOf(e[0]) >= 0)
+      .map(e => '<path d="' + e[1] + '" stroke="currentColor" stroke-width="2.2" fill="none"/>').join('')
+    + '</svg>';
+  h += dfRow('Borders', '<div class="df-seg df-bd">'
+    + [['all', 'Every edge', 'trbl'], ['out', 'Outline the block', 'trbl'],
+      ['t', 'Top', 't'], ['b', 'Bottom', 'b'], ['l', 'Left', 'l'], ['r', 'Right', 'r'],
+      ['none', 'None', '']]
+      .map(o => '<button type="button" data-dfbd="' + o[0] + '" title="' + o[1] + '"'
+        + ' aria-label="' + o[1] + '"'
+        + (o[0] !== 'all' && o[0] !== 'out' && o[0] !== 'none' && bd.indexOf(o[0]) >= 0 ? ' class="on"' : '')
+        + '>' + (o[0] === 'all'
+          // ALL is every edge of every cell — a grid. OUTLINE is the outside of
+          // the block only — a heavy box. Drawn the other way round they say
+          // each other's job, which is worse than saying nothing.
+          ? '<svg viewBox="0 0 14 14" width="13" height="13" aria-hidden="true">'
+            + '<rect x="1.5" y="1.5" width="11" height="11" fill="none" stroke="currentColor"'
+            + ' stroke-width="1.8"/><path d="M7 1.5V12.5M1.5 7H12.5" stroke="currentColor"'
+            + ' stroke-width="1.8"/></svg>'
+          : bdIcon(o[2])) + '</button>').join('')
+    + '</div>');
+  h += dfRow('Fill & text', '<div class="df-point-row">'
+    + dfSwatches('selfill', fill || '#e7eefc')
+    + dfSwatches('selink', ink || dashInkOn(fill || '#e7eefc') || '#14243d')
+    + ((fill || ink) ? '<button type="button" class="df-clear" data-df="selclear" data-v="1"'
+      + ' title="Back to no fill">&times;</button>' : '')
+    + '</div>');
+
+  const w = (card.colW || {})[box.left];
+  h += dfRow('Column width', '<input type="number" min="36" max="900" step="4" data-dfsel="colW" value="'
+    + (w != null ? +w : '') + '" placeholder="auto">');
+  const hh = (card.rowH || {})[box.top];
+  h += dfRow('Row height', '<input type="number" min="22" max="400" step="2" data-dfsel="rowH" value="'
+    + (hh != null ? +hh : '') + '" placeholder="auto">');
+
+  return dfSection('Selection', h);
 }
 
 /** @param {string} label @param {string} body @returns {string} a pane section */
@@ -220,6 +319,11 @@ function dfCurrentColour(card, key) {
   // Read and write have to name the same place or the picker opens showing a
   // colour the card is not using, and the first drag "changes" it to what it
   // already was.
+  if (key === 'selfill' || key === 'selink') {
+    const v = typeof dashSelValue === 'function'
+      ? dashSelValue(card, key === 'selfill' ? 'fill' : 'ink') : null;
+    return v || (key === 'selfill' ? '#e7eefc' : '#14243d');
+  }
   const rowf = key.match(/^rowfill:(\d+)$/);
   if (rowf) return (card.rowFill && card.rowFill[+rowf[1]]) || '#e7eefc';
   const rowi2 = key.match(/^rowink:(\d+)$/);
@@ -473,15 +577,11 @@ function renderDashFormat() {
       [['compact', 'Tight'], ['normal', 'Normal'], ['roomy', 'Roomy']],
       tf.tableDensity || 'normal'));
 
-    // Per column, because that is the unit the decision belongs to: a distance
-    // column reads right whatever row it is in.
-    const ca = card.colAlign || {};
-    (card.columns || []).forEach((c, i) => {
-      f += dfRow(dashRichPlain(String(c || '')).trim() || ('Column ' + (i + 1)),
-        dfSegIcons('colalign:' + i,
-          [['left', 'Align left'], ['center', 'Align centre'], ['right', 'Align right']],
-          ca[i] || 'left'));
-    });
+    // WHAT IS SELECTED, NOT ONE ROW PER COLUMN. The pane used to carry an
+    // alignment control for every column in the table — a pane that grew with
+    // the data, could not say "these three cells", and had no answer at all for
+    // a single row. A sheet solves it once: select, then format the selection.
+    f += dfTableSelection(card);
 
     f += dfRow('Header row', pair('headfill', 'headink',
       card.headFill, card.headInk, '#14243d'));
@@ -618,6 +718,50 @@ function dashFormatApply(card, key, v) {
     card.rowInk[+rowi[1]] = String(v).toLowerCase();
     return;
   }
+  // Everything that acts on the selected cells. dashSelApply decides whether a
+  // statement belongs on the cells or on the whole column — see its comment.
+  if (key === 'selalign') { dashSelApply(card, 'align', v === 'left' ? null : v); return; }
+  if (key === 'selfill') {
+    dashSelApply(card, 'fill', String(v).toLowerCase());
+    return;
+  }
+  if (key === 'selink') { dashSelApply(card, 'ink', String(v).toLowerCase()); return; }
+  if (key === 'selclear') { dashSelApply(card, 'fill', null); dashSelApply(card, 'ink', null); return; }
+
+  // EXCEL'S BORDER TOOL, in Excel's terms. 'all' is every edge of every cell,
+  // 'out' is only the outside of the block — the distinction that makes the
+  // tool worth having, and the one a per-cell toggle cannot express.
+  const bdm = key.match(/^selbd:(.+)$/);
+  if (bdm) {
+    const box = dashSelBox(card);
+    if (!box) return;
+    const mode = bdm[1];
+    for (let r = box.top; r <= box.bottom; r++) {
+      for (let c = box.left; c <= box.right; c++) {
+        let e = '';
+        if (mode === 'all') e = 'trbl';
+        else if (mode === 'out') {
+          if (r === box.top) e += 't';
+          if (r === box.bottom) e += 'b';
+          if (c === box.left) e += 'l';
+          if (c === box.right) e += 'r';
+        } else if (mode !== 'none') {
+          const cur = String(dashCellStyle(card, r, c, 'bd') || '');
+          e = cur.indexOf(mode) >= 0 ? cur.replace(mode, '') : cur + mode;
+        }
+        card.cellStyle = card.cellStyle || {};
+        const k2 = dashCellKey(r, c);
+        const st = Object.assign({}, card.cellStyle[k2]);
+        if (e) st.bd = e; else delete st.bd;
+        if (Object.keys(st).length) card.cellStyle[k2] = st; else delete card.cellStyle[k2];
+      }
+    }
+    return;
+  }
+
+  const cse = key.match(/^selcase:(.+)$/);
+  if (cse) { dashSelCase(card, cse[1]); return; }
+
   if (key === 'headfill') { card.headFill = String(v).toLowerCase(); return; }
   if (key === 'headink') { card.headInk = String(v).toLowerCase(); return; }
   // One clear takes the whole row back to plain — clearing a fill but leaving a
@@ -739,11 +883,62 @@ function dfRedraw(card) {
       return;
     }
 
+    const cse = e.target.closest('[data-dfcase]');
+    if (cse) {
+      const card = dashFormatTarget();
+      if (!card) return;
+      dashFormatApply(card, 'selcase:' + cse.dataset.dfcase, '1');
+      renderDashboard();
+      return;
+    }
+    const bd = e.target.closest('[data-dfbd]');
+    if (bd) {
+      const card = dashFormatTarget();
+      if (!card) return;
+      dashFormatApply(card, 'selbd:' + bd.dataset.dfbd, '1');
+      renderDashboard();
+      return;
+    }
+
     const b = e.target.closest('[data-df]');
     if (!b) return;
     const card = dashFormatTarget();
     if (!card) return;
     dashFormatApply(card, b.dataset.df, b.dataset.v);
+    renderDashboard();
+  });
+
+  // The numeric fields that act on the selection. Separate from data-dfnum,
+  // which writes onto the card: a font size belongs to the cells you picked.
+  host.addEventListener('change', e => {
+    const inp = e.target.closest('[data-dfsel]');
+    if (!inp) return;
+    const card = dashFormatTarget();
+    if (!card || typeof dashSelBox !== 'function') return;
+    const box = dashSelBox(card);
+    if (!box) return;
+    const k = inp.dataset.dfsel;
+    const n = parseFloat(inp.value);
+    const blank = inp.value === '' || !isFinite(n);
+    const lo = inp.min === '' ? -Infinity : +inp.min;
+    const hi = inp.max === '' ? Infinity : +inp.max;
+    const val = blank ? null : Math.max(lo, Math.min(hi, Math.round(n)));
+
+    // Width and height are geometry of the table, not style of a cell, so they
+    // are stored per column and per row rather than through dashSelApply.
+    if (k === 'colW') {
+      card.colW = card.colW || {};
+      for (let c = box.left; c <= box.right; c++) {
+        if (val == null) delete card.colW[c]; else card.colW[c] = val;
+      }
+    } else if (k === 'rowH') {
+      card.rowH = card.rowH || {};
+      for (let r = box.top; r <= box.bottom; r++) {
+        if (val == null) delete card.rowH[r]; else card.rowH[r] = val;
+      }
+    } else {
+      dashSelApply(card, k, val);
+    }
     renderDashboard();
   });
 

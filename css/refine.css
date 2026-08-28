@@ -3135,7 +3135,7 @@ input[type=checkbox]:disabled {
 }
 
 .pb-avatar:hover { filter: brightness(1.12); }
-.pb-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+.pb-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.34); }
 
 /* The breadcrumb. Sits under the tagline, inside the header's own padding, so
    it aligns with the product name above it instead of spanning the panel. */
@@ -3212,9 +3212,9 @@ input[type=checkbox]:disabled {
   cursor: pointer;
 }
 
-.pb-acct-menu button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.pb-acct-menu button:hover { background: rgba(var(--text-rgb), 0.09); }
 .pb-acct-menu button.danger { color: var(--danger); }
-.pb-acct-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent); }
+.pb-acct-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.34); }
 
 
 /* The stale-page notice. Fixed to the bottom so it cannot be missed and
@@ -3265,7 +3265,7 @@ input[type=checkbox]:disabled {
    at mini-btn size a border change alone is too quiet to read as "on". */
 .mini-btn.bnd.on {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: rgba(var(--accent-rgb), 0.2);
   color: var(--text);
 }
 

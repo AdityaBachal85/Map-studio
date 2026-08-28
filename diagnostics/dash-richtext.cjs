@@ -190,8 +190,8 @@ const M = require(path.join(REPO, 'js/export/dashExportModel.js'));
   });
   ck('selecting words in a card raises the formatting bar',
     !!bar && bar.open === true, JSON.stringify(bar));
-  ck('with the four marks, a row of inks and a way to clear it',
-    bar.marks === 5 && bar.inks === 6, JSON.stringify(bar));
+  ck('with the four marks, two lists, a row of inks and a way to clear it',
+    bar.marks === 7 && bar.inks === 6, JSON.stringify(bar));
   ck('and it is on the screen rather than off the top of it', bar.onScreen === true);
 
   await press('.rich-bar [data-rich="bold"]');
@@ -268,6 +268,51 @@ const M = require(path.join(REPO, 'js/export/dashExportModel.js'));
     model.tags === false, JSON.stringify(model.body));
   ck('and the marks beside them, so a writer that can set bold knows where',
     model.runs.some(r => /\[b\]$/.test(r)), JSON.stringify(model.runs));
+
+  /* ---- lists, as Word has them ------------------------------------------- */
+
+  const listed = await p.evaluate(() => {
+    const card = dashCardById('t1');
+    card.body = 'Nearby:';
+    renderDashboard();
+    const el = document.querySelector('.dc-text[data-bind="body"]');
+    el.focus();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    _richOn = el;
+    dashRichRun('insertUnorderedList', null);
+    return { html: el.innerHTML, stored: dashCardById('t1').body };
+  });
+  // THE SANITISER IS THE FAILURE MODE HERE. execCommand builds a real ul/li,
+  // and if those tags are not on the allowed list dashRichClean unwraps them
+  // straight back out on commit — the button appears to work and then undoes
+  // itself the moment focus leaves.
+  ck('a bulleted list survives being written back to the card',
+    /<ul>/.test(listed.stored) && /<li>/.test(listed.stored), listed.stored);
+
+  const kept = await p.evaluate(() => dashRichClean('<ul><li>one</li><li>two</li></ul>'));
+  ck('and the sanitiser keeps it rather than unwrapping it to a run-on line',
+    /<ul><li>one<\/li><li>two<\/li><\/ul>/.test(kept), kept);
+
+  const plain = await p.evaluate(() =>
+    dashRichPlain('<ul><li>one</li><li>two</li></ul>'));
+  ck('a list reads as a list in plain text too', /\u2022 one\n\u2022 two/.test(plain),
+    JSON.stringify(plain));
+  const numbered = await p.evaluate(() =>
+    dashRichPlain('<ol><li>first</li><li>second</li></ol>'));
+  ck('and a numbered one counts', /1\. first\n2\. second/.test(numbered),
+    JSON.stringify(numbered));
+
+  const listRuns = await p.evaluate(() => dashModelRuns('<ol><li>a</li><li>b</li></ol>'));
+  const joined = listRuns.map(r => r.text).join('');
+  ck('the export model turns the markers into text every writer can print',
+    /1\. a\n2\. b/.test(joined), JSON.stringify(joined));
+
+  const nested = await p.evaluate(() => dashModelRuns('<ul><li>a<ul><li>b</li></ul></li></ul>'));
+  ck('and a nested list is indented rather than flattened',
+    /\u2022 a\n {3}\u2022 b/.test(nested.map(r => r.text).join('')),
+    JSON.stringify(nested.map(r => r.text).join('')));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' | ') || 'none');
 

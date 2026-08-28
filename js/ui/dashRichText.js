@@ -34,6 +34,12 @@ const RICH_DROP = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|IFRAME|OBJECT|EMBED|APPLET|S
 const RICH_TAGS = {
   B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u',
   S: 's', STRIKE: 's', DEL: 's', MARK: 'mark', SPAN: 'span', BR: 'br',
+  // LISTS ARE STRUCTURE, and this is the one place the "inline marks only" rule
+  // bends. It has to: execCommand builds a real ul/ol/li, and without them on
+  // this list the sanitiser unwraps the list back into a run-on line the moment
+  // the field is committed — the button would appear to work and then undo
+  // itself. They carry no attributes, so nothing rides in with them.
+  UL: 'ul', OL: 'ol', LI: 'li',
 };
 
 /** The only inline styles a span may keep, and what they have to look like. */
@@ -112,6 +118,16 @@ function dashRichPlain(html) {
   const doc = new DOMParser().parseFromString(
     '<body>' + String(html == null ? '' : html) + '</body>', 'text/html');
   doc.body.querySelectorAll('br').forEach(br => br.replaceWith(doc.createTextNode('\n')));
+  // A list reads as a list in plain text too, or the card title in the pane and
+  // every place that shows a field's words rather than its marks would run four
+  // bullet points together into one sentence.
+  doc.body.querySelectorAll('li').forEach(li => {
+    const parent = li.parentElement;
+    const ordered = parent && parent.tagName === 'OL';
+    const n = parent ? Array.prototype.indexOf.call(parent.children, li) + 1 : 1;
+    li.insertBefore(doc.createTextNode((li.previousElementSibling || parent.previousSibling ? '\n' : '')
+      + (ordered ? n + '. ' : '\u2022 ')), li.firstChild);
+  });
   return doc.body.textContent;
 }
 
@@ -128,6 +144,11 @@ const RICH_BUTTONS = [
   ['italic', 'I', 'Italic', 'font-style:italic'],
   ['underline', 'U', 'Underline', 'text-decoration:underline'],
   ['strikeThrough', 'S', 'Strikethrough', 'text-decoration:line-through'],
+  // A bulleted and a numbered list, as Word has them. Glyphs rather than an
+  // icon font: these four characters render in every renderer this app writes
+  // to, which is the same reason the legend's symbols are characters.
+  ['insertUnorderedList', '\u2261', 'Bulleted list', 'font-size:13px'],
+  ['insertOrderedList', '\u2116', 'Numbered list', 'font-size:12px'],
 ];
 
 /** The highlighter's inks. Last one lifts the highlight off again. */

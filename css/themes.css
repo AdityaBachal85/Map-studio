@@ -8,9 +8,19 @@
       --stroke: rgba(255, 255, 255, .09);
       --stroke2: rgba(255, 255, 255, .16);
       --text: #EAF0F9;
+      /* THE SAME COLOUR AS A TRIPLE, so a tint can be written rgba(...).
+         `color-mix(in srgb, var(--text) 4%, transparent)` is the natural way to
+         say "4% of the ink" and Chrome computes it to `color(srgb …)` — which
+         html2canvas cannot parse, and it does not skip the element, it throws
+         and aborts the whole capture. One banded table on the board and every
+         PNG, PDF, deck and Word file failed with "Dashboard export failed".
+         rgba() serialises as rgba() and survives. Keep these in step with the
+         hex above. */
+      --text-rgb: 234, 240, 249;
       --dim: #8B99B0;
       --navy: #0A1E3C;
       --orange: #FF7A1A;
+      --accent-rgb: 255, 122, 26;
       --orange2: #FFA149;
       --danger: #FF6B81;
       /* Geist Mono, so the coordinate and distance readouts belong to the same
@@ -140,6 +150,7 @@
       --stroke: rgba(16, 32, 60, .12);
       --stroke2: rgba(16, 32, 60, .22);
       --text: #17233B;
+      --text-rgb: 23, 35, 59;
       --dim: #55627A;
       --surface-solid: #FFFFFF;
       --ok: #0F7A55;

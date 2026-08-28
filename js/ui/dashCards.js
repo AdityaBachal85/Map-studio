@@ -418,43 +418,82 @@ function dashTableHtml(card) {
   const fills = card.rowFill || {};
   const inks = card.rowInk || {};
   const f = card.fmt || {};
-  // A number column reads right, a name column reads left — which is the first
-  // thing anybody does to a table in a spreadsheet and could not be done here.
-  const colAlign = card.colAlign || {};
-  const al = i => (colAlign[i] ? ' style="text-align:' + esc(colAlign[i]) + '"' : '');
   const headOn = f.tableHead !== false;
+  const edit = !!dashEditing;
   // The classes the stylesheet keys off: rules, banding and density are three
   // separate decisions and a spreadsheet lets you make them separately.
   const cls = ['dc-table',
     'dc-rule-' + (f.tableRule || 'rows'),
     f.tableBanded === false ? 'dc-band-off' : 'dc-band-on',
-    'dc-dense-' + (f.tableDensity || 'normal')].join(' ');
+    'dc-dense-' + (f.tableDensity || 'normal'),
+    edit ? 'dc-grid' : ''].join(' ').trim();
 
-  return '<div class="dc-tablewrap"><table class="' + cls + '">'
+  const box = (typeof dashSelBox === 'function') ? dashSelBox(card) : null;
+  const inSel = (r, c) => !!box && r >= box.top && r <= box.bottom && c >= box.left && c <= box.right;
+  const css = (r, c) => (typeof dashCellCss === 'function' ? dashCellCss(card, r, c) : '');
+  // A cell carries its own alignment, size, fill and borders; `dc-sel` is the
+  // selection highlight and is a class rather than a colour so it can sit over
+  // whatever fill the cell already has.
+  const cell = (tag, r, c, inner) => '<' + tag
+    + ' class="dc-cell' + (inSel(r, c) ? ' dc-sel' : '') + '"'
+    + (css(r, c) ? ' style="' + css(r, c) + '"' : '')
+    + ' data-r="' + r + '" data-c="' + c + '">' + inner + '</' + tag + '>';
+
+  const wid = card.colW || {};
+  // A width is stated once, in a <col>, rather than on every cell in the
+  // column — which is how a browser wants to be told and means a table of two
+  // hundred rows carries one number rather than two hundred.
+  const cg = '<colgroup>' + (edit ? '<col class="dc-gutcol">' : '')
+    + cols.map((c, i) => '<col' + (wid[i] ? ' style="width:' + (+wid[i]) + 'px"' : '') + '>').join('')
+    + (edit ? '<col class="dc-gutcol">' : '') + '</colgroup>';
+
+  // THE SPREADSHEET FRAME, in edit mode only. Column tabs across the top and
+  // row numbers down the side: the place you click to select a whole column or
+  // row, and — at their trailing edge — the handle you drag to size it. A
+  // finished card and every export see none of it.
+  const colbar = edit
+    ? '<tr class="dc-colbar"><th class="dc-corner"><button type="button" class="dc-selall"'
+      + ' title="Select the whole table" aria-label="Select the whole table"></button></th>'
+      + cols.map((c, i) => '<th class="dc-coltab' + (box && i >= box.left && i <= box.right ? ' on' : '')
+        + '" data-col="' + i + '" title="Select this column">' + esc(dashColName(i))
+        + '<span class="dc-cgrip" data-wcol="' + i + '" title="Drag to set the width"></span></th>').join('')
+      + '<th class="dc-tw"></th></tr>'
+    : '';
+
+  const hgt = card.rowH || {};
+  const rh = i => (hgt[i] ? ' style="height:' + (+hgt[i]) + 'px"' : '');
+  const rowno = (i, label) => '<th class="dc-rowno' + (box && i >= box.top && i <= box.bottom ? ' on' : '')
+    + '" data-row="' + i + '" title="Select this row">' + label
+    + '<span class="dc-rgrip" data-hrow="' + i + '" title="Drag to set the height"></span></th>';
+
+  return '<div class="dc-tablewrap"><table class="' + cls + '">' + cg
+    + '<thead>' + colbar
     + (headOn
-      ? '<thead><tr'
-        + (dashRowStyled(card.headFill, card.headInk) ? ' class="dc-tr-fill"' : '')
-        + dashFillStyle(card.headFill, card.headInk) + '>'
-        + cols.map((c, i) => '<th' + al(i) + '>'
-          + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
-        + (dashEditing ? '<th class="dc-tw"></th>' : '')
-        + '</tr></thead>'
+      ? '<tr class="dc-headrow'
+        + (dashRowStyled(card.headFill, card.headInk) ? ' dc-tr-fill' : '') + '"'
+        + dashFillStyle(card.headFill, card.headInk) + rh(-1) + '>'
+        + (edit ? rowno(-1, '') : '')
+        + cols.map((c, i) => cell('th', -1, i, dashField(card, 'columns.' + i, c, 'dc-th'))).join('')
+        + (edit ? '<th class="dc-tw"></th>' : '')
+        + '</tr>'
       : '')
-    + '<tbody>'
+    + '</thead>'
     // A filled row carries its own ink, so a dark fill does not swallow the
     // words in it — see dashInkOn(). Rows nobody filled are untouched and keep
     // the card's zebra striping.
+    + '<tbody>'
     + rows.map((r, ri) => '<tr'
       + (dashRowStyled(fills[ri], inks[ri]) ? ' class="dc-tr-fill"' : '')
-      + dashFillStyle(fills[ri], inks[ri]) + '>'
-      + cols.map((c, ci) => '<td' + al(ci) + '>'
-        + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
-      + (dashEditing ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
+      + dashFillStyle(fills[ri], inks[ri]) + rh(ri) + '>'
+      + (edit ? rowno(ri, String(ri + 1)) : '')
+      + cols.map((c, ci) => cell('td', ri, ci, dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td'))).join('')
+      + (edit ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
       + '</tr>').join('')
     + '</tbody></table>'
-    + (dashEditing
+    + (edit
       ? '<div class="dc-tblbtns"><button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>'
-        + '<button class="dc-btn dc-addrow" data-add-col="1">+ Column</button></div>'
+        + '<button class="dc-btn dc-addrow" data-add-col="1">+ Column</button>'
+        + '<span class="dc-hint dc-pastehint">Paste a block straight from a spreadsheet.</span></div>'
       : '')
     + '</div>';
 }
@@ -683,6 +722,16 @@ function dashCardEl(card) {
     } else {
       el.classList.add(/^[1-8]$/.test(tone) ? 'head-slot-' + tone : 'head-navy');
     }
+    // AND AS A LITERAL, because the stylesheet says this with color-mix().
+    //
+    // Chrome serialises a computed color-mix as `color(srgb r g b)`, and
+    // html2canvas throws "unsupported color function" on it — which does not
+    // dim one header, it aborts the whole capture. Every export of any board
+    // carrying a card with a header bar failed, and the failure surfaced only
+    // as "Dashboard export failed" with no file. The same mix, computed here
+    // and written inline, is what the capture reads; the color-mix rules stay
+    // underneath for anything this misses.
+    dashHeadBarLiteral(el, tone);
   }
 
   const titleOn = !card.fmt || card.fmt.title !== false;
@@ -707,6 +756,12 @@ function dashCardEl(card) {
       : (dashEditing ? '<span class="dc-grip dc-grip-float" aria-hidden="true"></span>' : ''))
     + '<div class="dc-body">' + dashCardBody(card) + '</div>'
     + (dashEditing ? dashHandlesHtml() : '');
+
+  // The bar exists now. Written after innerHTML because it is inside it.
+  if (el.dataset.headBar) {
+    const head = el.querySelector(':scope > .dc-head');
+    if (head) head.style.background = el.dataset.headBar;
+  }
 
   return el;
 }
@@ -877,6 +932,49 @@ function dashRefreshLive() {
 
 /** @param {string} id @returns {object|undefined} */
 function dashCardById(id) { return dashCards.find(c => c.id === id); }
+
+/**
+ * Blend two hexes, as `color-mix(in srgb, a P%, b)` does.
+ * @param {string} a @param {number} pct @param {string} b @returns {string} hex
+ */
+function dashMixHex(a, pct, b) {
+  const rgb = h => {
+    const m = String(h).trim().replace('#', '');
+    const t = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+    return [0, 2, 4].map(i => parseInt(t.slice(i, i + 2), 16));
+  };
+  const x = rgb(a), y = rgb(b), k = Math.max(0, Math.min(1, pct / 100));
+  if (x.some(isNaN) || y.some(isNaN)) return null;
+  return '#' + x.map((v, i) => {
+    const n = Math.round(v * k + y[i] * (1 - k));
+    return (n < 16 ? '0' : '') + n.toString(16);
+  }).join('');
+}
+
+/**
+ * Write the header bar's colour onto the element as a literal hex.
+ *
+ * See the call site for why: the stylesheet expresses this as color-mix(), and
+ * the export's screenshotter cannot parse what Chrome computes that into.
+ *
+ * @param {HTMLElement} el the card @param {string} tone a slot number, a hex, or 'navy'
+ */
+function dashHeadBarLiteral(el, tone) {
+  const head = el.querySelector(':scope > .dc-head');
+  const cs = getComputedStyle(document.documentElement);
+  const navy = (cs.getPropertyValue('--navy') || '#0b1f3a').trim();
+  const hue = /^#[0-9a-f]{6}$/i.test(tone)
+    ? tone
+    : (/^[1-8]$/.test(tone) ? (cs.getPropertyValue('--viz-' + tone) || '').trim() : navy);
+  const mixed = /^#[0-9a-f]{3,6}$/i.test(hue) && /^#[0-9a-f]{3,6}$/i.test(navy)
+    ? dashMixHex(hue, 60, navy) : null;
+  // The bar does not exist yet — this runs before innerHTML is written — so the
+  // answer is parked on the card and applied by dashCardEl once it does.
+  if (mixed) {
+    el.dataset.headBar = mixed;
+    if (head) head.style.background = mixed;
+  }
+}
 
 /** @param {string|null} id */
 function dashSelect(id) {

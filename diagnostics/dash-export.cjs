@@ -308,6 +308,93 @@ function zipText(buf, entries, name) {
     !missing.pdf.length && !missing.pptx.length && !missing.docx.length,
     JSON.stringify(missing));
 
+  /* ---- nothing on the board speaks a colour the screenshotter cannot read - */
+
+  // THE WHOLE EXPORT, NOT ONE ELEMENT. html2canvas parses computed colours
+  // itself and THROWS on a function it does not know — it does not skip the
+  // element, it aborts the capture, and every format fails at once with
+  // "Dashboard export failed" and no file. `color-mix(in srgb, …)` is the trap:
+  // it is the natural way to write a tint, it renders correctly on screen, and
+  // Chrome computes it to `color(srgb …)`. A banded table — the default for
+  // every table on the board — was enough to break every export.
+  const unreadable = await p.evaluate(() => {
+    const props = ['color', 'backgroundColor', 'backgroundImage', 'borderTopColor',
+      'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'boxShadow',
+      'outlineColor', 'fill', 'stroke', 'textDecorationColor', 'columnRuleColor'];
+    const bad = [];
+    const walk = el => {
+      const cs = getComputedStyle(el);
+      props.forEach(k => {
+        const v = cs[k];
+        // `color(` as a function, not the tail of `background-color`.
+        if (v && /(^|[^-\w])(color|lab|lch|oklab|oklch)\(/.test(v)) {
+          bad.push((el.id ? '#' + el.id : el.tagName.toLowerCase() + '.'
+            + String(el.className).slice(0, 30)) + ' ' + k + ' = ' + v.slice(0, 60));
+        }
+      });
+      Array.from(el.children).forEach(walk);
+    };
+    ['dashGrid', 'mapWrap'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) walk(el);
+    });
+    return bad.slice(0, 8);
+  });
+  ck('no colour on the board or the map is one html2canvas would throw on',
+    unreadable.length === 0, unreadable.join(' | ') || 'none');
+
+  /* ---- a styled table survives the trip into Word and PowerPoint --------- */
+
+  // Everything the sheet controls sets — alignment, size, fill, ink, borders,
+  // widths — is a real thing in both formats. A board where a cell is centred
+  // in 18px on a green fill and a file where it is not is two answers to the
+  // same question, and the file is the one the client sees.
+  const styled = await p.evaluate(async () => {
+    dashCards = [Object.assign(dashNewCard('table'), {
+      id: 'st', title: 'Styled', x: 0, y: 0, w: 12, h: 8,
+      columns: ['Place', 'Km'],
+      rows: [['Andheri', '4.2'], ['Bandra', '9.1']],
+      colStyle: { 1: { align: 'right' } },
+      cellStyle: { '0:0': { align: 'center', size: 18, fill: '#0b7d3a', ink: '#ffe066', bd: 'trbl', bdc: '#ff0000' } },
+      colW: { 0: 240 },
+      rowH: { 0: 60 },
+    })];
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 10 };
+    renderDashboard();
+    const cs = getComputedStyle(document.documentElement);
+    const m = dashExportModel({ title: 'Styled', resolveColor: n => cs.getPropertyValue(n).trim() });
+    return m.cards.find(c => c.id === 'st').data;
+  });
+  ck('the model flattens the cell over the column it sits in',
+    styled.cells['0:0'].align === 'center' && styled.cells['0:1'].align === 'right',
+    JSON.stringify([styled.cells['0:0'].align, styled.cells['0:1'].align]));
+  ck('and carries the size, both colours and the border with it',
+    styled.cells['0:0'].size === 18 && styled.cells['0:0'].fill === '#0b7d3a'
+    && styled.cells['0:0'].ink === '#ffe066' && styled.cells['0:0'].bd === 'trbl',
+    JSON.stringify(styled.cells['0:0']));
+  ck('the column width and row height travel as numbers',
+    styled.colW[0] === 240 && styled.colW[1] === null && styled.rowH[0] === 60,
+    JSON.stringify([styled.colW, styled.rowH]));
+
+  const docx2 = await grab('docx', 'docx');
+  const docxXml = zipText(docx2, zipEntries(docx2), 'word/document.xml');
+  ck('Word gets the cell shading as a real w:shd fill', /w:fill="0B7D3A"/.test(docxXml));
+  ck('and the cell borders as w:tcBorders in the border colour',
+    /<w:tcBorders>/.test(docxXml) && /w:color="FF0000"/.test(docxXml));
+  ck('the centred cell is centred there too', /<w:jc w:val="center"\/>/.test(docxXml));
+  // Word sizes are HALF-points, so 18 has to arrive as 36.
+  ck('and an 18px cell arrives as 18pt rather than 36', /<w:sz w:val="36"\/>/.test(docxXml));
+  ck('a set column width becomes a dxa width rather than auto',
+    /w:w="3600" w:type="dxa"/.test(docxXml));
+  ck('and a set row height becomes a trHeight', /<w:trHeight w:val="900"/.test(docxXml));
+
+  const pptx2 = await grab('pptx', 'pptx');
+  const pptXml = zipText(pptx2, zipEntries(pptx2), 'ppt/slides/slide1.xml');
+  ck('PowerPoint gets the same fill on the same cell', /0B7D3A/i.test(pptXml));
+  ck('and the border colour on its edges', /FF0000/i.test(pptXml));
+  ck('with the cell centred rather than guessed from its column number',
+    /algn="ctr"/.test(pptXml), pptXml.length + ' bytes of slide XML');
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();
   try { fs.rmSync(OUT, { recursive: true, force: true }); } catch (e) { /* leave it */ }

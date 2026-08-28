@@ -149,27 +149,70 @@ function dashPptxCard(slide, tile, box, pal) {
       // what it said.
       const inkOn = h => (typeof dashInkOn === 'function' ? dashInkOn(h) : null);
       const fillOpt = h => (h ? { fill: { color: pptHex(h) } } : {});
-      const head = cols.map(c => Object.assign({
+      const cells = d.cells || {};
+
+      // WHAT THE CELL ITSELF SAYS. Everything below used to be a guess — the
+      // body aligned column one left and the rest right, which is a decent
+      // default and wrong the moment somebody chose otherwise on the board.
+      // dashModelCells() has already resolved cell over column over card, so
+      // this only has to apply it.
+      //
+      // PowerPoint takes borders as four entries in top, right, bottom, left
+      // order; `none` on an edge is how you say "no line here" without
+      // switching the table's own border off everywhere.
+      const bdOpt = st => {
+        if (!st || !st.bd) return {};
+        const c = pptHex(st.bdc || (typeof DASH_BORDER_INK === 'string' ? DASH_BORDER_INK : '#7f8fad'));
+        const e = on => (on ? { type: 'solid', pt: 1, color: c } : { type: 'none', pt: 0 });
+        return { border: [e(st.bd.indexOf('t') >= 0), e(st.bd.indexOf('r') >= 0),
+          e(st.bd.indexOf('b') >= 0), e(st.bd.indexOf('l') >= 0)] };
+      };
+      const styled = (st, base) => Object.assign({}, base,
+        st && st.align ? { align: st.align } : null,
+        // Pixels on screen, points in a deck. A cell set to 18px on a board
+        // 2.4× the width of a slide would be a shouting cell in the file.
+        st && st.size ? { fontSize: Math.max(5, Math.round(+st.size * 0.62)) } : null,
+        st && st.ink ? { color: pptHex(st.ink) } : null,
+        st && st.fill ? { fill: { color: pptHex(st.fill) } } : null,
+        bdOpt(st));
+
+      const head = cols.map((c, i) => ({
         text: String(c).toUpperCase(),
-        options: Object.assign({ bold: true, fontSize: 7.5,
-          color: pptHex(d.headInk || inkOn(d.headFill) || pal.faint) }, fillOpt(d.headFill)),
+        options: styled(cells['-1:' + i], Object.assign({ bold: true, fontSize: 7.5,
+          color: pptHex(d.headInk || inkOn(d.headFill) || pal.faint) }, fillOpt(d.headFill))),
       }));
       const body = rows.map((r, ri) => {
         const fill = (d.rowFill || [])[ri] || null;
         const ink = (d.rowInk || [])[ri] || inkOn(fill);
         return (r || []).map((cell, i) => ({
           text: String(cell == null ? '' : cell),
-          options: Object.assign({
+          options: styled(cells[ri + ':' + i], Object.assign({
             fontSize: 9, color: pptHex(ink || (i === 0 ? pal.ink : pal.dim)),
             align: i === 0 ? 'left' : 'right',
-          }, fillOpt(fill)),
+          }, fillOpt(fill))),
         }));
       });
-      slide.addTable(cols.length ? [head].concat(body) : body, {
+
+      // Column widths, in inches, scaled from the pixels the board used. Only
+      // when at least one was actually set — handing pptxgen a full array of
+      // nulls makes it lay every column out at zero.
+      const px = (d.colW || []);
+      const anyW = px.some(w => w != null);
+      const opt = {
         x: box.x + pad, y, w: innerW,
         border: { type: 'solid', pt: 0.4, color: pptHex(pal.rule) },
         margin: 2, valign: 'top', autoPage: false,
-      });
+      };
+      if (anyW && cols.length) {
+        // The set ones keep their proportion of the total; the rest share what
+        // is left, so a table with one sized column still fills the card.
+        const known = px.reduce((a, w) => a + (w || 0), 0);
+        const unknown = px.filter(w => w == null).length;
+        const each = unknown ? Math.max(40, (known / Math.max(1, px.length - unknown))) : 0;
+        const total = known + each * unknown;
+        opt.colW = px.map(w => innerW * ((w == null ? each : w) / total));
+      }
+      slide.addTable(cols.length ? [head].concat(body) : body, opt);
       break;
     }
 
