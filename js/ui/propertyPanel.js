@@ -728,8 +728,12 @@ function wireLocCard(card, loc) {
         locations.forEach(l => { if (l.iconUseProjectLogo) renderLocPin(l); if (l.iconUseProjectLogo && l.showLabel) updateLocLabel(l); });
         scheduleRepaint();
       }
-      // Default project logo to the embedded DBOT
-      setProjectLogo('data:image/png;base64,' + LOGO_B64);
+      // NO LOGO UNTIL SOMEBODY PICKS ONE. This used to seed the DBOT mark, so
+      // every project began branded whether or not that was wanted — and a pin
+      // set to "use the project logo" carried it onto the map by default. The
+      // upload control is unchanged and the DBOT mark is one click away in the
+      // picker; it is the DEFAULT that was wrong, not the option.
+      setProjectLogo(null);
       $('uploadProjLogoBtn').addEventListener('click', () => $('projLogoInput').click());
       $('projLogoInput').addEventListener('change', e => {
         const f = e.target.files[0]; if (!f) return;
@@ -752,9 +756,12 @@ function wireLocCard(card, loc) {
         rd.readAsDataURL(f);
         e.target.value = '';
       });
+      // It always set the DBOT mark rather than clearing anything, which was a
+      // button labelled "Reset" that added a logo. Now that a project starts
+      // with none, the honest name for what it does is what it does.
       $('clearProjLogoBtn').addEventListener('click', () => {
         setProjectLogo('data:image/png;base64,' + LOGO_B64);
-        status('Project logo reset to DBOT default.');
+        status('Using the DBOT mark as the project logo.');
       });
       $('siteUsesProjLogo').addEventListener('change', e => {
         brand.siteUsesProjLogo = e.target.checked;

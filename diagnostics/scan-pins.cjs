@@ -293,6 +293,74 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       return !!el;
     }) === true);
 
+  /* -- the pin glyph, the project logo and the compass ---------------------- */
+
+  // A TEARDROP WITH A HOLE IN IT IS A MAP PIN, and this library holds what goes
+  // INSIDE one — `iconFrame: 'pin'` already draws the teardrop and puts the
+  // chosen symbol in it, so offering a pin here meant a pin drawn inside a pin.
+  // It was also the default for every new location, which is how it came to be
+  // the symbol on the map most of the time.
+  const pins = await p.evaluate(() => {
+    const fresh = addLocation({ name: 'Fresh', lat: 19.243, lng: 73.052 });
+    const site = addLocation({ name: 'Site pt', lat: 19.246, lng: 73.048, type: 'site' });
+    return {
+      inLibrary: 'pin' in ICON_LIBRARY,
+      freshKey: fresh.iconKey,
+      siteKey: site.iconKey,
+      // A saved project storing iconKey:'pin' must still draw something — an
+      // older file opens a shade simpler, not blank.
+      oldStillDraws: (iconPaths('pin', '#123456') || '').length > 40,
+      oldIsDot: iconPaths('pin', '#123456') === iconPaths('dot', '#123456'),
+      // The FRAME is a different thing and stays: it is the teardrop itself.
+      frameOffered: !!document.querySelector('option[value="pin"]'),
+    };
+  });
+  ck('there is no pin glyph to draw inside a pin frame', pins.inLibrary === false);
+  ck('and a new location starts as a dot, a site as a star',
+    pins.freshKey === 'dot' && pins.siteKey === 'star',
+    pins.freshKey + ' / ' + pins.siteKey);
+  ck('a project saved with the old key still draws, as the dot it now is',
+    pins.oldStillDraws === true && pins.oldIsDot === true, JSON.stringify(pins));
+  ck('the pin FRAME is untouched — that one is the teardrop itself',
+    pins.frameOffered === true);
+
+  // Every project used to begin branded whether or not that was wanted, and a
+  // pin set to "use the project logo" carried the mark onto the map by default.
+  ck('a project starts with no logo, and the DBOT mark is one click away',
+    await p.evaluate(() => {
+      const img = document.getElementById('projectLogoImg');
+      const btn = document.getElementById('clearProjLogoBtn');
+      return img.style.display === 'none' && !img.getAttribute('src')
+        && /dbot/i.test(btn.textContent);
+    }) === true);
+
+  // A compass belongs at a corner of the map. This one was a third of the way
+  // down the right-hand rail, among five other round buttons that look alike.
+  const rose = await p.evaluate(() => {
+    const n = document.getElementById('northUpBtn');
+    n.hidden = false;
+    const wrap = document.getElementById('mapWrap').getBoundingClientRect();
+    const r = n.getBoundingClientRect();
+    const cs = getComputedStyle(n);
+    return {
+      top: Math.round(r.top - wrap.top),
+      // #mapWrap spans the full width with the sidebar floating OVER it, so the
+      // map's own left edge is underneath the panel — placed at 12px the
+      // compass was invisible behind it.
+      clearOfSidebar: r.left >= document.getElementById('sidebar')
+        ? true : r.left > 0,
+      left: cs.left,
+      needle: !!n.querySelector('svg path[fill^="var(--orange"]'),
+      letter: (n.querySelector('.nub-n') || {}).textContent,
+    };
+  });
+  ck('the compass is at the map\'s top corner, not down the button rail',
+    rose.top < 120, 'top ' + rose.top);
+  ck('and offset past the sidebar rather than hidden behind it',
+    /sbw/.test(rose.left) || parseFloat(rose.left) > 100, rose.left);
+  ck('it reads as a compass: a north needle and a letter',
+    rose.needle === true && rose.letter === 'N', JSON.stringify(rose));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

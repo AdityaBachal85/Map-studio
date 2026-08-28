@@ -488,7 +488,7 @@ const PIN_HEAD_BOX = 'position:absolute;left:22.5%;top:13.75%;width:55%;height:4
             // solid white fill with no stroke. Frameless keeps the old pairing:
             // there the glyph IS the marker, so it needs the colour and needs
             // the keyline to hold its edge against the map.
-            const iconKey = loc.iconKey || (loc.type === 'site' ? 'star' : 'pin');
+            const iconKey = loc.iconKey || (loc.type === 'site' ? 'star' : 'dot');
             const glyph = isPin
               ? svgForKey(iconKey, '#FFFFFF')
               : svgForKey(iconKey, loc.color, frameless ? '#FFFFFF' : null);

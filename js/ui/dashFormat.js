@@ -182,7 +182,14 @@ function dfCurrentColour(card, key) {
   // already was.
   const rowf = key.match(/^rowfill:(\d+)$/);
   if (rowf) return (card.rowFill && card.rowFill[+rowf[1]]) || '#e7eefc';
+  const rowi2 = key.match(/^rowink:(\d+)$/);
+  if (rowi2) {
+    const i = +rowi2[1];
+    return (card.rowInk && card.rowInk[i])
+      || dashInkOn((card.rowFill && card.rowFill[i]) || '#e7eefc') || '#14243d';
+  }
   if (key === 'headfill') return card.headFill || '#14243d';
+  if (key === 'headink') return card.headInk || dashInkOn(card.headFill || '#14243d') || '#ffffff';
   return 1;
 }
 
@@ -383,24 +390,31 @@ function renderDashFormat() {
   // a row that was never filled is left alone so the card's zebra striping
   // still does its job underneath.
   if (card.type === 'table') {
-    f += dfRow('Header row', '<div class="df-point-row">'
-      + dfSwatches('headfill', card.headFill || '#14243d')
-      + (card.headFill ? '<button type="button" class="df-clear" data-df="headfillclear"'
-        + ' data-v="1" title="No fill">&times;</button>' : '')
-      + '</div>');
+    // Fill and text colour side by side, because that is the pair a spreadsheet
+    // offers and choosing one without the other is half a decision. The text
+    // swatch shows the readable default until somebody overrides it, so it is
+    // never a blank control.
+    const pair = (fk, ik, fill, ink, fallback) => '<div class="df-point-row">'
+      + dfSwatches(fk, fill || fallback)
+      + dfSwatches(ik, ink || dashInkOn(fill || fallback) || '#14243d')
+      + ((fill || ink) ? '<button type="button" class="df-clear" data-df="' + fk
+        + 'clear" data-v="1" title="Back to no fill">&times;</button>' : '')
+      + '</div>';
+
+    f += dfRow('Header row', pair('headfill', 'headink',
+      card.headFill, card.headInk, '#14243d'));
+
     const fills = card.rowFill || {};
-    const set = Object.keys(fills).filter(k => fills[k]).length;
+    const inks = card.rowInk || {};
+    const set = (card.rows || []).filter((r, i) => fills[i] || inks[i]).length;
     f += '<details class="df-points"' + (set ? ' open' : '') + '>'
-      + '<summary>Row fill' + (set ? ' \u00b7 ' + set : '') + '</summary>'
+      + '<summary>Fill &amp; text' + (set ? ' \u00b7 ' + set : '') + '</summary>'
+      + '<p class="df-note">Fill on the left, text colour on the right.</p>'
       + (card.rows || []).map((r, i) =>
         // Named by what is actually in the row's first cell, so a list of eight
         // swatches is not eight rows called "Row".
         dfRow(dashRichPlain(String((r && r[0]) || '')).trim() || ('Row ' + (i + 1)),
-          '<div class="df-point-row">'
-          + dfSwatches('rowfill:' + i, fills[i] || '#e7eefc')
-          + (fills[i] ? '<button type="button" class="df-clear" data-df="rowfillclear:' + i
-            + '" data-v="1" title="No fill">&times;</button>' : '')
-          + '</div>')).join('')
+          pair('rowfill:' + i, 'rowink:' + i, fills[i], inks[i], '#e7eefc'))).join('')
       + '</details>';
   }
 
@@ -502,13 +516,24 @@ function dashFormatApply(card, key, v) {
     card.rowFill[+rowf[1]] = String(v).toLowerCase();
     return;
   }
-  const rowfc = key.match(/^rowfillclear:(\d+)$/);
+  const rowfc = key.match(/^rowfill:(\d+)clear$/);
   if (rowfc) {
-    if (card.rowFill) { card.rowFill = Object.assign({}, card.rowFill); delete card.rowFill[+rowfc[1]]; }
+    const i = +rowfc[1];
+    if (card.rowFill) { card.rowFill = Object.assign({}, card.rowFill); delete card.rowFill[i]; }
+    if (card.rowInk) { card.rowInk = Object.assign({}, card.rowInk); delete card.rowInk[i]; }
+    return;
+  }
+  const rowi = key.match(/^rowink:(\d+)$/);
+  if (rowi) {
+    card.rowInk = Object.assign({}, card.rowInk);
+    card.rowInk[+rowi[1]] = String(v).toLowerCase();
     return;
   }
   if (key === 'headfill') { card.headFill = String(v).toLowerCase(); return; }
-  if (key === 'headfillclear') { delete card.headFill; return; }
+  if (key === 'headink') { card.headInk = String(v).toLowerCase(); return; }
+  // One clear takes the whole row back to plain — clearing a fill but leaving a
+  // text colour behind is a row that still looks styled with no way to see why.
+  if (key === 'headfillclear') { delete card.headFill; delete card.headInk; return; }
 
   const gslot = key.match(/^gslot:(\d+)$/);
   if (gslot) {

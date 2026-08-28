@@ -152,11 +152,11 @@ function dashPptxCard(slide, tile, box, pal) {
       const head = cols.map(c => Object.assign({
         text: String(c).toUpperCase(),
         options: Object.assign({ bold: true, fontSize: 7.5,
-          color: pptHex(inkOn(d.headFill) || pal.faint) }, fillOpt(d.headFill)),
+          color: pptHex(d.headInk || inkOn(d.headFill) || pal.faint) }, fillOpt(d.headFill)),
       }));
       const body = rows.map((r, ri) => {
         const fill = (d.rowFill || [])[ri] || null;
-        const ink = inkOn(fill);
+        const ink = (d.rowInk || [])[ri] || inkOn(fill);
         return (r || []).map((cell, i) => ({
           text: String(cell == null ? '' : cell),
           options: Object.assign({

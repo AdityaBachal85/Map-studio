@@ -116,7 +116,9 @@
           // thing this removes — because opts comes straight from the file.
           // Icon customization
 
-          iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'pin'),
+          // `dot`, not `pin`: the pin glyph is gone — see ICON_LIBRARY — because
+          // `iconFrame: 'pin'` already draws the teardrop this would sit inside.
+          iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'dot'),
           iconImage: opts.iconImage || null,
           iconUseProjectLogo: !!opts.iconUseProjectLogo,
           iconSize: opts.iconSize || (opts.type === 'site' ? 44 : 36),

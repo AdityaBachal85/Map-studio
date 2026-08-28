@@ -155,6 +155,12 @@ function dashModelRuns(v) {
   return out;
 }
 
+/** @param {*} v @returns {?string} a literal hex, or null if it is not one */
+function dashModelHex(v) {
+  const s = String(v == null ? '' : v).trim();
+  return /^#[0-9a-f]{6}$/i.test(s) ? s.toLowerCase() : null;
+}
+
 /** @param {*} v @returns {boolean} is this a value somebody actually typed? */
 function dashModelHasValue(v) {
   if (v == null) return false;
@@ -359,12 +365,12 @@ function dashModelData(card, resolve) {
         // both take a cell background, and a table exported without them is a
         // different table from the one on the board. Per row, plus the header,
         // and null wherever nobody chose one.
-        headFill: /^#[0-9a-f]{6}$/i.test(String(card.headFill || ''))
-          ? String(card.headFill).toLowerCase() : null,
-        rowFill: (card.rows || []).map((r, i) => {
-          const v = String((card.rowFill || {})[i] || '');
-          return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null;
-        }),
+        headFill: dashModelHex(card.headFill),
+        headInk: dashModelHex(card.headInk),
+        rowFill: (card.rows || []).map((r, i) => dashModelHex((card.rowFill || {})[i])),
+        // The chosen text colour, or null where the writer should work out a
+        // readable one from the fill itself.
+        rowInk: (card.rows || []).map((r, i) => dashModelHex((card.rowInk || {})[i])),
       };
     case 'list':
       return { items: (card.items || []).map(i => ({
@@ -518,6 +524,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     dashExportModel, dashModelColor, dashModelCardEmpty, dashModelData,
     dashModelHasValue, dashModelTyped, dashModelViz, dashModelPlain, dashModelRuns,
+    dashModelHex,
     DASH_MODEL_COLS, DASH_MODEL_FALLBACK, DASH_MODEL_PROMPTS,
   };
 }

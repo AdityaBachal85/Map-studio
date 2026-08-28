@@ -43,10 +43,12 @@ function sheetLegendLines() {
  */
 function sheetLegendMarks() {
   if (typeof connLegendRows !== 'function') return [];
-  const icons = { site: 'pin', airport: 'airport', station: 'train', metroStation: 'train',
-    hub: 'building', powerTower: 'pin' };
+  // `dot` where `pin` used to be: the pin glyph is gone from ICON_LIBRARY —
+  // iconFrame draws the teardrop, this is what goes inside it.
+  const icons = { site: 'star', airport: 'airport', station: 'train', metroStation: 'train',
+    hub: 'building', powerTower: 'dot' };
   return connLegendRows().filter(r => r.kind === 'mark')
-    .map(r => ({ iconKey: icons[r.cls] || 'pin', color: r.color, label: r.label, cls: r.cls }));
+    .map(r => ({ iconKey: icons[r.cls] || 'dot', color: r.color, label: r.label, cls: r.cls }));
 }
 
 /**
@@ -270,7 +272,7 @@ function rsRemove(root, path) {
           ? connClass(CONNECTIVITY_DEFAULT_CLASS) : null;
         d.lines.push({ color: c ? c.color : '#011A49', label: 'New line' });
       }
-      if (k === 'marks') d.marks.push({ iconKey: 'pin', color: '#0E7490', label: 'New mark' });
+      if (k === 'marks') d.marks.push({ iconKey: 'dot', color: '#0E7490', label: 'New mark' });
       if (k === 'highlights') d.highlights.push('New highlight');
       if (k === 'hubs') d.hubs.push({ name: 'Hub', meta: '—' });
       renderReportSheet();

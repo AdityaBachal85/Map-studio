@@ -387,25 +387,47 @@ function dashInkOn(hex) {
   return L > 0.55 ? '#14243d' : '#ffffff';
 }
 
-/** @param {?string} hex @returns {string} a style attribute, or nothing */
-function dashFillStyle(hex) {
-  const ink = dashInkOn(hex);
-  return ink ? ' style="background:' + esc(hex) + ';color:' + ink + '"' : '';
+/**
+ * The style a filled row carries.
+ *
+ * `ink` is the operator's own choice where they made one — Excel's font colour
+ * — and the readable default from dashInkOn() where they did not. Choosing a
+ * text colour without a fill is a real thing to want too, so either alone is
+ * enough to produce a style.
+ *
+ * @param {?string} hex a fill @param {?string} ink an explicit text colour
+ * @returns {string} a style attribute, or nothing
+ */
+function dashFillStyle(hex, ink) {
+  const fill = /^#[0-9a-f]{6}$/i.test(String(hex || '')) ? String(hex) : null;
+  const col = /^#[0-9a-f]{6}$/i.test(String(ink || '')) ? String(ink) : dashInkOn(fill);
+  if (!fill && !col) return '';
+  return ' style="' + (fill ? 'background:' + esc(fill) + ';' : '')
+    + (col ? 'color:' + esc(col) : '') + '"';
+}
+
+/** Whether a row carries any styling of its own. @returns {boolean} */
+function dashRowStyled(fill, ink) {
+  return /^#[0-9a-f]{6}$/i.test(String(fill || '')) || /^#[0-9a-f]{6}$/i.test(String(ink || ''));
 }
 
 function dashTableHtml(card) {
   const cols = card.columns || [];
   const rows = card.rows || [];
   const fills = card.rowFill || {};
+  const inks = card.rowInk || {};
   return '<div class="dc-tablewrap"><table class="dc-table"><thead><tr'
-    + dashFillStyle(card.headFill) + '>'
+    + (dashRowStyled(card.headFill, card.headInk) ? ' class="dc-tr-fill"' : '')
+    + dashFillStyle(card.headFill, card.headInk) + '>'
     + cols.map((c, i) => '<th>' + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
     + (dashEditing ? '<th class="dc-tw"></th>' : '')
     + '</tr></thead><tbody>'
     // A filled row carries its own ink, so a dark fill does not swallow the
     // words in it — see dashInkOn(). Rows nobody filled are untouched and keep
     // the card's zebra striping.
-    + rows.map((r, ri) => '<tr' + (fills[ri] ? ' class="dc-tr-fill"' : '') + dashFillStyle(fills[ri]) + '>'
+    + rows.map((r, ri) => '<tr'
+      + (dashRowStyled(fills[ri], inks[ri]) ? ' class="dc-tr-fill"' : '')
+      + dashFillStyle(fills[ri], inks[ri]) + '>'
       + cols.map((c, ci) => '<td>' + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
       + (dashEditing ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
       + '</tr>').join('')

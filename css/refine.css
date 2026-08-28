@@ -4820,14 +4820,29 @@ body.identify-on .leaflet-container {
 #dimSwitch .dim-item.working { opacity: .45; }
 
 /* Only present while 3D is, so it takes the slot below the switch. */
+/* TOP LEFT, away from the control rail on the right.
+   A compass belongs at a corner of the map, and the right-hand edge is where
+   every other control already lives — so the one thing a reader looks for to
+   orient themselves was buried a third of the way down a stack of lookalike
+   buttons.
+
+   `--sbw` and not 12px: #mapWrap spans the full width with the sidebar floating
+   OVER it, so the map's own left edge is underneath the panel. Placed at 12px
+   the compass was invisible — sitting behind the sidebar with the DBOT logo on
+   top of it. Every other left-edge control here is offset the same way, and
+   moves with the same transition when the sidebar is hidden.
+
+   Below the search box rather than beside it: that field already owns this
+   corner and is 300px wide. */
 #northUpBtn {
   position: absolute;
-  top: 318px;
-  right: 12px;
+  top: 66px;
+  left: calc(var(--sbw) + 12px);
+  transition: left .34s cubic-bezier(.32, .72, .28, 1);
   z-index: 1000;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
   color: var(--text);
   cursor: pointer;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
@@ -4835,6 +4850,17 @@ body.identify-on .leaflet-container {
   align-items: center;
   justify-content: center;
 }
+/* The letter sits under the rose rather than inside it: at this size a glyph in
+   the middle of the needle is a smudge, and the needle is what carries north. */
+#northUpBtn .nub-n {
+  position: absolute;
+  bottom: 3px;
+  font: 800 7.5px/1 var(--font, inherit);
+  letter-spacing: .1em;
+  opacity: .62;
+  pointer-events: none;
+}
+.app.side-hidden #northUpBtn { left: 12px; }
 #northUpBtn[hidden] { display: none; }
 #northUpBtn:hover { color: var(--orange); }
 /* The needle turns with the camera. transform only — this repaints on every
@@ -4909,17 +4935,18 @@ body.identify-on .leaflet-container {
 /* The right-hand map rail is a column of hard-coded offsets, 46px apart, and
    #aiBtn held slot three at 104px. Hiding it leaves a hole in the middle of the
    column, so everything below moves up one slot. The steps are now
-   12 / 58 / 104 / 150 / 196, with #northUpBtn continuing at 272 because
-   #dimSwitch is a two-item stack 76px tall rather than a 38px button.
+   12 / 58 / 104 / 150 / 196.
 
    These override the originals in components.css (#centerBtn) and earlier in
-   this file (#identifyBtn, #dimSwitch, #northUpBtn); restoring #aiBtn means
+   this file (#identifyBtn, #dimSwitch); restoring #aiBtn means
    deleting this block with the one above it, and the original values apply
    again untouched. */
 #centerBtn { top: 104px; }
 #identifyBtn { top: 150px; }
 #dimSwitch { top: 196px; }
-#northUpBtn { top: 272px; }
+/* The compass is NOT in this rail any more — it moved to the map's top-left
+   corner, where a compass belongs. The slot reserved for it here went on
+   overriding the position it was moved to, which is why it stayed put. */
 
 /* ---------------------------------------------------------------------------
    The 3D navigator's tilt slider

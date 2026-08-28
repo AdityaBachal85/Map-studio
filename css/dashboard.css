@@ -2458,6 +2458,15 @@ body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
    a stripe laid over a chosen fill is that fill in two slightly different
    shades, which reads as a rendering fault rather than as a choice. */
 .dc-table tr.dc-tr-fill,
-.dc-table tr.dc-tr-fill td { background: transparent; }
-.dc-table tr.dc-tr-fill td { border-color: rgba(255, 255, 255, .22); }
-.dc-table thead tr[style*="background"] th { background: transparent; }
+.dc-table tr.dc-tr-fill td,
+.dc-table tr.dc-tr-fill th { background: transparent; }
+.dc-table tr.dc-tr-fill td,
+.dc-table tr.dc-tr-fill th { border-color: rgba(255, 255, 255, .22); }
+
+/* THE INK HAS TO REACH THE TEXT. The fill and its ink are written on the row,
+   but `.dc-th` and `.dc-td` each set a colour of their own, and a rule beats
+   an inherited value — so the fill landed and the ink did not, leaving a header
+   in muted grey on navy. `inherit` hands the row's ink back to the cell.
+   Only on a filled row: everywhere else the theme's own ink is correct. */
+.dc-table tr.dc-tr-fill .dc-th,
+.dc-table tr.dc-tr-fill .dc-td { color: inherit; }

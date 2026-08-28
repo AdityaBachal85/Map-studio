@@ -18,9 +18,19 @@
 /** Category order in the picker. Anything not listed still renders, at the end. */
 const ICON_CATEGORIES = ['Basics', 'Property', 'Places', 'Transport', 'Nature & leisure', 'Infrastructure'];
 
+/**
+ * NO `pin` GLYPH. A teardrop-with-a-hole is a MAP PIN, and this library holds
+ * what goes INSIDE one — `iconFrame: 'pin'` already draws the teardrop and puts
+ * the chosen symbol in it, so offering a pin here meant a pin drawn inside a
+ * pin. It was also the default for every new location, which is how it came to
+ * be the symbol on the map most of the time.
+ *
+ * Anything saved with `iconKey: 'pin'` falls through to `dot` in iconPaths(),
+ * which is the same silhouette without the hole — an older project opens with
+ * its markers a shade simpler, not broken or blank.
+ */
 const ICON_LIBRARY = {
   /* ---------------- Basics ---------------- */
-  pin: { label: 'Pin', cat: 'Basics', d: 'M12 2C7.58 2 4 5.58 4 10c0 5.5 8 12 8 12s8-6.5 8-12c0-4.42-3.58-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z' },
   dot: { label: 'Dot', cat: 'Basics', d: 'M12 7a5 5 0 100 10 5 5 0 000-10z' },
   circle: { label: 'Circle', cat: 'Basics', d: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 3a7 7 0 110 14 7 7 0 010-14z' },
   square: { label: 'Square', cat: 'Basics', d: 'M4 4h16v16H4V4zm3 3v10h10V7H7z' },
@@ -114,7 +124,7 @@ const ICON_KEYS = Object.keys(ICON_LIBRARY);
  * @returns {string} the raw path markup for one icon.
  */
 function iconPaths(key, color, outline) {
-  const icon = ICON_LIBRARY[key] || ICON_LIBRARY.pin;
+  const icon = ICON_LIBRARY[key] || ICON_LIBRARY.dot;
   const fill = esc(color || '#0A1E3C');
   // paint-order="stroke" puts the stroke *behind* the fill, so the keyline
   // grows outward instead of eating half its width into the shape. Without it

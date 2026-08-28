@@ -440,11 +440,20 @@ const SCENE = [
     const out = {
       head: read(el.querySelector('thead tr')),
       rows: trs.map(read),
+      // THE COMPUTED COLOUR OF THE TEXT, not the attribute written on the row.
+      // `.dc-th` and `.dc-td` each set a colour of their own and a rule beats an
+      // inherited value, so the fill landed and the ink did not — a header in
+      // muted grey on navy. Reading back what was written passed anyway, which
+      // is a test agreeing with the code instead of checking it.
+      headInk: getComputedStyle(el.querySelector('thead .dc-th')).color,
+      cellInk: trs.map(t => getComputedStyle(t.querySelector('.dc-td')).color),
       // Only a filled row loses the zebra; the rest keep it.
       classed: trs.map(t => t.classList.contains('dc-tr-fill')),
       swatches: pane.querySelectorAll('[data-dfpick^="rowfill:"]').length,
       headSwatch: pane.querySelectorAll('[data-dfpick="headfill"]').length,
-      clears: pane.querySelectorAll('[data-df^="rowfillclear:"]').length,
+      clears: pane.querySelectorAll('[data-df$="clear"]').length - 1,
+      inkSwatches: pane.querySelectorAll('[data-dfpick^="rowink:"]').length,
+      headInkSwatch: pane.querySelectorAll('[data-dfpick="headink"]').length,
     };
     dashEditing = false; dashSelectedId = null;
     dashCards = board; renderDashboard(); dashLayoutApply();
@@ -461,14 +470,22 @@ const SCENE = [
   // stay the theme's ink and hope. A dark fill under grey body text is a row
   // nobody can read, and in an export there is no way to turn the fill off to
   // find out what it said.
-  ck('a dark fill takes light ink and a light fill takes dark',
-    fills.rows[1].ink === 'rgb(255, 255, 255)' && fills.head.ink === 'rgb(255, 255, 255)',
-    fills.rows[1].ink + ' / ' + fills.head.ink);
+  ck('a dark fill takes light ink, and the ink reaches the text itself',
+    fills.headInk === 'rgb(255, 255, 255)' && fills.cellInk[1] === 'rgb(255, 255, 255)',
+    'header ' + fills.headInk + ' / filled row ' + fills.cellInk[1]);
+  ck('and an unfilled row keeps the theme\'s own ink rather than inheriting one',
+    fills.cellInk[0] !== 'rgb(255, 255, 255)' && fills.cellInk[0] === fills.cellInk[2],
+    fills.cellInk.join(' | '));
   ck('only a filled row drops the card\'s zebra striping',
     fills.classed.join() === 'false,true,false', fills.classed.join());
-  ck('every row is offered a fill, and only the filled one a way back',
+  ck('every row is offered a fill, and only the styled one a way back',
     fills.swatches === 3 && fills.headSwatch === 1 && fills.clears === 1,
-    JSON.stringify(fills));
+    JSON.stringify({ s: fills.swatches, h: fills.headSwatch, c: fills.clears }));
+  // Excel offers font colour beside fill, and a fill without it is half the
+  // decision — the automatic ink is a sane default, not a substitute for asking.
+  ck('and a text colour of its own, beside every fill',
+    fills.inkSwatches === 3 && fills.headInkSwatch === 1,
+    fills.inkSwatches + ' row / ' + fills.headInkSwatch + ' header');
 
   const inks = await p.evaluate(() => ({
     white: dashInkOn('#14243d'), dark: dashInkOn('#c8f0d2'),

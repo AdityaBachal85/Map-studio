@@ -106,10 +106,10 @@ function openIconPicker(loc, onPick) {
 function refreshIconButton(card, loc) {
   const btn = card.querySelector('.icoBtn');
   if (!btn) return;
-  const key = loc.iconKey || (loc.type === 'site' ? 'star' : 'pin');
+  const key = loc.iconKey || (loc.type === 'site' ? 'star' : 'dot');
   btn.innerHTML =
     `<span class="icoBtn-sw">${iconPinSwatch(key, loc.color || '#0A1E3C', 17)}</span>`
-    + `<span class="icoBtn-lbl">${esc((ICON_LIBRARY[key] || ICON_LIBRARY.pin).label)}</span>`
+    + `<span class="icoBtn-lbl">${esc((ICON_LIBRARY[key] || ICON_LIBRARY.dot).label)}</span>`
     + '<span class="icoBtn-chev" aria-hidden="true">'
     + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"'
     + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'

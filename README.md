@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0201-blue)
+![Version](https://img.shields.io/badge/version-v6.0202-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,50 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0201 (latest)
+## 🆕 New in v6.0202 (latest)
+
+### A compass, at the corner of the map
+
+The old north arrow was an outlined triangle inside an outlined circle, sitting
+a third of the way down the right-hand button rail among five other round
+buttons that look alike — so the one control a reader looks for to orient
+themselves was the hardest one to find.
+
+It is a compass rose now: an orange north needle, a hollow south counterweight,
+cardinal ticks and a ring, with the letter under it. And it is at the map's
+top-left corner, offset past the sidebar the way every other left-edge control
+here already is — `#mapWrap` spans the full width with the panel floating *over*
+it, so a naive `left: 12px` put the compass underneath the sidebar, invisible.
+
+### A project starts unbranded
+
+The DBOT mark was seeded as the project logo on every new project, so a pin set
+to "use the project logo" carried it onto the map whether or not that was
+wanted. Projects start with no logo; the mark is one click away on a button that
+now says what it does — it always set the DBOT logo, while being labelled
+"Reset".
+
+### No pin glyph inside a pin
+
+`iconFrame: 'pin'` draws the teardrop and puts the chosen symbol inside it, so a
+`pin` entry in the symbol library meant a pin drawn inside a pin — and it was
+the default for every new location, which is how it came to be most of the map.
+New locations start as a dot. A project saved with the old key still draws:
+`iconPaths()` falls through to the dot, which is the same silhouette without the
+hole, so an older file opens a shade simpler rather than blank.
+
+### A table can set its text colour
+
+Fill and font colour side by side, which is the pair a spreadsheet offers.
+
+**And the fill's ink was not reaching the text.** `.dc-th` and `.dc-td` each set
+a colour of their own, and a rule beats an inherited value — so the fill landed
+and the ink did not, leaving a header in muted grey on navy. The assertion for
+it had passed anyway, because it read back the attribute that had been written
+rather than the colour the text actually renders in: a test agreeing with the
+code instead of checking it. It reads the computed colour now.
+
+## 🆕 New in v6.0201
 
 ### The formatting bar is made of the app's own glass
 

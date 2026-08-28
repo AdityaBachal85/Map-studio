@@ -82,15 +82,16 @@ function docxTable(columns, rows, pal, fills) {
   const f = fills || {};
   const headFill = f.head || null;
   const rowFill = f.rows || [];
+  const rowInk = f.inks || [];
   const head = columns && columns.length
     ? '<w:tr><w:trPr><w:tblHeader/></w:trPr>'
       + columns.map(c => cell(String(c).toUpperCase(),
-        { bold: true, size: 8, color: inkOn(headFill) || pal.faint }, headFill)).join('')
+        { bold: true, size: 8, color: f.headInk || inkOn(headFill) || pal.faint }, headFill)).join('')
       + '</w:tr>'
     : '';
   const body = rows.map((r, ri) => {
     const fill = rowFill[ri] || null;
-    const ink = inkOn(fill);
+    const ink = rowInk[ri] || inkOn(fill);
     return '<w:tr>'
       + (r || []).map((c, i) => cell(c,
         { size: 9, color: ink || (i === 0 ? pal.ink : pal.dim) }, fill)).join('')
@@ -202,7 +203,8 @@ async function dashBuildDocx(model, canvas, rects, scale) {
         break;
       case 'access':
       case 'table':
-        body.push(docxTable(d.columns, d.rows, pal, { head: d.headFill, rows: d.rowFill }));
+        body.push(docxTable(d.columns, d.rows, pal,
+          { head: d.headFill, rows: d.rowFill, headInk: d.headInk, inks: d.rowInk }));
         body.push(docxP('', { spaceAfter: 200 }));
         break;
       case 'chart': {

@@ -63,7 +63,7 @@
               let iconData = l.iconImage || ((l.iconUseProjectLogo && brand.projectLogo) ? brand.projectLogo : null);
               let iconSvgMarkup = null;
               if (!iconData) {
-                iconSvgMarkup = svgForKey(l.iconKey || (l.type === 'site' ? 'star' : 'pin'), l.color);
+                iconSvgMarkup = svgForKey(l.iconKey || (l.type === 'site' ? 'star' : 'dot'), l.color);
                 iconData = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvgMarkup)));
               }
               widgets.pins.push({ px: { x: wp.x, y: wp.y }, size: l.iconSize, frame: l.iconFrame, bg: l.iconBg, border: l.iconBorder, borderColor: l.iconBorderColor, iconData, iconSvgMarkup, isImage: !!l.iconImage || !!(l.iconUseProjectLogo && brand.projectLogo) });
