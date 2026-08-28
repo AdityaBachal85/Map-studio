@@ -1,6 +1,12 @@
 /* themes.css — Design tokens: the :root custom-property palette shared by every component.
    Extracted verbatim from index.html (v4.96) lines 10–28; order preserved via main.css. */
     :root {
+      /* TELL THE BROWSER WHICH WAY UP THE PAGE IS. Without this the engine
+         renders every native control — option lists, scrollbars, checkboxes,
+         date pickers — for its own default scheme rather than for ours, which
+         is how a light-theme dropdown came up as a black panel. One line here
+         does what per-control CSS cannot. */
+      color-scheme: dark;
       --bg0: #070C16;
       --bg1: #0B1322;
       --glass: rgba(12, 19, 35, .66);
@@ -120,6 +126,14 @@
       --surface: var(--glass);
       --surface-2: var(--glass2);
       --surface-solid: #0E1728;
+      /* THE GROUND UNDER A FORM FIELD, as a token rather than a hardcoded
+         rgba(0,0,0,.28). That literal was written for the dark theme and stayed
+         put in the light one, where it is a charcoal box on a white panel — and
+         worse, a browser paints a <select>'s native option list out of the
+         select's OWN background and colour, so the whole dropdown came up
+         near-black with dark navy text on it. */
+      --field: rgba(0, 0, 0, .28);
+      --field-edge: var(--stroke2);
       --border: var(--stroke);
       --border-strong: var(--stroke2);
       --text-2: var(--dim);
@@ -143,6 +157,7 @@
 
     /* ---------- Light theme (applied via <html data-theme="light">) ---------- */
     :root[data-theme="light"] {
+      color-scheme: light;
       --bg0: #EDF1F7;
       --bg1: #E3E9F2;
       --glass: rgba(255, 255, 255, .85);
@@ -153,6 +168,8 @@
       --text-rgb: 23, 35, 59;
       --dim: #55627A;
       --surface-solid: #FFFFFF;
+      --field: #FFFFFF;
+      --field-edge: rgba(16, 32, 60, .22);
       --ok: #0F7A55;
       --ok-soft: rgba(15, 122, 85, .10);
       --ok-edge: rgba(15, 122, 85, .38);

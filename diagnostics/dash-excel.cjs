@@ -303,6 +303,49 @@ async function typeInto(p, sel, value) {
     !!document.querySelector('#dashFormat [data-dfpick="headink"]'));
   ck('the table pane offers a text colour beside the fill', hasText);
 
+  // THE HEADER HAS TO READ AS THE TOP OF THE TABLE. The body's banding runs the
+  // full width of the card; the header carried no ground at all and a rule at
+  // 12% opacity, so the column names read as a caption floating above a striped
+  // block rather than as its first row.
+  const bind = await p.evaluate(() => {
+    dashEditing = false; renderDashboard();
+    const th = document.querySelector('#dashGrid thead th');
+    const rows = document.querySelectorAll('#dashGrid tbody tr');
+    const alpha = v => { const m = /rgba?\([^)]*?([\d.]+)\s*\)/.exec(v); return m ? +m[1] : 1; };
+    const out = {
+      headBg: getComputedStyle(th).backgroundColor,
+      headRule: getComputedStyle(th).borderBottomWidth,
+      bodyRule: getComputedStyle(rows[0].querySelector('td')).borderBottomWidth,
+      bandBg: getComputedStyle(rows[1].querySelector('td')).backgroundColor,
+      plainBg: getComputedStyle(rows[0].querySelector('td')).backgroundColor,
+    };
+    out.headAlpha = alpha(out.headBg);
+    out.bandAlpha = alpha(out.bandBg);
+    dashEditing = true; renderDashboard();
+    return out;
+  });
+  ck('the header row carries a ground of its own, so it reads as part of the table',
+    bind.headBg !== 'rgba(0, 0, 0, 0)' && bind.headAlpha > 0, bind.headBg);
+  ck('deeper than the body banding, so the head is the head',
+    bind.headAlpha > bind.bandAlpha, bind.headAlpha + ' vs ' + bind.bandAlpha);
+  ck('and the rule under it is heavier than the rules between rows',
+    parseFloat(bind.headRule) > parseFloat(bind.bodyRule),
+    bind.headRule + ' vs ' + bind.bodyRule);
+
+  const filled = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    dashFormatApply(c, 'headfill', '#0b3d2e');
+    dashEditing = false; renderDashboard();
+    const bg = getComputedStyle(document.querySelector('#dashGrid thead tr')).backgroundColor;
+    delete c.headFill; delete c.headInk;
+    dashEditing = true; renderDashboard();
+    return bg;
+  });
+  // The ground must not paint over a colour the operator chose, or the
+  // Header-row control would appear to do nothing.
+  ck('a chosen header colour still wins over that ground',
+    /11,\s*61,\s*46/.test(filled), filled);
+
   await p.evaluate(() => {
     dashFormatApply(dashCardById('t1'), 'headfill', '#0b3d2e');
     dashFormatApply(dashCardById('t1'), 'headink', '#ffe066');

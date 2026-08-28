@@ -1640,7 +1640,9 @@ input[type=tel] {
   border: 1px solid var(--stroke2);
   border-radius: 10px;
   font-size: 12.5px;
-  background: rgba(0, 0, 0, .28);
+  /* A token, not a literal — see --field in themes.css: this was a dark tint
+     written for the dark theme that stayed put in the light one. */
+  background: var(--field, rgba(0, 0, 0, .28));
   color: var(--text);
   font-family: inherit;
   transition: border-color .15s, box-shadow .15s;
@@ -1674,7 +1676,7 @@ input[type=tel] {
   padding: 0 11px;
   border: 1px solid var(--stroke2);
   border-radius: 0 10px 10px 0;
-  background: rgba(0, 0, 0, .28);
+  background: var(--field, rgba(0, 0, 0, .28));
   color: var(--text-2);
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -4842,7 +4844,9 @@ body.identify-on .leaflet-container {
 #northUpBtn {
   position: absolute;
   top: 128px;
-  left: calc(var(--sbw) + 12px);
+  /* The corner by default; map mode shifts it past the sidebar. Same reason as
+     #northArrow above it — see css/components.css. */
+  left: 12px;
   transition: left .34s cubic-bezier(.32, .72, .28, 1);
   z-index: 1000;
   width: 46px;
@@ -4865,7 +4869,12 @@ body.identify-on .leaflet-container {
   opacity: .62;
   pointer-events: none;
 }
-.app.side-hidden #northUpBtn { left: 12px; }
+.app[data-mode="map"]:not(.side-hidden) #northUpBtn { left: calc(var(--sbw) + 12px); }
+/* Stacked under the rose wherever the rose ends up, which is 58px higher on the
+   board than it is on the map. */
+.app[data-mode="dashboard"] #northUpBtn,
+.app[data-mode="report"] #northUpBtn { top: 70px; }
+.app.dash-editing[data-mode="dashboard"] #northUpBtn { top: 100px; }
 #northUpBtn[hidden] { display: none; }
 #northUpBtn:hover { color: var(--orange); }
 /* The needle turns with the camera. transform only — this repaints on every
@@ -5056,3 +5065,13 @@ body.identify-on .leaflet-container {
    glyph or hand the pointer back mid-spin. */
 #northUpBtn.orbiting { cursor: grabbing; }
 #northUpBtn svg { pointer-events: none; }
+
+/* The option list a browser draws for a <select> takes its colours from the
+   select itself, and it is drawn outside the page — no CSS of ours reaches it
+   beyond these two properties. Stated explicitly as well as through
+   color-scheme, because the two engines disagree about which wins. */
+select option,
+select optgroup {
+  background: var(--surface-solid);
+  color: var(--text);
+}

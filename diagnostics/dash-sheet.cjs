@@ -323,6 +323,141 @@ const alignGrid = p => p.evaluate(() =>
   ck('every column tab and row number carries a drag handle',
     sizes.grips === 3 && sizes.rgrips === 4, JSON.stringify([sizes.grips, sizes.rgrips]));
 
+  /* ---- the gestures a real mouse makes ------------------------------------ */
+
+  // SYNTHETIC POINTER EVENTS ARE NOT ENOUGH HERE. Dragging from a cell used to
+  // pick the CARD up and slide it across the board — the card-drag handler
+  // starts from anywhere that is not a button or a contenteditable, and the
+  // sheet frame is neither. Driven with the real mouse, because that is the
+  // gesture that was broken and dispatched events did not reproduce it.
+  await build();
+  await p.waitForTimeout(500);
+  const at = async sel => p.evaluate(s => {
+    const r = document.querySelector(s).getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, sel);
+  const mouseDrag = async (from, to) => {
+    const a = await at(from), c = await at(to);
+    await p.mouse.move(a.x, a.y);
+    await p.mouse.down();
+    await p.mouse.move((a.x + c.x) / 2, (a.y + c.y) / 2, { steps: 5 });
+    await p.mouse.move(c.x, c.y, { steps: 5 });
+    await p.mouse.up();
+    await p.waitForTimeout(220);
+    return p.evaluate(() => dashSelBox(dashCardById('t1')));
+  };
+
+  const cardBefore = await p.evaluate(() => {
+    const c = dashCardById('t1'); return { x: c.x, y: c.y, w: c.w, h: c.h };
+  });
+  const dragCells = await mouseDrag('#dashGrid .dc-cell[data-r="0"][data-c="0"]',
+    '#dashGrid .dc-cell[data-r="2"][data-c="2"]');
+  ck('dragging across cells selects the block they span',
+    dragCells && dragCells.top === 0 && dragCells.left === 0
+    && dragCells.bottom === 2 && dragCells.right === 2, JSON.stringify(dragCells));
+  const cardAfter = await p.evaluate(() => {
+    const c = dashCardById('t1'); return { x: c.x, y: c.y, w: c.w, h: c.h };
+  });
+  ck('and does not pick the card up and move it across the board',
+    JSON.stringify(cardBefore) === JSON.stringify(cardAfter),
+    JSON.stringify(cardBefore) + ' -> ' + JSON.stringify(cardAfter));
+
+  await p.evaluate(() => { dashTableSel = null; });
+  const dragCols = await mouseDrag('#dashGrid .dc-coltab[data-col="0"]',
+    '#dashGrid .dc-coltab[data-col="2"]');
+  ck('dragging across the column letters selects those columns',
+    dragCols && dragCols.left === 0 && dragCols.right === 2 && dragCols.top === -1,
+    JSON.stringify(dragCols));
+
+  await p.evaluate(() => { dashTableSel = null; });
+  const dragRows = await mouseDrag('#dashGrid .dc-rowno[data-row="0"]',
+    '#dashGrid .dc-rowno[data-row="3"]');
+  ck('and across the row numbers selects those rows',
+    dragRows && dragRows.top === 0 && dragRows.bottom === 3, JSON.stringify(dragRows));
+
+  const widthDrag = await p.evaluate(async () => {
+    const c0 = dashCardById('t1');
+    const before = { x: c0.x, y: c0.y, w: c0.w, h: c0.h };
+    return { before, grip: !!document.querySelector('#dashGrid [data-wcol="0"]') };
+  });
+  const grip = await at('#dashGrid [data-wcol="0"]');
+  await p.mouse.move(grip.x, grip.y);
+  await p.mouse.down();
+  await p.mouse.move(grip.x + 90, grip.y, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(250);
+  const widthAfter = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    return { x: c.x, y: c.y, w: c.w, h: c.h, colW: (c.colW || {})[0] };
+  });
+  ck('dragging a column edge sizes the column',
+    widthAfter.colW > 0, 'colW ' + widthAfter.colW);
+  ck('and leaves the card exactly where it was',
+    widthAfter.x === widthDrag.before.x && widthAfter.y === widthDrag.before.y
+    && widthAfter.w === widthDrag.before.w && widthAfter.h === widthDrag.before.h,
+    JSON.stringify(widthDrag.before) + ' -> ' + JSON.stringify(widthAfter));
+
+  /* ---- leaving a cell must not eat the click that left it ----------------- */
+
+  // THE BUG THIS ANSWERS. Clicking a cell focuses it; clicking a pane button
+  // then blurs it, and the blur handler rebuilt the whole board — between the
+  // pointer going down on that button and coming up. The button moved out from
+  // under the pointer, no click was ever delivered, and Align, the row's × and
+  // every other control in reach "did nothing" until you pressed twice.
+  await build();
+  await p.waitForTimeout(500);
+  await p.click('#dashGrid .dc-coltab[data-col="0"]');
+  await p.waitForTimeout(200);
+  await p.click('#dashFormat [data-df="selalign"][data-v="center"]');
+  await p.waitForTimeout(350);
+  await p.click('#dashGrid .dc-cell[data-r="1"][data-c="0"]');
+  await p.waitForTimeout(250);
+  await p.click('#dashFormat [data-df="selalign"][data-v="left"]');
+  await p.waitForTimeout(400);
+  const oneClick = await alignGrid(p);
+  ck('Left takes on the FIRST press after clicking in a cell',
+    oneClick[1][0] === 'left', JSON.stringify(oneClick.map(r => r[0])));
+  // Left has to be a choice, not the absence of one: cleared rather than
+  // written, it fell back to the column, which was still centred.
+  ck('and it beats the centred column it sits in, rather than clearing to it',
+    oneClick[0][0] === 'center' && oneClick[2][0] === 'center',
+    JSON.stringify(oneClick.map(r => r[0])));
+
+  const rowsBefore = await p.evaluate(() => dashCardById('t1').rows.length);
+  await p.click('#dashGrid .dc-cell[data-r="0"][data-c="0"]');
+  await p.waitForTimeout(200);
+  await p.click('#dashGrid [data-drop-row="1"]');
+  await p.waitForTimeout(350);
+  const rowsAfter = await p.evaluate(() => ({
+    n: dashCardById('t1').rows.length, first: dashCardById('t1').rows.map(r => r[0]),
+  }));
+  ck('and a row deletes on the first press too, having just touched a cell',
+    rowsAfter.n === rowsBefore - 1, rowsBefore + ' -> ' + rowsAfter.n);
+  ck('the row that goes is the one whose button was pressed',
+    rowsAfter.first.indexOf('KALYAN PADGHA ROAD') < 0, JSON.stringify(rowsAfter.first));
+
+  /* ---- the selection belongs to editing ----------------------------------- */
+
+  const leftEdit = await p.evaluate(() => {
+    dashTableSel = { id: 't1', r0: 0, c0: 1, r1: 2, c1: 1 };
+    renderDashboard();
+    const on = document.querySelectorAll('#dashGrid .dc-cell.dc-sel').length;
+    setDashEditing(false);
+    const off = document.querySelectorAll('#dashGrid .dc-sel').length;
+    const rings = Array.from(document.querySelectorAll('#dashGrid td'))
+      .filter(td => getComputedStyle(td).boxShadow !== 'none').length;
+    const held = dashTableSel;
+    setDashEditing(true);
+    return { on, off, rings, held };
+  });
+  ck('a selection is lit while the board is being edited', leftEdit.on === 3, String(leftEdit.on));
+  // It was not: the ring and the orange tint went on painting the table for a
+  // client to read, and into the export, which renders out of edit mode.
+  ck('and gone the moment it is not — no ring left on a finished card',
+    leftEdit.off === 0 && leftEdit.rings === 0, JSON.stringify(leftEdit));
+  ck('the selection itself is dropped, not just hidden', leftEdit.held === null,
+    JSON.stringify(leftEdit.held));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' | ') || 'none');
 
   await p.screenshot({ path: path.join(REPO, 'diagnostics', 'shot-dash-sheet.png') });

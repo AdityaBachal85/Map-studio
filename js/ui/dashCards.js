@@ -428,7 +428,11 @@ function dashTableHtml(card) {
     'dc-dense-' + (f.tableDensity || 'normal'),
     edit ? 'dc-grid' : ''].join(' ').trim();
 
-  const box = (typeof dashSelBox === 'function') ? dashSelBox(card) : null;
+  // Only while editing. Belt as well as braces: setDashEditing clears the
+  // selection on the way out, but an export renders with dashEditing forced off
+  // without going through that setter, and a selection ring in a client's PDF
+  // is not a small blemish.
+  const box = (edit && typeof dashSelBox === 'function') ? dashSelBox(card) : null;
   const inSel = (r, c) => !!box && r >= box.top && r <= box.bottom && c >= box.left && c <= box.right;
   const css = (r, c) => (typeof dashCellCss === 'function' ? dashCellCss(card, r, c) : '');
   // A cell carries its own alignment, size, fill and borders; `dc-sel` is the
@@ -896,7 +900,13 @@ function renderDashboard() {
 /** @param {boolean} on */
 function setDashEditing(on) {
   dashEditing = !!on;
-  if (!dashEditing) dashSelectedId = null;
+  // A cell selection is an editing gesture and belongs to editing. Left behind,
+  // its ring and tint went on painting the table for a client to read — and
+  // into the export, which renders out of edit mode.
+  if (!dashEditing) {
+    dashSelectedId = null;
+    if (typeof dashTableSel !== 'undefined') dashTableSel = null;
+  }
   renderDashboard();
   if (typeof status === 'function') {
     status(dashEditing
@@ -993,10 +1003,11 @@ function dashSelect(id) {
  * a series from a spreadsheet is the fast path people actually want.
  *
  * @param {HTMLElement} el a [data-bind] element
+ * @returns {boolean} true if the visual actually changed
  */
 function dashCommit(el) {
   const card = dashCardById(el.dataset.card);
-  if (!card) return;
+  if (!card) return false;
   const text = el.textContent.trim();
   const path = el.dataset.bind;
   // A prose field stores what it looks like; a parsed one stores its words. The
@@ -1010,17 +1021,20 @@ function dashCommit(el) {
 
   if (path === 'labels' || path === 'slicerItems') {
     const parts = text.split(',').map(s => s.trim()).filter(s => s !== '');
+    const was = (path === 'labels' ? card.labels : card.items) || [];
     if (path === 'labels') card.labels = parts;
     else { card.items = parts; card.picked = (card.picked || []).filter(v => parts.indexOf(String(v)) >= 0); }
-    return;
+    return was.join('\u0000') !== parts.join('\u0000');
   }
   // seriesList.<i>.values — a comma list of numbers. A non-number is dropped
   // rather than coerced to zero: a typo should not become a data point.
   const sv = path.match(/^seriesList\.(\d+)\.values$/);
   if (sv) {
     const s = card.seriesList && card.seriesList[+sv[1]];
-    if (s) s.values = text.split(',').map(x => Number(x.trim())).filter(isFinite);
-    return;
+    if (!s) return false;
+    const was = (s.values || []).join(',');
+    s.values = text.split(',').map(x => Number(x.trim())).filter(isFinite);
+    return was !== s.values.join(',');
   }
 
   const keys = path.split('.');
@@ -1033,7 +1047,10 @@ function dashCommit(el) {
   // An em-dash is what an empty field is *shown* as; storing it back would turn
   // the placeholder into content, and the next edit would start by deleting a
   // character nobody typed.
-  node[last] = text === '—' ? '' : val;
+  const next = text === '—' ? '' : val;
+  const changed = String(node[last] == null ? '' : node[last]) !== String(next);
+  node[last] = next;
+  return changed;
 }
 
 (function wireDashboard() {
@@ -1120,10 +1137,27 @@ function dashCommit(el) {
     const el = e.target.closest && e.target.closest('[data-bind]');
     if (!el || !dashEditing) return;
     if (!inBoard(e) && !e.target.closest('#dashFormat')) return;
-    dashCommit(el);
-    // Charts and gauges have to redraw from the new numbers; text does not, but
-    // rebuilding uniformly is one code path instead of a list of exceptions.
-    renderDashboard();
+    const changed = dashCommit(el);
+
+    // A BLUR-DRIVEN REBUILD EATS THE CLICK THAT CAUSED IT.
+    //
+    // This used to call renderDashboard() unconditionally — "one code path
+    // instead of a list of exceptions". The exception it did not anticipate is
+    // that leaving a cell to press a button in the format pane blurs the cell
+    // FIRST: the board is torn down and rebuilt between the pointer going down
+    // on that button and coming up, the button moves out from under the
+    // pointer, and no click event is ever delivered. The Align buttons simply
+    // did nothing after you had clicked in a cell, and worked on the second
+    // press — which is what "the left align button is not working" was.
+    //
+    // Two guards. Nothing changed, nothing to redraw. And a card that shows
+    // what you typed — a table, a list, a paragraph — is already showing it;
+    // only the ones that DRAW from their values need the pass.
+    if (!changed) return;
+    const card = dashCardById(el.dataset.card);
+    const drawn = card && (card.type === 'chart' || card.type === 'gauges'
+      || card.type === 'rating' || card.type === 'slicer');
+    if (drawn) renderDashboard();
   }, true);
 
   app.addEventListener('keydown', e => {

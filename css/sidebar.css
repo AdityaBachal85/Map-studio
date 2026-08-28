@@ -232,10 +232,11 @@
     select {
       width: 100%;
       padding: 8px 10px;
-      border: 1px solid var(--stroke2);
+      border: 1px solid var(--field-edge, var(--stroke2));
       border-radius: 10px;
       font-size: 12.5px;
-      background: rgba(0, 0, 0, .28);
+      /* A token, not rgba(0,0,0,.28) — see --field in themes.css. */
+      background: var(--field, rgba(0, 0, 0, .28));
       color: var(--text);
       font-family: inherit;
       transition: border-color .15s, box-shadow .15s;

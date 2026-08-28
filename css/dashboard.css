@@ -2493,6 +2493,27 @@ body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
 .dc-table.dc-rule-box td { border: 0; }
 .dc-table.dc-rule-box { outline: 1px solid var(--border); }
 
+/* THE HEADER IS THE TOP OF THE TABLE, not a caption floating above it.
+   The body's banding runs the full width of the card while the header carried
+   no ground at all and a rule at 12% opacity — so the column names read as a
+   line of text sitting above a striped block rather than as its first row.
+   A ground slightly deeper than the banding, and a rule with enough weight to
+   bind the two, which is what every printed report table does.
+
+   Not on a row the operator filled: that fill and its ink are a choice, and
+   painting over it would make the Header-row colour control do nothing. */
+.dc-table thead tr:not(.dc-tr-fill):not(.dc-colbar) th {
+  background: rgba(var(--text-rgb), .06);
+}
+.dc-table:not(.dc-rule-none) thead tr:not(.dc-tr-fill):not(.dc-colbar) th {
+  /* 2px, not 1.5: the table collapses its borders and the browser rounds the
+     resolved width, so 1.5 came back out as the same 1px the body rows use —
+     see the cell borders in dashTable.js, which hit this first. */
+  border-bottom: 2px solid rgba(var(--text-rgb), .3);
+}
+/* The row-number gutter keeps its own frame colour in edit mode. */
+.dc-table thead tr .dc-rowno { background: var(--surface-2, rgba(127, 143, 173, .12)); }
+
 /* Banding. Skipped on a row that carries a fill of its own — a stripe over a
    chosen colour is that colour in two shades, which reads as a fault. */
 .dc-table.dc-band-on tbody tr:nth-child(even):not(.dc-tr-fill) td {

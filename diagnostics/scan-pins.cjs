@@ -441,6 +441,53 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('it reads as a compass: a north needle and a letter',
     rose.needle === true && rose.letter === 'N', JSON.stringify(rose));
 
+  /* ---- native controls follow the theme ---------------------------------- */
+
+  // A BROWSER DRAWS A <select>'s OPTION LIST OUTSIDE THE PAGE, out of the
+  // select's own background and colour, and no stylesheet of ours reaches it.
+  // The field ground was written as a literal rgba(0,0,0,.28) for the dark
+  // theme and stayed put in the light one, so the icon-frame picker's dropdown
+  // came up as a black panel with dark navy text on it — unreadable. The fix is
+  // a token for the ground and `color-scheme`, which is the only thing that
+  // tells the engine which way up the page is.
+  const themed = await p.evaluate(() => {
+    const read = () => {
+      const s = document.createElement('select');
+      s.innerHTML = '<option>a</option>';
+      (document.querySelector('.sidebar') || document.body).appendChild(s);
+      const cs = getComputedStyle(s), opt = getComputedStyle(s.querySelector('option'));
+      const lum = v => {
+        const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(v);
+        return m ? (0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) / 255 : null;
+      };
+      const out = { scheme: getComputedStyle(document.documentElement).colorScheme,
+        optBg: opt.backgroundColor, optInk: opt.color,
+        bgL: lum(opt.backgroundColor), inkL: lum(opt.color) };
+      s.remove();
+      return out;
+    };
+    const was = document.documentElement.getAttribute('data-theme');
+    document.documentElement.removeAttribute('data-theme');
+    const dark = read();
+    document.documentElement.setAttribute('data-theme', 'light');
+    const light = read();
+    if (was) document.documentElement.setAttribute('data-theme', was);
+    else document.documentElement.removeAttribute('data-theme');
+    return { dark, light };
+  });
+  ck('the page tells the browser which scheme it is in, so native controls follow',
+    themed.dark.scheme === 'dark' && themed.light.scheme === 'light',
+    themed.dark.scheme + ' / ' + themed.light.scheme);
+  ck('a dropdown list is light in the light theme, not a black panel',
+    themed.light.bgL > 0.8, themed.light.optBg);
+  ck('and dark in the dark one', themed.dark.bgL < 0.3, themed.dark.optBg);
+  // Legible either way: the failure was not just "dark", it was dark ground
+  // under dark ink.
+  ck('with ink that contrasts with it in both',
+    Math.abs(themed.light.bgL - themed.light.inkL) > 0.4
+    && Math.abs(themed.dark.bgL - themed.dark.inkL) > 0.4,
+    JSON.stringify([themed.light.optInk, themed.dark.optInk]));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

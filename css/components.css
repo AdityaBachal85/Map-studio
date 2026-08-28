@@ -1123,13 +1123,19 @@
        read as another button. Top left is where a printed plan puts it.
 
        Below the search button rather than beside it: that button owns the
-       corner and is 46px square. `left` is measured from the sidebar because
-       #mapWrap spans the full window — a plain `left: 12px` puts this
-       underneath the sidebar, which is how the first attempt at this went. */
+       corner and is 46px square.
+
+       THE SIDEBAR OFFSET BELONGS TO MAP MODE ALONE. In map mode #mapWrap spans
+       the whole window with the panel floating OVER it, so the map's own left
+       edge is behind the panel and a plain `left: 12px` hides the compass
+       under it. On the board and in the report the very same element is a TILE
+       — 761px wide, starting wherever the grid puts it, with no panel over it —
+       so the offset there pushed the compass to the middle of the map. The
+       default is the corner, and map mode is the exception that shifts it. */
     #northArrow {
       position: absolute;
       top: 70px;
-      left: calc(var(--sbw) + 12px);
+      left: 12px;
       transition: left .34s cubic-bezier(.32, .72, .28, 1);
       z-index: 800;
       width: 54px;
@@ -1138,7 +1144,21 @@
       filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .45));
     }
 
-    .app.side-hidden #northArrow { left: 12px; }
+    .app[data-mode="map"]:not(.side-hidden) #northArrow { left: calc(var(--sbw) + 12px); }
+
+    /* AND THE SAME FOR THE TOP. The 70px above clears the search button, which
+       owns the map's top-left corner in map mode. The board's map tile does not
+       carry that button — nothing at all sits there — so on the board and in
+       the report the offset is 70 pixels of empty gap between the compass and
+       the corner it is supposed to be in. */
+    .app[data-mode="dashboard"] #northArrow,
+    .app[data-mode="report"] #northArrow { top: 12px; }
+
+    /* Except while the board is being edited, when the map tile grows a drag
+       chip in that exact corner — .dc-maphead at 10px, 24px tall — and the
+       compass sat underneath it, half covered by the word MAP. Below the chip
+       while it is there, back in the corner when it goes. */
+    .app.dash-editing[data-mode="dashboard"] #northArrow { top: 42px; }
 
     body.no-north #northArrow {
       display: none;

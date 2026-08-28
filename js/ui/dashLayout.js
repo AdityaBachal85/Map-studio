@@ -340,7 +340,15 @@ function dashGestureEnd() {
     // Restricting it to the title bar sounded tidier and was nearly unusable:
     // the bar is mostly the title, the title is contenteditable, so the actual
     // grabbable area was a 13px dot.
-    if (e.target.closest('button, [contenteditable="true"], input, select, textarea, a, .dc-plot')) return;
+    //
+    // THE TABLE'S SHEET FRAME IS SOMETHING YOU INTERACT WITH. Column tabs, row
+    // numbers, the corner box, the width and height grips and the cells
+    // themselves are all gestures of their own — and none of them is a button
+    // or a contenteditable, so without this the whole frame read as "empty card
+    // surface" and dragging a column edge picked the CARD up and moved it
+    // across the board instead of resizing the column.
+    if (e.target.closest('button, [contenteditable="true"], input, select, textarea, a, .dc-plot,'
+      + ' .dc-cell, .dc-coltab, .dc-rowno, .dc-corner, [data-wcol], [data-hrow]')) return;
     dashGestureStart(e, tile, null);
   });
 

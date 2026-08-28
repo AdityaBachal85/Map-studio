@@ -641,6 +641,68 @@ const SCENE = [
   await p.evaluate(() => setDashEditing(false));
   await p.waitForTimeout(500);
 
+  /* ---- the compass follows the map, whatever the map is ------------------ */
+
+  // THE SAME ELEMENT IS TWO DIFFERENT THINGS. In map mode #mapWrap spans the
+  // whole window with the sidebar floating OVER it, so the compass has to be
+  // offset past the panel or it is hidden behind it. On the board that element
+  // is a TILE in the grid with nothing over it — and the offset, still applied,
+  // put the compass in the MIDDLE of the map. Measured as a fraction of the
+  // map's own box, so the assertion means the same thing in both modes.
+  const compass = await p.evaluate(() => {
+    const at = () => {
+      const r = document.getElementById('northArrow').getBoundingClientRect();
+      const w = document.getElementById('mapWrap').getBoundingClientRect();
+      return { fx: +((r.x - w.x) / w.width).toFixed(3), fy: +((r.y - w.y) / w.height).toFixed(3),
+        dx: Math.round(r.x - w.x), dy: Math.round(r.y - w.y),
+        w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    setAppMode('map');
+    const map = at();
+    const sb = document.querySelector('.sidebar').getBoundingClientRect();
+    const mapClearsPanel = document.getElementById('northArrow').getBoundingClientRect().x >= sb.right - 1;
+    setAppMode('dashboard');
+    const board = at();
+    return { map, board, mapClearsPanel };
+  });
+  ck('on the board the compass is in the map tile\'s own corner',
+    compass.board.dx < 30 && compass.board.dy < 30, JSON.stringify(compass.board));
+  ck('not adrift in the middle of it, which the sidebar offset did',
+    compass.board.fx < 0.1 && compass.board.fy < 0.1,
+    compass.board.fx + ' across, ' + compass.board.fy + ' down');
+  ck('and in map mode it still clears the sidebar rather than hiding behind it',
+    compass.mapClearsPanel === true, JSON.stringify(compass.map));
+  // A squashed compass is a compass drawn into a box that is not square.
+  ck('it is square in both, so the rose is a circle and not an ellipse',
+    compass.board.w === compass.board.h && compass.map.w === compass.map.h,
+    compass.board.w + 'x' + compass.board.h);
+
+  // The map tile grows a drag chip in that same corner while the board is being
+  // edited, and the compass sat underneath it, half covered by the word MAP.
+  const clash = await p.evaluate(() => {
+    setAppMode('dashboard');
+    setDashEditing(true);
+    const rel = el => {
+      const r = el.getBoundingClientRect();
+      const w = document.getElementById('mapWrap').getBoundingClientRect();
+      return { x: r.x - w.x, y: r.y - w.y, right: r.right - w.x, bottom: r.bottom - w.y };
+    };
+    const head = document.querySelector('#mapWrap .dc-maphead');
+    const a = rel(document.getElementById('northArrow'));
+    const h = head ? rel(head) : null;
+    const over = !!h && !(a.x > h.right || a.right < h.x || a.y > h.bottom || a.bottom < h.y);
+    setDashEditing(false);
+    const parked = rel(document.getElementById('northArrow'));
+    return { over, hadHead: !!h, parkedY: Math.round(parked.y) };
+  });
+  ck('and it clears the tile\'s drag chip while the board is being edited',
+    clash.hadHead === true && clash.over === false, JSON.stringify(clash));
+  ck('returning to the corner once the chip is gone', clash.parkedY < 20,
+    'y ' + clash.parkedY);
+
+  await p.evaluate(() => { setAppMode('dashboard'); setDashEditing(true); });
+  await p.waitForTimeout(500);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

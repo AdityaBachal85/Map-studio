@@ -93,12 +93,14 @@ function dfTableSelection(card) {
       '<p class="df-note">Click a cell, a column letter or a row number to format it. '
       + 'Drag across cells for a block, or use the corner box for the whole table.</p>');
   }
+  // Named the way a sheet names a cell — A4, or "header A" for the one row that
+  // has no number. "Cell A header" was the literal reading of the model and
+  // nobody says it.
+  const ref = (r, c) => (r < 0 ? dashColName(c) + ' header' : dashColName(c) + (r + 1));
   const n = (box.bottom - box.top + 1) * (box.right - box.left + 1);
   const where = n === 1
-    ? 'Cell ' + dashColName(box.left) + (box.top < 0 ? ' header' : ' ' + (box.top + 1))
-    : dashColName(box.left) + (box.top < 0 ? 'H' : String(box.top + 1))
-      + ' : ' + dashColName(box.right) + (box.bottom < 0 ? 'H' : String(box.bottom + 1))
-      + '  \u00b7  ' + n + ' cells';
+    ? ref(box.top, box.left)
+    : ref(box.top, box.left) + ' : ' + ref(box.bottom, box.right) + '  \u00b7  ' + n + ' cells';
 
   const al = dashSelValue(card, 'align') || 'left';
   const sz = dashSelValue(card, 'size');
@@ -720,7 +722,11 @@ function dashFormatApply(card, key, v) {
   }
   // Everything that acts on the selected cells. dashSelApply decides whether a
   // statement belongs on the cells or on the whole column — see its comment.
-  if (key === 'selalign') { dashSelApply(card, 'align', v === 'left' ? null : v); return; }
+  // LEFT IS A CHOICE, NOT THE ABSENCE OF ONE. Storing null for left meant
+  // pressing Left cleared the CELL and then fell back through to whatever the
+  // column said — so on a column already centred, the Left button did nothing
+  // at all and the centre button stayed lit. Every alignment is written down.
+  if (key === 'selalign') { dashSelApply(card, 'align', v); return; }
   if (key === 'selfill') {
     dashSelApply(card, 'fill', String(v).toLowerCase());
     return;
