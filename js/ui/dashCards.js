@@ -438,8 +438,23 @@ function dashTableHtml(card) {
   // A cell carries its own alignment, size, fill and borders; `dc-sel` is the
   // selection highlight and is a class rather than a colour so it can sit over
   // whatever fill the cell already has.
+  // `dc-ink` marks a cell whose text colour was decided here rather than by the
+  // theme. THE INK HAS TO REACH THE TEXT: the words live in a .dc-th/.dc-td div
+  // inside the cell, and those set a colour of their own — a rule, which beats
+  // an inherited value. So a cell given a dark fill and a light ink landed the
+  // fill and kept the theme's dark text on it, unreadable. Exactly the bug the
+  // row fill hit; this is the same one a level down.
+  const inked = (r, c) => (typeof dashCellStyle === 'function'
+    && (dashCellStyle(card, r, c, 'ink') || dashCellStyle(card, r, c, 'fill')));
+  // And the same for a chosen size, for the same reason: `.dc-th` sets a
+  // font-size of its own, so a header cell set to 18px stayed at 9.5px while
+  // the cell around it measured 18. The body escaped it only because `.dc-td`
+  // happens not to set one.
+  const sized = (r, c) => (typeof dashCellStyle === 'function'
+    && dashCellStyle(card, r, c, 'size') != null);
   const cell = (tag, r, c, inner) => '<' + tag
-    + ' class="dc-cell' + (inSel(r, c) ? ' dc-sel' : '') + '"'
+    + ' class="dc-cell' + (inSel(r, c) ? ' dc-sel' : '') + (inked(r, c) ? ' dc-ink' : '')
+    + (sized(r, c) ? ' dc-sized' : '') + '"'
     + (css(r, c) ? ' style="' + css(r, c) + '"' : '')
     + ' data-r="' + r + '" data-c="' + c + '">' + inner + '</' + tag + '>';
 
@@ -458,8 +473,17 @@ function dashTableHtml(card) {
   const colbar = edit
     ? '<tr class="dc-colbar"><th class="dc-corner"><button type="button" class="dc-selall"'
       + ' title="Select the whole table" aria-label="Select the whole table"></button></th>'
+      // A COLUMN NEEDS A WAY OUT TOO. Rows have carried an × at their end since
+      // the card was written; columns had nothing — no button, no menu, no
+      // gesture — so a column added by mistake was permanent. It lives on the
+      // tab because that is where the column's other controls already are.
       + cols.map((c, i) => '<th class="dc-coltab' + (box && i >= box.left && i <= box.right ? ' on' : '')
-        + '" data-col="' + i + '" title="Select this column">' + esc(dashColName(i))
+        + '" data-col="' + i + '" title="Select this column \u00b7 right-click for more">'
+        + '<span class="dc-coln">' + esc(dashColName(i)) + '</span>'
+        + (cols.length > 1
+          ? '<button type="button" class="dc-colx" data-drop-col="' + i
+            + '" title="Remove this column" aria-label="Remove column ' + esc(dashColName(i)) + '">&times;</button>'
+          : '')
         + '<span class="dc-cgrip" data-wcol="' + i + '" title="Drag to set the width"></span></th>').join('')
       + '<th class="dc-tw"></th></tr>'
     : '';
@@ -1128,6 +1152,19 @@ function dashCommit(el) {
     if (dropRow) {
       const i = +dropRow.dataset.dropRow;
       if (card.type === 'table') card.rows.splice(i, 1); else card.items.splice(i, 1);
+      if (typeof dashDropRowStyles === 'function') dashDropRowStyles(card, i);
+      renderDashboard();
+      return;
+    }
+    const dropCol = e.target.closest('[data-drop-col]');
+    if (dropCol) {
+      const i = +dropCol.dataset.dropCol;
+      // The last column is the table. Removing it would leave a card that is
+      // neither empty nor a table, and no way back to either.
+      if ((card.columns || []).length < 2) return;
+      card.columns.splice(i, 1);
+      (card.rows || []).forEach(r => r.splice(i, 1));
+      if (typeof dashDropColStyles === 'function') dashDropColStyles(card, i);
       renderDashboard();
       return;
     }

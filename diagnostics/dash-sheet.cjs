@@ -68,7 +68,8 @@ const alignGrid = p => p.evaluate(() =>
   /* ---- the frame ---------------------------------------------------------- */
 
   const frame = await p.evaluate(() => ({
-    tabs: Array.from(document.querySelectorAll('#dashGrid .dc-coltab')).map(t => t.textContent.replace(/\s/g, '')),
+    // `.dc-coln`, not the tab: the tab also holds the column's delete button.
+    tabs: Array.from(document.querySelectorAll('#dashGrid .dc-coln')).map(t => t.textContent.replace(/\s/g, '')),
     nums: Array.from(document.querySelectorAll('#dashGrid .dc-rowno')).map(t => t.textContent.replace(/\s/g, '')),
     corner: !!document.querySelector('#dashGrid .dc-selall'),
   }));
@@ -169,14 +170,19 @@ const alignGrid = p => p.evaluate(() =>
 
   /* ---- font size ---------------------------------------------------------- */
 
+  // READ THE ELEMENT THE WORDS ARE IN. The text sits in a .dc-th/.dc-td div
+  // inside the cell, and that div sets styles of its own — so measuring the
+  // cell can pass while the reader sees something else entirely, which is how
+  // the ink shipped broken with a green suite.
   const sized = await p.evaluate(() => {
     dashTableSel = { id: 't1', r0: -1, c0: 0, r1: -1, c1: 2 };
     dashSelApply(dashCardById('t1'), 'size', 18);
     renderDashboard();
     return {
-      head: Array.from(document.querySelectorAll('#dashGrid .dc-cell[data-r="-1"]'))
+      head: Array.from(document.querySelectorAll('#dashGrid .dc-cell[data-r="-1"] .dc-th'))
         .map(c => getComputedStyle(c).fontSize),
-      body: getComputedStyle(document.querySelector('#dashGrid .dc-cell[data-r="0"][data-c="0"]')).fontSize,
+      body: getComputedStyle(
+        document.querySelector('#dashGrid .dc-cell[data-r="0"][data-c="0"] .dc-td')).fontSize,
     };
   });
   ck('a font size applies to the cells that were selected', sized.head.every(s => s === '18px'),
@@ -457,6 +463,116 @@ const alignGrid = p => p.evaluate(() =>
     leftEdit.off === 0 && leftEdit.rings === 0, JSON.stringify(leftEdit));
   ck('the selection itself is dropped, not just hidden', leftEdit.held === null,
     JSON.stringify(leftEdit.held));
+
+  /* ---- a fill and an ink on the selected cells ---------------------------- */
+
+  const inked = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    c.cellStyle = {}; c.colStyle = {};
+    renderDashboard();
+    dashTableSel = { id: 't1', r0: 1, c0: 0, r1: 1, c1: 2 };
+    dashFormatApply(c, 'selfill', '#0b7d3a');
+    dashFormatApply(c, 'selink', '#ffe066');
+    renderDashboard();
+    const rows = Array.from(document.querySelectorAll('#dashGrid tbody tr'));
+    return rows.map(tr => {
+      const td = tr.querySelector('.dc-cell');
+      return { bg: getComputedStyle(td).backgroundColor,
+        ink: getComputedStyle(td.querySelector('.dc-td')).color };
+    });
+  });
+  ck('a fill on the selected row lands on that row', /11,\s*125,\s*58/.test(inked[1].bg),
+    inked[1].bg);
+  // The fill landed and the ink did not: .dc-td sets a colour of its own and a
+  // rule beats an inherited value, so a dark fill kept the theme's dark text.
+  ck('and the text colour reaches the words, not just the cell around them',
+    /255,\s*224,\s*102/.test(inked[1].ink), inked[1].ink);
+  ck('leaving the rows either side of it alone',
+    !/11,\s*125,\s*58/.test(inked[0].bg) && !/255,\s*224,\s*102/.test(inked[2].ink),
+    JSON.stringify([inked[0], inked[2]]));
+
+  const auto = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    c.cellStyle = {}; renderDashboard();
+    dashTableSel = { id: 't1', r0: 0, c0: 0, r1: 0, c1: 0 };
+    dashFormatApply(c, 'selfill', '#101828');
+    renderDashboard();
+    return getComputedStyle(
+      document.querySelector('#dashGrid .dc-cell[data-r="0"][data-c="0"] .dc-td')).color;
+  });
+  ck('a dark fill with no ink chosen still gets readable text',
+    /^rgb\((2[0-9]{2}|1[89][0-9]),/.test(auto), auto);
+
+  /* ---- a column can be removed, and either can be inserted ---------------- */
+
+  await build();
+  await p.waitForTimeout(500);
+  const colBefore = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    c.colStyle = { 2: { align: 'right' } };
+    c.colW = { 2: 180 };
+    c.cellStyle = { '0:2': { fill: '#123456' } };
+    renderDashboard();
+    return { cols: c.columns.slice(), xs: document.querySelectorAll('#dashGrid [data-drop-col]').length };
+  });
+  // Rows have carried an × since the card was written; columns had nothing —
+  // no button, no menu, no gesture — so a column added by mistake was permanent.
+  ck('every column carries a way to remove it', colBefore.xs === colBefore.cols.length,
+    colBefore.xs + ' of ' + colBefore.cols.length);
+  await p.click('#dashGrid [data-drop-col="1"]', { force: true });
+  await p.waitForTimeout(400);
+  const colAfter = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    return { cols: c.columns, row0: c.rows[0], colStyle: c.colStyle, colW: c.colW, cellStyle: c.cellStyle };
+  });
+  ck('removing a column takes its cells with it',
+    colAfter.cols.length === colBefore.cols.length - 1 && colAfter.row0.length === colAfter.cols.length,
+    JSON.stringify(colAfter.cols));
+  // Every per-cell style is keyed by POSITION, so without shifting them the
+  // column after the deleted one inherits the dead one's fill and width.
+  ck('and the styles of the columns after it move along with them',
+    colAfter.colStyle['1'] && colAfter.colStyle['1'].align === 'right'
+    && colAfter.colW['1'] === 180 && colAfter.cellStyle['0:1'],
+    JSON.stringify([colAfter.colStyle, colAfter.colW, colAfter.cellStyle]));
+
+  await p.click('#dashGrid .dc-coltab[data-col="0"]', { button: 'right' });
+  await p.waitForTimeout(250);
+  const menu = await p.evaluate(() => {
+    const m = document.querySelector('.dc-sheetmenu');
+    return m ? { label: m.querySelector('.lbl').textContent,
+      items: Array.from(m.querySelectorAll('.mi')).map(i => i.dataset.a) } : null;
+  });
+  ck('right-clicking a column letter offers insert and delete, as a sheet does',
+    menu && menu.items.join(',') === 'before,after,drop', JSON.stringify(menu));
+  await p.click('.dc-sheetmenu .mi[data-a="after"]');
+  await p.waitForTimeout(350);
+  const inserted = await p.evaluate(() => dashCardById('t1').columns.length);
+  // "+ Column" appends; there was no way at all to put one in the middle.
+  ck('and insert actually puts one in the middle', inserted === colAfter.cols.length + 1,
+    String(inserted));
+
+  await p.click('#dashGrid .dc-rowno[data-row="1"]', { button: 'right' });
+  await p.waitForTimeout(250);
+  const rmenu = await p.evaluate(() => {
+    const m = document.querySelector('.dc-sheetmenu');
+    return m ? m.querySelector('.lbl').textContent : null;
+  });
+  ck('a row number offers the same menu', rmenu === 'row 2', String(rmenu));
+  await p.click('.dc-sheetmenu .mi[data-a="before"]');
+  await p.waitForTimeout(350);
+  const rowsNow = await p.evaluate(() => dashCardById('t1').rows.map(r => r[0]));
+  ck('and inserts a row above the one named', rowsNow[1] === '', JSON.stringify(rowsNow));
+
+  const lastCol = await p.evaluate(() => {
+    const c = dashCardById('t1');
+    c.columns = ['Only']; c.rows = [['x']];
+    renderDashboard();
+    return document.querySelectorAll('#dashGrid [data-drop-col]').length;
+  });
+  // The last column IS the table: removing it leaves a card that is neither
+  // empty nor a table, with no way back to either.
+  ck('the last column offers no delete, because there would be nothing left',
+    lastCol === 0, String(lastCol));
 
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' | ') || 'none');
 

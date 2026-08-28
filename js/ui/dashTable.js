@@ -408,6 +408,11 @@ function dashSelAll(card) {
       return;
     }
 
+    // The tab's × is a delete, not a selection. Without this the pointerdown
+    // selected the column and the click then deleted it, which works but flashes
+    // a selection nobody asked for on the way out.
+    if (e.target.closest('[data-drop-col]')) return;
+
     const tab = e.target.closest('.dc-coltab');
     if (tab) {
       const card = cardOf(tab);
@@ -561,4 +566,195 @@ function dashSelAll(card) {
     dashTableSel.c1 = Math.max(0, Math.min((card.columns || []).length - 1, dashTableSel.c1 + d[1]));
     dashSelPaint();
   });
+})();
+
+/* ---- adding and removing rows and columns -------------------------------- */
+
+/**
+ * Shift the style maps after row `at` is removed.
+ *
+ * WHY THIS IS NOT OPTIONAL. Every per-cell style is keyed by position — 'row:col'
+ * — so deleting row 2 leaves row 3's fill sitting on what is now row 2, and the
+ * bottom row keeps the style of a row that no longer exists. The styles have to
+ * move with the data or the table silently repaints itself every time somebody
+ * deletes a line.
+ *
+ * @param {object} card @param {number} at
+ */
+function dashDropRowStyles(card, at) {
+  if (card.cellStyle) {
+    const next = {};
+    Object.keys(card.cellStyle).forEach(k => {
+      const [r, c] = k.split(':').map(Number);
+      if (r === at) return;
+      next[(r > at ? r - 1 : r) + ':' + c] = card.cellStyle[k];
+    });
+    card.cellStyle = next;
+  }
+  ['rowFill', 'rowInk', 'rowH'].forEach(key => {
+    if (!card[key]) return;
+    const next = {};
+    Object.keys(card[key]).forEach(k => {
+      const r = +k;
+      if (r === at) return;
+      next[r > at ? r - 1 : r] = card[key][k];
+    });
+    card[key] = next;
+  });
+}
+
+/**
+ * Shift the style maps after column `at` is removed.
+ * @param {object} card @param {number} at
+ */
+function dashDropColStyles(card, at) {
+  if (card.cellStyle) {
+    const next = {};
+    Object.keys(card.cellStyle).forEach(k => {
+      const [r, c] = k.split(':').map(Number);
+      if (c === at) return;
+      next[r + ':' + (c > at ? c - 1 : c)] = card.cellStyle[k];
+    });
+    card.cellStyle = next;
+  }
+  ['colStyle', 'colW', 'colAlign'].forEach(key => {
+    if (!card[key]) return;
+    const next = {};
+    Object.keys(card[key]).forEach(k => {
+      const c = +k;
+      if (c === at) return;
+      next[c > at ? c - 1 : c] = card[key][k];
+    });
+    card[key] = next;
+  });
+}
+
+/**
+ * Insert a row or a column, carrying the styles either side of it along.
+ * @param {object} card @param {string} what 'row'|'col' @param {number} at
+ */
+function dashInsertAt(card, what, at) {
+  if (what === 'row') {
+    card.rows = card.rows || [];
+    card.rows.splice(at, 0, new Array((card.columns || []).length).fill(''));
+    // Same reasoning as the deletes: everything below the new line moves down.
+    if (card.cellStyle) {
+      const next = {};
+      Object.keys(card.cellStyle).forEach(k => {
+        const [r, c] = k.split(':').map(Number);
+        next[(r >= at && r >= 0 ? r + 1 : r) + ':' + c] = card.cellStyle[k];
+      });
+      card.cellStyle = next;
+    }
+    ['rowFill', 'rowInk', 'rowH'].forEach(key => {
+      if (!card[key]) return;
+      const next = {};
+      Object.keys(card[key]).forEach(k => { const r = +k; next[r >= at ? r + 1 : r] = card[key][k]; });
+      card[key] = next;
+    });
+    return;
+  }
+  card.columns = card.columns || [];
+  card.columns.splice(at, 0, 'Column ' + (card.columns.length + 1));
+  (card.rows || []).forEach(r => r.splice(at, 0, ''));
+  if (card.cellStyle) {
+    const next = {};
+    Object.keys(card.cellStyle).forEach(k => {
+      const [r, c] = k.split(':').map(Number);
+      next[r + ':' + (c >= at ? c + 1 : c)] = card.cellStyle[k];
+    });
+    card.cellStyle = next;
+  }
+  ['colStyle', 'colW', 'colAlign'].forEach(key => {
+    if (!card[key]) return;
+    const next = {};
+    Object.keys(card[key]).forEach(k => { const c = +k; next[c >= at ? c + 1 : c] = card[key][k]; });
+    card[key] = next;
+  });
+}
+
+/* ---- the right-click menu ------------------------------------------------ */
+
+/**
+ * The sheet's own context menu.
+ *
+ * Right-clicking a column letter or a row number is where a spreadsheet user
+ * looks for Insert and Delete, and it is the only place Insert can live at all —
+ * "+ Row" appends, and there was no way to put a row in the middle. Its own
+ * element rather than the map's #ctxMenu, which is positioned inside #mapWrap
+ * and would open off-screen over a board card.
+ *
+ * @param {object} card @param {string} what 'row'|'col' @param {number} i
+ * @param {number} x @param {number} y
+ */
+function dashSheetMenu(card, what, i, x, y) {
+  dashSheetMenuClose();
+  const row = what === 'row';
+  const n = row ? (card.rows || []).length : (card.columns || []).length;
+  const name = row ? 'row ' + (i + 1) : 'column ' + dashColName(i);
+  const el = document.createElement('div');
+  el.className = 'dc-sheetmenu frost';
+  el.innerHTML = '<div class="lbl">' + esc(name) + '</div>'
+    + '<div class="mi" data-a="before"><span class="ico">+</span>Insert '
+      + (row ? 'above' : 'to the left') + '</div>'
+    + '<div class="mi" data-a="after"><span class="ico">+</span>Insert '
+      + (row ? 'below' : 'to the right') + '</div>'
+    + '<div class="sep"></div>'
+    // The last one is the table. Offering to delete it would leave a card that
+    // is neither empty nor a table, with no way back to either.
+    + '<div class="mi' + (n < 2 ? ' off' : '') + '" data-a="drop"><span class="ico">×</span>Delete '
+      + (row ? 'this row' : 'this column') + '</div>';
+  document.body.appendChild(el);
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(6, Math.min(x, innerWidth - w - 6)) + 'px';
+  el.style.top = Math.max(6, Math.min(y, innerHeight - h - 6)) + 'px';
+
+  el.addEventListener('click', e => {
+    const mi = e.target.closest('.mi');
+    if (!mi || mi.classList.contains('off')) return;
+    const a = mi.dataset.a;
+    if (a === 'before') dashInsertAt(card, what, i);
+    else if (a === 'after') dashInsertAt(card, what, i + 1);
+    else if (row) { card.rows.splice(i, 1); dashDropRowStyles(card, i); }
+    else {
+      card.columns.splice(i, 1);
+      (card.rows || []).forEach(r => r.splice(i, 1));
+      dashDropColStyles(card, i);
+    }
+    dashTableSel = null;
+    dashSheetMenuClose();
+    if (typeof renderDashboard === 'function') renderDashboard();
+  });
+  _dashSheetMenu = el;
+}
+
+let _dashSheetMenu = null;
+function dashSheetMenuClose() {
+  if (_dashSheetMenu) { _dashSheetMenu.remove(); _dashSheetMenu = null; }
+}
+
+(function wireDashSheetMenu() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.addEventListener('contextmenu', e => {
+    if (!dashEditing) return;
+    const tab = e.target.closest('.dc-coltab');
+    const rno = e.target.closest('.dc-rowno');
+    if (!tab && !rno) return;
+    const host = (tab || rno).closest('.dash-card');
+    const card = host && typeof dashCardById === 'function' ? dashCardById(host.dataset.card) : null;
+    if (!card) return;
+    e.preventDefault();
+    if (tab) dashSheetMenu(card, 'col', +tab.dataset.col, e.clientX, e.clientY);
+    else {
+      const r = +rno.dataset.row;
+      // The header is not a row you can insert around or delete.
+      if (r < 0) return;
+      dashSheetMenu(card, 'row', r, e.clientX, e.clientY);
+    }
+  });
+  document.addEventListener('pointerdown', e => {
+    if (_dashSheetMenu && !e.target.closest('.dc-sheetmenu')) dashSheetMenuClose();
+  }, true);
+  window.addEventListener('blur', dashSheetMenuClose);
 })();

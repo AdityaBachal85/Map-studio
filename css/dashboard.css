@@ -2671,3 +2671,87 @@ body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
   padding: 0;
 }
 .df-seg.df-bd button svg { display: block; }
+
+/* The column's own delete, matching the one every row has carried. Hidden until
+   the tab is under the pointer or its column is selected: seven letters each
+   wearing a permanent × is a header strip of nothing but buttons. */
+.dc-coltab { position: relative; }
+.dc-coln { display: inline-block; }
+.dc-colx {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-2);
+  font: 700 12px/1 var(--font, inherit);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, color .12s, background .12s;
+}
+.dc-coltab:hover .dc-colx,
+.dc-coltab.on .dc-colx { opacity: .75; }
+.dc-colx:hover { opacity: 1; color: var(--danger, #E5484D); background: rgba(var(--text-rgb), .1); }
+.dc-colx:focus-visible { opacity: 1; outline: 2px solid var(--accent); }
+
+/* The sheet's context menu. Its own element rather than the map's #ctxMenu,
+   which is positioned inside #mapWrap and would open off-screen over a card. */
+.dc-sheetmenu {
+  position: fixed;
+  z-index: 6000;
+  min-width: 176px;
+  padding: 5px;
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .34);
+  font-size: 12px;
+  user-select: none;
+}
+.dc-sheetmenu .lbl {
+  padding: 4px 9px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.dc-sheetmenu .mi {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.dc-sheetmenu .mi:hover { background: rgba(var(--text-rgb), .09); }
+.dc-sheetmenu .mi .ico {
+  width: 14px;
+  text-align: center;
+  color: var(--text-2);
+  font-weight: 700;
+}
+.dc-sheetmenu .mi.off { opacity: .38; cursor: default; }
+.dc-sheetmenu .mi.off:hover { background: none; }
+.dc-sheetmenu .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(var(--text-rgb), .14);
+}
+
+/* THE INK HAS TO REACH THE TEXT — see the `dc-ink` comment in dashTableHtml().
+   The words sit in a .dc-th/.dc-td div inside the cell, and those set a colour
+   of their own; a rule beats an inherited value, so a cell given a dark fill
+   and a light ink landed the fill and kept the theme's dark text on top of it.
+   Only on cells that actually carry one: everywhere else the theme is right. */
+.dc-table .dc-cell.dc-ink .dc-th,
+.dc-table .dc-cell.dc-ink .dc-td { color: inherit; }
+/* Same again for a chosen size: `.dc-th` sets one of its own, so a header cell
+   set to 18px stayed at 9.5 while the cell around it measured 18 — which is
+   what an assertion reading the cell rather than the words in it missed. */
+.dc-table .dc-cell.dc-sized .dc-th,
+.dc-table .dc-cell.dc-sized .dc-td { font-size: inherit; }

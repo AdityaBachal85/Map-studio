@@ -614,6 +614,20 @@ function renderDashFormat() {
     const bodyOpts = (card.type === 'text' || card.type === 'comment')
       ? three.concat([['justify', 'Justify']]) : three;
     f += dfRow('Text', dfSegIcons('alignBody', bodyOpts, (card.fmt && card.fmt.alignBody) || 'left'));
+
+    // LISTS BELONG WHERE PEOPLE LOOK FOR THEM. They were on the floating bar
+    // that appears when you select words — which is right for bold, because you
+    // bold a phrase, and wrong for a list, because you make a list before there
+    // is anything to select. Somebody with an empty Notes card had no way to
+    // find them at all. The bar keeps them too; this is the second door.
+    if (card.type === 'text' || card.type === 'comment') {
+      f += dfRow('Lists', '<div class="df-seg df-lists">'
+        + '<button type="button" data-dflist="insertUnorderedList" title="Bulleted list"'
+        + ' aria-label="Bulleted list">\u2022 \u2014</button>'
+        + '<button type="button" data-dflist="insertOrderedList" title="Numbered list"'
+        + ' aria-label="Numbered list">1. \u2014</button>'
+        + '</div>');
+    }
   }
 
   // Where the legend lives. On the map is the layout every printed connectivity
@@ -886,6 +900,32 @@ function dfRedraw(card) {
         renderDashboard();
         renderDashFormat();
       });
+      return;
+    }
+
+    // A list command needs a focused editable with a caret in it. Pressed from
+    // the pane there may be none — so the card's own body field is focused and
+    // the caret put at its end first, which is where somebody about to start a
+    // list would have put it themselves.
+    const lst = e.target.closest('[data-dflist]');
+    if (lst) {
+      e.preventDefault();
+      const card = dashFormatTarget();
+      if (!card) return;
+      const field = document.querySelector(
+        '#dashGrid .dash-card[data-card="' + card.id + '"] [data-bind="body"]');
+      if (!field) return;
+      field.focus({ preventScroll: true });
+      const sel = getSelection();
+      if (!sel.rangeCount || !field.contains(sel.anchorNode)) {
+        const r = document.createRange();
+        r.selectNodeContents(field);
+        r.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      if (typeof _richOn !== 'undefined') _richOn = field;
+      if (typeof dashRichRun === 'function') dashRichRun(lst.dataset.dflist, null);
       return;
     }
 
