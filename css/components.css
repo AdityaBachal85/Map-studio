@@ -1116,16 +1116,29 @@
       display: none;
     }
 
+    /* TOP LEFT OF THE MAP, not bottom right.
+       Bottom right is where every control rail on this app already lives — the
+       zoom buttons, the layer switch, the 2D/3D switch — so the one piece of
+       furniture that is not a control was sitting in the middle of them, and
+       read as another button. Top left is where a printed plan puts it.
+
+       Below the search button rather than beside it: that button owns the
+       corner and is 46px square. `left` is measured from the sidebar because
+       #mapWrap spans the full window — a plain `left: 12px` puts this
+       underneath the sidebar, which is how the first attempt at this went. */
     #northArrow {
       position: absolute;
-      right: 14px;
-      bottom: 104px;
+      top: 70px;
+      left: calc(var(--sbw) + 12px);
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
       z-index: 800;
-      width: 36px;
-      height: 36px;
+      width: 54px;
+      height: 54px;
       pointer-events: none;
-      filter: drop-shadow(0 3px 8px rgba(0, 0, 0, .4));
+      filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .45));
     }
+
+    .app.side-hidden #northArrow { left: 12px; }
 
     body.no-north #northArrow {
       display: none;

@@ -271,6 +271,83 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the export model carries the symbol beside the colour',
     Array.isArray(exported) && exported.indexOf('star') >= 0, JSON.stringify(exported));
 
+  /* ---- the key describes the whole map, not just the site ---------------- */
+
+  // connLegendRows() read `if (l.type === 'site')`, so a map carrying a site,
+  // four stations, an airport and a school produced exactly ONE row — the card
+  // that says what the map means said "Site / subject property" and stopped.
+  const auto = await p.evaluate(() => {
+    locations.length = 0;
+    if (typeof routes !== 'undefined') routes.length = 0;
+    if (typeof geometries !== 'undefined') geometries.length = 0;
+    addLocation({ lat: 19.23, lng: 73.13, name: 'Site', type: 'site' });
+    addLocation({ lat: 19.25, lng: 73.16, name: 'Kalyan', type: 'station' });
+    addLocation({ lat: 19.21, lng: 73.10, name: 'Ambivli', type: 'station' });
+    addLocation({ lat: 19.27, lng: 73.19, name: 'Line 5', type: 'metroStation' });
+    addLocation({ lat: 19.19, lng: 73.22, name: 'Airport', type: 'airport' });
+    return colorKeyRows().map(r => r.label);
+  });
+  ck('every kind of pin on the map earns a legend row, not only the site',
+    auto.indexOf('Railway station') >= 0 && auto.indexOf('Metro station') >= 0
+    && auto.indexOf('Airport') >= 0 && auto.indexOf('Site / subject property') >= 0,
+    JSON.stringify(auto));
+  // A legend names kinds, not instances: two stations are one row.
+  ck('and two of the same kind share one row rather than printing twice',
+    auto.filter(l => l === 'Railway station').length === 1, JSON.stringify(auto));
+
+  // A type with no class in the standard still has a colour on the map, and a
+  // colour on the map with nothing beside it in the key is the complaint this
+  // whole card exists to answer.
+  const loose = await p.evaluate(() => {
+    addLocation({ lat: 19.24, lng: 73.08, name: 'DPS School', type: 'school', color: '#7C3AED' });
+    return colorKeyRows().map(r => r.label + '=' + String(r.color).toLowerCase());
+  });
+  ck('a pin whose type is not in the standard is named after itself',
+    loose.some(l => l === 'DPS School=#7c3aed'), JSON.stringify(loose));
+
+  // Editing off first: an empty card while the pencil is open is deliberate —
+  // that is the state you add a custom row from — so leaving it on here would
+  // assert the opposite of what the card is for.
+  await p.evaluate(() => {
+    colorKeyEditing = false;
+    locations.length = 0;
+    rebuildColorKey();
+  });
+  await p.waitForTimeout(400);
+  const empty = await p.evaluate(() => ({
+    rows: colorKeyRows().length,
+    shown: getComputedStyle(document.getElementById('colorKeyCard')).display,
+  }));
+  ck('and a map with nothing on it hides the card rather than showing an empty one',
+    empty.rows === 0 && empty.shown === 'none', JSON.stringify(empty));
+
+  /* ---- the compass ------------------------------------------------------- */
+
+  const rose = await p.evaluate(() => {
+    const n = document.getElementById('northArrow');
+    const r = n.getBoundingClientRect();
+    const wrap = document.getElementById('mapWrap').getBoundingClientRect();
+    const sb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sbw')) || 0;
+    const svg = n.querySelector('svg');
+    return {
+      x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width),
+      sb: Math.round(sb), wrapH: Math.round(wrap.height),
+      paths: svg.querySelectorAll('path').length,
+      letters: Array.from(svg.querySelectorAll('text')).map(t => t.textContent).join(''),
+      // html2canvas resolves no CSS variables, and this element is captured
+      // into every export — a currentColor here comes out black.
+      vars: /var\(|currentColor/.test(svg.outerHTML),
+    };
+  });
+  ck('the compass is at the TOP of the map, not the bottom', rose.y < rose.wrapH / 3,
+    'y=' + rose.y + ' of ' + rose.wrapH);
+  ck('and on the left, clear of the sidebar rather than under it',
+    rose.x >= rose.sb && rose.x < rose.sb + 40, 'x=' + rose.x + ', sidebar ' + rose.sb);
+  ck('it is a rose — folded points, a ring and an inner star, not one triangle',
+    rose.paths >= 5, rose.paths + ' paths');
+  ck('and it names all four cardinal directions', rose.letters === 'NESW', rose.letters);
+  ck('every colour in it is a literal, since exports resolve no variables', !rose.vars);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

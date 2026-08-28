@@ -4834,9 +4834,14 @@ body.identify-on .leaflet-container {
 
    Below the search box rather than beside it: that field already owns this
    corner and is 300px wide. */
+/* UNDER THE ROSE, not on top of it. In 3D both are on screen: #northArrow says
+   where north is and turns with the camera, this one is the control you drag to
+   turn the camera. They stack as one column in the same corner rather than
+   fighting for the same 46 pixels, which is what they did when the rose moved
+   here. In 2D only the rose is up. */
 #northUpBtn {
   position: absolute;
-  top: 66px;
+  top: 128px;
   left: calc(var(--sbw) + 12px);
   transition: left .34s cubic-bezier(.32, .72, .28, 1);
   z-index: 1000;

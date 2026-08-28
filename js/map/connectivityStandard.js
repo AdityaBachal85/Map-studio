@@ -216,7 +216,16 @@ function connLegendRows() {
     geometries.forEach(g => note(g.cls, g.proposed,
       (g.shape === 'Line' || g.shape === 'Label') ? g.borderColor : g.fillColor));
   }
-  if (typeof locations !== 'undefined') locations.forEach(l => { if (l.type === 'site') note('site', false, l.color); });
+  // EVERY PIN, NOT ONLY THE SITE.
+  //
+  // This read `if (l.type === 'site')`, so a map carrying a site, four railway
+  // stations, an airport and a dozen schools produced exactly one legend row —
+  // and the card that is supposed to say what the map means said "Site /
+  // subject property" and nothing else. Every location type in the vocabulary
+  // above (station, metroStation, airport, hub, powerTower, …) is a class with
+  // a label and a colour already; a type with no class falls through connClass
+  // and is picked up by colorKeyUnclassedRows() instead, grouped by colour.
+  if (typeof locations !== 'undefined') locations.forEach(l => note(l.type, false, l.color));
 
   // THE SWATCH FOLLOWS THE MAP, NOT THE TABLE.
   //

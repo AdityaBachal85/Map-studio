@@ -125,6 +125,18 @@ function colorKeyUnclassedRows() {
   if (typeof routes !== 'undefined') {
     routes.forEach(r => { if (!r.cls) note(r.color, 'line', colorKeyRouteName(r)); });
   }
+  // A PIN IS DRAWN COLOUR TOO. Locations were read nowhere here: a map of
+  // twelve pins in six colours produced six rows' worth of meaning and zero
+  // rows. Only the ones whose type has no class in the standard — the rest are
+  // named properly by connLegendRows() above, and noting them twice would put
+  // "Railway station" on the card beside an unnamed grey swatch for the same
+  // pins.
+  if (typeof locations !== 'undefined') {
+    locations.forEach(l => {
+      if (typeof connClass === 'function' && connClass(l.type)) return;
+      note(l.color, 'mark', l.name || '');
+    });
+  }
   if (typeof geometries !== 'undefined') {
     geometries.forEach(g => {
       if (g.cls || g._hidden) return;

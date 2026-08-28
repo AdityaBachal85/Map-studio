@@ -9,9 +9,9 @@
        it is preloaded rather than discovered three stylesheets deep in an
        @font-face. The mono is not — it only sets coordinate readouts, and
        loading it eagerly would compete with the one that matters. -->
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0205" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0205">
-  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0205">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0206" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0206">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0206">
   <!-- Listed individually rather than behind main.css's @import list, because
        an @import carries its own ?v= that has to be bumped in a second place,
        and when it isn't, index.html busts while the sheets it pulls in keep
@@ -21,14 +21,14 @@
        there is one version per file and the release bump covers them.
        Order is load-bearing — later sheets override earlier ones, and refine
        must stay last. Do not reorder. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0205">
-  <link rel="stylesheet" href="./css/style.css?v=6.0205">
-  <link rel="stylesheet" href="./css/map.css?v=6.0205">
-  <link rel="stylesheet" href="./css/sidebar.css?v=6.0205">
-  <link rel="stylesheet" href="./css/components.css?v=6.0205">
-  <link rel="stylesheet" href="./css/layout.css?v=6.0205">
-  <link rel="stylesheet" href="./css/dashboard.css?v=6.0205">
-  <link rel="stylesheet" href="./css/refine.css?v=6.0205">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0206">
+  <link rel="stylesheet" href="./css/style.css?v=6.0206">
+  <link rel="stylesheet" href="./css/map.css?v=6.0206">
+  <link rel="stylesheet" href="./css/sidebar.css?v=6.0206">
+  <link rel="stylesheet" href="./css/components.css?v=6.0206">
+  <link rel="stylesheet" href="./css/layout.css?v=6.0206">
+  <link rel="stylesheet" href="./css/dashboard.css?v=6.0206">
+  <link rel="stylesheet" href="./css/refine.css?v=6.0206">
 </head>
 
 <!-- no-brand matches the DBOT-logo toggle, which starts off. A saved project
@@ -375,10 +375,51 @@
         </div>
         </div>
       </div>
-      <div id="northArrow"><svg viewBox="0 0 36 36" width="36" height="36">
-          <circle cx="18" cy="18" r="16.5" fill="rgba(12,19,35,.85)" stroke="rgba(255,255,255,.18)" stroke-width="1" />
-          <polygon points="18,5.5 22.4,20 18,16.6 13.6,20" fill="#FF7A1A" /><text x="18" y="29.5" text-anchor="middle"
-            font-size="9.5" font-weight="800" fill="#EAF0F9" font-family="Arial">N</text>
+      <!-- A NAUTICAL COMPASS ROSE, not a circle with a triangle in it.
+           Every face of every point is split light/dark down its spine, which
+           is what makes a rose read as a rose rather than as a starburst — the
+           fold is the drawing. Cardinal points run past the graduated ring and
+           the intercardinals stop inside it, so which four directions are named
+           is legible before the letters are.
+
+           THE NORTH POINT IS ORANGE. The reference is monochrome, and on paper
+           that is fine because the reader has time to find the N. On a map you
+           are glancing, so the one point that matters is the one that is a
+           different colour. Everything else follows the reference.
+
+           Drawn on a dark disc because this sits over both a pale road map and
+           dark satellite imagery, and ink alone reads on neither.
+
+           INLINE SVG WITH LITERAL COLOURS, deliberately: html2canvas resolves
+           no CSS variables, and this element is captured into every PNG, PDF,
+           PowerPoint and Word export. A currentColor here exports as black. -->
+      <div id="northArrow"><svg viewBox="-7 -7 130 130" width="54" height="54">
+          <circle cx="58" cy="58" r="63" fill="rgba(12,19,35,.86)"
+            stroke="rgba(255,255,255,.20)" stroke-width="2.4" />
+          <!-- the graduated ring, and its ticks -->
+          <circle cx="58" cy="58" r="37.6" fill="none" stroke="#8FA6C8" stroke-width="1.5" opacity=".55" />
+          <circle cx="58" cy="58" r="32.4" fill="none" stroke="#8FA6C8" stroke-width="1.5" opacity=".55" />
+          <path stroke="#8FA6C8" stroke-width="1.4" opacity=".45" d="M70.5 27.9L72.3 23.4 M81.1 34.9L84.4 31.6 M88.1 45.5L92.6 43.7 M88.1 70.5L92.6 72.3 M81.1 81.1L84.4 84.4 M70.5 88.1L72.3 92.6 M45.5 88.1L43.7 92.6 M34.9 81.1L31.6 84.4 M27.9 70.5L23.4 72.3 M27.9 45.5L23.4 43.7 M34.9 34.9L31.6 31.6 M45.5 27.9L43.7 23.4" />
+          <!-- the eight-point rose: lit faces, then shadowed faces -->
+          <path fill="#E8EFFA" d="M58.0 15.0L48.5 48.5L58.0 58.0Z M79.9 36.1L58.0 44.5L58.0 58.0Z M101.0 58.0L67.5 48.5L58.0 58.0Z M79.9 79.9L71.5 58.0L58.0 58.0Z M58.0 101.0L67.5 67.5L58.0 58.0Z M36.1 79.9L58.0 71.5L58.0 58.0Z M15.0 58.0L48.5 67.5L58.0 58.0Z M36.1 36.1L44.5 58.0L58.0 58.0Z" />
+          <path fill="#7F97BC" d="M58.0 15.0L58.0 58.0L67.5 48.5Z M79.9 36.1L58.0 58.0L71.5 58.0Z M101.0 58.0L58.0 58.0L67.5 67.5Z M79.9 79.9L58.0 58.0L58.0 71.5Z M58.0 101.0L58.0 58.0L48.5 67.5Z M36.1 79.9L58.0 58.0L44.5 58.0Z M15.0 58.0L58.0 58.0L48.5 48.5Z M36.1 36.1L58.0 58.0L58.0 44.5Z" />
+          <!-- north, twice over: drawn again in the brand orange -->
+          <path fill="#FF9A4D" d="M58.0 15.0L48.5 48.5L58.0 58.0Z" />
+          <path fill="#F26B21" d="M58.0 15.0L58.0 58.0L67.5 48.5Z" />
+          <!-- the inner rose -->
+          <path fill="#E8EFFA" d="M58.0 37.0L54.5 54.5L58.0 58.0Z M67.9 48.1L58.0 53.0L58.0 58.0Z M79.0 58.0L61.5 54.5L58.0 58.0Z M67.9 67.9L63.0 58.0L58.0 58.0Z M58.0 79.0L61.5 61.5L58.0 58.0Z M48.1 67.9L58.0 63.0L58.0 58.0Z M37.0 58.0L54.5 61.5L58.0 58.0Z M48.1 48.1L53.0 58.0L58.0 58.0Z" />
+          <path fill="#6E86AB" d="M58.0 37.0L58.0 58.0L61.5 54.5Z M67.9 48.1L58.0 58.0L63.0 58.0Z M79.0 58.0L58.0 58.0L61.5 61.5Z M67.9 67.9L58.0 58.0L58.0 63.0Z M58.0 79.0L58.0 58.0L54.5 61.5Z M48.1 67.9L58.0 58.0L53.0 58.0Z M37.0 58.0L58.0 58.0L54.5 54.5Z M48.1 48.1L58.0 58.0L58.0 53.0Z" />
+          <!-- the hub -->
+          <circle cx="58" cy="58" r="9" fill="none" stroke="#8FA6C8" stroke-width="1.6" opacity=".7" />
+          <circle cx="58" cy="58" r="5.4" fill="#E8EFFA" />
+          <!-- The letters carry an explicit y rather than a dominant-baseline,
+               which html2canvas ignores — it would export them off-centre. -->
+          <g fill="#EAF0F9" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" text-anchor="middle">
+            <text x="58.0" y="13.6">N</text>
+            <text x="108.0" y="63.6">E</text>
+            <text x="58.0" y="113.6">S</text>
+            <text x="8.0" y="63.6">W</text>
+          </g>
         </svg></div>
       <div id="brandMark"><img class="dbotLogo" alt="DBOT"></div>
       <div id="mapCredit"></div>
@@ -1163,159 +1204,159 @@
        opened via double-click (file://), which browsers block for ES modules.
        Load order matters: each file below depends on globals declared by the
        ones before it. Do not reorder. -->
-  <script src="./vendor/leaflet.js?v=6.0205"></script>
-  <script src="./vendor/leaflet-geoman.js?v=6.0205"></script>
-  <script src="./vendor/html2canvas.js?v=6.0205"></script>
-  <script src="./vendor/pptxgen.bundle.js?v=6.0205"></script>
-  <script src="./vendor/jszip.js?v=6.0205"></script>
-  <script src="./vendor/anime.min.js?v=6.0205"></script>
+  <script src="./vendor/leaflet.js?v=6.0206"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0206"></script>
+  <script src="./vendor/html2canvas.js?v=6.0206"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0206"></script>
+  <script src="./vendor/jszip.js?v=6.0206"></script>
+  <script src="./vendor/anime.min.js?v=6.0206"></script>
 
-  <script src="./js/core/prefs.js?v=6.0205"></script>
-  <script src="./js/constants.js?v=6.0205"></script>
+  <script src="./js/core/prefs.js?v=6.0206"></script>
+  <script src="./js/constants.js?v=6.0206"></script>
   <!-- The class→colour standard. Before routes.js, which asks it what colour
        a new road is. -->
-  <script src="./js/map/connectivityStandard.js?v=6.0205"></script>
-  <script src="./js/core/freshness.js?v=6.0205"></script>
-  <script src="./js/utils/dom.js?v=6.0205"></script>
-  <script src="./js/utils/color.js?v=6.0205"></script>
-  <script src="./js/export/exportPDF.js?v=6.0205"></script>
-  <script src="./js/export/captureMap.js?v=6.0205"></script>
-  <script src="./js/core/state.js?v=6.0205"></script>
-  <script src="./js/map/icons.js?v=6.0205"></script>
-  <script src="./js/config.js?v=6.0205"></script>
-  <script src="./js/ui/notifications.js?v=6.0205"></script>
-  <script src="./js/utils/math.js?v=6.0205"></script>
-  <script src="./js/map/billboard.js?v=6.0205"></script>
+  <script src="./js/map/connectivityStandard.js?v=6.0206"></script>
+  <script src="./js/core/freshness.js?v=6.0206"></script>
+  <script src="./js/utils/dom.js?v=6.0206"></script>
+  <script src="./js/utils/color.js?v=6.0206"></script>
+  <script src="./js/export/exportPDF.js?v=6.0206"></script>
+  <script src="./js/export/captureMap.js?v=6.0206"></script>
+  <script src="./js/core/state.js?v=6.0206"></script>
+  <script src="./js/map/icons.js?v=6.0206"></script>
+  <script src="./js/config.js?v=6.0206"></script>
+  <script src="./js/ui/notifications.js?v=6.0206"></script>
+  <script src="./js/utils/math.js?v=6.0206"></script>
+  <script src="./js/map/billboard.js?v=6.0206"></script>
   <!-- Both define helpers propertyPanel.js calls when a card is built, so they
        load ahead of it. -->
-  <script src="./js/ui/colorPresets.js?v=6.0205"></script>
-  <script src="./js/ui/iconPicker.js?v=6.0205"></script>
-  <script src="./js/ui/propertyPanel.js?v=6.0205"></script>
-  <script src="./js/ui/legendTable.js?v=6.0205"></script>
-  <script src="./js/ui/dashCharts.js?v=6.0205"></script>
-  <script src="./js/ui/dashLayout.js?v=6.0205"></script>
-  <script src="./js/ui/dashCards.js?v=6.0205"></script>
-  <script src="./js/ui/dashRichText.js?v=6.0205"></script>
-  <script src="./js/ui/dashFormat.js?v=6.0205"></script>
-  <script src="./js/export/dashExportModel.js?v=6.0205"></script>
-  <script src="./js/export/pdfWriter.js?v=6.0205"></script>
-  <script src="./js/export/dashPdf.js?v=6.0205"></script>
-  <script src="./js/export/dashPptx.js?v=6.0205"></script>
-  <script src="./js/export/dashDocx.js?v=6.0205"></script>
-  <script src="./js/export/dashExport.js?v=6.0205"></script>
-  <script src="./js/ui/reportSheet.js?v=6.0205"></script>
-  <script src="./js/ui/appMode.js?v=6.0205"></script>
-  <script src="./js/ui/dialogs.js?v=6.0205"></script>
-  <script src="./js/utils/colors.js?v=6.0205"></script>
-  <script src="./js/utils/animate.js?v=6.0205"></script>
-  <script src="./js/map/routes.js?v=6.0205"></script>
-  <script src="./js/map/markers.js?v=6.0205"></script>
-  <script src="./js/map/snapping.js?v=6.0205"></script>
-  <script src="./js/map/imageryEnhance.js?v=6.0205"></script>
-  <script src="./js/map/providerKeys.js?v=6.0205"></script>
-  <script src="./js/map/basemapProviders.js?v=6.0205"></script>
-  <script src="./js/map/googleTiles.js?v=6.0205"></script>
-  <script src="./js/map/customBasemaps.js?v=6.0205"></script>
+  <script src="./js/ui/colorPresets.js?v=6.0206"></script>
+  <script src="./js/ui/iconPicker.js?v=6.0206"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0206"></script>
+  <script src="./js/ui/legendTable.js?v=6.0206"></script>
+  <script src="./js/ui/dashCharts.js?v=6.0206"></script>
+  <script src="./js/ui/dashLayout.js?v=6.0206"></script>
+  <script src="./js/ui/dashCards.js?v=6.0206"></script>
+  <script src="./js/ui/dashRichText.js?v=6.0206"></script>
+  <script src="./js/ui/dashFormat.js?v=6.0206"></script>
+  <script src="./js/export/dashExportModel.js?v=6.0206"></script>
+  <script src="./js/export/pdfWriter.js?v=6.0206"></script>
+  <script src="./js/export/dashPdf.js?v=6.0206"></script>
+  <script src="./js/export/dashPptx.js?v=6.0206"></script>
+  <script src="./js/export/dashDocx.js?v=6.0206"></script>
+  <script src="./js/export/dashExport.js?v=6.0206"></script>
+  <script src="./js/ui/reportSheet.js?v=6.0206"></script>
+  <script src="./js/ui/appMode.js?v=6.0206"></script>
+  <script src="./js/ui/dialogs.js?v=6.0206"></script>
+  <script src="./js/utils/colors.js?v=6.0206"></script>
+  <script src="./js/utils/animate.js?v=6.0206"></script>
+  <script src="./js/map/routes.js?v=6.0206"></script>
+  <script src="./js/map/markers.js?v=6.0206"></script>
+  <script src="./js/map/snapping.js?v=6.0206"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0206"></script>
+  <script src="./js/map/providerKeys.js?v=6.0206"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0206"></script>
+  <script src="./js/map/googleTiles.js?v=6.0206"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0206"></script>
   <!-- Before mapEngine: the engine builds its first tile layers at boot, and
        a scrub class that loads later leaves the first paint unscrubbed. -->
-  <script src="./js/map/tileScrub.js?v=6.0205"></script>
+  <script src="./js/map/tileScrub.js?v=6.0206"></script>
   <!-- Also before mapEngine, and for the same reason: setBasemap() runs during
        parse, and a remembered vector ground needs mountVectorGround() to exist
        by then. The MapLibre renderer itself is NOT loaded here — it is 803 KB
        for a feature that is off by default, so this file fetches it from
        vendor/ the first time a vector ground is actually chosen. -->
-  <script src="./js/map/vectorBasemap.js?v=6.0205"></script>
-  <script src="./js/map/mapEngine.js?v=6.0205"></script>
-  <script src="./js/export/hiResRender.js?v=6.0205"></script>
-  <script src="./js/export/exportPNG.js?v=6.0205"></script>
-  <script src="./js/export/pptUtils.js?v=6.0205"></script>
-  <script src="./js/export/pptValidation.js?v=6.0205"></script>
-  <script src="./js/export/pptShapes.js?v=6.0205"></script>
-  <script src="./js/export/pptImages.js?v=6.0205"></script>
-  <script src="./js/export/pptLabels.js?v=6.0205"></script>
-  <script src="./js/export/pptTables.js?v=6.0205"></script>
-  <script src="./js/export/exportPPT.js?v=6.0205"></script>
-  <script src="./js/services/places.js?v=6.0205"></script>
-  <script src="./js/services/google.js?v=6.0205"></script>
-  <script src="./js/services/placeCache.js?v=6.0205"></script>
-  <script src="./js/services/geoapify.js?v=6.0205"></script>
-  <script src="./js/services/nearbyPlaces.js?v=6.0205"></script>
-  <script src="./js/services/geocoder.js?v=6.0205"></script>
-  <script src="./js/services/boundaries.js?v=6.0205"></script>
+  <script src="./js/map/vectorBasemap.js?v=6.0206"></script>
+  <script src="./js/map/mapEngine.js?v=6.0206"></script>
+  <script src="./js/export/hiResRender.js?v=6.0206"></script>
+  <script src="./js/export/exportPNG.js?v=6.0206"></script>
+  <script src="./js/export/pptUtils.js?v=6.0206"></script>
+  <script src="./js/export/pptValidation.js?v=6.0206"></script>
+  <script src="./js/export/pptShapes.js?v=6.0206"></script>
+  <script src="./js/export/pptImages.js?v=6.0206"></script>
+  <script src="./js/export/pptLabels.js?v=6.0206"></script>
+  <script src="./js/export/pptTables.js?v=6.0206"></script>
+  <script src="./js/export/exportPPT.js?v=6.0206"></script>
+  <script src="./js/services/places.js?v=6.0206"></script>
+  <script src="./js/services/google.js?v=6.0206"></script>
+  <script src="./js/services/placeCache.js?v=6.0206"></script>
+  <script src="./js/services/geoapify.js?v=6.0206"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0206"></script>
+  <script src="./js/services/geocoder.js?v=6.0206"></script>
+  <script src="./js/services/boundaries.js?v=6.0206"></script>
   <!-- Line geometry for metro, rail and water — the only source that has it.
        Built on boundaries.js's shape: mirrors, cache, rate gate, honest failure. -->
-  <script src="./js/services/ringFeatures.js?v=6.0205"></script>
-  <script src="./js/services/mapIdentify.js?v=6.0205"></script>
-  <script src="./js/services/aiReports.js?v=6.0205"></script>
-  <script src="./js/services/aiReportLog.js?v=6.0205"></script>
-  <script src="./js/ui/searchBox.js?v=6.0205"></script>
-  <script src="./js/ui/sliders.js?v=6.0205"></script>
-  <script src="./js/ui/tooltips.js?v=6.0205"></script>
-  <script src="./js/ui/toolbar.js?v=6.0205"></script>
-  <script src="./js/map/aerialDistance.js?v=6.0205"></script>
+  <script src="./js/services/ringFeatures.js?v=6.0206"></script>
+  <script src="./js/services/mapIdentify.js?v=6.0206"></script>
+  <script src="./js/services/aiReports.js?v=6.0206"></script>
+  <script src="./js/services/aiReportLog.js?v=6.0206"></script>
+  <script src="./js/ui/searchBox.js?v=6.0206"></script>
+  <script src="./js/ui/sliders.js?v=6.0206"></script>
+  <script src="./js/ui/tooltips.js?v=6.0206"></script>
+  <script src="./js/ui/toolbar.js?v=6.0206"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0206"></script>
   <!-- Two-click road tracing. After aerialDistance.js, whose mode-stand-down
        pattern it follows and whose globals it calls. -->
-  <script src="./js/map/roadDraw.js?v=6.0205"></script>
-  <script src="./js/map/fillPatterns.js?v=6.0205"></script>
-  <script src="./js/ui/geometryPanel.js?v=6.0205"></script>
-  <script src="./js/ui/geomGroups.js?v=6.0205"></script>
+  <script src="./js/map/roadDraw.js?v=6.0206"></script>
+  <script src="./js/map/fillPatterns.js?v=6.0206"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0206"></script>
+  <script src="./js/ui/geomGroups.js?v=6.0206"></script>
   <!-- The same idea for locations. A separate module rather than a shared
        one: the two look alike on screen and share no fields underneath. -->
-  <script src="./js/ui/locGroups.js?v=6.0205"></script>
-  <script src="./js/map/drawing.js?v=6.0205"></script>
-  <script src="./js/map/textLabels.js?v=6.0205"></script>
+  <script src="./js/ui/locGroups.js?v=6.0206"></script>
+  <script src="./js/map/drawing.js?v=6.0206"></script>
+  <script src="./js/map/textLabels.js?v=6.0206"></script>
 
   <!-- The contour map. Order is load-bearing: contourGen defines the grid
        sampling elevation.js reads back, osmDetail calls into the Overpass
        client ringFeatures.js sets up, and contourMap needs registerGeom from
        drawing.js above to convert contours into shapes. -->
-  <script src="./js/map/contourRamps.js?v=6.0205"></script>
-  <script src="./js/map/contourGen.js?v=6.0205"></script>
-  <script src="./js/services/elevation.js?v=6.0205"></script>
-  <script src="./js/services/osmDetail.js?v=6.0205"></script>
-  <script src="./js/map/contourLayer.js?v=6.0205"></script>
-  <script src="./js/map/contourMap.js?v=6.0205"></script>
-  <script src="./js/map/map3d.js?v=6.0205"></script>
-  <script src="./js/map/map3dContent.js?v=6.0205"></script>
-  <script src="./js/ui/contourPanel.js?v=6.0205"></script>
-  <script src="./js/ui/map3dControls.js?v=6.0205"></script>
-  <script src="./js/map/markerCluster.js?v=6.0205"></script>
-  <script src="./js/map/nearby.js?v=6.0205"></script>
+  <script src="./js/map/contourRamps.js?v=6.0206"></script>
+  <script src="./js/map/contourGen.js?v=6.0206"></script>
+  <script src="./js/services/elevation.js?v=6.0206"></script>
+  <script src="./js/services/osmDetail.js?v=6.0206"></script>
+  <script src="./js/map/contourLayer.js?v=6.0206"></script>
+  <script src="./js/map/contourMap.js?v=6.0206"></script>
+  <script src="./js/map/map3d.js?v=6.0206"></script>
+  <script src="./js/map/map3dContent.js?v=6.0206"></script>
+  <script src="./js/ui/contourPanel.js?v=6.0206"></script>
+  <script src="./js/ui/map3dControls.js?v=6.0206"></script>
+  <script src="./js/map/markerCluster.js?v=6.0206"></script>
+  <script src="./js/map/nearby.js?v=6.0206"></script>
   <!-- Layouts last of the map modules: applying one calls setBasemap, which
        needs the basemap registry built. Its own startup is deferred anyway. -->
-  <script src="./js/map/layouts.js?v=6.0205"></script>
-  <script src="./js/map/mapOverlays.js?v=6.0205"></script>
-  <script src="./js/ui/ringScanPanel.js?v=6.0205"></script>
-  <script src="./js/ui/colorKey.js?v=6.0205"></script>
-  <script src="./js/project/geojson.js?v=6.0205"></script>
-  <script src="./js/export/pptxHandler.js?v=6.0205"></script>
-  <script src="./js/project/xlsx.js?v=6.0205"></script>
-  <script src="./js/project/importSheet.js?v=6.0205"></script>
-  <script src="./js/project/kml.js?v=6.0205"></script>
+  <script src="./js/map/layouts.js?v=6.0206"></script>
+  <script src="./js/map/mapOverlays.js?v=6.0206"></script>
+  <script src="./js/ui/ringScanPanel.js?v=6.0206"></script>
+  <script src="./js/ui/colorKey.js?v=6.0206"></script>
+  <script src="./js/project/geojson.js?v=6.0206"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0206"></script>
+  <script src="./js/project/xlsx.js?v=6.0206"></script>
+  <script src="./js/project/importSheet.js?v=6.0206"></script>
+  <script src="./js/project/kml.js?v=6.0206"></script>
   <!-- projectState defines what a project *is*; everything that saves, restores
        or autosaves depends on it, so it loads before all of them. -->
-  <script src="./js/project/projectState.js?v=6.0205"></script>
-  <script src="./js/project/history.js?v=6.0205"></script>
-  <script src="./js/project/autosave.js?v=6.0205"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0205"></script>
-  <script src="./js/project/importFiles.js?v=6.0205"></script>
-  <script src="./js/project/openProject.js?v=6.0205"></script>
+  <script src="./js/project/projectState.js?v=6.0206"></script>
+  <script src="./js/project/history.js?v=6.0206"></script>
+  <script src="./js/project/autosave.js?v=6.0206"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0206"></script>
+  <script src="./js/project/importFiles.js?v=6.0206"></script>
+  <script src="./js/project/openProject.js?v=6.0206"></script>
   <!-- After autosave.js: the bridge wraps autosaveNow(), so that function has
        to exist by the time this runs. -->
-  <script src="./vendor/supabase.js?v=6.0205"></script>
-  <script src="./js/auth/session.js?v=6.0205"></script>
-  <script src="./js/projects/projectStore.js?v=6.0205"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0205"></script>
-  <script src="./js/projects/projectBridge.js?v=6.0205"></script>
-  <script src="./js/project/saveProject.js?v=6.0205"></script>
-  <script src="./js/ui/sidebar.js?v=6.0205"></script>
-  <script src="./js/ui/aiTab.js?v=6.0205"></script>
-  <script src="./js/ui/layerManager.js?v=6.0205"></script>
-  <script src="./js/ui/settingsDialog.js?v=6.0205"></script>
-  <script src="./js/ui/exportCenter.js?v=6.0205"></script>
-  <script src="./js/ui/importDialog.js?v=6.0205"></script>
-  <script src="./js/ui/basemapSwitcher.js?v=6.0205"></script>
-  <script src="./js/app.js?v=6.0205"></script>
+  <script src="./vendor/supabase.js?v=6.0206"></script>
+  <script src="./js/auth/session.js?v=6.0206"></script>
+  <script src="./js/projects/projectStore.js?v=6.0206"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0206"></script>
+  <script src="./js/projects/projectBridge.js?v=6.0206"></script>
+  <script src="./js/project/saveProject.js?v=6.0206"></script>
+  <script src="./js/ui/sidebar.js?v=6.0206"></script>
+  <script src="./js/ui/aiTab.js?v=6.0206"></script>
+  <script src="./js/ui/layerManager.js?v=6.0206"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0206"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0206"></script>
+  <script src="./js/ui/importDialog.js?v=6.0206"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0206"></script>
+  <script src="./js/app.js?v=6.0206"></script>
 </body>
 
 </html>

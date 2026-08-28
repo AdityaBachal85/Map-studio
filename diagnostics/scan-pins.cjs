@@ -403,6 +403,12 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
   // A compass belongs at a corner of the map. This one was a third of the way
   // down the right-hand rail, among five other round buttons that look alike.
+  //
+  // THIS IS THE 3D ORBIT CONTROL, not the map's north arrow — an earlier pass
+  // moved this one and left #northArrow where it was, which is why the compass
+  // on screen in 2D did not move at all. #northArrow now owns the corner (see
+  // legend-colour.cjs) and this stacks below it, so both are usable in 3D
+  // instead of sharing 46 pixels.
   const rose = await p.evaluate(() => {
     const n = document.getElementById('northUpBtn');
     n.hidden = false;
@@ -421,8 +427,15 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       letter: (n.querySelector('.nub-n') || {}).textContent,
     };
   });
-  ck('the compass is at the map\'s top corner, not down the button rail',
-    rose.top < 120, 'top ' + rose.top);
+  const arrowTop = await p.evaluate(() => {
+    const wrap = document.getElementById('mapWrap').getBoundingClientRect();
+    const r = document.getElementById('northArrow').getBoundingClientRect();
+    return { top: Math.round(r.top - wrap.top), bottom: Math.round(r.bottom - wrap.top) };
+  });
+  ck('the orbit control is in the map\'s top corner, not down the button rail',
+    rose.top < 200, 'top ' + rose.top);
+  ck('and sits below the north rose rather than on top of it',
+    rose.top >= arrowTop.bottom, 'orbit at ' + rose.top + ', rose ends at ' + arrowTop.bottom);
   ck('and offset past the sidebar rather than hidden behind it',
     /sbw/.test(rose.left) || parseFloat(rose.left) > 100, rose.left);
   ck('it reads as a compass: a north needle and a letter',
