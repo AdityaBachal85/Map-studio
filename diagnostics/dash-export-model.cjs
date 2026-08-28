@@ -232,6 +232,44 @@ ck('a gauge carries its own hex through unchanged',
 const json = JSON.stringify(board);
 ck('no var() reference survives anywhere in the model', !/var\(/.test(json));
 
+/* ---- how a number prints travels with the card ----------------------------- */
+
+{
+  // A chart drawn in rupees to one decimal, with a table of bare integers under
+  // it in the Word file, is two different answers to the same question on one
+  // page. The rule is carried as data because this file runs under Node with no
+  // chart engine — a writer that re-derived it would drift from the picture.
+  const d = M.dashModelData({
+    type: 'chart', kind: 'column', labels: ['2021', '2022'],
+    seriesList: [{ name: 'Rent', values: [62000, 138000], slot: 1 }],
+    fmt: { decimals: 0, numPrefix: '\u20b9', xTitle: 'Year', yTitle: 'Rent per month' },
+  }, resolveColor);
+  ck('a chart carries its number format into the model',
+    d.numFmt && d.numFmt.decimals === 0 && d.numFmt.prefix === '\u20b9' && d.numFmt.suffix === '',
+    JSON.stringify(d.numFmt));
+  ck('and both axis titles', d.xTitle === 'Year' && d.yTitle === 'Rent per month',
+    JSON.stringify([d.xTitle, d.yTitle]));
+
+  const plain = M.dashModelData({
+    type: 'chart', kind: 'column', labels: ['2021'],
+    seriesList: [{ name: 'Rent', values: [62000], slot: 1 }],
+  }, resolveColor);
+  ck('a card nobody formatted carries no format at all, rather than an empty one',
+    plain.numFmt === undefined && plain.xTitle === undefined, JSON.stringify(plain.numFmt));
+
+  ck('a writer prints a formatted number the way the chart drew it',
+    M.dashModelNum(62000, { decimals: 0, prefix: '\u20b9', suffix: '' }) === '\u20b962,000',
+    M.dashModelNum(62000, { decimals: 0, prefix: '\u20b9', suffix: '' }));
+  ck('and an unformatted one compactly, as the chart also does',
+    M.dashModelNum(27500, null) === '27.5K' && M.dashModelNum(1200, null) === '1,200',
+    M.dashModelNum(27500, null) + ' / ' + M.dashModelNum(1200, null));
+  ck('a suffix rides along without a decimal count',
+    M.dashModelNum(4.2, { decimals: null, prefix: '', suffix: ' km' }) === '4.2 km',
+    M.dashModelNum(4.2, { decimals: null, prefix: '', suffix: ' km' }));
+  ck('and a gap in the data prints as a dash, not as NaN',
+    M.dashModelNum(null, null) === '\u2014' && M.dashModelNum(undefined, { decimals: 2 }) === '\u2014');
+}
+
 /* ---- it must not need a browser, or the globals ---------------------------- */
 
 ck('an empty board is describable rather than a crash',

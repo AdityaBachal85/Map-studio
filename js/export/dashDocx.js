@@ -216,9 +216,14 @@ async function dashBuildDocx(model, canvas, rects, scale) {
         const labels = d.labels || [];
         const series = d.series || [];
         if (labels.length && series.length) {
-          body.push(docxTable([''].concat(labels),
+          // The corner cell names what every number under it is. Blank leaves a
+          // table of bare figures whose units live only in the picture above.
+          body.push(docxTable([d.yTitle || ''].concat(labels),
+            // Printed the way the picture above prints them: a chart drawn in
+            // rupees to one decimal with a table of bare integers under it is
+            // two different answers to the same question on one page.
             series.map(s => [s.name].concat(labels.map((_, i) =>
-              (s.values[i] == null ? '—' : String(s.values[i]))))), pal));
+              dashModelNum(s.values[i], d.numFmt)))), pal));
         }
         // Scores are a fraction of a ceiling, and the table above prints only
         // the numerator. Saying so once under the table is the difference

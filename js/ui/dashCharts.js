@@ -40,6 +40,8 @@ const VIZ_ENTER_TOTAL = 1700;
 
 /** Plot padding, in pixels. Left carries the value ticks, bottom the categories. */
 const VIZ_PAD = { t: 12, r: 14, b: 22, l: 42 };
+/** The band an axis title takes off the plot, rather than being drawn over it. */
+const VIZ_AXTITLE_BAND = 16;
 
 /** Mark specs, fixed across every chart here. */
 const VIZ_LINE_W = 2;
@@ -83,6 +85,9 @@ const VIZ_SHARE_KINDS = ['pie', 'donut', 'funnel', 'treemap'];
  * on one card. The funnel already taught this lesson once.
  */
 const VIZ_SCORE_KINDS = ['ring', 'gauge', 'radar'];
+
+/** Kinds drawn as rectangles in a category band, so gap width means something. */
+const VIZ_BAR_KINDS = ['column', 'bar', 'stackedColumn', 'stackedBar', 'combo'];
 
 /** Kinds whose colours belong to the categories rather than to the series. */
 const VIZ_CATEGORY_KEYED = ['pie', 'donut', 'funnel', 'treemap', 'ring'];
@@ -283,6 +288,97 @@ function vizCatColour(ser, i) {
  * Compact a number for an axis tick or a label.
  * @param {number} n @returns {string}
  */
+/**
+ * The card's own number format, as a function.
+ *
+ * A chart in a property report prints rupees, kilometres, percentages and
+ * counts, and the compact default — 27.5K, 1.2M — is right for a count and
+ * wrong for the other three. Excel calls this a number format; here it is the
+ * three parts of one that a reader of these charts actually needs: how many
+ * decimals, and what goes before and after.
+ *
+ * Nothing set means the compact default, unchanged, so no existing board moves.
+ *
+ * @param {object} card @returns {function(number):string}
+ */
+function vizNumFmt(card) {
+  const f = (card && card.fmt) || {};
+  const dp = f.decimals;
+  const pre = f.numPrefix || '';
+  const suf = f.numSuffix || '';
+  const hasDp = dp != null && dp !== '' && isFinite(dp);
+  if (!hasDp && !pre && !suf) return vizNum;
+  return n => {
+    if (!isFinite(n)) return '—';
+    const body = hasDp
+      ? Number(n).toLocaleString('en-US',
+        { minimumFractionDigits: +dp, maximumFractionDigits: +dp })
+      : vizNum(n);
+    return pre + body + suf;
+  };
+}
+
+/**
+ * How wide a bar is, given the band it has to sit in.
+ *
+ * Excel's control, in Excel's units: gap width is the space between one
+ * category's bars and the next, as a percentage of a bar. 150 means the gap is
+ * half again as wide as the bar itself.
+ *
+ * The app's own sizing — which caps a bar at 24px so three categories across
+ * 600px do not draw three slabs 200px wide — stays in charge until somebody
+ * sets a gap. Then it gets out of the way: capping a bar at 24px after you
+ * asked for a gap of zero would just ignore you.
+ *
+ * @param {object} card @param {number} band the pixels one category owns
+ * @param {number} lanes bars side by side in that band (1 unless grouped)
+ * @param {number} dflt what the caller would have used
+ * @returns {number} the bar width in pixels
+ */
+function vizBarWidth(card, band, lanes, dflt) {
+  const g = card && card.fmt ? card.fmt.barGap : null;
+  if (g == null || g === '' || !isFinite(g)) return dflt;
+  const n = Math.max(1, lanes || 1);
+  const w = band / (n + Math.max(0, +g) / 100);
+  return Math.max(1, w - (n > 1 ? VIZ_GAP : 0));
+}
+
+/** Marker sizes, by the name the pane stores. */
+const VIZ_MARKER_R = { off: 0, s: 2.5, m: VIZ_DOT_R, l: 6 };
+
+/**
+ * The radius of the dot on a line, or zero for none.
+ *
+ * A line of twenty points is a shape, and twenty dots on it are twenty things
+ * to read; a line of four is four measurements, and the dots say so. Which of
+ * those a chart is, is a judgement about the data — so it is a control rather
+ * than a rule.
+ *
+ * @param {object} card @returns {number}
+ */
+function vizMarkerR(card) {
+  const m = card && card.fmt && card.fmt.markers;
+  return (m && VIZ_MARKER_R[m] != null) ? VIZ_MARKER_R[m] : VIZ_DOT_R;
+}
+
+/**
+ * Roughly how wide a string of tick text will be, in pixels.
+ *
+ * ESTIMATED, NOT MEASURED, because there is nothing to measure against: the
+ * chart is built as an SVG string and is not in the document until after every
+ * coordinate in it has been decided. The estimate only has to be close enough
+ * that the text clears the plot, and it is used to widen a pad rather than to
+ * place anything, so being a few pixels generous costs nothing.
+ *
+ * @param {string} s @param {number} [px] the font size @returns {number}
+ */
+function vizTextW(s, px) {
+  const size = px || 9.5;
+  let w = 0;
+  for (const ch of String(s)) w += (ch === ',' || ch === '.' || ch === ' ' || ch === "'") ? 0.30 : 0.58;
+  return w * size;
+}
+
 function vizNum(n) {
   if (!isFinite(n)) return '—';
   const a = Math.abs(n);
@@ -459,8 +555,8 @@ function vizSmoothPath(pts) {
  * @param {boolean} horiz @param {object} box plot bounds {x0,y0,iw,ih}
  * @returns {string} one SVG <text>
  */
-function vizBarLabel(v, end, zero, mid, horiz, box) {
-  const txt = vizNum(v);
+function vizBarLabel(v, end, zero, mid, horiz, box, num) {
+  const txt = (num || vizNum)(v);
   // How much of the plot the label needs beyond the bar's end, along the axis
   // the bar grows on: a string's width across, one line's height up.
   const room = horiz ? (txt.length * 5.6 + 7) : 16;
@@ -562,12 +658,21 @@ function vizFrame(card, w, h) {
   const stacked = kind === 'stackedColumn' || kind === 'stackedBar';
   const n = cats.length;
 
-  const pl = fmt.yAxis ? (horiz ? 74 : VIZ_PAD.l) : 10;
-  const pb = fmt.xAxis ? VIZ_PAD.b : 8;
-  const iw = Math.max(10, w - pl - VIZ_PAD.r);
+  // An axis title needs its own band of the card. Taken off the plot rather
+  // than drawn over it: a title laid on top of the ticks is two things in one
+  // place, which is what makes a chart look crowded rather than labelled.
+  const num = vizNumFmt(card);
+  const xTitle = String((card.fmt && card.fmt.xTitle) || '').trim();
+  const yTitle = String((card.fmt && card.fmt.yTitle) || '').trim();
+  const pb = (fmt.xAxis ? VIZ_PAD.b : 8) + (xTitle ? VIZ_AXTITLE_BAND : 0);
   const ih = Math.max(10, h - VIZ_PAD.t - pb);
-  const x0 = pl, y0 = VIZ_PAD.t;
-  const tickCount = Math.max(2, Math.floor((horiz ? iw : ih) / 46));
+  // The left pad and the tick count each want the other first: the pad depends
+  // on how wide the tick TEXT is, and the text depends on how many ticks there
+  // are. Broken by counting the ticks against the unwidened pad — a few pixels
+  // either way never changes how many fit — and widening afterwards.
+  const pl0 = (fmt.yAxis ? (horiz ? 74 : VIZ_PAD.l) : 10) + (yTitle ? VIZ_AXTITLE_BAND : 0);
+  const tickCount = Math.max(2,
+    Math.floor((horiz ? Math.max(10, w - pl0 - VIZ_PAD.r) : ih) / 46));
 
   let lo, hi;
   if (stacked) {
@@ -585,12 +690,23 @@ function vizFrame(card, w, h) {
     lo = t[0]; hi = t[t.length - 1];
   }
   const span = (hi - lo) || 1;
+  const ticks = vizTicks(lo, hi, tickCount);
+
+  // NOW the real left pad. 42px fits "150K", which is what the compact default
+  // prints; it does not fit "\u20b91,50,000.00", and a fixed pad let a formatted
+  // axis run left out of the plot and underneath its own title.
+  const pl = (fmt.yAxis && !horiz)
+    ? Math.max(VIZ_PAD.l, Math.round(Math.max.apply(null,
+      ticks.map(t => vizTextW(num(t))))) + 11) + (yTitle ? VIZ_AXTITLE_BAND : 0)
+    : pl0;
+  const iw = Math.max(10, w - pl - VIZ_PAD.r);
+  const x0 = pl, y0 = VIZ_PAD.t;
   const band = (horiz ? ih : iw) / n;
 
   return {
     kind, fmt, cats, series, horiz, stacked, n,
-    x0, y0, iw, ih, lo, hi, span, band,
-    ticks: vizTicks(lo, hi, tickCount),
+    x0, y0, iw, ih, lo, hi, span, band, ticks,
+    num, xTitle, yTitle,
     /** value → pixel along the value axis */
     vOf: v => (horiz ? x0 + ((v - lo) / span) * iw : y0 + ih - ((v - lo) / span) * ih),
     /** category index → pixel along the category axis */
@@ -611,6 +727,9 @@ function vizCartesian(card, w, h) {
   const x0 = fr.x0, y0 = fr.y0, iw = fr.iw, ih = fr.ih;
   const lo = fr.lo, hi = fr.hi, ticks = fr.ticks, band = fr.band;
   const vOf = fr.vOf, cOf = fr.cOf;
+  // How a number prints, and what the two axes are called. Computed in the
+  // frame because the padding depends on whether the titles exist at all.
+  const num = fr.num, xTitle = fr.xTitle, yTitle = fr.yTitle;
 
   let s = '';
 
@@ -625,8 +744,10 @@ function vizCartesian(card, w, h) {
         : '';
       const label = fmt.yAxis
         ? (horiz
-          ? '<text class="viz-tick" x="' + p + '" y="' + (h - 6) + '" text-anchor="middle">' + vizEsc(vizNum(t)) + '</text>'
-          : '<text class="viz-tick" x="' + (x0 - 7) + '" y="' + (vOf(t) + 3.5).toFixed(1) + '" text-anchor="end">' + vizEsc(vizNum(t)) + '</text>')
+          ? '<text class="viz-tick" x="' + p + '" y="' + (h - 6 - (xTitle ? VIZ_AXTITLE_BAND : 0))
+            + '" text-anchor="middle">' + vizEsc(num(t)) + '</text>'
+          : '<text class="viz-tick" x="' + (x0 - 7) + '" y="' + (vOf(t) + 3.5).toFixed(1)
+            + '" text-anchor="end">' + vizEsc(num(t)) + '</text>')
         : '';
       return line + label;
     }).join('');
@@ -640,7 +761,7 @@ function vizCartesian(card, w, h) {
     const lineSeries = kind === 'combo' ? series.slice(1) : series;
 
     if (kind === 'combo' && series[0]) {
-      const bw = Math.min(VIZ_BAR_MAX, Math.max(3, band - VIZ_GAP * 2 - 8));
+      const bw = vizBarWidth(card, band, 1, Math.min(VIZ_BAR_MAX, Math.max(3, band - VIZ_GAP * 2 - 8)));
       s += series[0].values.map((v, i) => {
         if (!isFinite(v)) return '';
         const y = vOf(v), top = Math.min(y, zero), hgt = Math.max(1, Math.abs(zero - y));
@@ -654,7 +775,7 @@ function vizCartesian(card, w, h) {
         series[0].values.forEach((v, i) => {
           if (!isFinite(v)) return;
           labelBits.push(vizBarLabel(v, vOf(v), zero, cOf(i), horiz,
-            { x0: x0, y0: y0, iw: iw, ih: ih }));
+            { x0: x0, y0: y0, iw: iw, ih: ih }, num));
         });
       }
     }
@@ -682,8 +803,12 @@ function vizCartesian(card, w, h) {
       // The dots take a per-point colour where one was set; the line itself
       // cannot — a line is one stroke and colouring "point three" of it would
       // mean choosing which of its two segments changed.
-      s += pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
-        + '" r="' + VIZ_DOT_R + '" style="fill:' + vizColour(ser, i) + ';--i:' + i + '"/>').join('');
+      // A scatter IS its markers, so it keeps them whatever the setting says.
+      const mr = kind === 'scatter' ? VIZ_DOT_R : vizMarkerR(card);
+      if (mr > 0) {
+        s += pts.map((p, i) => '<circle class="viz-dot" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1)
+          + '" r="' + mr + '" style="fill:' + vizColour(ser, i) + ';--i:' + i + '"/>').join('');
+      }
       if (fmt.labels) {
         // ABOVE, THEN BELOW, THEN ABOVE. Every series labelled above its own
         // point, so wherever two lines ran close together their numbers printed
@@ -703,17 +828,21 @@ function vizCartesian(card, w, h) {
           const others = lineSeries.map(o => o.values[i]).filter(isFinite);
           const up = !others.length || v >= Math.max.apply(null, others) || v > Math.min.apply(null, others);
           const py = vOf(v);
-          let y = py + (up ? -9 : 15);
-          if (y - 9.5 < y0) y = py + 15;
-          if (y + 2.5 > y0 + ih) y = py - 9;
-          labelBits.push({ txt: vizNum(v), cls: 'viz-label', x: cOf(i), y: y,
+          // Clear of the marker, whatever size it is. The offsets were tuned
+          // for the 4px default, so a large marker grew up into its own label.
+          const up9 = 5 + mr, dn9 = 11 + mr;
+          let y = py + (up ? -up9 : dn9);
+          if (y - 9.5 < y0) y = py + dn9;
+          if (y + 2.5 > y0 + ih) y = py - up9;
+          labelBits.push({ txt: num(v), cls: 'viz-label', x: cOf(i), y: y,
             anchor: 'middle', px: 0, py: up ? -1 : 1 });
         });
       }
     });
 
   } else if (stacked) {
-    const bw = Math.min(VIZ_BAR_MAX * 1.6, Math.max(4, band - VIZ_GAP * 2 - 8));
+    const bw = vizBarWidth(card, band, 1,
+      Math.min(VIZ_BAR_MAX * 1.6, Math.max(4, band - VIZ_GAP * 2 - 8)));
     cats.forEach((c, i) => {
       let acc = 0;
       series.forEach(ser => {
@@ -730,7 +859,7 @@ function vizCartesian(card, w, h) {
         if (fmt.labels) {
           const span = Math.abs(b - a);
           if (span > 15) {
-            labelBits.push({ txt: vizNum(v), cls: 'viz-label viz-label-in',
+            labelBits.push({ txt: num(v), cls: 'viz-label viz-label-in',
               x: horiz ? (a + b) / 2 : cOf(i),
               y: (horiz ? cOf(i) : (a + b) / 2) + 3.5,
               // Pinned: a stack's label means "this segment", so moving it off
@@ -757,7 +886,7 @@ function vizCartesian(card, w, h) {
   } else {
     /* grouped column or bar */
     const per = Math.max(2, (band - VIZ_GAP * 2 - 8) / series.length);
-    const bw = Math.min(VIZ_BAR_MAX, Math.max(2, per - VIZ_GAP));
+    const bw = vizBarWidth(card, band, series.length, Math.min(VIZ_BAR_MAX, Math.max(2, per - VIZ_GAP)));
     series.forEach((ser, si) => {
       const off = (si - (series.length - 1) / 2) * (bw + VIZ_GAP);
       s += ser.values.map((v, i) => {
@@ -779,13 +908,24 @@ function vizCartesian(card, w, h) {
         ser.values.forEach((v, i) => {
           if (!isFinite(v)) return;
           labelBits.push(vizBarLabel(v, vOf(v), zero, cOf(i) + off, horiz,
-            { x0: x0, y0: y0, iw: iw, ih: ih }));
+            { x0: x0, y0: y0, iw: iw, ih: ih }, num));
         });
       }
     });
   }
 
   s += vizLabelLayer(labelBits);
+
+  // Drawn last so nothing overlaps them, and the value title is turned on its
+  // side the way it is on every chart that has one.
+  if (xTitle) {
+    s += '<text class="viz-axtitle" x="' + (x0 + iw / 2).toFixed(1) + '" y="' + (h - 3).toFixed(1)
+      + '" text-anchor="middle">' + vizEsc(xTitle) + '</text>';
+  }
+  if (yTitle) {
+    s += '<text class="viz-axtitle" transform="translate(11,' + (y0 + ih / 2).toFixed(1)
+      + ') rotate(-90)" text-anchor="middle">' + vizEsc(yTitle) + '</text>';
+  }
 
   /* ---- category labels, thinned to whatever fits ---- */
   if (fmt.xAxis) {
@@ -797,7 +937,8 @@ function vizCartesian(card, w, h) {
       const every = Math.max(1, Math.ceil((n * 38) / iw));
       s += cats.map((c, i) => {
         if (i % every && i !== n - 1) return '';
-        return '<text class="viz-tick" x="' + cOf(i).toFixed(1) + '" y="' + (h - 6)
+        return '<text class="viz-tick" x="' + cOf(i).toFixed(1) + '" y="'
+          + (h - 6 - (xTitle ? VIZ_AXTITLE_BAND : 0))
           + '" text-anchor="middle">' + vizEsc(c.length > 10 ? c.slice(0, 9) + '…' : c) + '</text>';
       }).join('');
     }

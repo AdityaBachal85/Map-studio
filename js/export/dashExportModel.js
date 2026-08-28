@@ -280,6 +280,33 @@ function dashModelCardEmpty(card) {
  * @param {object} card @param {function(string):string} resolve
  * @returns {object}
  */
+/**
+ * A number, printed the way the chart beside it prints one.
+ *
+ * The compact fallback is deliberately the same shape as the chart engine's —
+ * 27.5K, 1.2M — so a Word table under a picture of a chart reads the same as
+ * the picture. Duplicated rather than imported because this file runs under
+ * Node with no chart engine loaded, and a writer that guessed would drift.
+ *
+ * @param {number|null} v @param {object|null} f the model's `numFmt`
+ * @returns {string}
+ */
+function dashModelNum(v, f) {
+  if (v == null || !isFinite(v)) return '\u2014';
+  const n = Number(v);
+  if (f && f.decimals != null) {
+    return (f.prefix || '')
+      + n.toLocaleString('en-US', { minimumFractionDigits: f.decimals, maximumFractionDigits: f.decimals })
+      + (f.suffix || '');
+  }
+  const a = Math.abs(n);
+  const body = a >= 1e7 ? (n / 1e6).toFixed(a >= 1e8 ? 0 : 1).replace(/\.0$/, '') + 'M'
+    : a >= 1e4 ? (n / 1e3).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '') + 'K'
+      : a >= 1000 ? n.toLocaleString('en-US')
+        : String(Math.round(n * 100) / 100);
+  return f ? (f.prefix || '') + body + (f.suffix || '') : body;
+}
+
 function dashModelData(card, resolve) {
   const col = c => dashModelColor(c, resolve);
   switch (card.type) {
@@ -306,6 +333,28 @@ function dashModelData(card, resolve) {
             : null,
         })),
       };
+
+      // HOW A NUMBER PRINTS, carried as data rather than as the function that
+      // does it: this model is read under Node with no browser and no chart
+      // engine, and a writer that re-derived the rule would drift from the
+      // picture beside it. Only present when somebody chose something — absent
+      // means the compact default, which is what every writer already did.
+      const nf = card.fmt || {};
+      const dp = nf.decimals;
+      if ((dp != null && dp !== '' && isFinite(dp)) || nf.numPrefix || nf.numSuffix) {
+        m.numFmt = {
+          decimals: (dp != null && dp !== '' && isFinite(dp)) ? +dp : null,
+          prefix: String(nf.numPrefix || ''),
+          suffix: String(nf.numSuffix || ''),
+        };
+      }
+      // The two axis titles. A chart exported as a picture already has them
+      // drawn in; the numbers table Word puts under that picture does not, and
+      // a column of bare figures whose units live only in the image above is
+      // the same missing half as a score with no ceiling.
+      const xt = String(nf.xTitle || '').trim(), yt = String(nf.yTitle || '').trim();
+      if (xt) m.xTitle = xt;
+      if (yt) m.yTitle = yt;
 
       // WHAT COLOUR IS SLICE THREE — answered here rather than left for each
       // writer to work out. A pie, donut, ring, funnel or treemap draws one
@@ -524,7 +573,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     dashExportModel, dashModelColor, dashModelCardEmpty, dashModelData,
     dashModelHasValue, dashModelTyped, dashModelViz, dashModelPlain, dashModelRuns,
-    dashModelHex,
+    dashModelHex, dashModelNum,
     DASH_MODEL_COLS, DASH_MODEL_FALLBACK, DASH_MODEL_PROMPTS,
   };
 }

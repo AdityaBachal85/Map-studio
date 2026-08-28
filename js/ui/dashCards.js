@@ -291,7 +291,8 @@ function dashChartHtml(card) {
         + (/^(#[0-9a-f]{6}|var\(--viz-\d\))$/i.test(String(slot)) ? esc(String(slot)) : vizSlot(slot))
         + '"></i>' + esc(String(name || '—'))
         + (sum ? '<b>' + Math.round(((vals[i] > 0 ? vals[i] : 0) / sum) * 100) + '%</b>'
-          : (kind === 'ring' && vals && isFinite(vals[i]) ? '<b>' + esc(vizNum(vals[i])) + '</b>' : ''))
+          : (kind === 'ring' && vals && isFinite(vals[i])
+            ? '<b>' + esc(vizNumFmt(card)(vals[i])) + '</b>' : ''))
         + '</span>').join('')
       + '</div>';
   }
@@ -358,7 +359,7 @@ function dashGaugesHtml(card) {
           + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(g.slot || (i + 1)) : '#22C55E'))
           + '" stroke-dasharray="' + (circ * frac).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
         : '')
-      + '<text class="dc-gauge-num" x="30" y="35">' + (set ? vizNum(v) : '—') + '</text></svg>'
+      + '<text class="dc-gauge-num" x="30" y="35">' + (set ? vizNumFmt(card)(v) : '—') + '</text></svg>'
       + dashField(card, 'items.' + i + '.cap', g.cap, 'dc-gauge-cap')
       + (dashEditing ? dashField(card, 'items.' + i + '.value', set ? String(v) : '', 'dc-input') : '')
       + '</div>';
@@ -416,19 +417,38 @@ function dashTableHtml(card) {
   const rows = card.rows || [];
   const fills = card.rowFill || {};
   const inks = card.rowInk || {};
-  return '<div class="dc-tablewrap"><table class="dc-table"><thead><tr'
-    + (dashRowStyled(card.headFill, card.headInk) ? ' class="dc-tr-fill"' : '')
-    + dashFillStyle(card.headFill, card.headInk) + '>'
-    + cols.map((c, i) => '<th>' + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
-    + (dashEditing ? '<th class="dc-tw"></th>' : '')
-    + '</tr></thead><tbody>'
+  const f = card.fmt || {};
+  // A number column reads right, a name column reads left — which is the first
+  // thing anybody does to a table in a spreadsheet and could not be done here.
+  const colAlign = card.colAlign || {};
+  const al = i => (colAlign[i] ? ' style="text-align:' + esc(colAlign[i]) + '"' : '');
+  const headOn = f.tableHead !== false;
+  // The classes the stylesheet keys off: rules, banding and density are three
+  // separate decisions and a spreadsheet lets you make them separately.
+  const cls = ['dc-table',
+    'dc-rule-' + (f.tableRule || 'rows'),
+    f.tableBanded === false ? 'dc-band-off' : 'dc-band-on',
+    'dc-dense-' + (f.tableDensity || 'normal')].join(' ');
+
+  return '<div class="dc-tablewrap"><table class="' + cls + '">'
+    + (headOn
+      ? '<thead><tr'
+        + (dashRowStyled(card.headFill, card.headInk) ? ' class="dc-tr-fill"' : '')
+        + dashFillStyle(card.headFill, card.headInk) + '>'
+        + cols.map((c, i) => '<th' + al(i) + '>'
+          + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
+        + (dashEditing ? '<th class="dc-tw"></th>' : '')
+        + '</tr></thead>'
+      : '')
+    + '<tbody>'
     // A filled row carries its own ink, so a dark fill does not swallow the
     // words in it — see dashInkOn(). Rows nobody filled are untouched and keep
     // the card's zebra striping.
     + rows.map((r, ri) => '<tr'
       + (dashRowStyled(fills[ri], inks[ri]) ? ' class="dc-tr-fill"' : '')
       + dashFillStyle(fills[ri], inks[ri]) + '>'
-      + cols.map((c, ci) => '<td>' + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
+      + cols.map((c, ci) => '<td' + al(ci) + '>'
+        + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
       + (dashEditing ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
       + '</tr>').join('')
     + '</tbody></table>'
@@ -618,7 +638,7 @@ function dashCardBody(card) {
         + dashField(card, 'body', card.body, 'dc-rating-note')
         + '</div>'
         + '<div class="dc-rating-badge' + (set ? '' : ' empty') + '">'
-        + '<b>' + (set ? esc(vizNum(v)) : '\u2014') + '</b>'
+        + '<b>' + (set ? esc(vizNumFmt(card)(v)) : '\u2014') + '</b>'
         + '<span>/' + max + '</span>'
         + '</div>'
         + (dashEditing ? dashField(card, 'value', set ? String(v) : '', 'dc-input dc-rating-in') : '')

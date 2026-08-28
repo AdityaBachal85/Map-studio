@@ -2470,3 +2470,46 @@ body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
    Only on a filled row: everywhere else the theme's own ink is correct. */
 .dc-table tr.dc-tr-fill .dc-th,
 .dc-table tr.dc-tr-fill .dc-td { color: inherit; }
+
+/* ---------------------------------------------------------------------------
+ * Table rules, banding and density
+ *
+ * Three separate decisions, because a spreadsheet lets you make them
+ * separately: where the lines are, whether alternate rows are tinted, and how
+ * much air each row gets. Coupling them would mean turning off the rules to
+ * get a tighter table.
+ * ------------------------------------------------------------------------ */
+
+/* Rules. `rows` is the default the card has always had. */
+.dc-table.dc-rule-none th,
+.dc-table.dc-rule-none td { border: 0; }
+.dc-table.dc-rule-grid th,
+.dc-table.dc-rule-grid td {
+  border: 1px solid var(--border);
+  padding-left: 8px;
+}
+/* An outline only: the frame, with nothing inside it. */
+.dc-table.dc-rule-box th,
+.dc-table.dc-rule-box td { border: 0; }
+.dc-table.dc-rule-box { outline: 1px solid var(--border); }
+
+/* Banding. Skipped on a row that carries a fill of its own — a stripe over a
+   chosen colour is that colour in two shades, which reads as a fault. */
+.dc-table.dc-band-on tbody tr:nth-child(even):not(.dc-tr-fill) td {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.dc-table.dc-dense-compact th,
+.dc-table.dc-dense-compact td { padding-top: 2px; padding-bottom: 2px; }
+.dc-table.dc-dense-roomy th,
+.dc-table.dc-dense-roomy td { padding-top: 9px; padding-bottom: 9px; }
+
+/* An axis title. Quieter than a tick label — it names the scale rather than
+   being part of it, and a title as loud as the numbers competes with them. */
+.viz-axtitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  fill: var(--text-2);
+}

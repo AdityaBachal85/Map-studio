@@ -10,18 +10,58 @@
  *
  * WHAT IS HERE. Visual type — switching keeps the data, which is the point of a
  * switcher rather than delete-and-re-add. Data: categories and any number of
- * series, each with its own name, values and colour slot. Format: title,
- * legend, data labels, gridlines, axes, smoothing. Layout: the tile's grid
- * position and size as numbers, for when dragging is not precise enough.
+ * series, each with its own name, values and colour slot, down to a colour per
+ * individual bar. Format: title, legend, data labels, gridlines, axes,
+ * smoothing, axis titles, how a number prints, bar gap width, line markers —
+ * and for a table, fill and text colour per row and for the header, rules,
+ * banding, density and per-column alignment. Layout: the tile's grid position
+ * and size as numbers, for when dragging is not precise enough.
+ *
+ * WHY THIS MUCH. "All the Excel features" is not a specification, and building
+ * thirty half-working controls would be worse than ten that hold. These are the
+ * ones a property report actually needs: a chart of rupees and one of
+ * kilometres are the same picture without axis titles, and a board of Indian
+ * property prices reads as nonsense in the compact 27.5K default.
  *
  * WHAT IS NOT. There is no query engine and no formula language — data is typed
  * or pasted or read from the map. That is the honest boundary of this tool, and
  * it is stated in the pane rather than hidden behind a disabled button.
+ *
+ * EVERY CONTROL HERE MUST BE WIRED IN TWO PLACES: the markup below, and either
+ * `dashFormatApply` (for a click) or the `input`/`change` listeners at the
+ * bottom (for a typed value). Three controls in this pane have shipped rendered
+ * and dead — the data-label toggle with no branch in the switch, and the axis
+ * titles and decimals on an attribute nothing listened for. All three looked
+ * correct in a screenshot. `diagnostics/dash-excel.cjs` drives each control and
+ * reads the result off the drawing, which is the only check that catches it.
  */
 
 /** @returns {object|null} the visual the pane is showing */
 function dashFormatTarget() {
   return dashSelectedId ? dashCardById(dashSelectedId) : null;
+}
+
+/**
+ * What a number looks like when this visual prints one.
+ *
+ * The compact default — 27.5K, 1.2M — is right for a count and wrong for
+ * rupees, kilometres and percentages, which is most of what a property board
+ * carries. Decimals left blank keeps the compact form; set, it prints the
+ * number in full at that many places, which is what a prefix or a suffix is
+ * almost always wanted alongside.
+ *
+ * @param {object} card @returns {string} HTML
+ */
+function dfNumberFormat(card) {
+  const f = card.fmt || {};
+  return dfRow('Decimals', '<input type="number" min="0" max="4" data-dfnum="decimals" value="'
+    + (f.decimals != null ? +f.decimals : '') + '" placeholder="auto">')
+    + dfRow('Before / after', '<div class="df-point-row">'
+      + '<input type="text" data-dftext="numPrefix" value="'
+      + esc(f.numPrefix || '') + '" placeholder="\u20b9" size="4">'
+      + '<input type="text" data-dftext="numSuffix" value="'
+      + esc(f.numSuffix || '') + '" placeholder="km" size="4">'
+      + '</div>');
 }
 
 /** @param {string} label @param {string} body @returns {string} a pane section */
@@ -371,12 +411,34 @@ function renderDashFormat() {
     if (score) f += dfScoreCeiling(card);
     if (card.kind === 'line' || card.kind === 'area' || card.kind === 'combo') {
       f += dfToggle('smooth', fmt.smooth, 'Smooth line');
+      // A line of twenty points is a shape; a line of four is four
+      // measurements, and the dots say so.
+      f += dfRow('Markers', dfSeg('markers', [['off', 'None'], ['s', 'S'], ['m', 'M'], ['l', 'L']],
+        fmt.markers || 'm'));
     }
+    // Excel's gap width, in Excel's units: the space between one category's
+    // bars and the next, as a percentage of a bar. Blank leaves the app's own
+    // sizing in charge, which is right until you have three bars on a wide card.
+    if (VIZ_BAR_KINDS.indexOf(card.kind) >= 0) {
+      f += dfRow('Gap width %', '<input type="number" min="0" max="500" step="10" data-dfnum="barGap" value="'
+        + (card.fmt && card.fmt.barGap != null ? +card.fmt.barGap : '')
+        + '" placeholder="auto">');
+    }
+    // Axis titles, on the kinds that have axes. A chart of rupees and one of
+    // kilometres are the same picture without them.
+    if (!share && !score) {
+      f += dfRow('Category title', '<input type="text" data-dftext="xTitle" value="'
+        + esc((card.fmt && card.fmt.xTitle) || '') + '" placeholder="none">');
+      f += dfRow('Value title', '<input type="text" data-dftext="yTitle" value="'
+        + esc((card.fmt && card.fmt.yTitle) || '') + '" placeholder="none">');
+    }
+    if (!share) f += dfNumberFormat(card);
   }
   // The score-rings card is not a `chart`, so it missed the branch above
   // entirely — and it is the card most likely to be scored out of ten.
   if (card.type === 'gauges') {
     f += dfScoreCeiling(card);
+    f += dfNumberFormat(card);
     // The rings had no colour control at all: they took the slot their position
     // gave them and that was the end of it, while every chart series beside
     // them had swatches. Same control, same eight slots.
@@ -400,6 +462,26 @@ function renderDashFormat() {
       + ((fill || ink) ? '<button type="button" class="df-clear" data-df="' + fk
         + 'clear" data-v="1" title="Back to no fill">&times;</button>' : '')
       + '</div>';
+
+    const tf = card.fmt || {};
+    f += dfToggle('tableHead', tf.tableHead !== false, 'Header row');
+    f += dfRow('Rules', dfSeg('tableRule',
+      [['rows', 'Rows'], ['grid', 'Grid'], ['box', 'Outline'], ['none', 'None']],
+      tf.tableRule || 'rows'));
+    f += dfToggle('tableBanded', tf.tableBanded !== false, 'Banded rows');
+    f += dfRow('Density', dfSeg('tableDensity',
+      [['compact', 'Tight'], ['normal', 'Normal'], ['roomy', 'Roomy']],
+      tf.tableDensity || 'normal'));
+
+    // Per column, because that is the unit the decision belongs to: a distance
+    // column reads right whatever row it is in.
+    const ca = card.colAlign || {};
+    (card.columns || []).forEach((c, i) => {
+      f += dfRow(dashRichPlain(String(c || '')).trim() || ('Column ' + (i + 1)),
+        dfSegIcons('colalign:' + i,
+          [['left', 'Align left'], ['center', 'Align centre'], ['right', 'Align right']],
+          ca[i] || 'left'));
+    });
 
     f += dfRow('Header row', pair('headfill', 'headink',
       card.headFill, card.headInk, '#14243d'));
@@ -446,7 +528,7 @@ function renderDashFormat() {
     f += dfToggle('time', !!(card.fmt && card.fmt.time), 'Travel time');
   }
 
-  if (card.type === 'rating') f += dfScoreCeiling(card);
+  if (card.type === 'rating') f += dfScoreCeiling(card) + dfNumberFormat(card);
 
   if (card.type === 'legend') {
     f += dfRow('Placement', dfSeg('onMap', [['card', 'A card'], ['map', 'On the map']],
@@ -523,6 +605,13 @@ function dashFormatApply(card, key, v) {
     if (card.rowInk) { card.rowInk = Object.assign({}, card.rowInk); delete card.rowInk[i]; }
     return;
   }
+  const cal = key.match(/^colalign:(\d+)$/);
+  if (cal) {
+    card.colAlign = Object.assign({}, card.colAlign);
+    if (v === 'left') delete card.colAlign[+cal[1]];
+    else card.colAlign[+cal[1]] = v;
+    return;
+  }
   const rowi = key.match(/^rowink:(\d+)$/);
   if (rowi) {
     card.rowInk = Object.assign({}, card.rowInk);
@@ -551,6 +640,10 @@ function dashFormatApply(card, key, v) {
       if (v === 'map') card.onMap = true; else delete card.onMap;
       return;
     case 'legend': card.fmt.legend = v; return;
+    case 'tableHead': card.fmt.tableHead = v === '1'; return;
+    case 'tableBanded': card.fmt.tableBanded = v === '1'; return;
+    case 'tableRule': card.fmt.tableRule = v; return;
+    case 'tableDensity': card.fmt.tableDensity = v; return;
     case 'title': card.fmt.title = v === '1'; return;
     case 'labels': card.fmt.labels = v === '1'; return;
     case 'grid': card.fmt.grid = v === '1'; return;
@@ -575,6 +668,12 @@ function dashFormatApply(card, key, v) {
       if (v === 'table') card.fmt.asTable = true; else delete card.fmt.asTable;
       return;
     case 'smooth': card.fmt.smooth = v === '1'; return;
+    // 'm' is the size the chart has always drawn, so it is stored as the
+    // absence of a choice — a board saved before this control existed and one
+    // where somebody picked Medium are the same board.
+    case 'markers':
+      if (v === 'm') delete card.fmt.markers; else card.fmt.markers = v;
+      return;
     case 'plain': card.fmt.plain = v === '1'; return;
 
     case 'addSeries': {
@@ -603,6 +702,20 @@ function dashFormatApply(card, key, v) {
       return;
     }
   }
+}
+
+/**
+ * Redraw one card after a setting changed.
+ *
+ * A chart redraws into the host it already has, which is cheap and keeps the
+ * board still. The score-rings and rating cards ARE their markup — there is no
+ * canvas to redraw into — so they have to be rebuilt. Redrawing charts alone
+ * left a ring showing the old ceiling, which is how this distinction was found.
+ *
+ * @param {object} card
+ */
+function dfRedraw(card) {
+  if (card && card.type !== 'chart') renderDashboard(); else dashDrawAllCharts();
 }
 
 (function wireDashFormat() {
@@ -647,11 +760,27 @@ function dashFormatApply(card, key, v) {
     if (k === 'max') {
       const n = parseFloat(inp.value);
       if (isFinite(n) && n > 0) card.max = n; else delete card.max;
-      // A chart redraws into its existing host; the score-rings card IS its
-      // markup, so it has to be rebuilt. Redrawing charts alone left the rings
-      // showing the old ceiling.
-      if (card.type === 'gauges') renderDashboard(); else dashDrawAllCharts();
+      dfRedraw(card);
       renderDashFormat();
+      return;
+    }
+
+    // Geometry is the only numeric field here that moves tiles. A decimal
+    // count is a property of the visual, and running it through the clamps
+    // below would cap it at the column count and settle the whole board
+    // because somebody typed a 2. The input already declares its own range,
+    // so read the bounds off it rather than re-stating them here.
+    if (k !== 'x' && k !== 'y' && k !== 'w' && k !== 'h') {
+      card.fmt = card.fmt || {};
+      const n = parseFloat(inp.value);
+      if (inp.value === '' || !isFinite(n)) {
+        delete card.fmt[k];
+      } else {
+        const lo = inp.min === '' ? -Infinity : +inp.min;
+        const hi = inp.max === '' ? Infinity : +inp.max;
+        card.fmt[k] = Math.max(lo, Math.min(hi, n));
+      }
+      dfRedraw(card);
       return;
     }
 
@@ -663,6 +792,22 @@ function dashFormatApply(card, key, v) {
     dashLayoutApply();
     dashDrawAllCharts();
     renderDashFormat();
+  });
+
+  // Free text — an axis title, a currency prefix — goes onto the visual as you
+  // type. The pane is deliberately NOT re-rendered here: rebuilding it would
+  // replace the input under the cursor and drop focus on the first keystroke.
+  host.addEventListener('input', e => {
+    const inp = e.target.closest('[data-dftext]');
+    if (!inp) return;
+    const card = dashFormatTarget();
+    if (!card) return;
+    card.fmt = card.fmt || {};
+    const k = inp.dataset.dftext;
+    // Blank is "no title", not an empty one — an empty string would still
+    // reserve the 16px of padding the title would have needed.
+    if (inp.value === '') delete card.fmt[k]; else card.fmt[k] = inp.value;
+    dfRedraw(card);
   });
 
   // Clicking the empty canvas deselects — otherwise the pane keeps showing a
