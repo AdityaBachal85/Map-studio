@@ -138,6 +138,12 @@
           rings: rings || [], photo: opts.photo || null,
           _pinEl: null, _labelEl: null, _el: null, _ringLabelEls: [], ringLayers: [], ringLabels: [], anchor: null, card: null
         };
+        // Where it came from, when it came from a ring scan. addLocation builds a
+        // fixed shape rather than copying opts, so a flag passed in is dropped
+        // unless it is carried across by hand — and this one has to survive a
+        // save, or a reopened project cannot tell a scanned station from one
+        // somebody typed.
+        if (opts.fromRing) loc.fromRing = true;
         // If it's a Site and the "default site logo" setting is on, opt in by default
         if (loc.type === 'site' && brand.siteUsesProjLogo && !opts.iconImage) loc.iconUseProjectLogo = true;
         bumpId(loc.id);

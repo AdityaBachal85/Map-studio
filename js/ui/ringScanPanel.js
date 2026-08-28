@@ -224,6 +224,9 @@ function keepRingScanSelection() {
   const s = ringScanState;
   let n = 0;
   const added = [];
+  // Counted apart, because they land in two different places and the message
+  // has to say which — "added to Draw" was already a lie for half of them.
+  let placed = 0;
 
   // Classes flagged `merge` become one shape instead of hundreds. Buildings
   // are the case this exists for: a square kilometre of a city is thousands of
@@ -248,6 +251,29 @@ function keepRingScanSelection() {
     const name = f.name || (fc ? fc.label : 'Feature');
     const iconKey = fc ? fc.icon : null;
     const markerStyle = (fc && fc.marker) || 'pin';
+
+    // A PLACE GOES INTO LOCATIONS, NOT INTO DRAW. A station is the same kind of
+    // thing as a location typed in by hand — it wants a name you can correct, a
+    // colour, a ring, and above all it is what a route gets measured TO. Landing
+    // it in Draw made it a shape that looked like a location and could do none
+    // of those things, so the only way to route to a station the scan had just
+    // found was to type it in again by hand.
+    if (fc && fc.place) {
+      const at = ringScanPointOf(f);
+      if (at) {
+        added.push(addLocation({
+          name: name,
+          lat: at.lat, lng: at.lng,
+          color: (typeof connClass === 'function' && connClass(clsId) || {}).color || undefined,
+          iconKey: iconKey || 'dot',
+          // Its own frame, so a scanned station reads like the pins around it.
+          iconFrame: 'pin',
+          fromRing: true,
+        }));
+        n++; placed++;
+        return;
+      }
+    }
     const wantLabel = !(fc && fc.label_off);
     let layer = null, shape = null;
     // A pin, not a circle. What comes back as a `point` from a scan is a
@@ -284,8 +310,49 @@ function keepRingScanSelection() {
   closeRingScan();
   if (typeof rebuildLegend === 'function') rebuildLegend();
   if (typeof pushHistory === 'function') pushHistory();
-  status(n + ' feature' + (n === 1 ? '' : 's') + ' added to Draw — restyle, rename or delete'
-    + ' any of them like anything else you drew.');
+  const drawn = n - placed;
+  const bits = [];
+  if (placed) {
+    bits.push(placed + ' place' + (placed === 1 ? '' : 's')
+      + ' added to Locations — rename, restyle or route to ' + (placed === 1 ? 'it' : 'them')
+      + ' like any other location');
+  }
+  if (drawn) {
+    bits.push(drawn + ' feature' + (drawn === 1 ? '' : 's')
+      + ' added to Draw — restyle, rename or delete '
+      + (drawn === 1 ? 'it' : 'them') + ' like anything else you drew');
+  }
+  status(bits.length ? bits.join('. ') + '.' : 'Nothing was added.');
+}
+
+/**
+ * Where to put a single mark for a feature, whatever shape it arrived as.
+ *
+ * A node has its own coordinate. An aerodrome arrives as a perimeter several
+ * kilometres across, and the answer it is on the map to give is "the airport is
+ * over there, this far away" — so it is marked at the middle of that perimeter
+ * rather than drawn as a grey field covering everything under it.
+ *
+ * The mean of the ring's vertices, not a true centroid: OSM perimeters are
+ * dense and fairly convex, the two agree to within a few metres at this scale,
+ * and a shoelace centroid inverts on a self-touching ring, which aerodrome
+ * relations sometimes are.
+ *
+ * @param {object} f a scan result @returns {?{lat:number,lng:number}}
+ */
+function ringScanPointOf(f) {
+  if (f.kind === 'point' && isFinite(f.lat) && isFinite(f.lng)) {
+    return { lat: f.lat, lng: f.lng };
+  }
+  const ring = (f.polys && f.polys[0]) || f.pts;
+  if (!ring || !ring.length) return null;
+  let la = 0, ln = 0, k = 0;
+  ring.forEach(pt => {
+    const a = Array.isArray(pt) ? pt[0] : pt.lat;
+    const b = Array.isArray(pt) ? pt[1] : pt.lng;
+    if (isFinite(a) && isFinite(b)) { la += a; ln += b; k++; }
+  });
+  return k ? { lat: la / k, lng: ln / k } : null;
 }
 
 /**

@@ -293,6 +293,73 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       return !!el;
     }) === true);
 
+  /* -- a scanned place is a location, not a drawing ------------------------- */
+
+  // A STATION IS THE SAME KIND OF THING AS A LOCATION TYPED IN BY HAND. It wants
+  // a name you can correct, a colour, a ring — and above all it is what a route
+  // gets measured TO. Landing every scan result in Draw made a station a shape
+  // that looked like a location and could do none of that, so the only way to
+  // route to one the scan had just found was to type it in again.
+  //
+  // Overpass is unreachable from here, so the panel's own add step is driven
+  // with a fabricated result — the same shape the fetch produces.
+  const scan = await p.evaluate(() => {
+    const site = addLocation({ name: 'Scan site', lat: 19.10, lng: 72.88, type: 'site' });
+    const locBefore = locations.length, geomBefore = geometries.length;
+    // An aerodrome arrives as a perimeter, not a point.
+    const ring = [];
+    for (let i = 0; i < 24; i++) {
+      const a = i / 24 * 2 * Math.PI;
+      ring.push([19.12 + 0.02 * Math.cos(a), 72.92 + 0.02 * Math.sin(a)]);
+    }
+    ringScanState = {
+      loc: site, km: 10, ids: [], picked: new Set([0, 1, 2, 3]),
+      result: [
+        { classId: 'station', kind: 'point', name: 'Kalyan Junction', lat: 19.11, lng: 72.90 },
+        { classId: 'metroStation', kind: 'point', name: 'Ghatkopar', lat: 19.09, lng: 72.86 },
+        { classId: 'airport', kind: 'area', name: 'Chhatrapati Shivaji', polys: [ring] },
+        { classId: 'river', kind: 'line', name: 'Ulhas', pts: [[19.05, 72.83], [19.07, 72.87]] },
+      ],
+    };
+    keepRingScanSelection();
+    const made = locations.slice(locBefore);
+    const air = made.find(l => /Shivaji/.test(l.name));
+    addRoute();
+    return {
+      placed: made.length,
+      names: made.map(l => l.name),
+      icons: made.map(l => l.iconKey),
+      fromRing: made.every(l => l.fromRing === true),
+      airport: air ? { lat: +air.lat.toFixed(3), lng: +air.lng.toFixed(3) } : null,
+      drawn: geometries.slice(geomBefore).filter(g => g.name === 'Ulhas').length,
+      routable: [...document.querySelectorAll('select option')]
+        .some(o => /Kalyan Junction/.test(o.textContent || '')),
+    };
+  });
+  ck('a scanned station and metro station land in Locations',
+    scan.placed === 3 && scan.names.indexOf('Kalyan Junction') >= 0
+      && scan.names.indexOf('Ghatkopar') >= 0, JSON.stringify(scan.names));
+  ck('each carrying the symbol its class implies',
+    scan.icons.join() === 'railway,metro,airport', scan.icons.join());
+  ck('and marked as having come from a scan, which survives a save',
+    scan.fromRing === true);
+
+  // An aerodrome comes back as its whole perimeter, which on a connectivity map
+  // is a grey field kilometres across covering everything under it — while the
+  // question it is there to answer is "the airport is over there, this far".
+  ck('an airport is one pin at the middle of its perimeter, not the perimeter',
+    !!scan.airport && Math.abs(scan.airport.lat - 19.12) < 0.002
+      && Math.abs(scan.airport.lng - 72.92) < 0.002, JSON.stringify(scan.airport));
+
+  // Only places move. A river is not somewhere you go, and Draw is where it
+  // belongs — this is a routing change, not a wholesale one.
+  ck('a river is still a drawn shape', scan.drawn === 1, String(scan.drawn));
+
+  // The point of all of it: routes are measured to locations, so a scanned
+  // station that is not one cannot be routed to without retyping it.
+  ck('and a station the scan just found can be routed to straight away',
+    scan.routable === true);
+
   /* -- the pin glyph, the project logo and the compass ---------------------- */
 
   // A TEARDROP WITH A HOLE IN IT IS A MAP PIN, and this library holds what goes

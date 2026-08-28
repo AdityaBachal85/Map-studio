@@ -87,11 +87,20 @@ const RING_FEATURE_CLASSES = [
     // Sidings, yards and spurs are the majority of railway=rail in a city and
     // are all noise on a connectivity map.
     q: ['way["railway"~"^(rail|narrow_gauge)$"]["service"!~"."]'] },
+  // `place: true` — a scan result that is somewhere you can go, rather than a
+  // line or a piece of ground. These land in Locations, not in Draw: a station
+  // is the same kind of thing as a location typed in by hand, and it is what a
+  // route gets measured to. Everything else stays a drawn shape.
   { id: 'station', label: 'Railway stations', cls: 'station', max: 25, icon: 'railway',
-    q: ['node["railway"="station"]'] },
+    place: true, q: ['node["railway"="station"]'] },
   { id: 'metroStation', label: 'Metro stations', cls: 'metroStation', max: 25, icon: 'metro',
-    q: ['node["railway"="station"]["station"="subway"]', 'node["station"="subway"]'] },
+    place: true, q: ['node["railway"="station"]["station"="subway"]', 'node["station"="subway"]'] },
+  // An aerodrome comes back as its whole perimeter, which on a connectivity map
+  // is a grey field several kilometres across covering everything under it —
+  // and the answer it is there to give is "the airport is over there, this far
+  // away". `asPoint` marks it at the centre of that perimeter instead.
   { id: 'airport', label: 'Airports', cls: 'airport', max: 40, icon: 'airport',
+    place: true, asPoint: true,
     q: ['way["aeroway"="aerodrome"]', 'relation["aeroway"="aerodrome"]'] },
   { id: 'river', label: 'Rivers', cls: 'water', max: 15,
     q: ['way["waterway"="river"]'] },
@@ -100,8 +109,10 @@ const RING_FEATURE_CLASSES = [
     // feature of a location.
     q: ['way["waterway"~"^(stream|canal)$"]'] },
   { id: 'busTerminal', label: 'Bus terminals', cls: 'hub', max: 20, icon: 'bus',
+    place: true, asPoint: true,
     q: ['node["amenity"="bus_station"]', 'way["amenity"="bus_station"]'] },
   { id: 'port', label: 'Ports & ferry terminals', cls: 'hub', max: 40, icon: 'port',
+    place: true, asPoint: true,
     q: ['node["amenity"="ferry_terminal"]', 'way["landuse"="port"]'] },
 
   /* ---- power: a constraint on the land, not a service to it ---- */

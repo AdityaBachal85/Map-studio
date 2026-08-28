@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0203-blue)
+![Version](https://img.shields.io/badge/version-v6.0204-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,32 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0203 (latest)
+## 🆕 New in v6.0204 (latest)
+
+### A scanned station is a location, not a drawing
+
+A station is the same kind of thing as a location typed in by hand. It wants a
+name you can correct, a colour, a ring — and above all **it is what a route gets
+measured to**. Every ring-scan result used to land in Draw, which made a station
+a shape that looked like a location and could do none of that: the only way to
+route to one the scan had just found was to type it in again by hand.
+
+Scan classes that are *places* — railway stations, metro stations, airports, bus
+terminals, ports — now land in **Locations**, each carrying the symbol its class
+implies, and are routable immediately. Everything else is unchanged: a river, a
+highway, a power line is not somewhere you go, and Draw is where it belongs.
+
+**An airport is one pin, not the whole airport.** An aerodrome comes back from
+OpenStreetMap as its entire perimeter, which on a connectivity map is a grey
+field kilometres across covering everything under it — while the question it is
+on the map to answer is "the airport is over there, this far away". It is marked
+at the centre of that perimeter instead. Same for a bus terminal or a port that
+arrives as a way rather than a node.
+
+The status line says where things went, per destination — "added to Draw" was
+already only half true.
+
+## 🆕 New in v6.0203
 
 ### The exported contour map is the one you were looking at
 
