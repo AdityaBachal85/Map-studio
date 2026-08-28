@@ -140,7 +140,12 @@ let _richOn = null;                        // the field the bar is serving
 function dashRichBar() {
   if (_richBar) return _richBar;
   const bar = document.createElement('div');
-  bar.className = 'rich-bar';
+  // `frost` is the app's own glass surface — the gradient tint, the blur, the
+  // saturation boost and the top-edge catch-light, plus the solid fallback when
+  // Preferences turns glass off. Styling this bar by hand produced a translucent
+  // rectangle with nothing blurring behind it, which over a dark card is a dark
+  // wash with dark ink on it.
+  bar.className = 'rich-bar frost';
   bar.setAttribute('role', 'toolbar');
   bar.setAttribute('aria-label', 'Text formatting');
   bar.innerHTML =

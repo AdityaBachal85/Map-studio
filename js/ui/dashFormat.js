@@ -177,6 +177,12 @@ function dfCurrentColour(card, key) {
     const g = (card.items || [])[+ring[1]];
     return g ? (g.color || g.slot || (+ring[1] + 1)) : 1;
   }
+  // Read and write have to name the same place or the picker opens showing a
+  // colour the card is not using, and the first drag "changes" it to what it
+  // already was.
+  const rowf = key.match(/^rowfill:(\d+)$/);
+  if (rowf) return (card.rowFill && card.rowFill[+rowf[1]]) || '#e7eefc';
+  if (key === 'headfill') return card.headFill || '#14243d';
   return 1;
 }
 
@@ -372,6 +378,32 @@ function renderDashFormat() {
     });
   }
 
+  // A TABLE FILLS ITS ROWS, like every table in every spreadsheet. The header
+  // is its own choice because it usually wants to be the one that differs, and
+  // a row that was never filled is left alone so the card's zebra striping
+  // still does its job underneath.
+  if (card.type === 'table') {
+    f += dfRow('Header row', '<div class="df-point-row">'
+      + dfSwatches('headfill', card.headFill || '#14243d')
+      + (card.headFill ? '<button type="button" class="df-clear" data-df="headfillclear"'
+        + ' data-v="1" title="No fill">&times;</button>' : '')
+      + '</div>');
+    const fills = card.rowFill || {};
+    const set = Object.keys(fills).filter(k => fills[k]).length;
+    f += '<details class="df-points"' + (set ? ' open' : '') + '>'
+      + '<summary>Row fill' + (set ? ' \u00b7 ' + set : '') + '</summary>'
+      + (card.rows || []).map((r, i) =>
+        // Named by what is actually in the row's first cell, so a list of eight
+        // swatches is not eight rows called "Row".
+        dfRow(dashRichPlain(String((r && r[0]) || '')).trim() || ('Row ' + (i + 1)),
+          '<div class="df-point-row">'
+          + dfSwatches('rowfill:' + i, fills[i] || '#e7eefc')
+          + (fills[i] ? '<button type="button" class="df-clear" data-df="rowfillclear:' + i
+            + '" data-v="1" title="No fill">&times;</button>' : '')
+          + '</div>')).join('')
+      + '</details>';
+  }
+
   // Two settings, not one: a centred header bar over a left-read paragraph is a
   // real layout, and coupling them made it impossible. Justify is offered on the
   // body only and only where there is prose to justify — on a list of place
@@ -463,6 +495,20 @@ function dashFormatApply(card, key, v) {
     if (isHex) { s.hex = String(v).toLowerCase(); } else { s.slot = +v; delete s.hex; }
     return;
   }
+
+  const rowf = key.match(/^rowfill:(\d+)$/);
+  if (rowf) {
+    card.rowFill = Object.assign({}, card.rowFill);
+    card.rowFill[+rowf[1]] = String(v).toLowerCase();
+    return;
+  }
+  const rowfc = key.match(/^rowfillclear:(\d+)$/);
+  if (rowfc) {
+    if (card.rowFill) { card.rowFill = Object.assign({}, card.rowFill); delete card.rowFill[+rowfc[1]]; }
+    return;
+  }
+  if (key === 'headfill') { card.headFill = String(v).toLowerCase(); return; }
+  if (key === 'headfillclear') { delete card.headFill; return; }
 
   const gslot = key.match(/^gslot:(\d+)$/);
   if (gslot) {

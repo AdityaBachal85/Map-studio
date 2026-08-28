@@ -422,6 +422,78 @@ const SCENE = [
     catUi.column.seriesSwatch === 1 && catUi.column.folded && !catUi.column.open,
     JSON.stringify(catUi.column));
 
+  /* -- a table fills its rows, like a table in any spreadsheet -------------- */
+
+  const fills = await p.evaluate(() => {
+    const board = dashCards;
+    const c = Object.assign(dashNewCard('table'), { id: 'tf', title: 'Table', x: 0, y: 0, w: 7, h: 8,
+      columns: ['Item', 'Value'],
+      rows: [['Station', '2.4 km'], ['Airport', '27.5 km'], ['Mall', '3.6 km']],
+      headFill: '#14243d', rowFill: { 1: '#e03131' } });
+    dashCards = [c];
+    dashEditing = true; dashSelectedId = 'tf';
+    renderDashboard(); dashLayoutApply(); renderDashFormat();
+    const el = document.querySelector('.dash-card[data-card="tf"]');
+    const trs = [...el.querySelectorAll('tbody tr')];
+    const read = n => ({ bg: n.style.background || n.style.backgroundColor, ink: n.style.color });
+    const pane = document.getElementById('dashFormat');
+    const out = {
+      head: read(el.querySelector('thead tr')),
+      rows: trs.map(read),
+      // Only a filled row loses the zebra; the rest keep it.
+      classed: trs.map(t => t.classList.contains('dc-tr-fill')),
+      swatches: pane.querySelectorAll('[data-dfpick^="rowfill:"]').length,
+      headSwatch: pane.querySelectorAll('[data-dfpick="headfill"]').length,
+      clears: pane.querySelectorAll('[data-df^="rowfillclear:"]').length,
+    };
+    dashEditing = false; dashSelectedId = null;
+    dashCards = board; renderDashboard(); dashLayoutApply();
+    return out;
+  });
+  ck('a filled row carries the colour it was given',
+    /224,\s*49,\s*49|#e03131/i.test(fills.rows[1].bg), JSON.stringify(fills.rows[1]));
+  ck('and rows nobody filled are left alone',
+    !fills.rows[0].bg && !fills.rows[2].bg, JSON.stringify(fills.rows.map(r => r.bg)));
+  ck('the header is its own choice', /20,\s*36,\s*61|#14243d/i.test(fills.head.bg),
+    JSON.stringify(fills.head));
+
+  // A fill the operator chose is any colour at all, so the row's text cannot
+  // stay the theme's ink and hope. A dark fill under grey body text is a row
+  // nobody can read, and in an export there is no way to turn the fill off to
+  // find out what it said.
+  ck('a dark fill takes light ink and a light fill takes dark',
+    fills.rows[1].ink === 'rgb(255, 255, 255)' && fills.head.ink === 'rgb(255, 255, 255)',
+    fills.rows[1].ink + ' / ' + fills.head.ink);
+  ck('only a filled row drops the card\'s zebra striping',
+    fills.classed.join() === 'false,true,false', fills.classed.join());
+  ck('every row is offered a fill, and only the filled one a way back',
+    fills.swatches === 3 && fills.headSwatch === 1 && fills.clears === 1,
+    JSON.stringify(fills));
+
+  const inks = await p.evaluate(() => ({
+    white: dashInkOn('#14243d'), dark: dashInkOn('#c8f0d2'),
+    mid: dashInkOn('#e03131'), none: dashInkOn(''), bad: dashInkOn('nonsense'),
+  }));
+  ck('and the ink rule is luminance, not a guess',
+    inks.white === '#ffffff' && inks.dark === '#14243d' && inks.mid === '#ffffff'
+      && inks.none === null && inks.bad === null, JSON.stringify(inks));
+
+  // A fill that exists only on screen is not a fill: both writers that can set
+  // a cell background are handed one.
+  const model = await p.evaluate(() => {
+    const c = Object.assign(dashNewCard('table'), { id: 'tm', title: 'T', x: 0, y: 0, w: 6, h: 7,
+      columns: ['A', 'B'], rows: [['1', '2'], ['3', '4']],
+      headFill: '#14243d', rowFill: { 1: '#E03131' } });
+    const cs = getComputedStyle(document.documentElement);
+    const m = dashExportModel({ title: 'T', cards: [c], mapTile: null,
+      resolveColor: n => cs.getPropertyValue(n).trim() });
+    return m.cards[0].data;
+  });
+  ck('the export model carries the fills, normalised and validated',
+    model.headFill === '#14243d' && model.rowFill[0] === null
+      && model.rowFill[1] === '#e03131',
+    JSON.stringify({ h: model.headFill, r: model.rowFill }));
+
   /* -- the top bar is a toolbar, not a map with buttons on it --------------- */
 
   // The search box in the bar is the MAP's search box, re-parented rather than

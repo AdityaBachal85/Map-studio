@@ -2368,19 +2368,23 @@ body.reduce-motion .dc-gauge-num { animation: none !important; }
  * placed from viewport coordinates.
  * ------------------------------------------------------------------------ */
 
+/* Layout only. The surface comes from `.frost` — see css/map.css — so this bar
+   is made of the same glass as every other floating pane in the app, adapts to
+   the theme with them, and falls back to a solid fill when Preferences turns
+   glass off. The drop shadow is the one thing added on top: this pane floats
+   over a card rather than over the map, and needs to read as being above it. */
 .rich-bar {
   position: fixed;
   z-index: 2400;
   display: none;
   align-items: center;
   gap: 2px;
-  padding: 4px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: 0 8px 24px rgba(9, 18, 35, .18);
+  padding: 5px;
+  border-radius: 12px;
 }
 .rich-bar.open { display: flex; }
+.rich-bar.frost { box-shadow: var(--glass-highlight), 0 10px 30px rgba(4, 10, 22, .34); }
+body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
 
 .rich-bar button {
   display: inline-flex;
@@ -2396,14 +2400,18 @@ body.reduce-motion .dc-gauge-num { animation: none !important; }
   font: 600 13px/1 var(--font, inherit);
   cursor: pointer;
 }
-.rich-bar button:hover { background: var(--surface-2); }
+/* Hover and the on-state are drawn from the ink rather than from a surface
+   token: a glass pane has whatever is behind it showing through, so a
+   translucent "surface" laid on top of it barely registers. */
+.rich-bar button:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
 .rich-bar button.on { background: var(--accent); color: #fff; }
+.rich-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .rich-sep {
   width: 1px;
   height: 18px;
   margin: 0 3px;
-  background: var(--line);
+  background: color-mix(in srgb, var(--text) 22%, transparent);
 }
 
 /* The inks are the mark itself, so they are shown rather than named. */
@@ -2413,14 +2421,24 @@ body.reduce-motion .dc-gauge-num { animation: none !important; }
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
 }
-/* A swatch of "no colour" has to say so — an empty square reads as white. */
-.rich-ink-off i {
-  background:
-    linear-gradient(to top left, transparent calc(50% - 1px),
-      var(--danger, #d64545) calc(50% - 1px), var(--danger, #d64545) calc(50% + 1px),
-      transparent calc(50% + 1px));
+/* A swatch of "no colour" has to say so — an empty square reads as white.
+   Drawn on a pseudo-element, NOT as this element's own background-image: the
+   button writes `style="background:transparent"` inline, and the `background`
+   shorthand resets background-image, so the slash was being erased by the very
+   attribute that made the swatch mean "none". Inline beats the stylesheet. */
+.rich-ink-off i { position: relative; overflow: hidden; }
+.rich-ink-off i::after {
+  content: '';
+  position: absolute;
+  left: -30%;
+  top: 50%;
+  width: 160%;
+  height: 2px;
+  background: var(--danger, #d64545);
+  transform: rotate(-45deg);
+  transform-origin: center;
 }
 
 /* The marks as they read on a card. `mark` and a highlighted span carry the
@@ -2433,3 +2451,13 @@ body.reduce-motion .dc-gauge-num { animation: none !important; }
   padding: 0 2px;
 }
 .dash-card mark { background: #fff3a3; }
+
+/* A filled table row. The fill and its ink are written inline by
+   dashTableHtml() — see dashInkOn() for why the ink cannot stay the theme's.
+   What is needed here is only to get the card's zebra striping out of the way:
+   a stripe laid over a chosen fill is that fill in two slightly different
+   shades, which reads as a rendering fault rather than as a choice. */
+.dc-table tr.dc-tr-fill,
+.dc-table tr.dc-tr-fill td { background: transparent; }
+.dc-table tr.dc-tr-fill td { border-color: rgba(255, 255, 255, .22); }
+.dc-table thead tr[style*="background"] th { background: transparent; }

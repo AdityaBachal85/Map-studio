@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0200-blue)
+![Version](https://img.shields.io/badge/version-v6.0201-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,46 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0200 (latest)
+## 🆕 New in v6.0201 (latest)
+
+### The formatting bar is made of the app's own glass
+
+It was styled by hand from the glass *token* with no `backdrop-filter`, which is
+a translucent rectangle with nothing blurring behind it — over a dark card, a
+dark wash carrying dark ink. It wears the app's `.frost` class now, so it is the
+same glass as every other floating pane, adapts with the theme, and falls back
+to a solid fill when Preferences turns glass off.
+
+The "no highlight" swatch had lost its diagonal slash for a related reason: the
+button writes `style="background:transparent"` inline, and the `background`
+shorthand resets `background-image` — so the inline attribute that made the
+swatch mean "none" was erasing the mark that said so.
+
+### A table can fill its rows
+
+Per-row and header fill, the way any spreadsheet does it. **The ink comes with
+the fill**: a colour somebody chose is any colour at all, so the row's text
+cannot stay the theme's and hope — a dark fill under grey body text is a row
+nobody can read, and in an exported document there is no way to switch the fill
+off to find out what it said. Relative luminance decides, with the threshold at
+0.55 rather than 0.5 because a mid-tone is better served by the dark ink.
+
+Rows nobody filled are left alone and keep the card's zebra striping; a filled
+row drops it, because a stripe over a chosen fill is that fill in two slightly
+different shades and reads as a fault rather than a choice.
+
+It reaches the file: the export model carries the fills, PowerPoint gets a cell
+fill and Word a `w:shd` — each with the matching ink.
+
+### A crosshair could still stick to a chart
+
+The document-level pointer tracker added in v6.0199 only cleared a chart when
+something redrew it. If nothing did, the marks stayed. `pointerleave` has now
+failed to arrive often enough that it cannot be the only way a chart lets go, so
+the same tracker clears whichever chart the pointer has left, whether or not
+anything redraws.
+
+## 🆕 New in v6.0200
 
 ### Every legend row can pick its own symbol
 

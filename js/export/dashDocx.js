@@ -68,18 +68,34 @@ function docxP(text, o) {
 }
 
 /** A table with an optional header row. @returns {string} */
-function docxTable(columns, rows, pal) {
+function docxTable(columns, rows, pal, fills) {
   const widthPct = 5000;                       // fiftieths of a percent = 100%
-  const cell = (text, o) => '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>'
+  // `w:shd` is Word's cell shading; the fill has to be a bare six-digit hex.
+  // The ink travels with it for the same reason it does in the deck: a dark
+  // fill under the document's own grey body text is a cell nobody can read.
+  const shd = h => (h ? '<w:shd w:val="clear" w:color="auto" w:fill="'
+    + String(h).replace('#', '').toUpperCase() + '"/>' : '');
+  const inkOn = h => (typeof dashInkOn === 'function' ? dashInkOn(h) : null);
+  const cell = (text, o, fill) => '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>'
+    + shd(fill) + '</w:tcPr>'
     + docxP(text, Object.assign({ spaceAfter: 0 }, o)) + '</w:tc>';
+  const f = fills || {};
+  const headFill = f.head || null;
+  const rowFill = f.rows || [];
   const head = columns && columns.length
     ? '<w:tr><w:trPr><w:tblHeader/></w:trPr>'
-      + columns.map(c => cell(String(c).toUpperCase(), { bold: true, size: 8, color: pal.faint })).join('')
+      + columns.map(c => cell(String(c).toUpperCase(),
+        { bold: true, size: 8, color: inkOn(headFill) || pal.faint }, headFill)).join('')
       + '</w:tr>'
     : '';
-  const body = rows.map(r => '<w:tr>'
-    + (r || []).map((c, i) => cell(c, { size: 9, color: i === 0 ? pal.ink : pal.dim })).join('')
-    + '</w:tr>').join('');
+  const body = rows.map((r, ri) => {
+    const fill = rowFill[ri] || null;
+    const ink = inkOn(fill);
+    return '<w:tr>'
+      + (r || []).map((c, i) => cell(c,
+        { size: 9, color: ink || (i === 0 ? pal.ink : pal.dim) }, fill)).join('')
+      + '</w:tr>';
+  }).join('');
   return '<w:tbl><w:tblPr>'
     + '<w:tblW w:w="' + widthPct + '" w:type="pct"/>'
     + '<w:tblBorders>'
@@ -186,7 +202,7 @@ async function dashBuildDocx(model, canvas, rects, scale) {
         break;
       case 'access':
       case 'table':
-        body.push(docxTable(d.columns, d.rows, pal));
+        body.push(docxTable(d.columns, d.rows, pal, { head: d.headFill, rows: d.rowFill }));
         body.push(docxP('', { spaceAfter: 200 }));
         break;
       case 'chart': {

@@ -1358,6 +1358,7 @@ function vizWireHover(host, card, w, h) {
 
   const move = e => {
     host._vizAt = { clientX: e.clientX, clientY: e.clientY };
+    _vizHot = host;
     const r = svg.getBoundingClientRect();
     const along = horiz ? e.clientY - r.top : e.clientX - r.left;
     // Nearest index, so the whole band is the hit target rather than the mark
@@ -1406,12 +1407,19 @@ function vizWireHover(host, card, w, h) {
     hits.forEach(c => { c.style.display = 'none'; });
     tip.hidden = true;
     host._vizAt = null;
+    if (_vizHot === host) _vizHot = null;
   };
   host.addEventListener('pointermove', move);
   host.addEventListener('pointerleave', leave);
+  // Handed to the document tracker, which clears this chart when the pointer is
+  // somewhere else — see vizTrackPointer(). `pointerleave` is the fast path, not
+  // the only one: it is not delivered at all if a redraw removes the listener it
+  // was queued against, and then nothing else was coming.
+  host._vizLeave = leave;
   host._vizOff = () => {
     host.removeEventListener('pointermove', move);
     host.removeEventListener('pointerleave', leave);
+    if (_vizHot === host) _vizHot = null;
   };
 
   // A chart can be redrawn while the pointer is sitting on it — a neighbouring
@@ -1449,6 +1457,9 @@ function vizWireHover(host, card, w, h) {
 const VIZ_POINTER = { x: -1, y: -1 };
 let _vizPointerOn = false;
 
+/** The one chart currently showing hover marks, if any. */
+let _vizHot = null;
+
 /**
  * Follow the pointer at the document, once.
  *
@@ -1467,6 +1478,18 @@ function vizTrackPointer() {
   _vizPointerOn = true;
   document.addEventListener('pointermove', e => {
     VIZ_POINTER.x = e.clientX; VIZ_POINTER.y = e.clientY;
+    // AND CLEAR WHATEVER THE POINTER HAS LEFT. `pointerleave` is not reliable
+    // enough to be the only way a chart lets go: a redraw landing between the
+    // pointer leaving and the event being delivered removes the listener it was
+    // queued against, so it never arrives — and if nothing redraws afterwards
+    // there was no second chance either. The crosshair then sits on the chart
+    // for good, and an export taken later has one frozen across the picture.
+    // One document listener answers it for every chart on the board.
+    if (_vizHot && _vizHot !== e.target && !_vizHot.contains(e.target)) {
+      const h = _vizHot;
+      _vizHot = null;
+      if (typeof h._vizLeave === 'function') h._vizLeave();
+    }
   }, { passive: true, capture: true });
 }
 

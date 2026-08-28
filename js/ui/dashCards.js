@@ -366,14 +366,46 @@ function dashGaugesHtml(card) {
 }
 
 /** A plain editable table. @param {object} card @returns {string} HTML */
+/**
+ * Ink that can be read on a given fill.
+ *
+ * A fill the operator chose is any colour at all, so the row's text cannot stay
+ * the theme's ink and hope. Relative luminance by the WCAG weights, and the
+ * threshold at 0.55 rather than 0.5 because the eye reads dark-on-light more
+ * easily than light-on-dark — a mid-tone is better served by the dark ink.
+ *
+ * @param {string} hex @returns {?string} a colour, or null for "leave it alone"
+ */
+function dashInkOn(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const v = [1, 2, 3].map(i => {
+    const c = parseInt(m[i], 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  return L > 0.55 ? '#14243d' : '#ffffff';
+}
+
+/** @param {?string} hex @returns {string} a style attribute, or nothing */
+function dashFillStyle(hex) {
+  const ink = dashInkOn(hex);
+  return ink ? ' style="background:' + esc(hex) + ';color:' + ink + '"' : '';
+}
+
 function dashTableHtml(card) {
   const cols = card.columns || [];
   const rows = card.rows || [];
-  return '<div class="dc-tablewrap"><table class="dc-table"><thead><tr>'
+  const fills = card.rowFill || {};
+  return '<div class="dc-tablewrap"><table class="dc-table"><thead><tr'
+    + dashFillStyle(card.headFill) + '>'
     + cols.map((c, i) => '<th>' + dashField(card, 'columns.' + i, c, 'dc-th') + '</th>').join('')
     + (dashEditing ? '<th class="dc-tw"></th>' : '')
     + '</tr></thead><tbody>'
-    + rows.map((r, ri) => '<tr>'
+    // A filled row carries its own ink, so a dark fill does not swallow the
+    // words in it — see dashInkOn(). Rows nobody filled are untouched and keep
+    // the card's zebra striping.
+    + rows.map((r, ri) => '<tr' + (fills[ri] ? ' class="dc-tr-fill"' : '') + dashFillStyle(fills[ri]) + '>'
       + cols.map((c, ci) => '<td>' + dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td') + '</td>').join('')
       + (dashEditing ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
       + '</tr>').join('')

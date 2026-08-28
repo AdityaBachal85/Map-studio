@@ -355,6 +355,16 @@ function dashModelData(card, resolve) {
           columns: (card.columns || []).map(dashModelRuns),
           rows: (card.rows || []).map(r => (r || []).map(dashModelRuns)),
         },
+        // A fill that exists only on screen is not a fill: PowerPoint and Word
+        // both take a cell background, and a table exported without them is a
+        // different table from the one on the board. Per row, plus the header,
+        // and null wherever nobody chose one.
+        headFill: /^#[0-9a-f]{6}$/i.test(String(card.headFill || ''))
+          ? String(card.headFill).toLowerCase() : null,
+        rowFill: (card.rows || []).map((r, i) => {
+          const v = String((card.rowFill || {})[i] || '');
+          return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null;
+        }),
       };
     case 'list':
       return { items: (card.items || []).map(i => ({

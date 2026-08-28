@@ -143,17 +143,28 @@ function dashPptxCard(slide, tile, box, pal) {
       const cols = d.columns || [];
       const rows = d.rows || [];
       if (!cols.length && !rows.length) break;
-      const head = cols.map(c => ({
+      // A fill chosen on the board is a fill in the deck. Its ink comes with
+      // it: a dark fill under the card's own grey text is a cell nobody can
+      // read, and the reader of a deck cannot turn the fill off to find out
+      // what it said.
+      const inkOn = h => (typeof dashInkOn === 'function' ? dashInkOn(h) : null);
+      const fillOpt = h => (h ? { fill: { color: pptHex(h) } } : {});
+      const head = cols.map(c => Object.assign({
         text: String(c).toUpperCase(),
-        options: { bold: true, fontSize: 7.5, color: pptHex(pal.faint) },
+        options: Object.assign({ bold: true, fontSize: 7.5,
+          color: pptHex(inkOn(d.headFill) || pal.faint) }, fillOpt(d.headFill)),
       }));
-      const body = rows.map(r => (r || []).map((cell, i) => ({
-        text: String(cell == null ? '' : cell),
-        options: {
-          fontSize: 9, color: pptHex(i === 0 ? pal.ink : pal.dim),
-          align: i === 0 ? 'left' : 'right',
-        },
-      })));
+      const body = rows.map((r, ri) => {
+        const fill = (d.rowFill || [])[ri] || null;
+        const ink = inkOn(fill);
+        return (r || []).map((cell, i) => ({
+          text: String(cell == null ? '' : cell),
+          options: Object.assign({
+            fontSize: 9, color: pptHex(ink || (i === 0 ? pal.ink : pal.dim)),
+            align: i === 0 ? 'left' : 'right',
+          }, fillOpt(fill)),
+        }));
+      });
       slide.addTable(cols.length ? [head].concat(body) : body, {
         x: box.x + pad, y, w: innerW,
         border: { type: 'solid', pt: 0.4, color: pptHex(pal.rule) },
