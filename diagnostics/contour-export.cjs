@@ -176,6 +176,77 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   });
   await p.screenshot({ path: path.join(__dirname, 'shot-contour-export.png') });
 
+  /* -- and it is the SAME picture, not the same pixel sizes ---------------- */
+
+  // THE EXPORT DID NOT LOOK LIKE THE SCREEN. The layer draws onto an export map
+  // that is `scale` times wider in CSS pixels, and its geometry spreads with it
+  // — but `ctx.font` and `ctx.lineWidth` are pixel measures and stayed at 10px
+  // and 1px while everything around them tripled. So a 3x export came back with
+  // elevation labels a third of their proper size, too small to read, and
+  // contour lines so fine they nearly vanished: every number correct, the
+  // drawing wrong.
+  //
+  // `setRenderScale` does not fix it and was never meant to — that one decides
+  // how many device pixels back each CSS pixel, which is crispness.
+  //
+  // Read off the context rather than out of a screenshot: what is being checked
+  // is that the layer is TOLD proportional numbers, and a pixel comparison of a
+  // 3x contour render against a 1x one cannot say that cleanly.
+  const weights = await p.evaluate(() => {
+    const record = k => {
+      const seen = { fonts: new Set(), widths: new Set() };
+      const layer = new ContourLayer();
+      layer.setStyleScale(k);
+      const origAdd = layer.onAdd;
+      layer.onAdd = function () {
+        origAdd.call(this);
+        const raw = this._ctx;
+        this._ctx = new Proxy(raw, {
+          set(t, prop, v) {
+            if (prop === 'font') seen.fonts.add(String(v));
+            if (prop === 'lineWidth') seen.widths.add(Math.round(v * 100) / 100);
+            t[prop] = v; return true;
+          },
+          get(t, prop) {
+            const v = t[prop];
+            return typeof v === 'function' ? v.bind(t) : v;
+          },
+        });
+      };
+      layer.addTo(map);
+      layer._reset();
+      map.removeLayer(layer);
+      return { fonts: [...seen.fonts], widths: [...seen.widths].sort((a, z) => a - z) };
+    };
+    return { k1: record(1), k3: record(3) };
+  });
+  const px = f => { const m = /(\d+(?:\.\d+)?)px/.exec(f || ''); return m ? +m[1] : 0; };
+  const f1 = px(weights.k1.fonts[0]), f3 = px(weights.k3.fonts[0]);
+  ck('an export three times wider sets a label three times the size',
+    f1 > 0 && Math.abs(f3 - f1 * 3) < 0.05, f1 + 'px -> ' + f3 + 'px');
+  ck('and every stroke weight with it, in the same proportion',
+    weights.k1.widths.length > 1
+      && weights.k1.widths.length === weights.k3.widths.length
+      && weights.k1.widths.every((w, i) => Math.abs(weights.k3.widths[i] - w * 3) < 0.05),
+    weights.k1.widths.join(',') + ' -> ' + weights.k3.widths.join(','));
+  // Left unscaled, a map three times wider has lines three times longer and
+  // would take three times as many labels — every one the right size, on a
+  // denser sheet than the one on screen, which is still a different drawing.
+  ck('the label spacing scales too, so the sheet is no denser than the screen\'s',
+    await p.evaluate(() => {
+      const layer = new ContourLayer();
+      layer.addTo(map);
+      const m = visibleContourModels()[0];
+      const line = (m.lines.find(l => (l.pts || l.points || []).length > 40) || m.lines[0]);
+      const pts = (line.pts || line.points || []).map((q, i) => [i * 30, 0]);
+      layer.setStyleScale(1);
+      const a = (layer._labelStops(pts, m, line) || []).length;
+      layer.setStyleScale(3);
+      const c = (layer._labelStops(pts, m, line) || []).length;
+      map.removeLayer(layer);
+      return a > 1 && c < a;
+    }) === true);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

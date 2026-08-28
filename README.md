@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0202-blue)
+![Version](https://img.shields.io/badge/version-v6.0203-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,33 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0202 (latest)
+## 🆕 New in v6.0203 (latest)
+
+### The exported contour map is the one you were looking at
+
+Every number in it was correct and the drawing was wrong. The export renders the
+contour layer onto a map that is `scale` times wider in CSS pixels, and the
+contour geometry spreads with it on its own — it is projected from coordinates.
+But `ctx.font` and `ctx.lineWidth` are *pixel* measures, and they stayed at 10px
+and 1px while everything around them tripled. A 3× export came back with
+elevation labels a third of their proper size, too small to read, and contour
+lines so fine they nearly vanished.
+
+`setRenderScale` does not address this and was never meant to: that one decides
+how many device pixels back each CSS pixel, which is crispness. The layer takes
+a **style scale** now, and the export passes its own multiplier — so the label
+font, the line and bold-line weights, the label halo, the boundary dash and the
+OpenStreetMap detail weights all grow in proportion.
+
+The label *spacing* scales with them. Left fixed, a map three times wider has
+lines three times longer and takes three times as many labels — every one the
+right size, on a sheet denser than the screen's, which is still a different
+drawing.
+
+Measured rather than eyeballed: at 3× the layer is told a 30px font against 10px,
+and stroke weights of 2.4 / 4.5 / 9 against 0.8 / 1.5 / 3.
+
+## 🆕 New in v6.0202
 
 ### A compass, at the corner of the map
 

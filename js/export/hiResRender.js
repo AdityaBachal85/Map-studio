@@ -343,6 +343,14 @@ async function renderGroundPass(o) {
       // 1, not the screen's device ratio: this map is already `scale` times the
       // size, so its pixels are the export's pixels.
       contourExportLayer.setRenderScale(1);
+      // AND THE WEIGHTS HAVE TO GROW WITH IT. The pixel ratio above decides
+      // crispness; it does nothing about the fact that a 10px elevation label
+      // and a 1px contour sit on a map three times wider here than on screen.
+      // Without this they stayed 10px and 1px while everything around them
+      // tripled, and the exported contour map came back with labels too small
+      // to read and lines so fine they nearly vanished — not the map anybody
+      // had been looking at, which is exactly how it was reported.
+      contourExportLayer.setStyleScale(scale);
       contourExportLayer.addTo(exportMap);
     }
 

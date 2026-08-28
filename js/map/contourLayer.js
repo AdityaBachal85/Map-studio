@@ -35,7 +35,15 @@
 const CONTOUR_LABEL_SPACING = 230;
 /** Shortest run of line, in pixels, still worth interrupting for a label. */
 const CONTOUR_LABEL_MIN_RUN = 90;
-const CONTOUR_LABEL_FONT = '700 10px Geist, ui-sans-serif, system-ui, sans-serif';
+const CONTOUR_LABEL_SIZE = 10;
+const CONTOUR_LABEL_FONT = '700 ' + CONTOUR_LABEL_SIZE
+  + 'px Geist, ui-sans-serif, system-ui, sans-serif';
+/** @param {number} k @returns {string} the label font at k times its size */
+function contourLabelFont(k) {
+  return k === 1 ? CONTOUR_LABEL_FONT
+    : '700 ' + (CONTOUR_LABEL_SIZE * k).toFixed(1)
+      + 'px Geist, ui-sans-serif, system-ui, sans-serif';
+}
 
 const ContourLayer = L.Layer.extend({
   options: {
@@ -137,6 +145,30 @@ const ContourLayer = L.Layer.extend({
   /** Render at a fixed pixel ratio — used by the export path. */
   setRenderScale: function (s) { this._renderScale = s; if (this._map) this._reset(); },
 
+  /**
+   * How much bigger this map is than the screen's, for the things measured in
+   * pixels rather than in metres.
+   *
+   * THE PIXEL RATIO IS NOT THIS. `setRenderScale` decides how many device
+   * pixels back each CSS pixel — crispness. This decides how big a 10px label
+   * and a 1px line are ON A MAP THAT IS THREE TIMES WIDER, and without it they
+   * stay 10px and 1px while everything around them triples: the exported
+   * contour map came out with elevation labels too small to read and lines so
+   * fine they nearly vanished, which is not the map anybody was looking at.
+   *
+   * Contour geometry needs no such factor — it is projected from coordinates
+   * and spreads with the map on its own. Only the drawing weights do.
+   *
+   * @param {number} k
+   */
+  setStyleScale: function (k) {
+    this._styleScale = (isFinite(k) && k > 0) ? k : 1;
+    if (this._map) this._reset();
+  },
+
+  /** @returns {number} */
+  _sk: function () { return this._styleScale || 1; },
+
   /* -- the picture -------------------------------------------------------- */
 
   _draw: function (size) {
@@ -206,9 +238,10 @@ const ContourLayer = L.Layer.extend({
     const lines = m.lines || [];
     if (!lines.length) return null;
 
+    const k = this._sk();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.font = CONTOUR_LABEL_FONT;
+    ctx.font = contourLabelFont(k);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -236,7 +269,7 @@ const ContourLayer = L.Layer.extend({
       const stops = wantLabel ? this._labelStops(pts, m, ln) : null;
 
       ctx.strokeStyle = ln.bold ? m.boldColor : m.lineColor;
-      ctx.lineWidth = ln.bold ? m.boldWidth : m.lineWidth;
+      ctx.lineWidth = (ln.bold ? m.boldWidth : m.lineWidth) * k;
       this._strokePath(ctx, pts, stops);
 
       if (stops) stops.forEach(s => labelled.push(s));
@@ -254,7 +287,9 @@ const ContourLayer = L.Layer.extend({
   _drawOsm: function (ctx, pt, m, kinds) {
     const feats = m.osm;
     if (!feats || !feats.length) return;
-    const scale = m.osmWeight == null ? 1 : m.osmWeight;
+    // The operator's own weight, times how much bigger this map is than the
+    // screen — the same reason the contour lines and labels take it.
+    const scale = (m.osmWeight == null ? 1 : m.osmWeight) * this._sk();
 
     ctx.save();
     ctx.lineCap = 'round';
@@ -302,15 +337,21 @@ const ContourLayer = L.Layer.extend({
    * lies along the contour the way it does on a printed sheet.
    */
   _labelStops: function (pts, m, ln) {
+    // Spacing and the burn gap are pixel measures like the font is, so they
+    // scale with it. Left fixed, a map three times wider has lines three times
+    // longer and would take three times as many labels — a denser sheet than
+    // the one on screen, which is a different drawing even if each label is now
+    // the right size.
+    const k = this._sk();
     let total = 0;
     for (let i = 1; i < pts.length; i++) {
       total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
     }
-    if (total < CONTOUR_LABEL_MIN_RUN) return null;
+    if (total < CONTOUR_LABEL_MIN_RUN * k) return null;
 
     const text = ln.label;
-    const halfW = (text.length * 3.1) + 7;      // the gap to burn, half-width
-    const n = Math.max(1, Math.round(total / CONTOUR_LABEL_SPACING));
+    const halfW = ((text.length * 3.1) + 7) * k;   // the gap to burn, half-width
+    const n = Math.max(1, Math.round(total / (CONTOUR_LABEL_SPACING * k)));
     const step = total / n;
     // Offset by the level so labels on neighbouring contours stagger instead of
     // lining up in a row down the slope.
@@ -376,8 +417,9 @@ const ContourLayer = L.Layer.extend({
   },
 
   _drawLabels: function (ctx, stops, m) {
+    const k = this._sk();
     ctx.save();
-    ctx.font = CONTOUR_LABEL_FONT;
+    ctx.font = contourLabelFont(k);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -388,7 +430,7 @@ const ContourLayer = L.Layer.extend({
       // A halo rather than a filled plate: the fill under a contour label is
       // the elevation colour, and a box would punch a hole in the very ramp
       // the label is describing.
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * k;
       ctx.strokeStyle = m.labelHalo;
       ctx.strokeText(s.text, 0, 0);
       ctx.fillStyle = s.bold ? m.boldColor : m.lineColor;
@@ -404,8 +446,9 @@ const ContourLayer = L.Layer.extend({
     ctx.beginPath();
     ring.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.closePath();
-    ctx.setLineDash([7, 5]);
-    ctx.lineWidth = 1.5;
+    const k = this._sk();
+    ctx.setLineDash([7 * k, 5 * k]);
+    ctx.lineWidth = 1.5 * k;
     ctx.strokeStyle = m.outlineColor || 'rgba(255,122,26,.9)';
     ctx.stroke();
     ctx.restore();
