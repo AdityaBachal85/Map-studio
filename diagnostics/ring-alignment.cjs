@@ -164,9 +164,13 @@ const overlaid = [
 M.markSharedAlignments(overlaid);
 ck('a metro mapped over a road is marked as sharing its alignment',
   overlaid[1].overRoad === true, String(overlaid[1].overRoad));
-// Only the rail side is marked: the road is what it always was, and dashing it
-// would say something about the road that is not true.
+// Only the rail side is marked: the road is what it always was, and moving it
+// would put the thing distances are measured along somewhere it is not.
 ck('and the road itself is not', !overlaid[0].overRoad);
+ck('the rail is told which side to move to', Math.abs(overlaid[1].shiftSide) === 1,
+  String(overlaid[1].shiftSide));
+ck('and it is the first thing over that road, so it takes the first step out',
+  overlaid[1].shiftRank === 1, String(overlaid[1].shiftRank));
 
 const apart = [
   line({ classId: 'arterial', name: 'LBS Marg', pts: base, km: 4 }),
@@ -200,6 +204,68 @@ M.markSharedAlignments(water);
 // A river is not something that rides over a road, and a dashed river reads as
 // a seasonal one — a different fact about the water.
 ck('a river alongside a road is NOT dashed', !water[1].overRoad);
+
+/* ---- which side it moves to ---------------------------------------------- */
+
+/*
+ * A FIXED DIRECTION CANCELS INSTEAD OF ADDING. A metro mapped 8 m north of its
+ * road and moved 7 px south is clear of it at 1:100000, where 7 px is 60 m —
+ * and sitting exactly on it at 1:4000, where 7 px is 8 m. Not a near miss: the
+ * original complaint, reappearing at one zoom level, which is the sort of
+ * thing nobody finds by hand.
+ *
+ * So the side is measured here, where both lines are in hand, and returned in
+ * the frame the drawing uses: +1 is the line's own right, looking along the
+ * direction its coordinates run in.
+ */
+
+// East-running metro, road to its south (right hand) -> move left, -1.
+ck('a line with the road on its right is sent left',
+  M.ringSideOf(shift(base, 8), base) === -1,
+  String(M.ringSideOf(shift(base, 8), base)));
+// Same pair, road to its north (left hand) -> move right, +1.
+ck('and one with the road on its left is sent right',
+  M.ringSideOf(shift(base, -8), base) === 1,
+  String(M.ringSideOf(shift(base, -8), base)));
+// THE ONE THAT MATTERS. A metro's coordinates may run the opposite way along
+// the same alignment; anchored to the road's heading instead of its own, the
+// answer flips and the shift points back at the road.
+ck('a metro whose coordinates run the other way is still sent away from the road',
+  M.ringSideOf(shift(base, 8).slice().reverse(), base) === 1,
+  String(M.ringSideOf(shift(base, 8).slice().reverse(), base)));
+ck('and the reversed pair the other way round, likewise',
+  M.ringSideOf(shift(base, -8).slice().reverse(), base) === -1);
+// Exactly on top of it: either side is as truthful as the other, so the answer
+// only has to be one of them, consistently.
+ck('a line exactly on the road still gets a definite side',
+  Math.abs(M.ringSideOf(base, base)) === 1, String(M.ringSideOf(base, base)));
+
+// A second line over the same road steps further out on the SAME side. Sending
+// it across would put it back in the cancelling case the first one escaped.
+const two = [
+  line({ classId: 'arterial', name: 'LBS Marg', pts: base, km: 4 }),
+  line({ classId: 'metro', name: 'Line 4', pts: shift(base, 8), km: 4 }),
+  line({ classId: 'metro', name: 'Line 6', pts: shift(base, 11), km: 4 }),
+];
+M.markSharedAlignments(two);
+ck('two metros over one road are ranked, not piled on the same offset',
+  two[1].shiftRank === 1 && two[2].shiftRank === 2,
+  two[1].shiftRank + ' and ' + two[2].shiftRank);
+ck('and both are sent to the same side of it',
+  two[1].shiftSide === two[2].shiftSide, two[1].shiftSide + ' / ' + two[2].shiftSide);
+
+// Counted per road: a metro over a different road is the first thing over THAT
+// road and takes the first step out, not the second.
+const twoRoads = [
+  line({ classId: 'arterial', name: 'A Road', pts: base, km: 4 }),
+  line({ classId: 'arterial', name: 'B Road', pts: shift(base, 900), km: 4 }),
+  line({ classId: 'metro', name: 'Line 4', pts: shift(base, 8), km: 4 }),
+  line({ classId: 'metro', name: 'Line 9', pts: shift(base, 908), km: 4 }),
+];
+M.markSharedAlignments(twoRoads);
+ck('a metro over a different road starts from the first step out again',
+  twoRoads[2].shiftRank === 1 && twoRoads[3].shiftRank === 1,
+  twoRoads[2].shiftRank + ' and ' + twoRoads[3].shiftRank);
 
 const noRoads = [line({ classId: 'metro', name: 'Line 4', pts: base, km: 4 })];
 M.markSharedAlignments(noRoads);

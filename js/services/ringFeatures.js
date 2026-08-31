@@ -436,6 +436,63 @@ function ringFollowFrac(probe, ref, tolKm) {
 }
 
 /**
+ * Which side of itself a line should be moved to, to get clear of another.
+ *
+ * WHY A SIDE AND NOT JUST A DISTANCE. The map separates two lines by moving
+ * one of them sideways by a few screen pixels, and a fixed direction cancels
+ * instead of adding whenever it happens to point at the other line. A metro
+ * mapped 8 m north of its road, moved 7 px south, is clear of it at 1:100000
+ * where 7 px is 60 m — and sitting exactly on it at 1:4000 where 7 px is 8 m.
+ * That is not a near miss: it is the original complaint, reappearing at one
+ * particular zoom.
+ *
+ * So the side is measured here, where both lines are in hand, and the map
+ * pushes AWAY from the road rather than in whichever direction the arithmetic
+ * happened to face. The two displacements then add at every zoom.
+ *
+ * Returned in the frame the drawing uses: +1 is the line's own right-hand
+ * side, looking along the direction its coordinates run in — which is what a
+ * positive pixel offset means in map/drawing.js. Anchored to the LINE's own
+ * heading, not the road's, because a metro's coordinates may well run the
+ * opposite way along the same alignment.
+ *
+ * @param {Array<[number,number]>} pts The line to be moved.
+ * @param {Array<[number,number]>} ref The line to get clear of.
+ * @returns {number} +1 or -1
+ */
+function ringSideOf(pts, ref) {
+  const lat0 = pts[0][0];
+  const p = ringToLocalKm(pts, lat0);
+  const r = ringToLocalKm(ref, lat0);
+  let vote = 0;
+  const step = Math.max(1, Math.floor(p.length / RING_FOLLOW_SAMPLES));
+  for (let i = 0; i < p.length; i += step) {
+    const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)];
+    const tx = b[0] - a[0], ty = b[1] - a[1];
+    const tl = Math.hypot(tx, ty);
+    if (tl < 1e-9) continue;
+    // Nearest point on the reference line, and which hand it lies on.
+    let best = Infinity, cx = 0, cy = 0;
+    for (let j = 1; j < r.length; j++) {
+      const ax = r[j - 1][0], ay = r[j - 1][1];
+      const dx = r[j][0] - ax, dy = r[j][1] - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = 0;
+      if (len2 > 0) t = Math.max(0, Math.min(1, ((p[i][0] - ax) * dx + (p[i][1] - ay) * dy) / len2));
+      const qx = ax + dx * t, qy = ay + dy * t;
+      const d = Math.hypot(p[i][0] - qx, p[i][1] - qy);
+      if (d < best) { best = d; cx = qx; cy = qy; }
+    }
+    // Right-hand normal of the tangent is (ty, -tx). A positive dot puts the
+    // reference on this line's right, so the line moves left, and vice versa.
+    vote += ((ty * (cx - p[i][0]) - tx * (cy - p[i][1])) / tl) > 0 ? -1 : 1;
+  }
+  // Exactly on top of it, or crossing back and forth: either side is as
+  // truthful as the other, so pick one and be consistent about it.
+  return vote < 0 ? -1 : 1;
+}
+
+/**
  * Bounding boxes overlap, cheaply, before the real test.
  *
  * The corridor test is O(samples x segments); a scan over a city can hold two
@@ -745,14 +802,15 @@ const RING_OVER_ROAD_CLASSES = ['metro', 'rail'];
  * covered which was down to the order the scan happened to add them in, which
  * is why it looked like the metro sometimes and the road sometimes.
  *
- * Nothing is moved. Displacing a metro sideways would need the shift measured
- * in pixels to hold at every zoom, and a metre offset that reads at 1:100000
- * puts the line in the wrong street at 1:5000. The line is marked instead, and
- * the map draws a marked line dashed and on top — so the road runs on
- * underneath and shows through the gaps, which is how every transit map has
- * ever drawn a railway over a street.
+ * Nothing is moved HERE. This measures and marks; the map does the moving,
+ * because the separation that makes two lines readable is a screen distance
+ * and this file has no screen. `shiftRank` says which side and how far out:
+ * the road stays where it is and the lines over it are laid out either side of
+ * it, so two metro lines along one road do not simply land on each other
+ * instead of on the road.
  *
- * @param {object[]} features Mutated in place; `overRoad` set on the rail side.
+ * @param {object[]} features Mutated in place; `overRoad` and `shiftRank` set
+ *   on the rail side.
  */
 function markSharedAlignments(features) {
   const roads = features.filter(f => f.kind === 'line' && f.pts && f.pts.length > 1
@@ -760,6 +818,10 @@ function markSharedAlignments(features) {
   if (!roads.length) return;
   roads.forEach(r => { r._box = ringBox(r.pts); });
   const pad = RING_SHARED_KM / 111.32 * 2;
+
+  // Counted per road, not overall: two metro lines over two different roads
+  // are each the first thing over their own road and both take the near side.
+  const used = new Map();
 
   features.forEach(f => {
     if (f.kind !== 'line' || !f.pts || f.pts.length < 2) return;
@@ -769,6 +831,10 @@ function markSharedAlignments(features) {
       if (!ringBoxesNear(box, roads[i]._box, pad)) continue;
       if (ringFollowFrac(f.pts, roads[i].pts, RING_SHARED_KM) >= RING_SHARED_FRAC) {
         f.overRoad = true;
+        const n = (used.get(i) || 0) + 1;
+        used.set(i, n);
+        f.shiftRank = n;
+        f.shiftSide = ringSideOf(f.pts, roads[i].pts);
         return;
       }
     }
@@ -1197,7 +1263,7 @@ function ringFeatureRetryable(reason) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     joinRingFeatures, joinChainsByName, roadNameKey, joinableNames,
-    collapseCarriageways, markSharedAlignments,
+    collapseCarriageways, markSharedAlignments, ringSideOf,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
     ringPathKm, simplifyLatLngs,
     RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,

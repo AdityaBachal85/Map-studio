@@ -362,11 +362,12 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
 
   /* -- a metro over a road, drawn so both can still be seen ---------------- */
 
-  // The maths that decides this is proved in diagnostics/ring-alignment.cjs
-  // without a browser. What is proved here is the other half: that the shape
-  // it produces reaches the map, is drawn dashed, and lands ABOVE the road it
-  // covers instead of wherever the insertion order happened to put it.
+  // The maths that decides WHICH lines share an alignment is proved in
+  // diagnostics/ring-alignment.cjs without a browser. What is proved here is
+  // the drawing: that the two lines end up side by side with air between them,
+  // and that the separation survives everything that can recompute a shape.
   const over = await p.evaluate(() => {
+    map.setView([19.20, 72.82], 14, { animate: false });
     const geomBefore = geometries.length;
     const road = [], metro = [];
     for (let m = 0; m <= 4000; m += 100) {
@@ -377,7 +378,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     const found = joinRingFeatures([
       { kind: 'line', classId: 'arterial', name: 'LBS Marg', pts: road, parts: 1, km: 4 },
       { kind: 'line', classId: 'arterial', name: 'LBS Marg', parts: 1, km: 3.9,
-        pts: road.map(p => [p[0] + 18 / 111320, p[1]]) },   // the other carriageway
+        pts: road.map(q => [q[0] + 18 / 111320, q[1]]) },   // the other carriageway
       { kind: 'line', classId: 'metro', name: 'Metro Line 4', pts: metro, parts: 1, km: 4 },
     ]);
     ringScanState = { loc: null, km: 5, ids: [], picked: new Set(found.map((f, i) => i)), result: found };
@@ -385,6 +386,13 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     const made = geometries.slice(geomBefore);
     const road2 = made.find(g => g.cls === 'major');
     const rail = made.find(g => g.cls === 'metro');
+    // On screen, in pixels — the only unit in which "you can see both" means
+    // anything. Measured at the middle of the run, where they overlap most.
+    const px = (g) => {
+      const cs = g.layer.getLatLngs();
+      const mid = cs[Math.floor(cs.length / 2)];
+      return map.latLngToContainerPoint(mid).y;
+    };
     // Document order IS paint order in an SVG group: later siblings are on top.
     const paths = [...document.querySelectorAll('#mapWrap svg path')];
     return {
@@ -392,67 +400,123 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       names: made.map(g => g.name),
       roadStyle: road2 && road2.lineStyle,
       railStyle: rail && rail.lineStyle,
-      railDashArray: rail && rail.layer._path && rail.layer._path.getAttribute('stroke-dasharray'),
-      railOverRoad: rail && rail.overRoad === true,
+      shiftPx: rail && rail.shiftPx,
+      gap: (road2 && rail) ? Math.abs(px(rail) - px(road2)) : null,
+      weights: [road2 && road2.borderWidth, rail && rail.borderWidth],
       railAbove: (road2 && rail) ? paths.indexOf(rail.layer._path) > paths.indexOf(road2.layer._path) : null,
       carriageways: found.filter(f => f.classId === 'arterial').map(f => f.carriageways || 1),
+      // The measurement has to be of the real road, not the parallel curve.
+      railKm: rail && rail.measureText,
     };
   });
-  // The complaint this answers: "if a road have 4 lane it will mark 4 lane, we
-  // have to mark only one."
+  // "if a road have 4 lane it will mark 4 lane, we have to mark only one."
   ck('a divided road ticked in the scan reaches the map as ONE line',
     over.rows === 2 && over.names.filter(n => /LBS Marg/.test(n)).length === 1,
     over.names.join(' | '));
   ck('and it knows it is both carriageways',
     over.carriageways.join() === '2', over.carriageways.join());
-  // The other half: "sometimes metro is visible not road and sometimes vice
-  // versa — both should be visible."
-  ck('the metro over it is drawn dashed, so the road reads through the gaps',
-    over.railStyle === 'dashed' && !!over.railDashArray,
-    over.railStyle + ' / ' + over.railDashArray);
-  ck('the road under it stays solid — the dash is a fact about the metro',
-    over.roadStyle === 'solid', over.roadStyle);
-  ck('and the metro is painted above the road, not wherever it was added',
-    over.railAbove === true, String(over.railAbove));
-  ck('with the reason recorded on the shape, so a reopened project still knows',
-    over.railOverRoad === true);
 
-  // The stack is over the WHOLE map, not just what a scan added. A metro added
-  // now has to go above a road added an hour ago — the old pass only ever
-  // looked at the shapes of its own scan, which is exactly the case that broke.
-  const restacked = await p.evaluate(() => {
+  // "not like this — side by side, I want both clearly visible."
+  ck('the metro is drawn beside the road, not on top of it',
+    Math.abs(over.shiftPx) === 7, 'shiftPx=' + over.shiftPx);
+  ck('and far enough over that there is air between the two lines',
+    over.gap >= 6 && over.gap - (over.weights[0] + over.weights[1]) / 2 >= 2,
+    over.gap + 'px apart, ' + over.weights.join('px and ') + 'px wide');
+  // Dashing it was the first answer and a worse one: it says something untrue
+  // about the metro, and gives the reader one line with two colours in it.
+  ck('both lines are solid — neither is disguised to make room for the other',
+    over.roadStyle === 'solid' && over.railStyle === 'solid',
+    over.roadStyle + ' / ' + over.railStyle);
+  ck('the metro still paints above the road, so a crossing reads correctly',
+    over.railAbove === true, String(over.railAbove));
+  // A parallel curve is longer than the curve it came from. Reporting the
+  // drawn line would put a road a few per cent long in front of a client.
+  ck('but the length reported is the real road, not the offset copy',
+    /4\.0[01]? km|3\.99/.test(over.railKm || ''), over.railKm);
+
+  // A PIXEL SEPARATION IS ONLY A SEPARATION AT ONE ZOOM. Baked in at the zoom
+  // it was added at, the shift is invisible two levels out and puts the metro
+  // in the next street two levels in.
+  const zoomed = await p.evaluate(async () => {
     const road = geometries.find(g => g.cls === 'major');
     const rail = geometries.find(g => g.cls === 'metro');
-    road.layer.bringToFront();                      // put the road on top by hand
-    const paths0 = [...document.querySelectorAll('#mapWrap svg path')];
-    const before = paths0.indexOf(rail.layer._path) > paths0.indexOf(road.layer._path);
-    restackClassedShapes();
-    const paths1 = [...document.querySelectorAll('#mapWrap svg path')];
-    return { before, after: paths1.indexOf(rail.layer._path) > paths1.indexOf(road.layer._path) };
+    const gapAt = async (z) => {
+      map.setZoom(z, { animate: false });
+      await new Promise(r => setTimeout(r, 260));
+      const mid = g => { const c = g.layer.getLatLngs(); return c[Math.floor(c.length / 2)]; };
+      return Math.round(Math.abs(map.latLngToContainerPoint(mid(rail)).y
+        - map.latLngToContainerPoint(mid(road)).y));
+    };
+    return { z12: await gapAt(12), z14: await gapAt(14), z17: await gapAt(17) };
   });
-  ck('a shape shoved to the front out of order is put back where it belongs',
-    restacked.before === false && restacked.after === true, JSON.stringify(restacked));
+  ck('the separation survives zooming out, where the real 8 m is a fifth of a pixel',
+    zoomed.z12 >= 6, zoomed.z12 + 'px at z12');
+  ck('and zooming in, where a fixed direction would have cancelled it exactly',
+    zoomed.z14 >= 6 && zoomed.z17 >= 6, JSON.stringify(zoomed));
+  // The shift is pushed AWAY from the road, so the two displacements add. Get
+  // the sign wrong and at the one zoom where 7px equals the real offset the
+  // metro lands exactly back on the road — the original complaint, returning
+  // at one zoom level only, which is the kind of thing nobody finds by hand.
+  ck('and the real offset shows through on top of it as you zoom in, never against it',
+    zoomed.z17 > zoomed.z12, zoomed.z12 + 'px -> ' + zoomed.z17 + 'px');
 
-  // Reopening a project restyles every classed shape from its class. Without
-  // `overRoad` on the record that restyle turns the metro solid again and it
-  // goes straight back to hiding the road.
-  const reopened = await p.evaluate(() => {
+  // Everything that persists a shape has to read where the line REALLY is, or
+  // each round trip walks the metro one more step off the road.
+  const roundTrip = await p.evaluate(() => {
+    const rail = geometries.find(g => g.cls === 'metro');
+    const drawnBefore = rail.layer.getLatLngs()[0].lat;
     const snap = JSON.parse(JSON.stringify(serialiseProject()));
     const feat = (snap.geometries || [])
       .find(x => (x.properties || {}).name === 'Metro Line 4');
+    const savedLat = feat.geometry.coordinates[0][1];
     clearProject();
     applyProject(snap);
-    const rail = geometries.find(g => g.name === 'Metro Line 4');
-    connApplyAll();
+    const back = geometries.find(g => g.name === 'Metro Line 4');
+    const road = geometries.find(g => g.cls === 'major');
+    const mid = g => { const c = g.layer.getLatLngs(); return c[Math.floor(c.length / 2)]; };
     return {
-      saved: feat && feat.properties.overRoad === true,
-      restored: rail && rail.overRoad === true,
-      style: rail && rail.lineStyle,
+      savedIsTrue: Math.abs(savedLat - (19.20 + 8 / 111320)) < 1e-6,
+      savedIsNotDrawn: Math.abs(savedLat - drawnBefore) > 1e-6,
+      shift: back && back.shiftPx,
+      gap: Math.round(Math.abs(map.latLngToContainerPoint(mid(back)).y
+        - map.latLngToContainerPoint(mid(road)).y)),
     };
   });
-  ck('the reason is written into the saved file', reopened.saved === true, String(reopened.saved));
-  ck('and comes back dashed when the project is reopened and restyled',
-    reopened.restored === true && reopened.style === 'dashed', JSON.stringify(reopened));
+  ck('the file stores where the metro actually is, not where it is drawn',
+    roundTrip.savedIsTrue && roundTrip.savedIsNotDrawn, JSON.stringify(roundTrip));
+  ck('and reopening redraws the same separation rather than shifting it again',
+    Math.abs(roundTrip.shift) === 7 && roundTrip.gap >= 6, JSON.stringify(roundTrip));
+
+  // The undo stack snapshots coordinates too, and a snapshot of the drawn line
+  // restored and then re-shifted moves the metro one step per undo.
+  const undone = await p.evaluate(() => {
+    const rail = geometries.find(g => g.cls === 'metro');
+    const road = geometries.find(g => g.cls === 'major');
+    const mid = g => { const c = g.layer.getLatLngs(); return c[Math.floor(c.length / 2)]; };
+    const gap = () => Math.round(Math.abs(map.latLngToContainerPoint(mid(rail)).y
+      - map.latLngToContainerPoint(mid(road)).y));
+    const snap = snapshotGeom(rail);
+    const gaps = [gap()];
+    for (let i = 0; i < 3; i++) { applyGeomCoords(rail, snap.geom); gaps.push(gap()); }
+    return { gaps, snapIsTrue: Math.abs(snap.geom.latlngs[0][0] - (19.20 + 8 / 111320)) < 1e-6 };
+  });
+  ck('an undo snapshot holds the real line as well',
+    undone.snapIsTrue === true, String(undone.snapIsTrue));
+  ck('so restoring it three times over does not walk the metro off the road',
+    undone.gaps.every(g => g === undone.gaps[0]) && undone.gaps[0] >= 6,
+    undone.gaps.join(' -> '));
+
+  // What somebody drags is what they meant to place. A line that sprang 7px
+  // sideways the moment they let go of it would be a shape fighting its editor.
+  const edited = await p.evaluate(() => {
+    const rail = geometries.find(g => g.cls === 'metro');
+    const at = rail.layer.getLatLngs()[0].lat;
+    rail.layer.fire('pm:edit');
+    return { shift: rail.shiftPx, base: rail._baseLatLngs,
+      stayed: Math.abs(rail.layer.getLatLngs()[0].lat - at) < 1e-9 };
+  });
+  ck('dragging a shifted line bakes its separation in rather than fighting you',
+    edited.shift === 0 && !edited.base && edited.stayed === true, JSON.stringify(edited));
 
   /* -- the pin glyph, the project logo and the compass ---------------------- */
 

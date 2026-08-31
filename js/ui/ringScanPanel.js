@@ -323,7 +323,8 @@ function keepRingScanSelection() {
     if (!layer) return;
 
     added.push(registerGeom(layer, shape,
-      ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, f.overRoad)));
+      ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel,
+        f.overRoad, f.shiftRank, f.shiftSide)));
     n++;
     if (f.kind === 'area') { placed += ringScanPinArea(f, name, clsId, iconKey); }
   });
@@ -435,18 +436,30 @@ function ringScanPointOf(f) {
  * @param {boolean} [wantLabel] Whether to caption it on the map.
  * @returns {object}
  */
-function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad) {
+function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad, shiftRank, shiftSide) {
   const cc = typeof connClass === 'function' ? connClass(clsId) : null;
   const meta = { name, cls: clsId, fromRing: true };
-  // A metro mapped along the road it flies over. Carried on the shape so it
-  // survives a save and a restyle, rather than being re-measured every time
-  // the standard is applied — the two alignments do not change, and the scan
-  // that compared them is the only place with both lines in hand.
-  if (overRoad) meta.overRoad = true;
+  // A metro mapped along the road it flies over, drawn beside it so both can
+  // be seen. Carried on the shape rather than re-measured on every restyle:
+  // the two alignments do not change, and the scan that compared them is the
+  // only place that had both lines in hand.
+  //
+  // The side comes from the scan, which had both alignments in hand: the shift
+  // pushes AWAY from the road, so the real offset and the drawn one add rather
+  // than cancelling at whatever zoom makes them equal and opposite.
+  //
+  // A second line over the same road steps further out on the SAME side rather
+  // than crossing to the other one, which would put it back in the cancelling
+  // case it was moved to escape.
+  if (overRoad) {
+    meta.overRoad = true;
+    const step = (typeof GEOM_SHIFT_STEP === 'number' ? GEOM_SHIFT_STEP : 7);
+    meta.shiftPx = (shiftSide < 0 ? -1 : 1) * Math.max(1, shiftRank || 1) * step;
+  }
   if (cc) {
     meta.borderColor = cc.color;
     meta.borderWidth = cc.weight;
-    meta.lineStyle = (cc.dash || overRoad) ? 'dashed' : 'solid';
+    meta.lineStyle = cc.dash ? 'dashed' : 'solid';
     if (shape !== 'Line') {
       meta.fillColor = cc.color;
       meta.fillOpacity = cc.fill == null ? 0.18 : cc.fill;

@@ -235,11 +235,12 @@ function connApplyToGeom(g, opts) {
     if (g.fillOpacity == null) g.fillOpacity = c.fill == null ? 0.18 : c.fill;
   }
   g.borderWidth = c.weight;
-  // A metro that flies over the road it follows is drawn dashed, so the road
-  // runs on underneath and shows through the gaps — the way every transit map
-  // has ever drawn a railway over a street. `overRoad` is set by the scan that
-  // measured the two alignments (services/ringFeatures.js), not guessed here.
-  g.lineStyle = (c.dash || g.proposed || g.overRoad) ? 'dashed' : 'solid';
+  // A metro that flies over a road is NOT dashed. Dashing it was the first
+  // answer to the two lines covering each other, and it is not a good one: it
+  // says something about the metro that is not true, and what the reader gets
+  // is one line with two colours in it rather than two lines. They are drawn
+  // side by side instead — see `shiftPx` in map/drawing.js.
+  g.lineStyle = (c.dash || g.proposed) ? 'dashed' : 'solid';
   if (!(opts && opts.silent) && typeof applyGeomStyle === 'function') applyGeomStyle(g);
   return before !== (g.borderColor + '|' + g.fillColor + '|' + g.borderWidth + '|' + g.lineStyle);
 }

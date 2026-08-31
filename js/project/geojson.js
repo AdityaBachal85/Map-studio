@@ -7,7 +7,13 @@
 
 /** One geometry as a GeoJSON Feature, style/metadata folded into `properties`. @param {object} g @returns {object} */
 function geomToGeoJSONFeature(g) {
-  const geometry = g.layer.toGeoJSON().geometry;
+  // A shifted line is DRAWN beside its alignment and IS on it. The file gets
+  // the real coordinates plus the shift, so the metro is where the metro is
+  // for anything that reads the geometry, and reopening redraws the same
+  // separation rather than shifting an already-shifted line again.
+  const geometry = (g._baseLatLngs && g.shape === 'Line')
+    ? { type: 'LineString', coordinates: g._baseLatLngs.map(c => [c[1], c[0]]) }
+    : g.layer.toGeoJSON().geometry;
   return {
     type: 'Feature',
     properties: {
@@ -35,6 +41,7 @@ function geomToGeoJSONFeature(g) {
       // hiding the road — the look survives nothing and the reason survives
       // less, which is the pair that makes a bug hard to find.
       overRoad: g.overRoad || undefined,
+      shiftPx: g.shiftPx || undefined,
       radius: g.shape === 'Circle' ? g.layer.getRadius() : undefined,
     },
     geometry,
@@ -110,6 +117,7 @@ function importGeoJSONFeature(feat) {
     proposed: props.proposed != null ? !!props.proposed : undefined,
     fromRing: props.fromRing != null ? !!props.fromRing : undefined,
     overRoad: props.overRoad != null ? !!props.overRoad : undefined,
+    shiftPx: props.shiftPx != null ? +props.shiftPx : undefined,
   });
   return true;
 }

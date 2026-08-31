@@ -183,9 +183,106 @@ function applyGeomStyle(g) {
     // to anything at all.
     applyFillPatternTo(g.layer, g.fillPattern, g.fillColor);
   }
+  ensureGeomShift(g);
   ensureGlow(g);
   ensureGeomLabel(g);
 }
+
+// ---------- sideways shift (two lines that share one alignment) ----------
+
+/*
+ * WHY THIS EXISTS. An elevated metro is mapped where it physically is: over
+ * the road it flies over. Drawn, two lines a few metres apart are one line at
+ * any zoom a connectivity sheet uses, so one covered the other completely and
+ * only one of the two features was on the map.
+ *
+ * WHY PIXELS AND NOT METRES. A separation that reads has to be a separation
+ * the reader can see, and that is a screen distance, not a ground distance.
+ * Sixty metres is four pixels at 1:100000 and sixty pixels at 1:5000 — the
+ * first is invisible, the second puts the metro in the next street. So the
+ * shift is held in pixels and the coordinates are recomputed whenever the zoom
+ * changes, which is what `offsetPx` on a route has always done (map/routes.js)
+ * and is the same idea applied to a drawn shape.
+ *
+ * The shape keeps its real coordinates in `_baseLatLngs` and draws the shifted
+ * ones. Everything that persists a shape — the saved file, the undo snapshot,
+ * the measurement — reads the base, so what is stored is where the metro
+ * actually is and the shift stays a property of the drawing.
+ */
+
+/** One step of separation, in screen pixels. Two 4px lines 7px apart leave 3px of air. */
+const GEOM_SHIFT_STEP = 7;
+
+/** A shape's real coordinates, whatever it is currently drawn at. @param {object} g */
+function geomTrueLatLngs(g) {
+  return g._baseLatLngs || latLngsToArrays(g.layer.getLatLngs());
+}
+
+/**
+ * A polyline moved sideways by `px` screen pixels, perpendicular to itself.
+ *
+ * The normal at each point is averaged from the segments either side of it, so
+ * the offset line turns corners with the original instead of tearing open at
+ * them. A zero-length segment (two identical points, which OSM does contain)
+ * reuses the last good normal rather than producing NaN and erasing the line.
+ *
+ * @param {Array<[number,number]>} coords @param {number} px
+ * @returns {Array<[number,number]>}
+ */
+function geomOffsetLatLngs(coords, px) {
+  if (!px || !coords || coords.length < 2) return coords;
+  const pts = coords.map(c => map.latLngToLayerPoint(L.latLng(c[0], c[1])));
+  const out = [];
+  let lastNx = 0, lastNy = -1;
+  for (let i = 0; i < pts.length; i++) {
+    let dx = 0, dy = 0;
+    if (i > 0) { dx += pts[i].x - pts[i - 1].x; dy += pts[i].y - pts[i - 1].y; }
+    if (i < pts.length - 1) { dx += pts[i + 1].x - pts[i].x; dy += pts[i + 1].y - pts[i].y; }
+    const len = Math.hypot(dx, dy);
+    let nx, ny;
+    if (len < 0.001) { nx = lastNx; ny = lastNy; }
+    else { nx = -dy / len; ny = dx / len; lastNx = nx; lastNy = ny; }
+    const ll = map.layerPointToLatLng(L.point(pts[i].x + nx * px, pts[i].y + ny * px));
+    out.push([ll.lat, ll.lng]);
+  }
+  return out;
+}
+
+/**
+ * Draw a line at its shift, or put it back if the shift has been turned off.
+ * Called from applyGeomStyle, so nothing has to remember to call it.
+ * @param {object} g
+ */
+function ensureGeomShift(g) {
+  if (g.shape !== 'Line') return;
+  if (!g.shiftPx) {
+    if (g._baseLatLngs) { g.layer.setLatLngs(g._baseLatLngs); g._baseLatLngs = null; }
+    return;
+  }
+  if (!g._baseLatLngs) g._baseLatLngs = latLngsToArrays(g.layer.getLatLngs());
+  g.layer.setLatLngs(geomOffsetLatLngs(g._baseLatLngs, g.shiftPx));
+}
+
+/**
+ * Recompute every shifted line for the zoom now on screen.
+ *
+ * A pixel separation is only a pixel separation at one zoom; without this the
+ * shift is baked in at whatever zoom the shape was added at, and zooming in
+ * walks the metro off the road it is meant to run beside.
+ */
+function refreshGeomShifts() {
+  if (typeof geometries === 'undefined') return;
+  geometries.forEach(g => {
+    if (!g.shiftPx || g.shape !== 'Line' || !g._baseLatLngs) return;
+    g.layer.setLatLngs(geomOffsetLatLngs(g._baseLatLngs, g.shiftPx));
+    if (g.glowLayer) syncGlowGeometry(g);
+    if (g.labelMarker) g.labelMarker.setLatLng(geomLabelLatLng(g));
+  });
+}
+
+// `viewreset` as well as `zoomend`: a basemap change or a container resize
+// rebuilds the layer points without ever firing a zoom event.
+map.on('zoomend viewreset', refreshGeomShifts);
 
 // ---------- glow halo (a wider, translucent under-layer that tracks the shape) ----------
 
@@ -298,7 +395,12 @@ function measureForLayer(shape, layer) {
 
 /** Push the live measurement into a geometry's card and, if `live`, the floating readout. Also keeps the glow halo and on-map label tracking the shape as it moves. @param {object} g @param {boolean} [live] */
 function updateGeomMeasurement(g, live) {
-  const m = measureForLayer(g.shape, g.layer);
+  // Measured on the real line. A parallel curve is longer than the curve it
+  // was offset from, so measuring the drawn one reports a road that is a few
+  // per cent longer than it is — a number somebody puts in front of a client.
+  const m = (g._baseLatLngs && g.shape === 'Line')
+    ? measureForLayer('Line', L.polyline(g._baseLatLngs))
+    : measureForLayer(g.shape, g.layer);
   g.measureText = m.text;
   if (g.card) { const el = g.card.querySelector('.geom-measure'); if (el) el.textContent = m.text; }
   if (g.glowLayer) syncGlowGeometry(g);
@@ -401,6 +503,10 @@ function applyGeomCoords(g, geom) {
   if (g.shape === 'Marker' || g.shape === 'CircleMarker' || g.shape === 'Label') g.layer.setLatLng([geom.lat, geom.lng]);
   else if (g.shape === 'Circle') { g.layer.setLatLng([geom.lat, geom.lng]); g.layer.setRadius(geom.radius); }
   else if (g.shape === 'Rectangle') g.layer.setBounds(geom.bounds);
+  // A snapshot holds where the line really is. For a shifted line that is the
+  // base, and the drawn position is derived from it — writing the snapshot
+  // straight onto the layer would make the shifted position the new truth.
+  else if (g.shiftPx && g.shape === 'Line') { g._baseLatLngs = geom.latlngs; ensureGeomShift(g); }
   else g.layer.setLatLngs(geom.latlngs);
 }
 
@@ -418,7 +524,12 @@ function snapshotGeom(g) {
     cls: g.cls, proposed: g.proposed, fromRing: g.fromRing, overRoad: g.overRoad,
     // Where a converted contour came from, so an undone delete is still one.
     fromContour: g.fromContour, contourLevel: g.contourLevel, contourMapId: g.contourMapId,
-    createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),
+    // Sideways shift included, and the coordinates taken from the base rather
+    // than the drawn line — restoring a shifted line from its drawn position
+    // and then shifting it again walks it one step further off every undo.
+    shiftPx: g.shiftPx,
+    createdAt: g.createdAt,
+    geom: g._baseLatLngs ? { latlngs: g._baseLatLngs } : extractGeomCoords(g.shape, g.layer),
   };
 }
 
@@ -455,6 +566,15 @@ function attachGeomLayerEvents(g) {
   layer.on('pm:edit pm:markerdragend pm:dragend pm:rotateend', () => {
     const before = editSnapshots.get(g.id);
     editSnapshots.delete(g.id);
+    // DRAGGING A SHIFTED LINE BAKES ITS SHIFT IN. What somebody drags is what
+    // they meant to place, and a line that sprang 7px sideways the moment they
+    // let go of it would be a shape fighting its own editor. The separation is
+    // theirs to keep or remove from here.
+    if (g.shiftPx && g._baseLatLngs) {
+      g._baseLatLngs = null;
+      g.shiftPx = 0;
+      g.overRoad = false;
+    }
     touchGeom(g);
     updateGeomMeasurement(g);
     if (before) pushUndo({ type: 'edit', id: g.id, before, after: snapshotGeom(g) });
