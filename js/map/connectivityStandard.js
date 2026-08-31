@@ -104,6 +104,70 @@ const CONNECTIVITY_DEFAULT_CLASS = 'major';
  */
 const CONNECTIVITY_PROPOSED_DASH = '10,7';
 
+/**
+ * Bottom to top: which class covers which.
+ *
+ * Two lines a few metres apart are the same line at any zoom a connectivity
+ * sheet is drawn at, so one of them covers the other completely. Which one won
+ * used to be down to the order the shapes happened to be added in — so a metro
+ * over an arterial road showed the metro on one scan and the road on the next,
+ * with nothing in between to explain it. The reader cannot see an insertion
+ * order, and a map that answers a different question depending on it is not a
+ * map anybody can rely on.
+ *
+ * The order is by what the reader needs to be able to find, not by importance
+ * in the abstract:
+ *
+ *   - Ground cover is at the bottom because it is a wash. Everything on the
+ *     sheet is drawn ON the land, not under it.
+ *   - Water next: roads bridge over rivers, and a river drawn over the bridge
+ *     reads as a road that stops at the bank.
+ *   - Then roads, in ascending importance, so the expressway survives its
+ *     junction with a side street.
+ *   - Then what rides over a road — metro and railway — because those are the
+ *     ones that were vanishing, and they are drawn dashed when they share an
+ *     alignment so the road still reads underneath.
+ *   - Power last. An HT line is the one thing on the map that says "you cannot
+ *     build here", and it must never be the thing hidden by a road.
+ *
+ * Anything not listed sorts with `major`, in the middle.
+ */
+const CONNECTIVITY_STACK = [
+  'farmland', 'green', 'builtUp', 'industrial', 'commercial', 'building', 'substation',
+  'water',
+  'major', 'ring', 'airportRoad', 'expressway',
+  'railway', 'metro',
+  'powerMinor', 'powerLine',
+];
+
+/** @param {string} cls @returns {number} */
+function connStackRank(cls) {
+  const i = CONNECTIVITY_STACK.indexOf(cls);
+  return i < 0 ? CONNECTIVITY_STACK.indexOf('major') : i;
+}
+
+/**
+ * Put every classed shape in its place in the stack.
+ *
+ * Leaflet draws an SVG path in document order, and `bringToFront` moves one to
+ * the end of its group. Walking the shapes in ascending stack order and
+ * fronting each in turn leaves them in exactly that order, which is why this
+ * is a sort and not a pile of individual bringToFront calls scattered around
+ * the code that would fight each other.
+ *
+ * Markers are left alone: they are not paths, they live in their own pane
+ * above all of this already, and `bringToFront` does not exist on them.
+ */
+function restackClassedShapes() {
+  if (typeof geometries === 'undefined') return 0;
+  const paths = geometries.filter(g => g.cls && g.layer && typeof g.layer.bringToFront === 'function');
+  paths
+    .slice()
+    .sort((a, b) => connStackRank(a.cls) - connStackRank(b.cls))
+    .forEach(g => { try { g.layer.bringToFront(); } catch (e) { /* not on the map yet */ } });
+  return paths.length;
+}
+
 /** @param {string} id @returns {object|null} */
 function connClass(id) {
   return CONNECTIVITY_CLASSES.find(c => c.id === id) || null;
@@ -171,7 +235,11 @@ function connApplyToGeom(g, opts) {
     if (g.fillOpacity == null) g.fillOpacity = c.fill == null ? 0.18 : c.fill;
   }
   g.borderWidth = c.weight;
-  g.lineStyle = (c.dash || g.proposed) ? 'dashed' : 'solid';
+  // A metro that flies over the road it follows is drawn dashed, so the road
+  // runs on underneath and shows through the gaps — the way every transit map
+  // has ever drawn a railway over a street. `overRoad` is set by the scan that
+  // measured the two alignments (services/ringFeatures.js), not guessed here.
+  g.lineStyle = (c.dash || g.proposed || g.overRoad) ? 'dashed' : 'solid';
   if (!(opts && opts.silent) && typeof applyGeomStyle === 'function') applyGeomStyle(g);
   return before !== (g.borderColor + '|' + g.fillColor + '|' + g.borderWidth + '|' + g.lineStyle);
 }
@@ -269,6 +337,10 @@ function connApplyAll(opts) {
   }
   if (typeof geometries !== 'undefined') {
     geometries.forEach(g => { if (connApplyToGeom(g, opts)) n++; });
+    // Unconditionally, not `if (n)`: a project that reopens with every shape
+    // already correctly styled still has to be stacked, and it is the reopen
+    // case where an arbitrary order is most visible.
+    restackClassedShapes();
   }
   if (n && typeof rebuildLegend === 'function') rebuildLegend();
   return n;

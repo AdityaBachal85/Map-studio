@@ -360,6 +360,100 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('and a station the scan just found can be routed to straight away',
     scan.routable === true);
 
+  /* -- a metro over a road, drawn so both can still be seen ---------------- */
+
+  // The maths that decides this is proved in diagnostics/ring-alignment.cjs
+  // without a browser. What is proved here is the other half: that the shape
+  // it produces reaches the map, is drawn dashed, and lands ABOVE the road it
+  // covers instead of wherever the insertion order happened to put it.
+  const over = await p.evaluate(() => {
+    const geomBefore = geometries.length;
+    const road = [], metro = [];
+    for (let m = 0; m <= 4000; m += 100) {
+      const lng = 72.80 + m / (111320 * Math.cos(19.2 * Math.PI / 180));
+      road.push([19.20, lng]);
+      metro.push([19.20 + 8 / 111320, lng]);          // 8 m north — over the road
+    }
+    const found = joinRingFeatures([
+      { kind: 'line', classId: 'arterial', name: 'LBS Marg', pts: road, parts: 1, km: 4 },
+      { kind: 'line', classId: 'arterial', name: 'LBS Marg', parts: 1, km: 3.9,
+        pts: road.map(p => [p[0] + 18 / 111320, p[1]]) },   // the other carriageway
+      { kind: 'line', classId: 'metro', name: 'Metro Line 4', pts: metro, parts: 1, km: 4 },
+    ]);
+    ringScanState = { loc: null, km: 5, ids: [], picked: new Set(found.map((f, i) => i)), result: found };
+    keepRingScanSelection();
+    const made = geometries.slice(geomBefore);
+    const road2 = made.find(g => g.cls === 'major');
+    const rail = made.find(g => g.cls === 'metro');
+    // Document order IS paint order in an SVG group: later siblings are on top.
+    const paths = [...document.querySelectorAll('#mapWrap svg path')];
+    return {
+      rows: found.length,
+      names: made.map(g => g.name),
+      roadStyle: road2 && road2.lineStyle,
+      railStyle: rail && rail.lineStyle,
+      railDashArray: rail && rail.layer._path && rail.layer._path.getAttribute('stroke-dasharray'),
+      railOverRoad: rail && rail.overRoad === true,
+      railAbove: (road2 && rail) ? paths.indexOf(rail.layer._path) > paths.indexOf(road2.layer._path) : null,
+      carriageways: found.filter(f => f.classId === 'arterial').map(f => f.carriageways || 1),
+    };
+  });
+  // The complaint this answers: "if a road have 4 lane it will mark 4 lane, we
+  // have to mark only one."
+  ck('a divided road ticked in the scan reaches the map as ONE line',
+    over.rows === 2 && over.names.filter(n => /LBS Marg/.test(n)).length === 1,
+    over.names.join(' | '));
+  ck('and it knows it is both carriageways',
+    over.carriageways.join() === '2', over.carriageways.join());
+  // The other half: "sometimes metro is visible not road and sometimes vice
+  // versa — both should be visible."
+  ck('the metro over it is drawn dashed, so the road reads through the gaps',
+    over.railStyle === 'dashed' && !!over.railDashArray,
+    over.railStyle + ' / ' + over.railDashArray);
+  ck('the road under it stays solid — the dash is a fact about the metro',
+    over.roadStyle === 'solid', over.roadStyle);
+  ck('and the metro is painted above the road, not wherever it was added',
+    over.railAbove === true, String(over.railAbove));
+  ck('with the reason recorded on the shape, so a reopened project still knows',
+    over.railOverRoad === true);
+
+  // The stack is over the WHOLE map, not just what a scan added. A metro added
+  // now has to go above a road added an hour ago — the old pass only ever
+  // looked at the shapes of its own scan, which is exactly the case that broke.
+  const restacked = await p.evaluate(() => {
+    const road = geometries.find(g => g.cls === 'major');
+    const rail = geometries.find(g => g.cls === 'metro');
+    road.layer.bringToFront();                      // put the road on top by hand
+    const paths0 = [...document.querySelectorAll('#mapWrap svg path')];
+    const before = paths0.indexOf(rail.layer._path) > paths0.indexOf(road.layer._path);
+    restackClassedShapes();
+    const paths1 = [...document.querySelectorAll('#mapWrap svg path')];
+    return { before, after: paths1.indexOf(rail.layer._path) > paths1.indexOf(road.layer._path) };
+  });
+  ck('a shape shoved to the front out of order is put back where it belongs',
+    restacked.before === false && restacked.after === true, JSON.stringify(restacked));
+
+  // Reopening a project restyles every classed shape from its class. Without
+  // `overRoad` on the record that restyle turns the metro solid again and it
+  // goes straight back to hiding the road.
+  const reopened = await p.evaluate(() => {
+    const snap = JSON.parse(JSON.stringify(serialiseProject()));
+    const feat = (snap.geometries || [])
+      .find(x => (x.properties || {}).name === 'Metro Line 4');
+    clearProject();
+    applyProject(snap);
+    const rail = geometries.find(g => g.name === 'Metro Line 4');
+    connApplyAll();
+    return {
+      saved: feat && feat.properties.overRoad === true,
+      restored: rail && rail.overRoad === true,
+      style: rail && rail.lineStyle,
+    };
+  });
+  ck('the reason is written into the saved file', reopened.saved === true, String(reopened.saved));
+  ck('and comes back dashed when the project is reopened and restyled',
+    reopened.restored === true && reopened.style === 'dashed', JSON.stringify(reopened));
+
   /* -- the pin glyph, the project logo and the compass ---------------------- */
 
   // A TEARDROP WITH A HOLE IN IT IS A MAP PIN, and this library holds what goes

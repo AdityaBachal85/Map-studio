@@ -149,6 +149,10 @@ function ringScanItemRow(it, on) {
   let label = it.name || (it.kind === 'point' ? 'Unnamed' : 'Unnamed section');
   if (it.ref && it.name && it.ref !== it.name) label += ' (' + it.ref + ')';
   if (it.ofParts > 1) label += ' — ' + it.part + ' of ' + it.ofParts;
+  // Said on the row, not just in the tooltip: somebody looking at the imagery
+  // can count two carriageways and needs to know the one line is both of them,
+  // not half the road.
+  if (it.carriageways > 1) label += ' — ' + it.carriageways + ' carriageways as one';
   const tip = it.parts > 1 ? ' title="' + it.parts + ' OpenStreetMap segments joined into one line"' : '';
   return '<label class="chk"' + tip + '><input type="checkbox" data-scan-i="' + it._i + '"'
     + (on ? ' checked' : '') + '> ' + esc(label)
@@ -318,7 +322,8 @@ function keepRingScanSelection() {
     else if (f.pts) { layer = L.polyline(f.pts); shape = 'Line'; }
     if (!layer) return;
 
-    added.push(registerGeom(layer, shape, ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel)));
+    added.push(registerGeom(layer, shape,
+      ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, f.overRoad)));
     n++;
     if (f.kind === 'area') { placed += ringScanPinArea(f, name, clsId, iconKey); }
   });
@@ -338,13 +343,15 @@ function keepRingScanSelection() {
     });
   });
 
-  // Ground cover goes underneath. Added last, an area covers the roads and
-  // rail it was fetched to give context to — the exact opposite of why anyone
-  // fetched it.
-  added.forEach(g => {
-    const c = typeof connClass === 'function' ? connClass(g.cls) : null;
-    if (c && c.kind === 'area' && g.layer && g.layer.bringToBack) g.layer.bringToBack();
-  });
+  // Put the whole map back in class order, not just what was added.
+  //
+  // This was a bringToBack over the new areas, which handled the case it was
+  // written for — ground cover fetched last covering the roads it was fetched
+  // to give context to — and no other. It could not put a metro added now
+  // above a road added an hour ago, because it only ever looked at `added`,
+  // and that is the case where the two lines sit on top of each other and one
+  // of them disappears. See CONNECTIVITY_STACK for the order and why.
+  if (typeof restackClassedShapes === 'function') restackClassedShapes();
 
   closeRingScan();
   if (typeof rebuildLegend === 'function') rebuildLegend();
@@ -428,13 +435,18 @@ function ringScanPointOf(f) {
  * @param {boolean} [wantLabel] Whether to caption it on the map.
  * @returns {object}
  */
-function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel) {
+function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad) {
   const cc = typeof connClass === 'function' ? connClass(clsId) : null;
   const meta = { name, cls: clsId, fromRing: true };
+  // A metro mapped along the road it flies over. Carried on the shape so it
+  // survives a save and a restyle, rather than being re-measured every time
+  // the standard is applied — the two alignments do not change, and the scan
+  // that compared them is the only place with both lines in hand.
+  if (overRoad) meta.overRoad = true;
   if (cc) {
     meta.borderColor = cc.color;
     meta.borderWidth = cc.weight;
-    meta.lineStyle = cc.dash ? 'dashed' : 'solid';
+    meta.lineStyle = (cc.dash || overRoad) ? 'dashed' : 'solid';
     if (shape !== 'Line') {
       meta.fillColor = cc.color;
       meta.fillOpacity = cc.fill == null ? 0.18 : cc.fill;

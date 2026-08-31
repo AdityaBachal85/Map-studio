@@ -329,6 +329,138 @@ function ringPathKm(pts) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Does one line run along another?
+ *
+ * Two questions in this file need the same measurement. A dual carriageway is
+ * two ways that never touch, so the joiner cannot chain them and the road is
+ * drawn twice. An elevated metro is mapped along the road it flies over, so
+ * the two are drawn on top of each other and only one of them is visible.
+ * Both are "these two lines follow the same alignment", differing only in how
+ * close is close enough and what is done about it.
+ *
+ * Measured in a local planar frame rather than with great-circle maths. Over
+ * the few kilometres a ring covers the error is far below the tolerances here,
+ * and the flat version is a hundred times cheaper — which matters, because a
+ * city-scale scan can hold hundreds of lines to compare.
+ * ------------------------------------------------------------------------ */
+
+/** Degrees to km, at this latitude. @param {number} lat @returns {[number,number]} */
+function ringKmPerDeg(lat) {
+  return [111.32, 111.32 * Math.cos(lat * Math.PI / 180)];
+}
+
+/**
+ * A polyline as [x, y] kilometres from an arbitrary local origin.
+ * @param {Array<[number,number]>} pts @param {number} lat0 @returns {Array<[number,number]>}
+ */
+function ringToLocalKm(pts, lat0) {
+  const [ky, kx] = ringKmPerDeg(lat0);
+  return pts.map(p => [p[1] * kx, p[0] * ky]);
+}
+
+/** Shortest distance in km from point `p` to segment `a`-`b`, all local km. */
+function ringPtSegKm(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let x = a[0], y = a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 > 0) {
+    const t = Math.max(0, Math.min(1, ((p[0] - x) * dx + (p[1] - y) * dy) / len2));
+    x += dx * t; y += dy * t;
+  }
+  return Math.hypot(p[0] - x, p[1] - y);
+}
+
+/**
+ * Points spaced evenly ALONG a line, not its own vertices.
+ *
+ * The vertices are no good for this: OSM puts fifty of them round a curve and
+ * two down a straight kilometre, so a test that walked them would weigh the
+ * curve fifty times as heavily as the straight — and report that two roads
+ * diverge because they happen to bend in different places.
+ *
+ * @param {Array<[number,number]>} xy Local km. @param {number} n
+ * @returns {Array<[number,number]>}
+ */
+function ringSampleAlong(xy, n) {
+  if (xy.length < 2) return xy.slice();
+  const seg = [];
+  let total = 0;
+  for (let i = 1; i < xy.length; i++) {
+    const d = Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]);
+    seg.push(d); total += d;
+  }
+  if (!(total > 0)) return [xy[0]];
+  const out = [];
+  const step = total / (n - 1);
+  let i = 1, along = 0;
+  for (let k = 0; k < n; k++) {
+    const want = Math.min(k * step, total);
+    while (i < xy.length - 1 && along + seg[i - 1] < want) { along += seg[i - 1]; i++; }
+    const t = seg[i - 1] > 0 ? (want - along) / seg[i - 1] : 0;
+    out.push([xy[i - 1][0] + (xy[i][0] - xy[i - 1][0]) * t,
+      xy[i - 1][1] + (xy[i][1] - xy[i - 1][1]) * t]);
+  }
+  return out;
+}
+
+/** How many samples to test a line at. Enough to describe a road, few enough to stay cheap. */
+const RING_FOLLOW_SAMPLES = 48;
+
+/**
+ * What fraction of `probe` lies within `tolKm` of `ref`.
+ *
+ * 1 means the probe never leaves the corridor around the reference line; 0
+ * means it is never inside it. Direction-blind on purpose — the second
+ * carriageway of a road runs the opposite way, and that is not a difference
+ * anybody looking at the map can see.
+ *
+ * @param {Array<[number,number]>} probe lat/lng pairs
+ * @param {Array<[number,number]>} ref lat/lng pairs
+ * @param {number} tolKm @returns {number} 0..1
+ */
+function ringFollowFrac(probe, ref, tolKm) {
+  if (!probe || !ref || probe.length < 2 || ref.length < 2) return 0;
+  const lat0 = probe[0][0];
+  const p = ringSampleAlong(ringToLocalKm(probe, lat0), RING_FOLLOW_SAMPLES);
+  const r = ringToLocalKm(ref, lat0);
+  let inside = 0;
+  for (let i = 0; i < p.length; i++) {
+    let best = Infinity;
+    for (let j = 1; j < r.length && best > tolKm; j++) {
+      const d = ringPtSegKm(p[i], r[j - 1], r[j]);
+      if (d < best) best = d;
+    }
+    if (best <= tolKm) inside++;
+  }
+  return inside / p.length;
+}
+
+/**
+ * Bounding boxes overlap, cheaply, before the real test.
+ *
+ * The corridor test is O(samples x segments); a scan over a city can hold two
+ * hundred lines, and comparing every pair of them properly would take longer
+ * than the download did. Almost every pair is nowhere near the other, and this
+ * says so in a dozen comparisons.
+ */
+function ringBoxesNear(a, b, padDeg) {
+  return !(a.w > b.e + padDeg || a.e < b.w - padDeg
+    || a.s > b.n + padDeg || a.n < b.s - padDeg);
+}
+
+/** @param {Array<[number,number]>} pts @returns {{n:number,s:number,e:number,w:number}} */
+function ringBox(pts) {
+  let n = -Infinity, s = Infinity, e = -Infinity, w = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i][0] > n) n = pts[i][0];
+    if (pts[i][0] < s) s = pts[i][0];
+    if (pts[i][1] > e) e = pts[i][1];
+    if (pts[i][1] < w) w = pts[i][1];
+  }
+  return { n, s, e, w };
+}
+
+/* ---------------------------------------------------------------------------
  * Joining the pieces back together
  *
  * OSM does not store "Swami Vivekanand Road" as one line. It stores it as a
@@ -476,18 +608,24 @@ function joinRingFeatures(features) {
   const merged = joinChainsByName(allChains, near);
 
   // A dual carriageway is two ways that never touch, so one road can still end
-  // up as two chains. Numbering them says "these are halves of one thing"
-  // rather than leaving two identical rows looking like a duplicate bug.
-  // Counted after the cross-class merge, or the numbering describes a split
-  // that has since been repaired.
+  // up as two chains — and drawn, that is one road with two lines down it.
+  // Collapsed to one before anything else looks at the list.
+  const single = collapseCarriageways(merged);
+
+  // What is LEFT numbered. Two chains of the same name that are not carriageways
+  // of each other are genuinely two stretches — a road severed by a river and
+  // picked up again on the far side — and numbering says "these are halves of
+  // one thing" rather than leaving two rows looking like a duplicate bug.
+  // Counted after both merges, or the numbering describes a split that has
+  // since been repaired.
   const byName = new Map();
-  merged.forEach(c => {
+  single.forEach(c => {
     const k = roadNameKey(c.name || '');
     if (!k) return;
     byName.set(k, (byName.get(k) || 0) + 1);
   });
   const seen = new Map();
-  merged.forEach(c => {
+  single.forEach(c => {
     const k = roadNameKey(c.name || '');
     if (k && byName.get(k) > 1) {
       const n = (seen.get(k) || 0) + 1;
@@ -498,10 +636,145 @@ function joinRingFeatures(features) {
     out.push(c);
   });
 
+  // Which lines share an alignment with a road. Nothing is moved or dropped —
+  // this only marks them, and the map decides what to do about it.
+  markSharedAlignments(out);
+
   // Longest first. The 12 km expressway is what somebody scanned for; a 90 m
   // slip road is not, and it should not be what they see at the top of a list.
   out.sort((a, b) => (b.km || 0) - (a.km || 0));
   return out;
+}
+
+/** ~45 m. Wide enough for an expressway median, narrow enough to exclude the next street. */
+const RING_CARRIAGEWAY_KM = 0.045;
+
+/** Three quarters. Dropping a line is severe, so the evidence has to be strong. */
+const RING_CARRIAGEWAY_FRAC = 0.75;
+
+/**
+ * Draw a divided road once, not once per carriageway.
+ *
+ * A dual carriageway is two separate ways in OSM — one per direction — running
+ * ten to forty metres apart and never touching. The joiner cannot chain them,
+ * because chaining is endpoint-to-endpoint and these have no endpoint in
+ * common. So a four-lane divided highway arrived as two lines, and a scan of a
+ * junction where each direction is split again arrived as four. On the map
+ * that is one road drawn as a bundle, and in the list it is the same name
+ * repeated.
+ *
+ * The test is geometric, not tag-based. `dual_carriageway`, `oneway` and
+ * `lanes` are all inconsistently applied, and none of them says WHICH other
+ * way is the other half. "Runs alongside this one for most of its length" is
+ * the thing actually being asked, so it is the thing measured.
+ *
+ * Two guards against deleting a road that should have stayed:
+ *
+ *   - Both sides must carry the same road identity — the same name, or the
+ *     same ref. Two unnamed lines running parallel are just as likely to be a
+ *     road and its service lane, or a road and a footpath beside it.
+ *   - Three quarters of the shorter line must lie inside a 45 m corridor of
+ *     the longer. A road that merely starts out parallel and then diverges is
+ *     a different road, and has to survive.
+ *
+ * The survivor is the longer chain, and it records how many carriageways went
+ * into it so the row can say so rather than quietly showing one line where the
+ * reader counted two on the imagery.
+ *
+ * @param {object[]} chains @returns {object[]}
+ */
+function collapseCarriageways(chains) {
+  // Longest first: the keeper should be the fullest version of the road, and
+  // a short stub tested against a long chain is the way round that gives the
+  // fraction its meaning.
+  const order = chains.slice().sort((a, b) => (b.km || 0) - (a.km || 0));
+  const kept = [];
+  const dropped = new Set();
+
+  for (let i = 0; i < order.length; i++) {
+    const c = order[i];
+    if (c.kind !== 'line' || !c.pts || c.pts.length < 2) { kept.push(c); continue; }
+    const key = roadNameKey(c.name || '');
+    const ref = roadNameKey(c.ref || '');
+    if (!key && !ref) { kept.push(c); continue; }
+    c._box = c._box || ringBox(c.pts);
+    kept.push(c);
+
+    for (let j = i + 1; j < order.length; j++) {
+      const o = order[j];
+      if (dropped.has(o) || o.kind !== 'line' || !o.pts || o.pts.length < 2) continue;
+      const oKey = roadNameKey(o.name || '');
+      const oRef = roadNameKey(o.ref || '');
+      // Same road, said either way round. A carriageway often carries the ref
+      // and not the name, or the name and not the ref.
+      const same = (key && oKey && key === oKey) || (ref && oRef && ref === oRef);
+      if (!same) continue;
+      o._box = o._box || ringBox(o.pts);
+      if (!ringBoxesNear(c._box, o._box, RING_CARRIAGEWAY_KM / 111.32 * 2)) continue;
+      if (ringFollowFrac(o.pts, c.pts, RING_CARRIAGEWAY_KM) < RING_CARRIAGEWAY_FRAC) continue;
+      dropped.add(o);
+      c.carriageways = (c.carriageways || 1) + (o.carriageways || 1);
+      // The absorbed half may hold the name or the ref the keeper lacks.
+      if (!c.name && o.name) c.name = o.name;
+      if (!c.ref && o.ref) c.ref = o.ref;
+      c.parts = (c.parts || 1) + (o.parts || 1);
+    }
+  }
+
+  const survivors = kept.filter(c => !dropped.has(c));
+  survivors.forEach(c => { delete c._box; });
+  return survivors;
+}
+
+/** ~30 m. A viaduct stands over the carriageway or the median it follows. */
+const RING_SHARED_KM = 0.030;
+
+/** A fifth. The consequence is a dash, not a deletion, so the bar is low. */
+const RING_SHARED_FRAC = 0.20;
+
+/** Classes that are a road, and classes that ride over one. */
+const RING_ROAD_CLASSES = ['expressway', 'highway', 'arterial'];
+const RING_OVER_ROAD_CLASSES = ['metro', 'rail'];
+
+/**
+ * Mark the lines that run along a road, so both can still be seen.
+ *
+ * An elevated metro is mapped where it physically is: over the road it follows.
+ * Two lines a few metres apart are the same line at any zoom a connectivity
+ * sheet is drawn at, so one covered the other completely — and WHICH one
+ * covered which was down to the order the scan happened to add them in, which
+ * is why it looked like the metro sometimes and the road sometimes.
+ *
+ * Nothing is moved. Displacing a metro sideways would need the shift measured
+ * in pixels to hold at every zoom, and a metre offset that reads at 1:100000
+ * puts the line in the wrong street at 1:5000. The line is marked instead, and
+ * the map draws a marked line dashed and on top — so the road runs on
+ * underneath and shows through the gaps, which is how every transit map has
+ * ever drawn a railway over a street.
+ *
+ * @param {object[]} features Mutated in place; `overRoad` set on the rail side.
+ */
+function markSharedAlignments(features) {
+  const roads = features.filter(f => f.kind === 'line' && f.pts && f.pts.length > 1
+    && RING_ROAD_CLASSES.indexOf(f.classId) >= 0);
+  if (!roads.length) return;
+  roads.forEach(r => { r._box = ringBox(r.pts); });
+  const pad = RING_SHARED_KM / 111.32 * 2;
+
+  features.forEach(f => {
+    if (f.kind !== 'line' || !f.pts || f.pts.length < 2) return;
+    if (RING_OVER_ROAD_CLASSES.indexOf(f.classId) < 0) return;
+    const box = ringBox(f.pts);
+    for (let i = 0; i < roads.length; i++) {
+      if (!ringBoxesNear(box, roads[i]._box, pad)) continue;
+      if (ringFollowFrac(f.pts, roads[i].pts, RING_SHARED_KM) >= RING_SHARED_FRAC) {
+        f.overRoad = true;
+        return;
+      }
+    }
+  });
+
+  roads.forEach(r => { delete r._box; });
 }
 
 /**
@@ -916,4 +1189,18 @@ function ringFeatureMessage(reason, ctx) {
 /** Whether a failure is worth offering a retry for. */
 function ringFeatureRetryable(reason) {
   return reason === 'network' || reason === 'http-429' || /^http-5/.test(reason || '');
+}
+
+/* Node/test interop — harmless in the browser. The geometry below is pure
+   arithmetic over coordinate arrays, and it decides whether a road is drawn
+   once or twice. That is worth proving where there is no map to hide it. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    joinRingFeatures, joinChainsByName, roadNameKey, joinableNames,
+    collapseCarriageways, markSharedAlignments,
+    ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
+    ringPathKm, simplifyLatLngs,
+    RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,
+    RING_CARRIAGEWAY_KM, RING_CARRIAGEWAY_FRAC, RING_SHARED_KM, RING_SHARED_FRAC,
+  };
 }

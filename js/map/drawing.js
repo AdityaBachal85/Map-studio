@@ -415,7 +415,7 @@ function snapshotGeom(g) {
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
-    cls: g.cls, proposed: g.proposed, fromRing: g.fromRing,
+    cls: g.cls, proposed: g.proposed, fromRing: g.fromRing, overRoad: g.overRoad,
     // Where a converted contour came from, so an undone delete is still one.
     fromContour: g.fromContour, contourLevel: g.contourLevel, contourMapId: g.contourMapId,
     createdAt: g.createdAt, geom: extractGeomCoords(g.shape, g.layer),

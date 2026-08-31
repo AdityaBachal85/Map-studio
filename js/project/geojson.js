@@ -30,6 +30,11 @@ function geomToGeoJSONFeature(g) {
       // loses its rows. The look survives and the meaning does not, which is
       // the worst of the two to lose.
       cls: g.cls || undefined, proposed: g.proposed || undefined, fromRing: g.fromRing || undefined,
+      // A metro drawn dashed because it flies over a road. Without this a
+      // reopened project restyles it solid from its class and it goes back to
+      // hiding the road — the look survives nothing and the reason survives
+      // less, which is the pair that makes a bug hard to find.
+      overRoad: g.overRoad || undefined,
       radius: g.shape === 'Circle' ? g.layer.getRadius() : undefined,
     },
     geometry,
@@ -104,6 +109,7 @@ function importGeoJSONFeature(feat) {
     cls: props.cls || undefined,
     proposed: props.proposed != null ? !!props.proposed : undefined,
     fromRing: props.fromRing != null ? !!props.fromRing : undefined,
+    overRoad: props.overRoad != null ? !!props.overRoad : undefined,
   });
   return true;
 }
