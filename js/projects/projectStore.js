@@ -153,6 +153,10 @@ async function localProjectsSave(rec) {
   const meta = {
     id,
     name: String(rec.name || 'Untitled project').trim() || 'Untitled project',
+    // WHERE THE PROJECT IS. On the record rather than in the payload because
+    // the list has to filter on it without loading every project's document —
+    // a hundred maps would be a hundred reads to answer one search.
+    place: String(rec.place == null ? (prev ? prev.place : '') : rec.place).trim(),
     ownerId: rec.ownerId,
     ownerName: rec.ownerName || '',
     created: prev ? prev.created : now,
@@ -170,10 +174,15 @@ async function localProjectsSave(rec) {
   return ok ? meta : null;
 }
 
-/** @param {string} id @param {string} name @returns {Promise<boolean>} */
-async function localProjectsRename(id, name) {
+/**
+ * @param {string} id @param {string} name
+ * @param {string} [place] undefined leaves the location alone; '' clears it
+ * @returns {Promise<boolean>}
+ */
+async function localProjectsRename(id, name, place) {
   const meta = await localProjectsMeta(id);
   if (!meta) return false;
+  if (place !== undefined) meta.place = String(place || '').trim();
   meta.name = String(name || '').trim() || meta.name;
   meta.modified = Date.now();
   return await projectsTx(PROJECTS_META, 'readwrite', tx => tx.objectStore(PROJECTS_META).put(meta));
@@ -197,6 +206,7 @@ async function localProjectsDuplicate(id, ownerId) {
   if (!meta || !payload) return null;
   return await localProjectsSave({
     name: meta.name + ' (copy)',
+    place: meta.place || '',
     ownerId: ownerId || meta.ownerId,
     ownerName: meta.ownerName,
     project: payload,
@@ -278,9 +288,14 @@ async function projectsSave(rec) {
   return projectsCloudMode() ? await cloudProjectsSave(rec) : await localProjectsSave(rec);
 }
 
-/** @param {string} id @param {string} name @returns {Promise<boolean>} */
-async function projectsRename(id, name) {
-  return projectsCloudMode() ? await cloudProjectsRename(id, name) : await localProjectsRename(id, name);
+/**
+ * @param {string} id @param {string} name @param {string} [place]
+ * @returns {Promise<boolean>}
+ */
+async function projectsRename(id, name, place) {
+  return projectsCloudMode()
+    ? await cloudProjectsRename(id, name, place)
+    : await localProjectsRename(id, name, place);
 }
 
 /** @param {string} id @returns {Promise<boolean>} */

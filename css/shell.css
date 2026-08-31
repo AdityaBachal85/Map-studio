@@ -1196,3 +1196,124 @@ body.reduce-motion .pj-brand-glass::after { display: none; }
   object-fit: cover;
   object-position: center;
 }
+
+/* ---------------------------------------------------------------------------
+   The project dialog
+   ---------------------------------------------------------------------------
+   Naming a project used to be a browser prompt() — a grey Chrome strip at the
+   top of the window, in the browser's own type, with room for exactly one
+   field. That is why a project could be named and not placed.
+   --------------------------------------------------------------------------- */
+
+.pj-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 9, 18, .55);
+  backdrop-filter: blur(3px);
+  animation: pjFade .16s ease;
+}
+.pj-modal[hidden] { display: none; }
+@keyframes pjFade { from { opacity: 0; } }
+
+.pj-modal-card {
+  width: min(430px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--stroke2);
+  border-radius: 18px;
+  background: var(--surface-solid);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+  animation: pjRise .18s cubic-bezier(.22, .9, .3, 1);
+}
+@keyframes pjRise { from { transform: translateY(8px) scale(.985); opacity: 0; } }
+
+.pj-modal-card h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+.pj-modal-note { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); }
+
+.pj-field { display: block; margin-bottom: 13px; }
+.pj-field > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.pj-field > input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--field-edge, var(--stroke2));
+  border-radius: 10px;
+  background: var(--field, rgba(0, 0, 0, .28));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.pj-field > input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.pj-field > em {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-2);
+  opacity: .85;
+}
+
+.pj-modal-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* Its own classes rather than .btn/.btn-primary: those live in the studio's
+   stylesheets, which this page does not load — so the dialog opened with two
+   bare browser buttons in it, which is the very thing it exists to replace. */
+.pj-mbtn {
+  padding: 9px 15px;
+  border: 1px solid var(--stroke2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, transform .1s;
+}
+.pj-mbtn:hover { background: rgba(var(--text-rgb), .07); }
+.pj-mbtn:active { transform: translateY(1px); }
+.pj-mbtn.go {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font-weight: 700;
+}
+.pj-mbtn.go:hover { filter: brightness(1.06); background: linear-gradient(135deg, var(--orange), var(--orange2)); }
+.pj-mbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The location under a project's name in the list. Its own line rather than
+   appended to the name: a name and a place are two facts, and running them
+   together makes a project called "Kalyan, Thane". */
+.pj-name .p {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+.pj-name .p svg { opacity: .8; }
+.pj-name .dot { margin: 0 6px; opacity: .45; }

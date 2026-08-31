@@ -94,12 +94,69 @@
   }
 
   /* -------------------------------------------------------------------------
+   * The name-and-location dialog
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * Ask for a project's name and where it is.
+   *
+   * Replaces prompt(), which was a browser strip in the browser's own type with
+   * room for exactly one field — which is why a project could be named and not
+   * placed. Returns a promise so the callers read the way they did before.
+   *
+   * @param {object} o title, note, ok label, and the current name and place
+   * @returns {Promise<?{name:string, place:string}>} null if cancelled
+   */
+  function askProject(o) {
+    const wrap = $('pjModal');
+    const name = $('pjModalName');
+    const place = $('pjModalPlace');
+    $('pjModalTitle').textContent = o.title;
+    $('pjModalNote').textContent = o.note;
+    $('pjModalOk').textContent = o.ok;
+    name.value = o.name || '';
+    place.value = o.place || '';
+    wrap.hidden = false;
+    name.focus();
+    name.select();
+
+    return new Promise(resolve => {
+      const done = v => {
+        wrap.hidden = true;
+        wrap.removeEventListener('click', onBack);
+        document.removeEventListener('keydown', onKey);
+        $('pjModalOk').removeEventListener('click', onOk);
+        $('pjModalCancel').removeEventListener('click', onCancel);
+        resolve(v);
+      };
+      const onOk = () => done({ name: name.value.trim(), place: place.value.trim() });
+      const onCancel = () => done(null);
+      // Escape closes, Enter commits from either field — the two keys anybody
+      // reaches for, and the two the prompt() this replaced already had.
+      const onKey = e => {
+        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        else if (e.key === 'Enter' && wrap.contains(document.activeElement)) { e.preventDefault(); onOk(); }
+      };
+      const onBack = e => { if (e.target === wrap) onCancel(); };
+      $('pjModalOk').addEventListener('click', onOk);
+      $('pjModalCancel').addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+      wrap.addEventListener('click', onBack);
+    });
+  }
+
+  /* -------------------------------------------------------------------------
    * Rendering
    * ---------------------------------------------------------------------- */
 
   function visible() {
     const q = query.trim().toLowerCase();
-    const out = q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows.slice();
+    // Name OR location. Somebody looking for "the Thane one" knows where it is
+    // long before they remember what they called it.
+    const out = q
+      ? rows.filter(r => r.name.toLowerCase().includes(q)
+        || String(r.place || '').toLowerCase().includes(q))
+      : rows.slice();
     out.sort((a, b) => {
       if (sortKey === 'name') return a.name.localeCompare(b.name);
       if (sortKey === 'bytes') return (b.bytes || 0) - (a.bytes || 0);
@@ -148,7 +205,11 @@
                   </span>
                   <span class="tx">
                     <span class="t">${esc(p.name)}</span>
-                    <span class="s">${esc(summary(p.counts))}</span>
+                    <span class="s">${p.place ? `<span class="p"><svg viewBox="0 0 24 24" width="11" height="11"
+                        fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                        stroke-linejoin="round"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z"/>
+                        <circle cx="12" cy="10" r="2.4"/></svg>${esc(p.place)}</span><span class="dot">·</span>` : ''
+                      }${esc(summary(p.counts))}</span>
                   </span>
                 </div>
               </td>
@@ -282,9 +343,14 @@
     if (act === 'open') return openProject(id);
 
     if (act === 'rename') {
-      const name = prompt('Rename this project', meta.name);
-      if (name === null) return;
-      if (!await projectsRename(id, name)) alert('Could not rename — storage refused the write.');
+      const got = await askProject({
+        title: 'Project details', note: 'Rename it, or say where it is.',
+        ok: 'Save', name: meta.name, place: meta.place || '',
+      });
+      if (!got) return;
+      if (!await projectsRename(id, got.name || meta.name, got.place)) {
+        alert('Could not save — storage refused the write.');
+      }
       return refresh();
     }
 
@@ -400,10 +466,14 @@
 
   // New
   $('pjNew').addEventListener('click', async () => {
-    const name = prompt('Name this project', 'Untitled map project');
-    if (name === null) return;
+    const got = await askProject({
+      title: 'New project', note: 'Give it a name and say where it is.',
+      ok: 'Create project', name: '', place: '',
+    });
+    if (!got) return;
     const meta = await projectsSave({
-      name: name || 'Untitled map project',
+      name: got.name || 'Untitled map project',
+      place: got.place,
       ownerId: user.id,
       ownerName: user.name,
       // An empty document with the shape applyProject() expects, so the studio

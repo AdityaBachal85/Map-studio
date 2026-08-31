@@ -33,6 +33,9 @@ let ringScanState = null;
 /** @returns {HTMLElement|null} */
 function ringScanOverlay() { return document.getElementById('ringScanOverlay'); }
 
+/** Whether a scanned area also gets a pin at its middle. @type {boolean} */
+let ringScanMarkAreas = true;
+
 /**
  * Close the dialog. Leaves whatever was already kept on the map.
  *
@@ -106,13 +109,31 @@ function ringScanGroups(features) {
 }
 
 /**
- * Areas here span six orders of magnitude — a shed and a reserve forest — so
- * one unit cannot serve them. @param {number} km2
+ * How big a scanned area is, in the unit the reader actually works in.
+ *
+ * SQUARE FEET, because this is a property tool. A parcel of built-up land is
+ * bought, sold, rented and compared in sq ft everywhere this app is used, and
+ * "2.4 ha" is a number the reader has to convert before it means anything. This
+ * ignored the unitArea preference altogether and printed hectares regardless of
+ * what anybody had set.
+ *
+ * Areas here still span six orders of magnitude — a shed and a reserve forest —
+ * so past about ten acres the sq ft figure stops being readable and km² leads,
+ * with the sq ft kept alongside rather than dropped.
+ *
+ * @param {number} km2 @returns {string}
  */
 function fmtScanArea(km2) {
-  if (km2 >= 1) return km2.toFixed(1) + ' km²';
-  if (km2 >= 0.01) return (km2 * 100).toFixed(1) + ' ha';
-  return Math.round(km2 * 1e6).toLocaleString() + ' m²';
+  const m2 = km2 * 1e6;
+  // An explicit preference is an instruction; only 'auto' is ours to decide.
+  const u = typeof getPref === 'function' ? getPref('unitArea') : 'auto';
+  if (u && u !== 'auto' && typeof fmtAreaPref === 'function') return fmtAreaPref(m2);
+  const sqft = m2 * 10.7639;
+  if (km2 >= 0.04) {
+    return km2.toFixed(km2 >= 1 ? 1 : 2) + ' km² ('
+      + (sqft / 1e6).toFixed(1) + 'M sq ft)';
+  }
+  return Math.round(sqft).toLocaleString() + ' sq ft';
 }
 
 /**
@@ -207,6 +228,15 @@ function renderRingScan() {
       '<button class="btn btn-ghost" id="ringScanAgain">'
       + (s.error && ringFeatureRetryable(s.error) ? 'Try again' : 'Search again') + '</button>'
       + '<span class="grow"></span>'
+      // A parcel of land arrives as a polygon and nothing else — no pin, no
+      // entry in Locations — so on a map already carrying roads, rail and
+      // rings it is genuinely hard to find, and there is nothing to route to.
+      // On by default because that is the complaint; a switch because a scan
+      // that returns twelve residential parcels would otherwise plant twelve
+      // pins somebody has to delete.
+      + '<label class="chk" id="ringScanMarkWrap" title="Drop a pin at the middle of each '
+      + 'area, so it can be found and routed to"><input type="checkbox" id="ringScanMark"'
+      + (ringScanMarkAreas ? ' checked' : '') + '> Pin each area</label>'
       + '<button class="btn btn-primary" id="ringScanKeep"' + (n ? '' : ' disabled') + '>'
       + (n ? 'Add ' + n + ' to the map' : 'Nothing selected') + '</button>';
   }
@@ -290,6 +320,7 @@ function keepRingScanSelection() {
 
     added.push(registerGeom(layer, shape, ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel)));
     n++;
+    if (f.kind === 'area') { placed += ringScanPinArea(f, name, clsId, iconKey); }
   });
 
   mergePolys.forEach((polys, classId) => {
@@ -297,6 +328,14 @@ function keepRingScanSelection() {
     const label = (fc ? fc.label : 'Features') + ' (' + polys.length + ')';
     added.push(registerGeom(L.polygon(polys), 'Polygon',
       ringScanMeta(label, fc ? fc.cls : null, 'Polygon')));
+    // One pin per PARCEL, not one for the merged blob: a class merged into a
+    // single shape is still a dozen separate places on the ground, and a pin at
+    // the mean of all of them lands in a field between them.
+    polys.forEach((ring, i) => {
+      placed += ringScanPinArea({ kind: 'area', polys: [ring] },
+        label.replace(/\s*\(\d+\)$/, '') + ' ' + (i + 1),
+        fc ? fc.cls : null, fc ? fc.icon : null);
+    });
   });
 
   // Ground cover goes underneath. Added last, an area covers the roads and
@@ -323,6 +362,32 @@ function keepRingScanSelection() {
       + (drawn === 1 ? 'it' : 'them') + ' like anything else you drew');
   }
   status(bits.length ? bits.join('. ') + '.' : 'Nothing was added.');
+}
+
+/**
+ * Drop a pin at the middle of a scanned area, so it can be found and routed to.
+ *
+ * A LOCATION, NOT A DECORATION — the same treatment a scanned station already
+ * gets. A parcel marked only by its outline cannot be routed to, renamed or
+ * given a ring, so the only way to measure to the industrial estate the scan
+ * had just found was to type it in again by hand.
+ *
+ * @param {object} f the area @param {string} name @param {?string} clsId
+ * @param {?string} iconKey @returns {number} 1 if a pin was placed
+ */
+function ringScanPinArea(f, name, clsId, iconKey) {
+  if (!ringScanMarkAreas || typeof addLocation !== 'function') return 0;
+  const at = ringScanPointOf(f);
+  if (!at) return 0;
+  addLocation({
+    name: name,
+    lat: at.lat, lng: at.lng,
+    color: (typeof connClass === 'function' && connClass(clsId) || {}).color || undefined,
+    iconKey: iconKey || 'dot',
+    iconFrame: 'pin',
+    fromRing: true,
+  });
+  return 1;
 }
 
 /**
@@ -424,6 +489,9 @@ function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel) {
       renderRingScan();
       return;
     }
+    // Read straight off the box: the footer is rebuilt on every tick of the
+    // list, so a value kept only in the DOM would reset itself.
+    if (e.target.id === 'ringScanMark') { ringScanMarkAreas = !!e.target.checked; return; }
     if (e.target.closest('#ringScanAgain')) { runRingScan(); return; }
     if (e.target.closest('#ringScanKeep')) { keepRingScanSelection(); return; }
   });

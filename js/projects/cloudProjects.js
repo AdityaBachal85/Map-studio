@@ -22,6 +22,30 @@
 const CLOUD_META_COLS = 'id,name,owner_id,n_locations,n_sites,n_routes,n_shapes,bytes,created_at,updated_at';
 
 /**
+ * THE LOCATION COLUMN MAY NOT BE THERE YET.
+ *
+ * `place` was added to the project record after this table was created, and a
+ * table lives in the operator's own Supabase project — this code cannot migrate
+ * it. Asking for a column that does not exist fails the WHOLE query, so the
+ * list would go blank for anybody who had not run the migration: a new field
+ * would have broken the page rather than being quietly absent from it.
+ *
+ * So it is asked for once, and if the database says no the app carries on
+ * without it and stops asking. Run this in the Supabase SQL editor to turn it
+ * on — see docs/ACCOUNTS-SETUP.md:
+ *
+ *   alter table map_projects add column if not exists place text default '';
+ */
+let _cloudHasPlace = true;
+const cloudCols = () => CLOUD_META_COLS + (_cloudHasPlace ? ',place' : '');
+
+/** @param {*} e @returns {boolean} is this "that column does not exist"? */
+function cloudMissingPlace(e) {
+  const m = ((e && (e.message || e.details || e.hint)) || '') + ' ' + ((e && e.code) || '');
+  return /place/i.test(m) && (/column/i.test(m) || /42703/.test(m) || /schema cache/i.test(m));
+}
+
+/**
  * Present a database row the way the local store presents its records, so the
  * page's formatting code has one shape to deal with.
  * @param {object} r @param {object} [user]
@@ -35,6 +59,7 @@ function cloudRowToMeta(r, user) {
     ownerName: (user && user.id === r.owner_id) ? user.name : '',
     created: r.created_at ? Date.parse(r.created_at) : 0,
     modified: r.updated_at ? Date.parse(r.updated_at) : 0,
+    place: r.place || '',
     counts: {
       locations: r.n_locations || 0,
       sites: r.n_sites || 0,
@@ -76,10 +101,15 @@ function cloudError(error) {
 async function cloudProjectsList(ownerId) {
   const sb = sessionClient();
   if (!sb) return [];
-  const { data, error } = await sb
-    .from('map_projects')
-    .select(CLOUD_META_COLS)
+  const ask = () => sb.from('map_projects').select(cloudCols())
     .order('updated_at', { ascending: false });
+  let { data, error } = await ask();
+  // Asked for once. If the column is not there the query fails entirely, so it
+  // is retried without — a list that is missing one field beats no list at all.
+  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
+    _cloudHasPlace = false;
+    ({ data, error } = await ask());
+  }
   if (error) throw cloudError(error);
   const user = currentUser();
   return (data || []).map(r => cloudRowToMeta(r, user));
@@ -129,21 +159,36 @@ async function cloudProjectsSave(rec) {
     bytes: JSON.stringify(project).length,
   };
   if (rec.id) row.id = rec.id;
+  if (_cloudHasPlace && rec.place != null) row.place = String(rec.place).trim();
 
   // upsert rather than insert-or-update: one round trip, and no window where a
   // concurrent write could turn the update into a duplicate insert.
-  const { data, error } = await sb.from('map_projects').upsert(row).select(CLOUD_META_COLS).single();
+  const put = () => sb.from('map_projects').upsert(row).select(cloudCols()).single();
+  let { data, error } = await put();
+  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
+    _cloudHasPlace = false;
+    delete row.place;
+    ({ data, error } = await put());
+  }
   if (error) throw cloudError(error);
   return cloudRowToMeta(data, user);
 }
 
-/** @param {string} id @param {string} name @returns {Promise<boolean>} */
-async function cloudProjectsRename(id, name) {
+/** @param {string} id @param {string} name @param {string} [place] @returns {Promise<boolean>} */
+async function cloudProjectsRename(id, name, place) {
   const sb = sessionClient();
   if (!sb) return false;
   const clean = String(name || '').trim();
   if (!clean) return false;
-  const { error } = await sb.from('map_projects').update({ name: clean }).eq('id', id);
+  const patch = { name: clean };
+  if (_cloudHasPlace && place !== undefined) patch.place = String(place || '').trim();
+  const put = () => sb.from('map_projects').update(patch).eq('id', id);
+  let { error } = await put();
+  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
+    _cloudHasPlace = false;
+    delete patch.place;
+    ({ error } = await put());
+  }
   if (error) throw cloudError(error);
   return true;
 }

@@ -488,6 +488,66 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     && Math.abs(themed.dark.bgL - themed.dark.inkL) > 0.4,
     JSON.stringify([themed.light.optInk, themed.dark.optInk]));
 
+  /* ---- what a scan reports, and what it leaves behind --------------------- */
+
+  // SQUARE FEET. This printed hectares regardless of what anybody had set, and
+  // ignored the unitArea preference entirely — "2.4 ha" is a number the reader
+  // of a property report has to convert before it means anything.
+  const areas = await p.evaluate(() => ({
+    small: fmtScanArea(0.0005),
+    mid: fmtScanArea(0.005),
+    big: fmtScanArea(1),
+    pref: (() => { setPref('unitArea', 'acres'); const s = fmtScanArea(0.005);
+      setPref('unitArea', 'auto'); return s; })(),
+  }));
+  ck('a scanned parcel is reported in square feet', /sq ft/.test(areas.small) && !/ha/.test(areas.small),
+    areas.small);
+  ck('and a bigger one too', /sq ft/.test(areas.mid), areas.mid);
+  // Past about ten acres the sq ft figure stops being readable on its own.
+  ck('a square kilometre leads with km² but keeps the sq ft beside it',
+    /km²/.test(areas.big) && /sq ft/.test(areas.big), areas.big);
+  ck('and an explicit unit preference is obeyed rather than overridden',
+    /ac$/.test(areas.pref), areas.pref);
+
+  // A parcel used to arrive as a polygon and nothing else — no pin, nothing in
+  // Locations — so on a map already carrying roads, rail and rings it was hard
+  // to find and there was nothing to route to.
+  const pinned = await p.evaluate(() => {
+    const ring = (lat, lng, d) => [[lat, lng], [lat + d, lng], [lat + d, lng + d], [lat, lng + d], [lat, lng]];
+    locations.length = 0; geometries.length = 0;
+    ringScanMarkAreas = true;
+    ringScanState = { ids: ['builtUp', 'industrial'], picked: new Set([0, 1]), result: [
+      { kind: 'area', classId: 'builtUp', name: 'Kalyan colony', polys: [ring(19.23, 73.13, 0.004)], areaKm2: 0.19 },
+      { kind: 'area', classId: 'industrial', name: '', polys: [ring(19.21, 73.10, 0.005)], areaKm2: 0.3 },
+    ] };
+    keepRingScanSelection();
+    return { locs: locations.length, geoms: geometries.length,
+      names: locations.map(l => l.name), ring: locations.every(l => l.fromRing) };
+  });
+  ck('a scanned area is drawn AND pinned, so it can be found',
+    pinned.geoms === 2 && pinned.locs === 2, JSON.stringify(pinned));
+  ck('the pin takes the area\'s own name where OSM has one',
+    pinned.names.indexOf('Kalyan colony') >= 0, JSON.stringify(pinned.names));
+  ck('and the class name where it does not',
+    pinned.names.some(n => /Industrial/i.test(n)), JSON.stringify(pinned.names));
+  // A location, not a decoration: it can be renamed, restyled and routed to.
+  ck('it lands in Locations like any other place', pinned.ring === true);
+
+  const noPins = await p.evaluate(() => {
+    const ring = (lat, lng, d) => [[lat, lng], [lat + d, lng], [lat + d, lng + d], [lat, lng + d], [lat, lng]];
+    locations.length = 0; geometries.length = 0;
+    ringScanMarkAreas = false;
+    ringScanState = { ids: ['builtUp'], picked: new Set([0]), result: [
+      { kind: 'area', classId: 'builtUp', name: 'Some land', polys: [ring(19.23, 73.13, 0.004)], areaKm2: 0.19 },
+    ] };
+    keepRingScanSelection();
+    ringScanMarkAreas = true;
+    return { locs: locations.length, geoms: geometries.length };
+  });
+  // Twelve residential parcels would otherwise plant twelve pins to delete.
+  ck('and the switch turns the pins off without losing the shape',
+    noPins.locs === 0 && noPins.geoms === 1, JSON.stringify(noPins));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');

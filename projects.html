@@ -5,10 +5,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Map projects · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0209" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./css/themes.css?v=6.0209">
-  <link rel="stylesheet" href="./css/style.css?v=6.0209">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0209">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0210" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/themes.css?v=6.0210">
+  <link rel="stylesheet" href="./css/style.css?v=6.0210">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0210">
 </head>
 
 <body class="shell-body">
@@ -81,7 +81,7 @@
           <circle cx="11" cy="11" r="7" />
           <line x1="21" y1="21" x2="16.5" y2="16.5" />
         </svg>
-        <input id="pjSearch" type="search" placeholder="Search your projects…" autocomplete="off">
+        <input id="pjSearch" type="search" placeholder="Search by name or location…" autocomplete="off">
       </div>
 
       <div class="pj-top-spacer"></div>
@@ -141,16 +141,42 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0209"></script>
-  <script src="./js/core/prefs.js?v=6.0209"></script>
-  <script src="./js/config.js?v=6.0209"></script>
-  <script src="./js/constants.js?v=6.0209"></script>
-  <script src="./js/core/freshness.js?v=6.0209"></script>
-  <script src="./js/auth/session.js?v=6.0209"></script>
-  <script src="./js/projects/projectStore.js?v=6.0209"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0209"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0209"></script>
-  <script src="./js/projects/projectsPage.js?v=6.0209"></script>
+  <!-- NAMING A PROJECT WAS A BROWSER prompt(). A grey Chrome strip at the top
+       of the screen, in the browser's own type, with an OK button — the one
+       piece of this app that was not this app. It also had room for exactly one
+       field, which is why a project could be named and not placed. -->
+  <div class="pj-modal" id="pjModal" hidden>
+    <div class="pj-modal-card" role="dialog" aria-modal="true" aria-labelledby="pjModalTitle">
+      <h2 id="pjModalTitle">New project</h2>
+      <p class="pj-modal-note" id="pjModalNote">Give it a name and say where it is.</p>
+      <label class="pj-field">
+        <span>Project name</span>
+        <input id="pjModalName" type="text" autocomplete="off" spellcheck="false"
+          placeholder="Kalyan &ndash; Padgha corridor">
+      </label>
+      <label class="pj-field">
+        <span>Location</span>
+        <input id="pjModalPlace" type="text" autocomplete="off" spellcheck="false"
+          placeholder="Kalyan, Thane, Maharashtra">
+        <em>Searchable from the list, alongside the name.</em>
+      </label>
+      <div class="pj-modal-btns">
+        <button class="pj-mbtn" id="pjModalCancel" type="button">Cancel</button>
+        <button class="pj-mbtn go" id="pjModalOk" type="button">Create project</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./vendor/supabase.js?v=6.0210"></script>
+  <script src="./js/core/prefs.js?v=6.0210"></script>
+  <script src="./js/config.js?v=6.0210"></script>
+  <script src="./js/constants.js?v=6.0210"></script>
+  <script src="./js/core/freshness.js?v=6.0210"></script>
+  <script src="./js/auth/session.js?v=6.0210"></script>
+  <script src="./js/projects/projectStore.js?v=6.0210"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0210"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0210"></script>
+  <script src="./js/projects/projectsPage.js?v=6.0210"></script>
 </body>
 
 </html>

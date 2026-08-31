@@ -74,6 +74,22 @@ Expect two rows, both `rls_enabled = true`, with `map_projects` showing 4 polici
 and `profiles` showing 2. Anything else means the script did not finish — read
 the error rather than moving on.
 
+### 2a. The project location column
+
+A project carries a location as well as a name, and the list searches on both.
+The column was added after this table was created, so a database set up before
+then does not have it. Run this once:
+
+```sql
+alter table map_projects add column if not exists place text default '';
+```
+
+**The app works without it.** Asking for a column that does not exist fails the
+whole query, so the project list would have gone blank for anybody who had not
+run this — instead the app asks once, notices the refusal, and carries on
+without the field. Locations simply will not save or show until the column is
+there. Nothing else changes, and nothing needs restarting afterwards.
+
 ## 3. Microsoft sign-in
 
 Two registrations that have to agree: one in Azure, one in Supabase.
