@@ -97,6 +97,24 @@ function textLabelSize(g) {
 }
 
 /**
+ * A label's text as HTML, with its line breaks kept.
+ *
+ * `<br>`, NOT `white-space: pre`. The span is `nowrap` so that a long label
+ * never wraps itself at some arbitrary point near the pin — a break should be
+ * somewhere the author put it — and `<br>` breaks regardless of white-space,
+ * where a bare newline in a `nowrap` span is just a space. It also survives
+ * every rasteriser the export path runs through, which a white-space rule does
+ * not reliably do.
+ *
+ * @param {string} t @returns {string} escaped HTML
+ */
+function textLabelHtml(t) {
+  const s = String(t == null ? '' : t);
+  if (!s) return ' ';
+  return s.split(/\r\n|\r|\n/).map(line => esc(line) || '&nbsp;').join('<br>');
+}
+
+/**
  * The divIcon a text label draws as.
  *
  * Sized [0,0] with the span translated to its own centre, the same trick the
@@ -141,7 +159,7 @@ function geomTextIcon(g) {
   return L.divIcon({
     className: 'map-text-wrap',
     html: '<span class="map-text' + (mode === 'pill' ? ' as-pill' : '') + '" style="' + style + '">'
-      + esc(g.name || ' ') + '</span>',
+      + textLabelHtml(g.name) + '</span>',
     iconSize: [0, 0],
   });
 }
@@ -246,7 +264,8 @@ function textLabelCardMarkup(g) {
   card.innerHTML = `
     <div class="r">
       <input type="color" class="gbc" value="${esc(g.borderColor)}" title="Text colour" aria-label="Text colour">
-      <input type="text" class="gnm grow" value="${esc(g.name)}" placeholder="Type the label" aria-label="Label text">
+      <textarea class="gnm grow" rows="1" placeholder="Type the label &mdash; Enter starts a new line"
+        aria-label="Label text" spellcheck="false">${esc(g.name)}</textarea>
       <button class="x-btn" title="Delete this label" aria-label="Delete this label">&times;</button>
     </div>
     <div class="r">
@@ -288,13 +307,29 @@ function textLabelCardMarkup(g) {
 function wireTextLabelCard(card, g) {
   const restyle = () => { applyGeomStyle(g); touchGeom(g); };
 
-  card.querySelector('.gnm').addEventListener('input', e => {
+  const nm = card.querySelector('.gnm');
+  // The field grows with the text rather than scrolling inside a one-line box:
+  // a label you cannot see all of is a label you cannot check.
+  const fit = () => {
+    nm.style.height = 'auto';
+    nm.style.height = Math.min(180, Math.max(nm.scrollHeight, 30)) + 'px';
+  };
+  // Twice: this card is wired before it is in the document, and an element
+  // outside the document has a scrollHeight of zero — so the first call always
+  // measured one line however many were in it.
+  fit();
+  requestAnimationFrame(fit);
+  nm.addEventListener('input', e => {
     // 'input', not 'change': the label on the map is the preview, and waiting
     // for blur to show what you typed makes the two feel disconnected.
     g.name = e.target.value;
+    fit();
     restyle();
   });
-  card.querySelector('.gnm').addEventListener('change', e => {
+  // Enter is a newline here, which is the whole point — so it must not reach
+  // the panel handlers that treat Enter as "commit and close".
+  nm.addEventListener('keydown', e => { if (e.key === 'Enter') e.stopPropagation(); });
+  nm.addEventListener('change', e => {
     if (!e.target.value.trim()) { g.name = nextGeomName('Label'); e.target.value = g.name; restyle(); }
   });
   card.querySelector('.gbc').addEventListener('input', e => { g.borderColor = e.target.value; restyle(); });
@@ -353,7 +388,12 @@ function syncTextLabelCard(g) {
   if (!c) return;
   const size = textLabelSize(g);
   const plate = Math.round((g.fillOpacity || 0) * 100);
-  c.querySelector('.gnm').value = g.name;
+  const nmField = c.querySelector('.gnm');
+  if (nmField.value !== g.name) {
+    nmField.value = g.name;
+    nmField.style.height = 'auto';
+    nmField.style.height = Math.min(180, Math.max(nmField.scrollHeight, 30)) + 'px';
+  }
   c.querySelector('.gbc').value = g.borderColor;
   c.querySelector('.gclr').value = g.fillColor;
   c.querySelector('.lsize').value = size;

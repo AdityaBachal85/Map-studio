@@ -391,6 +391,46 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the pin FRAME is untouched — that one is the teardrop itself',
     pins.frameOffered === true);
 
+  // ONE DEFAULT, NOT A ROTATION. Colour came from PALETTE[n % PALETTE.length],
+  // so the fifth pin on a map was purple for no reason but being fifth — a
+  // different look on every map, and a meaning the reader is invited to guess
+  // at. A connectivity sheet wants its places to look alike until somebody
+  // deliberately makes one differ.
+  const defaults = await p.evaluate(() => {
+    const made = ['A', 'B', 'C', 'D', 'E', 'F'].map((n, i) =>
+      addLocation({ name: 'Def ' + n, lat: 19.20 + i * 0.004, lng: 73.10 + i * 0.004 }));
+    const site = addLocation({ name: 'Def site', lat: 19.30, lng: 73.20, type: 'site' });
+    const chosen = addLocation({ name: 'Def chosen', lat: 19.31, lng: 73.21,
+      color: '#C2185B', iconSize: 52, iconFrame: 'circle' });
+    const out = {
+      colours: [...new Set(made.map(l => l.color))],
+      sizes: [...new Set(made.map(l => l.iconSize))],
+      frames: [...new Set(made.map(l => l.iconFrame))],
+      keys: [...new Set(made.map(l => l.iconKey))],
+      site: { color: site.color, size: site.iconSize, frame: site.iconFrame },
+      chosen: { color: chosen.color, size: chosen.iconSize, frame: chosen.iconFrame },
+    };
+    [...made, site, chosen].forEach(l => deleteLocation(l));
+    return out;
+  });
+  ck('six new locations are one colour, not six from a rotation',
+    defaults.colours.length === 1 && defaults.colours[0] === '#2563EB',
+    defaults.colours.join(', '));
+  ck('every one of them starts at size 20',
+    defaults.sizes.length === 1 && defaults.sizes[0] === 20, defaults.sizes.join(', '));
+  ck('and in the map-pin frame, with the dot symbol inside it',
+    defaults.frames.length === 1 && defaults.frames[0] === 'pin'
+    && defaults.keys.length === 1 && defaults.keys[0] === 'dot',
+    defaults.frames.join(', ') + ' / ' + defaults.keys.join(', '));
+  // The site is the one place on the map that should not look like the others.
+  ck('the site is still the exception — dark, larger, unframed',
+    defaults.site.color === '#0A1E3C' && defaults.site.size === 44
+    && defaults.site.frame === 'none', JSON.stringify(defaults.site));
+  // "Default" has to mean where it starts, not where it is stuck.
+  ck('and anything asked for explicitly still wins over the default',
+    defaults.chosen.color === '#C2185B' && defaults.chosen.size === 52
+    && defaults.chosen.frame === 'circle', JSON.stringify(defaults.chosen));
+
   // Every project used to begin branded whether or not that was wanted, and a
   // pin set to "use the project logo" carried the mark onto the map by default.
   ck('a project starts with no logo, and the DBOT mark is one click away',

@@ -5075,3 +5075,35 @@ select optgroup {
   background: var(--surface-solid);
   color: var(--text);
 }
+
+/* The label's text field is a textarea now, because a drawn label can carry
+   more than one line. Styled to sit in the row like the input it replaced —
+   a textarea's defaults are a resize grip, a scrollbar and a baseline that
+   does not match the colour swatch beside it. */
+.label-card .gnm {
+  min-height: 30px;
+  max-height: 180px;
+  padding: 6px 9px;
+  border: 1px solid var(--field-edge, var(--stroke2));
+  border-radius: 9px;
+  background: var(--field, rgba(0, 0, 0, .28));
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.3;
+  resize: none;
+  overflow-y: auto;
+  vertical-align: top;
+}
+.label-card .gnm:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* The row holds a colour swatch, the field and a delete button; the field is
+   the only one that changes height, so the other two sit at its top. */
+.label-card .r:first-child { align-items: flex-start; }
+
+/* Several lines want to read as a block, centred on the point they mark —
+   left-ragged text hung off a map pin reads as an accident. */
+.map-text { text-align: center; }

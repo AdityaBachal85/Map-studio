@@ -120,7 +120,14 @@
           id: opts.id || newId(),
           name: opts.name || ('Location ' + (locations.length + 1)),
           lat: opts.lat, lng: opts.lng,
-          color: opts.color || (opts.type === 'badge' ? '#F7C948' : (opts.type === 'site' ? '#0A1E3C' : PALETTE[locations.length % PALETTE.length])),
+          // ONE COLOUR, NOT THE NEXT ONE IN A ROTATION. This took
+          // PALETTE[locations.length % PALETTE.length], so the fifth pin on a
+          // map was purple because it was the fifth — a colour nobody chose,
+          // carrying no meaning, and different on every map. A connectivity
+          // sheet wants its places to look alike until somebody deliberately
+          // makes one differ, which the colour control has always allowed.
+          color: opts.color || (opts.type === 'badge' ? '#F7C948'
+            : (opts.type === 'site' ? '#0A1E3C' : LOC_DEFAULT_COLOR)),
           type: opts.type || 'pin',
           badgeText: opts.badgeText || 'NH 66',
           showLabel: opts.showLabel !== undefined ? opts.showLabel : true,
@@ -149,11 +156,17 @@
           iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'dot'),
           iconImage: opts.iconImage || null,
           iconUseProjectLogo: !!opts.iconUseProjectLogo,
-          iconSize: opts.iconSize || (opts.type === 'site' ? 44 : 36),
-          // Frameless by default: the library's pins are already pin-shaped, so
-          // wrapping one in a circle drew a badge around a badge and shrank the
-          // glyph to 66% to fit. The bare icon reads as a map marker.
-          iconFrame: opts.iconFrame || 'none',
+          // 20, and the map-pin frame. A location arrives looking like every
+          // other location: the teardrop with a dot inside it, at one size, in
+          // one colour. Everything here is still per-pin editable — this is
+          // where it STARTS, not where it is stuck.
+          iconSize: opts.iconSize || (opts.type === 'site' ? 44 : LOC_DEFAULT_SIZE),
+          // The pin frame draws the teardrop and puts the symbol inside it,
+          // which is what a map marker looks like. It used to be frameless on
+          // the reasoning that the library's own pins were already pin-shaped —
+          // true of a few of them, and not of `dot`, which is the default
+          // symbol, so a plain location came out as a bare circle.
+          iconFrame: opts.iconFrame || (opts.type === 'site' ? 'none' : 'pin'),
           iconBg: opts.iconBg || '#FFFFFF',
           iconBorder: opts.iconBorder !== undefined ? opts.iconBorder : 2,
           iconBorderColor: opts.iconBorderColor || (opts.color || (opts.type === 'site' ? '#FF7A1A' : '#FFFFFF')),
