@@ -50,6 +50,9 @@ function serialiseLocation(l) {
     // survived only until the tab closed — it was dropped by Save and never
     // came back from Open. Autosave would have inherited exactly that hole.
     photo: l.photo || null,
+    photoCaption: l.photoCaption || '',
+    photoDesc: l.photoDesc || '',
+    photoW: l.photoW || 168,
   };
 }
 

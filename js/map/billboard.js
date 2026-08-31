@@ -587,11 +587,51 @@ const PIN_HEAD_BOX = 'position:absolute;left:22.5%;top:13.75%;width:55%;height:4
         if (opts.bg) badge.style.background = opts.bg;
         if (opts.color) badge.style.color = opts.color;
         if (opts.accent) badge.style.setProperty('--accent', opts.accent);
+
+        // A PHOTO CALLOUT IS A LABEL WITH A PICTURE IN IT.
+        //
+        // Built here rather than as a new kind of overlay because everything it
+        // needs already exists on a label and none of it is trivial: the drag,
+        // the pinning, the leader line back to the pin, the screen-space
+        // projection through the tilt stage, the export capture and the 3D
+        // pass. A second implementation would have had to earn all six again
+        // and would have drifted from this one on the first change to any.
+        if (opts.photo) {
+          badge.classList.add('photo-card');
+          badge.style.setProperty('--photo-w', (opts.photoW || 168) + 'px');
+          if (opts.accent) badge.style.borderColor = opts.accent;
+          const head = document.createElement('div');
+          head.className = 'pc-head';
+          head.textContent = opts.text;
+          if (opts.accent) { head.style.background = opts.accent; head.style.color = textOn(opts.accent); }
+          const shot = document.createElement('div');
+          shot.className = 'pc-shot';
+          const img = document.createElement('img');
+          img.src = opts.photo;
+          img.alt = opts.text || '';
+          // A repaint measures the badge, and an image that has not loaded
+          // measures zero — so the leader line is drawn to a point the card is
+          // not at until the next frame that happens to redraw.
+          img.addEventListener('load', () => scheduleRepaint());
+          shot.appendChild(img);
+          badge.appendChild(head);
+          badge.appendChild(shot);
+          if (opts.caption) {
+            const cap = document.createElement('div');
+            cap.className = 'pc-cap';
+            cap.textContent = opts.caption;
+            if (opts.accent) { cap.style.background = opts.accent; cap.style.color = textOn(opts.accent); }
+            badge.appendChild(cap);
+          }
+          wrap.appendChild(badge);
+          wrap.style.zIndex = 390;             // over the plain labels
+        } else {
         if (opts.iconHtml) { const ico = document.createElement('div'); ico.className = 'lb-ico' + (opts.iconPlain ? ' plain' : ''); ico.innerHTML = opts.iconHtml; badge.appendChild(ico); }
         const txt = document.createElement('span');
         txt.textContent = opts.text;
         badge.appendChild(txt);
         wrap.appendChild(badge);
+        }
         // Drag handling on the label
         let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
         wrap.addEventListener('pointerdown', e => {

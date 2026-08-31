@@ -865,3 +865,75 @@
       font-size: 10px;
       opacity: .78;
     }
+
+/* ---------------------------------------------------------------------------
+   Photo callouts
+   ---------------------------------------------------------------------------
+   The layout of a comparables sheet: the building's name on a coloured bar, a
+   photograph of it, and the rate on a bar underneath — joined to its pin by the
+   same leader line every label already draws.
+
+   BLOCK FLEX, NOT INLINE — the reason is the long note on .label-badge above:
+   html2canvas silently drops every child of an inline-level flex container, so
+   an inline callout would export as an empty box. Every rule here that could
+   have been inline-anything is block on purpose.
+
+   No box-shadow on the card: html2canvas renders one as a flat grey slab, and
+   this element is captured into every PNG, PDF, deck and Word file. The border
+   does the lifting instead, which is also what the reference sheet does. */
+.label-badge.photo-card {
+  display: block;
+  width: calc(var(--photo-w, 168px) * var(--label-scale, 1));
+  padding: 0;
+  overflow: hidden;
+  border: calc(2px * var(--label-scale, 1)) solid var(--accent, #F26B21);
+  border-radius: calc(5px * var(--label-scale, 1));
+  background: #FFFFFF;
+  gap: 0;
+  /* Overriding .label-badge's own drop shadow, which html2canvas renders as a
+     flat grey slab behind the element — a soft shadow under a name pill is one
+     thing, a hard rectangle behind a 200px card in a client's PDF is another. */
+  box-shadow: none;
+}
+
+.photo-card .pc-head,
+.photo-card .pc-cap {
+  display: block;
+  padding: calc(4px * var(--label-scale, 1)) calc(7px * var(--label-scale, 1));
+  background: var(--accent, #F26B21);
+  color: #FFFFFF;
+  font-size: calc(10px * var(--label-scale, 1));
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: .01em;
+  text-align: center;
+  /* Two lines, then cut. A building with a long name must not push the picture
+     off the bottom of a card sized to the picture. */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* SQUARE, and the picture fills it. A photograph of a building arrives at
+   whatever shape the camera was held; a row of callouts in three different
+   aspect ratios reads as an accident. `cover` crops rather than letterboxes,
+   which is right here — the middle of a photograph of a building is the
+   building. */
+.photo-card .pc-shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #EEF1F6;
+  overflow: hidden;
+}
+.photo-card .pc-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A callout is a bigger thing to move than a name badge, so it says so. */
+.bb .label-badge.photo-card { cursor: grab; }
+.bb:active .label-badge.photo-card { cursor: grabbing; }

@@ -58,6 +58,21 @@
         if (loc._hidden) return;                 // hidden via Layer Manager
         if (loc.showLabel && loc.type !== 'badge' && !loc.hideMarker) {
           const isSite = loc.type === 'site';
+          // A CALLOUT NEEDS MORE ROOM THAN A NAME BADGE. The default offset of
+          // (22, −40) puts a 30px pill just above and right of the pin, which
+          // is right for a pill and wrong for a 170×210 card — that lands
+          // squarely on top of the pin it is pointing at, hiding the very thing
+          // it labels. Only until the card is dragged: labelPinned means the
+          // operator has placed it, and their placement is not ours to revise.
+          if (loc.photo && !loc.labelPinned && !loc._photoOffsetSet) {
+            // Clear of it VERTICALLY, which means the card's full height — the
+            // square picture plus both bars — not half its width. Sized from
+            // the width because the picture is square, so height is width plus
+            // the two bars and the border.
+            const w = loc.photoW || 168;
+            loc.labelOffset = { x: 26, y: -(w + 46 + 26) };
+            loc._photoOffsetSet = true;
+          }
           const bg = loc.labelBg || (isSite ? '#0A1E3C' : '#FFFFFF');
           const el = makeLabelEl(loc, 'loc', {
             klass: isSite ? 'site' : '',
@@ -67,7 +82,12 @@
             // badge said the same thing twice and made every label wider than
             // the name it exists to show.
             iconHtml: null,
-            text: loc.name
+            text: loc.name,
+            // A photograph turns the label into a callout card — the layout of
+            // a comparables sheet: name on top, the picture, the rate under it.
+            photo: loc.photo || null,
+            caption: loc.photoCaption || '',
+            photoW: loc.photoW || 168,
           }, wasFirst);
           loc._labelEl = el;
           loc._labelEverRendered = true;
@@ -118,6 +138,14 @@
 
           // `dot`, not `pin`: the pin glyph is gone — see ICON_LIBRARY — because
           // `iconFrame: 'pin'` already draws the teardrop this would sit inside.
+          // The caption under the photograph, the longer note behind it, and
+          // how wide the card is drawn. `photo` itself is set below — it has
+          // been on the record and in the saved file all along, carried and
+          // never drawn.
+          photoCaption: opts.photoCaption || '',
+          photoDesc: opts.photoDesc || '',
+          photoW: opts.photoW || 168,
+
           iconKey: opts.iconKey || (opts.type === 'site' ? 'star' : 'dot'),
           iconImage: opts.iconImage || null,
           iconUseProjectLogo: !!opts.iconUseProjectLogo,
@@ -135,6 +163,9 @@
           // Scaffolding for a traced road, not a place somebody marked. Kept out
           // of every list and count via realLocations(); see map/roadDraw.js.
           routeAnchor: !!opts.routeAnchor,
+          // A data URL, so the picture travels inside the project file — a path
+          // to somebody's desktop is a broken image on every other machine, and
+          // this file is meant to be sent to people.
           rings: rings || [], photo: opts.photo || null,
           _pinEl: null, _labelEl: null, _el: null, _ringLabelEls: [], ringLayers: [], ringLabels: [], anchor: null, card: null
         };

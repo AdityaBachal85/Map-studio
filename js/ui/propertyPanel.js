@@ -199,9 +199,44 @@ function locCardMarkup(loc) {
       </div>
     </div>
 
+    <!-- A PHOTOGRAPH TURNS THE LABEL INTO A CALLOUT — the layout of a
+         comparables sheet: the building's name on a bar, a picture of it, and
+         the rate underneath, joined to its pin by the leader line the label
+         already draws. Folded away behind its own button like the icon panel,
+         because most locations are not comparables. -->
+    <div class="photoPanel" style="display:${loc.photo ? 'block' : 'none'};border-top:1px solid var(--stroke);padding-top:8px;margin-top:2px;">
+      <div class="r">
+        <span class="sub" style="width:52px;">Photo</span>
+        <button class="mini-btn upPhoto grow" title="Choose a photograph of this place">📷 Choose a picture…</button>
+        <button class="mini-btn clearPhoto" title="Remove the photograph" ${loc.photo ? '' : 'disabled'}>✕</button>
+        <input type="file" class="photoFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
+      </div>
+      <div class="r photoPreviewRow" style="display:${loc.photo ? 'flex' : 'none'};">
+        <span class="sub" style="width:52px;"></span>
+        <img class="photoPreview" src="${loc.photo || ''}" alt=""
+          style="width:64px;height:64px;border-radius:6px;object-fit:cover;background:#EEF1F6;">
+      </div>
+      <div class="r">
+        <span class="sub" style="width:52px;">Caption</span>
+        <input type="text" class="phcap grow" value="${esc(loc.photoCaption || '')}"
+          placeholder="INR 49&ndash;50 K PSF" title="The bar under the picture">
+      </div>
+      <div class="r">
+        <span class="sub" style="width:52px;">Note</span>
+        <input type="text" class="phdesc grow" value="${esc(loc.photoDesc || '')}"
+          placeholder="What this comparable tells you" title="Kept with the location; not drawn on the map">
+      </div>
+      <div class="r">
+        <span class="sub" style="width:52px;">Size</span>
+        <input type="range" class="phw" min="90" max="320" step="2" value="${loc.photoW || 168}" style="flex:1;">
+        <span class="sub phw-v" style="width:40px;font-family:var(--mono);">${loc.photoW || 168}px</span>
+      </div>
+    </div>
+
     <div class="ringsBox" style="display:flex;flex-direction:column;gap:5px;"></div>
     <div class="r">
       <button class="mini-btn addring" title="Add a catchment ring (radius circle)">+ Ring</button>
+      <button class="mini-btn photoTgl" title="Photograph &amp; caption">📷</button>
       <label class="chk"><input type="checkbox" class="sl" ${loc.showLabel ? 'checked' : ''}> Label</label>
       <input type="color" class="lbg" value="${esc(loc.labelBg)}" title="Label background color">
       <input type="range" class="lsz" min="50" max="220" step="5" value="${loc.labelScale == null ? 100 : loc.labelScale}" style="width:56px;flex:none;" title="This label's size, as a percentage of the global chip scale in Settings. Double-click to reset." aria-label="Label size for this location">
@@ -231,6 +266,8 @@ function wireLocCard(card, loc) {
         card.querySelector('.iconTgl').addEventListener('click', () => {
           iconPanel.style.display = iconPanel.style.display === 'none' ? 'block' : 'none';
         });
+
+        wireLocPhoto(card, loc);
 
         card.querySelector('.clr').addEventListener('input', e => {
           const value = e.target.value;
@@ -777,3 +814,121 @@ function wireLocCard(card, loc) {
       });
       $('brandTitleInput').addEventListener('input', e => { $('titleCard').textContent = e.target.value || 'PROPERTY LOCATION & ACCESS'; });
 
+
+/**
+ * The photograph, its caption and how big the callout is drawn.
+ *
+ * DOWNSCALED ON THE WAY IN. A phone photograph is four megabytes and eight
+ * megapixels; the callout draws it at 168 CSS pixels. Stored as it arrived, ten
+ * comparables would be a forty-megabyte project file that has to be held in
+ * memory, written to IndexedDB, pushed to Supabase and read back — for pictures
+ * nothing will ever display above about 700px, which is what the hi-res export
+ * asks for at 4×. So it is re-encoded to fit a 720px box before it is kept.
+ *
+ * A DATA URL, not a file path: the project is meant to be sent to people, and a
+ * path to somebody's desktop is a broken image on every other machine.
+ *
+ * @param {HTMLDivElement} card @param {object} loc
+ */
+function wireLocPhoto(card, loc) {
+  const panel = card.querySelector('.photoPanel');
+  const file = card.querySelector('.photoFile');
+  const prevRow = card.querySelector('.photoPreviewRow');
+  const prev = card.querySelector('.photoPreview');
+  const clear = card.querySelector('.clearPhoto');
+  if (!panel || !file) return;
+
+  const tgl = card.querySelector('.photoTgl');
+  if (tgl) {
+    tgl.addEventListener('click', () => {
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
+  const show = () => {
+    prevRow.style.display = loc.photo ? 'flex' : 'none';
+    prev.src = loc.photo || '';
+    clear.disabled = !loc.photo;
+    if (typeof locChanged === 'function') locChanged(loc);
+  };
+
+  card.querySelector('.upPhoto').addEventListener('click', () => file.click());
+  file.addEventListener('change', () => {
+    const f = file.files && file.files[0];
+    file.value = '';                       // so the same file can be picked twice
+    if (!f) return;
+    photoToDataUrl(f, 720, url => {
+      if (!url) { if (typeof status === 'function') status('That picture could not be read.'); return; }
+      loc.photo = url;
+      panel.style.display = 'block';
+      show();
+      if (typeof status === 'function') {
+        status('Photograph added — drag the card to place it, and the line back to the pin follows.');
+      }
+      if (typeof pushHistory === 'function') pushHistory();
+    });
+  });
+
+  clear.addEventListener('click', () => {
+    loc.photo = null;
+    show();
+    if (typeof pushHistory === 'function') pushHistory();
+  });
+
+  const cap = card.querySelector('.phcap');
+  cap.addEventListener('input', () => { loc.photoCaption = cap.value; if (loc.photo) locChanged(loc); });
+  const desc = card.querySelector('.phdesc');
+  desc.addEventListener('input', () => { loc.photoDesc = desc.value; });
+
+  const w = card.querySelector('.phw');
+  const wv = card.querySelector('.phw-v');
+  w.addEventListener('input', () => {
+    loc.photoW = +w.value;
+    wv.textContent = loc.photoW + 'px';
+    // Written straight onto the live card: rebuilding the label on every frame
+    // of a drag would drop the element under the pointer.
+    const el = loc._labelEl && loc._labelEl.querySelector('.photo-card');
+    if (el) el.style.setProperty('--photo-w', loc.photoW + 'px');
+    if (typeof scheduleRepaint === 'function') scheduleRepaint();
+  });
+  w.addEventListener('change', () => { if (typeof pushHistory === 'function') pushHistory(); });
+}
+
+/**
+ * Read a picked image file and re-encode it to fit a box, as a data URL.
+ *
+ * JPEG unless the source has transparency — a photograph of a building has
+ * none, and PNG of the same picture is three or four times the bytes for no
+ * visible difference. The alpha check is on the source type rather than on the
+ * pixels: reading every pixel of an eight-megapixel image to find out costs
+ * more than the saving.
+ *
+ * @param {File} f @param {number} box longest side, in pixels
+ * @param {function(?string):void} done
+ */
+function photoToDataUrl(f, box, done) {
+  const fr = new FileReader();
+  fr.onerror = () => done(null);
+  fr.onload = () => {
+    const img = new Image();
+    img.onerror = () => done(null);
+    img.onload = () => {
+      const scale = Math.min(1, box / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const cx = cv.getContext('2d');
+      // A white ground under a transparent PNG being flattened to JPEG, or the
+      // transparent parts come out black.
+      const keepAlpha = /png|gif|webp/i.test(f.type || '');
+      if (!keepAlpha) { cx.fillStyle = '#FFFFFF'; cx.fillRect(0, 0, w, h); }
+      cx.drawImage(img, 0, 0, w, h);
+      try {
+        done(keepAlpha ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.82));
+      } catch (e) { done(null); }
+    };
+    img.src = String(fr.result || '');
+  };
+  fr.readAsDataURL(f);
+}
