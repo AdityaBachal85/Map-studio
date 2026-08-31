@@ -126,6 +126,42 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the tiles on screen are imagery, not placeholders',
     pixels.isPlaceholder === false, JSON.stringify(pixels));
 
+  /* ---- the map is sharp between zoom levels, not only on them ------------- */
+
+  // WHY THE MAP LOOKED SOFT. zoomSnap is 0.25, so the map rests between whole
+  // levels — which is what makes framing possible. Leaflet fetched tiles for
+  // the NEAREST whole level and CSS-scaled the layer to bridge the gap, so at
+  // 14.25 the whole basemap was drawn at scale(1.189): every road name baked
+  // into those tiles resampled 19% larger, and 19% softer. Three of every four
+  // resting positions did it, which is why the map's own road names came out
+  // fuzzy while the app's DOM labels beside them stayed crisp.
+  //
+  // Rounding the tile zoom UP makes a fractional rest scale the tiles DOWN, and
+  // downsampling is sharp where upsampling is not. Read off the live transform
+  // rather than off the option, because the option was never the thing that
+  // was wrong.
+  const scales = await p.evaluate(async () => {
+    const at = async z => {
+      map.setView([19.076, 72.877], z, { animate: false });
+      await new Promise(r => setTimeout(r, 700));
+      const c = document.querySelector('.leaflet-tile-container');
+      const m = c ? /matrix\(([-\d.]+)/.exec(getComputedStyle(c).transform) : null;
+      return m ? +(+m[1]).toFixed(3) : null;
+    };
+    return { whole: await at(14), quarter: await at(14.25),
+      half: await at(14.5), threeQ: await at(14.75), next: await at(15) };
+  });
+  ck('a whole zoom level draws its tiles at their own size',
+    scales.whole === 1 && scales.next === 1, JSON.stringify([scales.whole, scales.next]));
+  ck('and a quarter level shrinks them rather than stretching them',
+    scales.quarter > 0 && scales.quarter < 1, String(scales.quarter));
+  ck('as does a half', scales.half > 0 && scales.half < 1, String(scales.half));
+  ck('and three quarters', scales.threeQ > 0 && scales.threeQ < 1, String(scales.threeQ));
+  // The exact number matters: 1.189 is the upscale this replaced.
+  ck('no resting position stretches the basemap, which is what blurred it',
+    [scales.whole, scales.quarter, scales.half, scales.threeQ, scales.next].every(v => v <= 1),
+    JSON.stringify(scales));
+
   await p.screenshot({ path: path.join(__dirname, 'shot-imagery-depth.png') });
   ck('no page errors', errs.length === 0, errs.slice(0, 2).join(' // ') || 'none');
 

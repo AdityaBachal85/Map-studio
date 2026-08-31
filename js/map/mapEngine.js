@@ -37,6 +37,48 @@
       const ZOOM_SNAP = 0.25;
       const WHEEL_PX_PER_ZOOM = 360;
 
+      /**
+       * WHY THE MAP LOOKED SOFT, AND THE FIX.
+       *
+       * zoomSnap 0.25 above lets the map rest between whole zoom levels, which
+       * is what makes framing possible. Leaflet fetches tiles for the NEAREST
+       * whole level and CSS-scales the tile layer to bridge the difference — so
+       * at zoom 14.25 the entire basemap is drawn at scale(1.189): every road
+       * name baked into those tiles is resampled 19% larger, and 19% softer.
+       * Three of every four resting positions did this. It is why the map's own
+       * road names came out fuzzy while the app's labels beside them stayed
+       * crisp — the app's labels are DOM text and are not in the tile layer.
+       *
+       * Measured, not guessed: at 14.00 and 15.00 the tile container reads
+       * scale(1); at 14.25, scale(1.18921); at 14.50, scale(0.707107).
+       *
+       * The answer is to round the tile zoom UP rather than to nearest. Then a
+       * fractional rest scales the tiles DOWN — 14.25 takes z15 tiles at
+       * scale(0.595) — and downsampling is sharp where upsampling is not. Three
+       * theories were measured and discarded before this one: the label's own
+       * transform (already whole-pixel), `will-change` on the label wrapper
+       * (byte-identical), and the perspective on #mapWrap (byte-identical).
+       *
+       * The cost is real and bounded: a fractional zoom needs about 2.8× as
+       * many tiles as the level below it, and only while resting off a whole
+       * level. Whole levels — where the +/− buttons, double-click and the
+       * keyboard all land, since zoomDelta is 1 — are unchanged.
+       */
+      if (window.L && L.GridLayer && !L.GridLayer.prototype._dbotSharpTiles) {
+        const clampBase = L.GridLayer.prototype._clampZoom;
+        L.GridLayer.prototype._clampZoom = function (z) {
+          const live = this._map ? this._map.getZoom() : null;
+          // 0.01 rather than an exact test: a zoom arrived at by animation
+          // lands a rounding error away from whole, and fetching a whole extra
+          // level of tiles for 0.0000001 of scale would be absurd.
+          if (live != null && isFinite(live) && Math.abs(live - Math.round(live)) > 0.01) {
+            z = Math.ceil(live);
+          }
+          return clampBase.call(this, z);
+        };
+        L.GridLayer.prototype._dbotSharpTiles = true;
+      }
+
       const map = L.map('map', {
         zoomControl: false, attributionControl: false, maxZoom: MAX_MAP_ZOOM,
         zoomSnap: ZOOM_SNAP, zoomDelta: 1, wheelPxPerZoomLevel: WHEEL_PX_PER_ZOOM,
