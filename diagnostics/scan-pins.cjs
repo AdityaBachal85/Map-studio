@@ -599,6 +599,95 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
         && /dbot/i.test(btn.textContent);
     }) === true);
 
+  /* -- what a map starts out showing --------------------------------------- */
+
+  // OFF, AND OFF EVERYWHERE. The watermark used to ride onto every sheet that
+  // left the app whether or not it was wanted, and the only way to find out was
+  // to open the PDF. Three things have to agree or it comes back through
+  // whichever one was missed: the tick, the class the CSS keys off, and what
+  // the export writer reads.
+  const chrome = await p.evaluate(() => {
+    const tgl = document.getElementById('brandTgl');
+    const mark = document.getElementById('brandMark');
+    // A new route, made the way the toolbar makes one — but WITH a path on it.
+    // Routing needs OSRM, which is unreachable from here, so a bare addRoute()
+    // has no coordinates, draws nothing, and would report "no label chip"
+    // whatever the default was. `saved` is the geometry a reopened project
+    // carries, and it is what makes this measure the label rather than the
+    // absence of a route.
+    const path = { d: 4200, t: 480, coords: [[19.10, 72.88], [19.13, 72.91], [19.16, 72.93]] };
+    const before = routes.length;
+    addRoute({ saved: path });
+    const rt = routes[routes.length - 1];
+    const hasLine = !!(rt && rt.line);
+    const drawn = !!(rt && rt._labelEl);
+    // Still one tick away — a default is where it starts, not where it sticks.
+    if (rt) { rt.showLabel = true; drawRoute(rt); }
+    const afterTick = !!(routes[routes.length - 1]._labelEl);
+    return {
+      brandTick: !!(tgl && tgl.checked),
+      bodyClass: document.body.classList.contains('no-brand'),
+      markHidden: !mark || getComputedStyle(mark).display === 'none'
+        || +getComputedStyle(mark).opacity === 0,
+      label: rt && rt.showLabel,
+      drawn, afterTick, hasLine, made: routes.length - before,
+    };
+  });
+  ck('the DBOT mark starts switched off', chrome.brandTick === false);
+  ck('and the page is actually in the no-brand state, not just the tick',
+    chrome.bodyClass === true);
+  ck('so nothing is drawn on the map for it', chrome.markHidden === true,
+    String(chrome.markHidden));
+
+  // ONE FIELD, TWO JOBS. `showLabel` governs a road's NAME and the measured
+  // "4.2 km · 8 min" chip alike, so the default cannot be a constant: the chip
+  // is a dozen boxes competing with the places they connect, on numbers that
+  // are already in the Key Distances table — while a road nobody can read the
+  // name of has not really been drawn.
+  ck('a new route starts with no distance-and-time chip on it',
+    chrome.made === 1 && chrome.hasLine === true && chrome.drawn === false,
+    JSON.stringify(chrome));
+  ck('and ticking Label still puts one there', chrome.afterTick === true);
+
+  const named = await p.evaluate(() => {
+    const path = { d: 4200, t: 480, coords: [[19.10, 72.88], [19.13, 72.91], [19.16, 72.93]] };
+    const road = addRoute({ saved: path, labelText: 'NH 48' });
+    const blank = addRoute({ saved: path, labelText: '   ' });
+    const chip = addRoute({ saved: path });
+    // What the map would actually draw in each case.
+    return {
+      road: { on: road.showLabel, text: road._el && road._el.textContent },
+      blank: blank.showLabel,
+      chip: chip.showLabel,
+      // And the one thing that must not change: an explicit choice still wins.
+      forced: addRoute({ saved: path, showLabel: true }).showLabel,
+      silenced: addRoute({ saved: path, labelText: 'NH 66', showLabel: false }).showLabel,
+    };
+  });
+  ck('but a road drawn with a name keeps its name on the map',
+    named.road.on === true && /NH 48/.test(named.road.text || ''), JSON.stringify(named.road));
+  ck('a label of nothing but spaces is not a name', named.blank === false,
+    String(named.blank));
+  ck('an unnamed route is still just the chip, and still off', named.chip === false);
+  ck('and an explicit choice wins over the default either way',
+    named.forced === true && named.silenced === false,
+    named.forced + ' / ' + named.silenced);
+
+  // A saved project carries its own setting either way round, so this changes
+  // what a NEW route starts as and nothing about one that already exists.
+  const kept = await p.evaluate(() => {
+    const on = addRoute({ showLabel: true });
+    const off = addRoute({ showLabel: false });
+    const snap = JSON.parse(JSON.stringify(serialiseProject()));
+    const saved = (snap.routes || []).slice(-2).map(r => r.showLabel);
+    clearProject();
+    applyProject(snap);
+    return { saved, back: routes.slice(-2).map(r => r.showLabel) };
+  });
+  ck('a route saved with its label on comes back with it on',
+    kept.saved.join() === 'true,false' && kept.back.join() === 'true,false',
+    JSON.stringify(kept));
+
   // A compass belongs at a corner of the map. This one was a third of the way
   // down the right-hand rail, among five other round buttons that look alike.
   //

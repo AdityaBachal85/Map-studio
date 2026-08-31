@@ -367,7 +367,25 @@
           weight: opts.weight || routeInitialWeight(opts),
           dash: opts.dash !== undefined ? !!opts.dash : routeInitialDash(opts),
           offsetPx: opts.offsetPx || 0,
-          labelText: opts.labelText || '', showLabel: opts.showLabel !== undefined ? opts.showLabel : true,
+          labelText: opts.labelText || '',
+          // ONE FIELD, TWO JOBS — which is why the default is a condition and
+          // not a constant. `routeLabelText` shows `labelText` when there is
+          // one and the measured "4.2 km · 8 min" when there is not, so
+          // `showLabel` governs a road's NAME and a distance chip alike.
+          //
+          // The chip starts off: a sheet with a dozen routes on it is a dozen
+          // chips competing with the places they connect, and the same numbers
+          // are already in the Key Distances table, set out where they can be
+          // read. A name starts on, because a road nobody can read the name of
+          // has not really been drawn — and a named route is one somebody
+          // named on purpose.
+          //
+          // `!== undefined` and not `||`: a saved project carries its own
+          // setting either way round, so this changes what a NEW route starts
+          // as and nothing about one that already exists.
+          showLabel: opts.showLabel !== undefined
+            ? !!opts.showLabel
+            : !!(opts.labelText && String(opts.labelText).trim()),
           labelOffset: opts.labelOffset || { x: 12, y: -26 },
           // How far along the route the label ties on: 0 origin, 1 destination.
           labelPos: opts.labelPos == null ? 0.5 : Math.min(1, Math.max(0, +opts.labelPos)),
