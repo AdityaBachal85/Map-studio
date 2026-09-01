@@ -321,5 +321,167 @@ ck('and the stack names nothing that is not a drawn class',
   order.every(c => declared.indexOf(c) >= 0),
   order.filter(c => declared.indexOf(c) < 0).join(', ') || 'none stale');
 
+/* ---- where an area's marker goes ------------------------------------------ */
+
+/*
+ * THE MEAN OF A RING'S CORNERS IS NOT INSIDE IT. An L-shaped residential zone
+ * has its mean in the notch — on somebody else's land — and a C-shaped one has
+ * it in the gap, which around here is usually the creek the zone wraps around.
+ * A pin beside the area it marks is worse than no pin: it says a place is
+ * somewhere it is not, and it does it confidently.
+ */
+const Lparcel = [[0, 0], [0, 3], [1, 3], [1, 1], [3, 1], [3, 0], [0, 0]];
+const meanOf = ring => {
+  let la = 0, ln = 0;
+  ring.forEach(p => { la += p[0]; ln += p[1]; });
+  return [la / ring.length, ln / ring.length];
+};
+ck('the corner mean of an L-shaped parcel is outside it, which is the bug',
+  M.pointInRing(meanOf(Lparcel), Lparcel) === false);
+const Lpt = M.ringInteriorPoint(Lparcel);
+ck('and the marker point is inside it', M.pointInRing([Lpt.lat, Lpt.lng], Lparcel) === true,
+  JSON.stringify(Lpt));
+
+// A C wrapped round a creek: the mean lands in the water.
+const Cparcel = [[0, 0], [0, 4], [1, 4], [1, 1], [3, 1], [3, 4], [4, 4], [4, 0], [0, 0]];
+ck('a C-shaped parcel has its corner mean in the gap as well',
+  M.pointInRing(meanOf(Cparcel), Cparcel) === false);
+const Cpt = M.ringInteriorPoint(Cparcel);
+ck('and its marker lands on the parcel', M.pointInRing([Cpt.lat, Cpt.lng], Cparcel) === true,
+  JSON.stringify(Cpt));
+
+// The convex majority keeps the centre it always had — this is a fix for the
+// awkward shapes, not a new position for every parcel.
+const square = [[0, 0], [0, 2], [2, 2], [2, 0], [0, 0]];
+const spt = M.ringInteriorPoint(square);
+ck('a square is still marked in the middle',
+  Math.abs(spt.lat - 1) < 1e-9 && Math.abs(spt.lng - 1) < 1e-9, JSON.stringify(spt));
+ck('a ring with too few corners to be a shape gives nothing rather than NaN',
+  M.ringInteriorPoint([[1, 1], [2, 2]]) === null);
+// A vertex list that is all one line cuts no span at all; a point on the shape
+// beats returning nothing.
+const flat = M.ringInteriorPoint([[0, 0], [0, 1], [0, 2], [0, 0]]);
+ck('a degenerate ring still yields a point', flat && isFinite(flat.lat) && isFinite(flat.lng),
+  JSON.stringify(flat));
+
+/* ---- OSM says where, Google says what it is called ------------------------ */
+
+/*
+ * Google Places returns a coordinate and a name and no geometry at all, so for
+ * everything drawn as a line or an area Overpass is not the better source, it
+ * is the only one. Where Google IS better is names of places, and in India
+ * markedly so. The two are merged rather than ranked — and both silent
+ * failures of a merge, "the same station twice" and "two stations collapsed
+ * into one", are proved here where there is no map to hide them.
+ */
+const stn = (name, lat, lng) => ({ kind: 'point', classId: 'station', name, lat, lng });
+const FC = { id: 'station', gtypes: ['train_station'] };
+const M_PER_DEG = 111320;
+
+let feats = [stn(null, 19.10, 72.88)];
+let tally = M.ringMergeGoogle(feats, [{ name: 'Kalyan Junction', lat: 19.1004, lng: 72.8801 }], FC);
+ck('a station OSM left unnamed takes the name Google has for it',
+  feats[0].name === 'Kalyan Junction' && tally.named === 1, feats[0].name);
+ck('and the row says so, rather than passing it off as OSM',
+  feats[0].source === 'osm+google', feats[0].source);
+// A station node is surveyed and sits on the platform, which is what a distance
+// should be measured to; Google's marker can be the forecourt or the ticket
+// office. So the name is taken and the position is not.
+ck('but the coordinate stays OSM\'s, because that is the surveyed one',
+  feats[0].lat === 19.10 && feats[0].lng === 72.88, feats[0].lat + ', ' + feats[0].lng);
+
+feats = [stn('Kalyan Jn', 19.10, 72.88)];
+M.ringMergeGoogle(feats, [{ name: 'Kalyan Junction Railway Station', lat: 19.1004, lng: 72.8801 }], FC);
+ck('a name OSM already has is kept, not overwritten',
+  feats[0].name === 'Kalyan Jn', feats[0].name);
+ck('though the other name is carried, so the row can show it',
+  feats[0].googleName === 'Kalyan Junction Railway Station', feats[0].googleName);
+
+// The half a single source can never fix.
+feats = [stn('Kalyan Junction', 19.10, 72.88)];
+tally = M.ringMergeGoogle(feats, [{ name: 'Shahad', lat: 19.18, lng: 73.10 }], FC);
+ck('a station Google knows and OSM has not mapped is added as a find',
+  feats.length === 2 && feats[1].name === 'Shahad' && tally.added === 1,
+  feats.map(f => f.name).join(' | '));
+ck('and it is marked as Google\'s, not passed off as surveyed',
+  feats[1].source === 'google' && feats[1].kind === 'point', feats[1].source);
+
+// TWO STATIONS COLLAPSED INTO ONE is the failure that matters most: it does not
+// look like a bug, it looks like a quiet map.
+feats = [stn(null, 19.10, 72.88), stn(null, 19.1005, 72.8802)];
+tally = M.ringMergeGoogle(feats, [
+  { name: 'Kalyan Junction', lat: 19.1001, lng: 72.8801 },
+  { name: 'Kalyan East', lat: 19.1004, lng: 72.8803 },
+], FC);
+ck('two Google rows near two OSM stations name one each, not one twice',
+  feats.length === 2 && tally.matched === 2 && tally.added === 0
+  && feats[0].name !== feats[1].name, feats.map(f => f.name).join(' | '));
+
+// Google returning the station building AND its entrance must not consume two
+// OSM stations, nor add a duplicate pin on top of the one it already named.
+feats = [stn(null, 19.10, 72.88)];
+tally = M.ringMergeGoogle(feats, [
+  { name: 'Kalyan Junction', lat: 19.1000, lng: 72.8800 },
+  { name: 'Kalyan Junction Entrance', lat: 19.10005, lng: 72.88005 },
+], FC);
+ck('a second Google row for the same station does not bind to it twice',
+  tally.matched === 1, 'matched ' + tally.matched);
+
+// 150 m is the whole rule, so it is worth pinning from both sides.
+const off200 = 200 / M_PER_DEG, off100 = 100 / M_PER_DEG;
+feats = [stn(null, 19.10, 72.88)];
+M.ringMergeGoogle(feats, [{ name: 'Far away', lat: 19.10 + off200, lng: 72.88 }], FC);
+ck('a Google place 200 m off is a different place', feats.length === 2 && !feats[0].name,
+  feats.length + ' features');
+feats = [stn(null, 19.10, 72.88)];
+M.ringMergeGoogle(feats, [{ name: 'Same place', lat: 19.10 + off100, lng: 72.88 }], FC);
+ck('and one 100 m off is the same one', feats.length === 1 && feats[0].name === 'Same place');
+
+// Only within a class. A bus station is not a name for the railway station
+// across the road from it, however close the two are.
+feats = [stn(null, 19.10, 72.88), { kind: 'point', classId: 'busTerminal', name: null, lat: 19.1001, lng: 72.8801 }];
+M.ringMergeGoogle(feats, [{ name: 'Kalyan Junction', lat: 19.1001, lng: 72.8801 }], FC);
+ck('a Google railway station never names the bus terminal beside it',
+  feats[0].name === 'Kalyan Junction' && feats[1].name === null,
+  JSON.stringify(feats.map(f => f.name)));
+
+// An area's match point is the one its pin gets, so a find and its marker can
+// never disagree about where the thing is.
+const area = { kind: 'area', classId: 'airport', polys: [square] };
+const ap = M.ringFeaturePoint(area);
+ck('an area is matched at the same point its marker is dropped on',
+  Math.abs(ap.lat - 1) < 1e-9 && Math.abs(ap.lng - 1) < 1e-9, JSON.stringify(ap));
+ck('and a line at the mean of its own vertices',
+  !!M.ringFeaturePoint({ kind: 'line', pts: base }));
+ck('a feature with no geometry at all yields nothing rather than NaN',
+  M.ringFeaturePoint({ kind: 'point' }) === null);
+
+// Nothing from Google is not an error — most rings hold nothing it knows that
+// OSM does not.
+feats = [stn('Kalyan Junction', 19.10, 72.88)];
+tally = M.ringMergeGoogle(feats, [], FC);
+ck('an empty answer from Google changes nothing',
+  feats.length === 1 && tally.added === 0 && tally.named === 0);
+ck('and a missing one is the same as an empty one',
+  M.ringMergeGoogle(feats, null, FC).added === 0);
+// A row with no usable coordinate is dropped rather than pinned at 0,0 off
+// the coast of Africa.
+feats = [stn('Kalyan Junction', 19.10, 72.88)];
+M.ringMergeGoogle(feats, [{ name: 'Broken', lat: null, lng: undefined }], FC);
+ck('a Google row with no coordinate is dropped, not pinned at nowhere',
+  feats.length === 1, feats.length + ' features');
+
+// The classes Google is asked about are exactly the ones it can answer for.
+const withG = M.RING_FEATURE_CLASSES.filter(c => c.gtypes);
+ck('only point classes are given Google types',
+  withG.every(c => c.place === true), withG.map(c => c.id).join(', '));
+ck('and every kind of place a scan can find has one',
+  M.RING_FEATURE_CLASSES.filter(c => c.place).every(c => c.gtypes && c.gtypes.length),
+  M.RING_FEATURE_CLASSES.filter(c => c.place && !c.gtypes).map(c => c.id).join(', ') || 'all covered');
+// Asking Google for a residential boundary gets a pin in the middle of a suburb
+// and nothing else — it has no geometry to give.
+ck('no line or area class asks Google for anything',
+  M.RING_FEATURE_CLASSES.filter(c => !c.place).every(c => !c.gtypes));
+
 console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
 process.exit(R.filter(Boolean).length === R.length ? 0 : 1);

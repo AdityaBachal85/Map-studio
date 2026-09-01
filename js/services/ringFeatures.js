@@ -68,6 +68,12 @@ const OVERPASS_CACHE_MAX_BYTES = 1.5e6;
  * beside the query that produces the feature, so adding a class means adding
  * one row rather than editing a lookup table somewhere else that will drift.
  *
+ * `gtypes` is the same class said in Google Places' vocabulary, and only the
+ * POINT classes carry one. Google returns a coordinate and a name, never a
+ * polygon or a line, so it can say what a station is called and nothing at all
+ * about where a road runs — which is why Overpass is the source and Google is
+ * the second opinion rather than the other way round.
+ *
  * `max` is a per-class radius ceiling in km. A 10 km ring over a city holds
  * thousands of secondary roads and streams; asking for them produces either a
  * refusal from Overpass or a wall of lines nobody wants. The class is skipped
@@ -92,15 +98,16 @@ const RING_FEATURE_CLASSES = [
   // is the same kind of thing as a location typed in by hand, and it is what a
   // route gets measured to. Everything else stays a drawn shape.
   { id: 'station', label: 'Railway stations', cls: 'station', max: 25, icon: 'railway',
-    place: true, q: ['node["railway"="station"]'] },
+    place: true, gtypes: ['train_station'], q: ['node["railway"="station"]'] },
   { id: 'metroStation', label: 'Metro stations', cls: 'metroStation', max: 25, icon: 'metro',
-    place: true, q: ['node["railway"="station"]["station"="subway"]', 'node["station"="subway"]'] },
+    place: true, gtypes: ['subway_station', 'light_rail_station'],
+    q: ['node["railway"="station"]["station"="subway"]', 'node["station"="subway"]'] },
   // An aerodrome comes back as its whole perimeter, which on a connectivity map
   // is a grey field several kilometres across covering everything under it —
   // and the answer it is there to give is "the airport is over there, this far
   // away". `asPoint` marks it at the centre of that perimeter instead.
   { id: 'airport', label: 'Airports', cls: 'airport', max: 40, icon: 'airport',
-    place: true, asPoint: true,
+    place: true, asPoint: true, gtypes: ['airport', 'international_airport'],
     q: ['way["aeroway"="aerodrome"]', 'relation["aeroway"="aerodrome"]'] },
   { id: 'river', label: 'Rivers', cls: 'water', max: 15,
     q: ['way["waterway"="river"]'] },
@@ -109,10 +116,10 @@ const RING_FEATURE_CLASSES = [
     // feature of a location.
     q: ['way["waterway"~"^(stream|canal)$"]'] },
   { id: 'busTerminal', label: 'Bus terminals', cls: 'hub', max: 20, icon: 'bus',
-    place: true, asPoint: true,
+    place: true, asPoint: true, gtypes: ['bus_station'],
     q: ['node["amenity"="bus_station"]', 'way["amenity"="bus_station"]'] },
   { id: 'port', label: 'Ports & ferry terminals', cls: 'hub', max: 40, icon: 'port',
-    place: true, asPoint: true,
+    place: true, asPoint: true, gtypes: ['ferry_terminal'],
     q: ['node["amenity"="ferry_terminal"]', 'way["landuse"="port"]'] },
 
   /* ---- power: a constraint on the land, not a service to it ---- */
@@ -1058,6 +1065,89 @@ function pointInRing(pt, ring) {
 }
 
 /**
+ * A point that is actually INSIDE the ring, and in the roomiest part of it.
+ *
+ * The mean of a ring's vertices is not inside it. An L-shaped residential zone
+ * has its mean in the notch — on somebody else's land — and a C-shaped one has
+ * it in the gap the C opens onto, which around here is usually the creek the
+ * zone is wrapped around. So the pin that is there to make the area findable
+ * lands next to the area instead, which is worse than no pin: it says a place
+ * is somewhere it is not.
+ *
+ * Centroid first, because for the convex majority it is both inside and the
+ * visual middle. When it is outside, cast horizontal rays across the ring and
+ * take the middle of the widest span any of them cuts. That is guaranteed
+ * inside a simple polygon, and "widest span" puts the mark where there is most
+ * room for it rather than in the first sliver the scan happens to hit.
+ *
+ * @param {Array<[number,number]>} ring [lat, lng] pairs
+ * @returns {{lat:number,lng:number}|null}
+ */
+function ringInteriorPoint(ring) {
+  if (!ring || ring.length < 3) return null;
+  let norm = ring.map(pt => Array.isArray(pt) ? pt : [pt.lat, pt.lng])
+    .filter(pt => isFinite(pt[0]) && isFinite(pt[1]));
+  if (!norm.length) return null;
+  // A closed ring repeats its first corner as its last. Averaged as written,
+  // that corner counts twice and drags the mark towards it — a plain square
+  // came out at 0.8 of its own width rather than the middle.
+  const first = norm[0], last = norm[norm.length - 1];
+  if (norm.length > 1 && first[0] === last[0] && first[1] === last[1]) norm = norm.slice(0, -1);
+  if (!norm.length) return null;
+
+  let la = 0, ln = 0;
+  let n = -Infinity, s = Infinity;
+  norm.forEach(pt => {
+    la += pt[0]; ln += pt[1];
+    if (pt[0] > n) n = pt[0];
+    if (pt[0] < s) s = pt[0];
+  });
+  const mean = { lat: la / norm.length, lng: ln / norm.length };
+  if (norm.length < 3) return mean;
+
+  // THE CENTROID, NOT THE AVERAGE CORNER. OSM traces a boundary densely round
+  // its curves and sparsely down its straights, so averaging the corners drags
+  // the mark towards whichever side happens to be more finely surveyed. The
+  // shoelace centroid weighs the shape rather than the vertex list, so a
+  // parcel with a fiddly northern edge is still marked in its middle.
+  let a2 = 0, cx = 0, cy = 0;
+  for (let i = 0, j = norm.length - 1; i < norm.length; j = i++) {
+    const x0 = norm[j][1], y0 = norm[j][0], x1 = norm[i][1], y1 = norm[i][0];
+    const f = x0 * y1 - x1 * y0;
+    a2 += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f;
+  }
+  // A ring with no area — every corner on one line — has no centroid to find.
+  const centre = Math.abs(a2) > 1e-12
+    ? { lat: cy / (3 * a2), lng: cx / (3 * a2) }
+    : mean;
+  if (pointInRing([centre.lat, centre.lng], norm)) return centre;
+
+  // Eleven rays rather than one: a single scan through the middle can cross a
+  // narrow waist and produce a mark squeezed between two edges.
+  let best = null, bestW = 0;
+  for (let i = 1; i <= 11; i++) {
+    const y = s + (n - s) * (i / 12);
+    const xs = [];
+    for (let a = 0, b = norm.length - 1; a < norm.length; b = a++) {
+      const y1 = norm[b][0], y2 = norm[a][0];
+      if ((y1 > y) === (y2 > y)) continue;
+      const t = (y - y1) / (y2 - y1);
+      xs.push(norm[b][1] + t * (norm[a][1] - norm[b][1]));
+    }
+    xs.sort((p, q) => p - q);
+    // Pairs, in order: inside the ring between the 1st and 2nd crossing, the
+    // 3rd and 4th, and so on. The odd gaps are outside it.
+    for (let j = 0; j + 1 < xs.length; j += 2) {
+      const w = xs[j + 1] - xs[j];
+      if (w > bestW) { bestW = w; best = { lat: y, lng: (xs[j] + xs[j + 1]) / 2 }; }
+    }
+  }
+  // A degenerate ring — every vertex on one line — cuts no span at all. The
+  // mean is wrong but it is on the shape, which beats returning nothing.
+  return best || mean;
+}
+
+/**
  * Area of a multipolygon in km², holes subtracted.
  *
  * Shoelace on an equirectangular projection about the shape's own latitude.
@@ -1134,6 +1224,199 @@ function overpassGate() {
  * The fetch
  * ------------------------------------------------------------------------ */
 
+/* ---------------------------------------------------------------------------
+ * A second opinion, where there is one to be had
+ *
+ * WHAT GOOGLE CAN AND CANNOT DO HERE. Places returns a coordinate and a name.
+ * It has no geometry at all — no road centreline, no metro alignment, no
+ * land-use polygon — so for everything this scan draws as a line or an area,
+ * Overpass is not merely the better source, it is the only one. Asking Google
+ * for a "more accurate" residential boundary gets a pin in the middle of a
+ * suburb and nothing else.
+ *
+ * Where it is genuinely better is NAMES OF PLACES, and in India markedly so:
+ * the same integration already carries the nearby-places search for exactly
+ * that reason. OSM has the station node — surveyed, on the platform, which is
+ * what a distance should be measured to — and often no name on it, or a
+ * transliteration nobody uses. Google has the name everybody uses and a
+ * coordinate that may be the forecourt or the ticket office.
+ *
+ * So the two are merged rather than ranked: OSM says WHERE, Google says WHAT
+ * IT IS CALLED, and anything Google knows about that OSM has not mapped at all
+ * is added as a find in its own right. Every row carries the source that
+ * produced it, so the answer is checkable rather than asserted.
+ *
+ * NO KEY, NO CHANGE. Without a Google key this whole layer is skipped and the
+ * scan is exactly what it was.
+ * ------------------------------------------------------------------------ */
+
+/** Two names for one place: how close counts as the same station. */
+const RING_SAME_PLACE_M = 150;
+
+/** Names change more often than geometry does, so this expires sooner than the OSM cache. */
+const RING_GOOGLE_TTL_MS = 24 * 3600e3;
+
+const RING_GOOGLE_CACHE_KEY = 'dbot.ringGoogleCache.v1';
+
+/**
+ * One point for a feature, whatever shape it arrived as.
+ *
+ * Shared with the panel, which draws a pin at exactly this spot, so a find and
+ * its marker can never disagree about where the thing is.
+ *
+ * @param {object} f @returns {{lat:number,lng:number}|null}
+ */
+function ringFeaturePoint(f) {
+  if (!f) return null;
+  if (f.kind === 'point' && isFinite(f.lat) && isFinite(f.lng)) return { lat: f.lat, lng: f.lng };
+  if (f.polys && f.polys[0]) {
+    const at = ringInteriorPoint(f.polys[0]);
+    if (at) return at;
+  }
+  const ring = (f.polys && f.polys[0]) || f.pts;
+  if (!ring || !ring.length) return null;
+  let la = 0, ln = 0, k = 0;
+  ring.forEach(pt => {
+    const a = Array.isArray(pt) ? pt[0] : pt.lat;
+    const b = Array.isArray(pt) ? pt[1] : pt.lng;
+    if (isFinite(a) && isFinite(b)) { la += a; ln += b; k++; }
+  });
+  return k ? { lat: la / k, lng: ln / k } : null;
+}
+
+/** Metres between two coordinates, flat-earth over the few km a ring covers. */
+function ringMetresBetween(a, b) {
+  const dLat = (b.lat - a.lat) * 111320;
+  const dLng = (b.lng - a.lng) * 111320 * Math.cos((a.lat + b.lat) / 2 * Math.PI / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * Fold one class's Google rows into the OSM features already found.
+ *
+ * Pure, and separate from the fetch, so the merge rules can be proved without
+ * a network or a key — which matters, because "the same station twice" and
+ * "two stations collapsed into one" are both silent failures on a map.
+ *
+ * @param {object[]} features All features, mutated in place.
+ * @param {object[]} rows Google rows: {name, lat, lng, address}.
+ * @param {object} fc The scan class these rows belong to.
+ * @returns {{named:number, added:number, matched:number}}
+ */
+function ringMergeGoogle(features, rows, fc) {
+  const mine = features.filter(f => f.classId === fc.id);
+  const pts = mine.map(ringFeaturePoint);
+  const taken = new Set();
+  let named = 0, added = 0, matched = 0;
+
+  (rows || []).forEach(row => {
+    if (!isFinite(row.lat) || !isFinite(row.lng)) return;
+    // Nearest unclaimed feature of this class. Claimed rather than nearest-wins
+    // so two Google entries for one station — the building and its entrance —
+    // cannot both bind to it and leave a second OSM station unnamed.
+    let best = -1, bestD = RING_SAME_PLACE_M;
+    for (let i = 0; i < mine.length; i++) {
+      if (taken.has(i) || !pts[i]) continue;
+      const d = ringMetresBetween(pts[i], row);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best >= 0) {
+      taken.add(best);
+      matched++;
+      const f = mine[best];
+      f.source = 'osm+google';
+      f.googleName = row.name;
+      // OSM's coordinate is kept: a station node is surveyed and sits on the
+      // platform, which is what a distance should be measured to, while
+      // Google's marker can be the ticket office or the car park.
+      if (!f.name && row.name) { f.name = row.name; named++; }
+      return;
+    }
+    // Google knows a place OSM has not mapped. That is the other half of the
+    // accuracy problem and the half a single source can never fix.
+    features.push({
+      kind: 'point', classId: fc.id, name: row.name || null,
+      lat: row.lat, lng: row.lng, address: row.address || '',
+      source: 'google', km: 0,
+    });
+    added++;
+  });
+  return { named, added, matched };
+}
+
+/**
+ * Ask Google for the point classes in this scan, and merge what it says.
+ *
+ * Every failure is swallowed into a note: a scan that found forty things must
+ * not report nothing because a second opinion was unavailable.
+ *
+ * @param {object} res The Overpass result, mutated in place.
+ * @returns {Promise<object>} the same result
+ */
+async function ringAddGooglePlaces(res, lat, lng, radiusM, ids) {
+  if (!res || !res.ok || !Array.isArray(res.features)) return res;
+  res.features.forEach(f => { if (!f.source) f.source = 'osm'; });
+
+  if (typeof googleReady !== 'function' || !googleReady()) return res;
+  if (typeof googleNearby !== 'function') return res;
+  const classes = (ids || [])
+    .map(ringFeatureClass)
+    .filter(c => c && c.gtypes && c.gtypes.length && radiusM / 1000 <= c.max);
+  if (!classes.length) return res;
+
+  let cache = {};
+  try { cache = JSON.parse(localStorage.getItem(RING_GOOGLE_CACHE_KEY) || '{}') || {}; }
+  catch (e) { cache = {}; }
+  let wrote = false;
+  const tally = { named: 0, added: 0, matched: 0 };
+
+  for (const fc of classes) {
+    const key = fc.id + '|' + lat.toFixed(4) + '|' + lng.toFixed(4) + '|' + Math.round(radiusM);
+    let rows = null;
+    const hit = cache[key];
+    if (hit && Date.now() - hit.at < RING_GOOGLE_TTL_MS) rows = hit.r;
+    if (!rows) {
+      try {
+        rows = await googleNearby(lat, lng, radiusM, fc.gtypes);
+        cache[key] = { at: Date.now(), r: rows };
+        wrote = true;
+      } catch (e) {
+        // One class failing is not the scan failing.
+        console.warn('Ring scan: Google ' + fc.id + ' failed:', e && e.message);
+        continue;
+      }
+    }
+    const n = ringMergeGoogle(res.features, rows, fc);
+    tally.named += n.named; tally.added += n.added; tally.matched += n.matched;
+  }
+
+  if (wrote) {
+    // Bounded: an entry is a handful of names, but a user who scans all day
+    // should not fill their storage quota with them.
+    try {
+      const keys = Object.keys(cache).sort((a, b) => cache[b].at - cache[a].at).slice(0, 60);
+      const trimmed = {};
+      keys.forEach(k => { trimmed[k] = cache[k]; });
+      localStorage.setItem(RING_GOOGLE_CACHE_KEY, JSON.stringify(trimmed));
+    } catch (e) { /* private mode, or full — the merge still happened */ }
+  }
+  if (tally.added || tally.named) res.google = tally;
+  return res;
+}
+
+/**
+ * What is inside the ring: OpenStreetMap's geometry, with Google's names on it
+ * where there are any.
+ *
+ * @param {number} lat @param {number} lng @param {number} radiusM
+ * @param {string[]} ids @returns {Promise<object>}
+ */
+async function fetchRingFeatures(lat, lng, radiusM, ids) {
+  const res = await fetchOverpassFeatures(lat, lng, radiusM, ids);
+  try { return await ringAddGooglePlaces(res, lat, lng, radiusM, ids); }
+  catch (e) { console.warn('Ring scan: the Google pass failed:', e && e.message); return res; }
+}
+
 /**
  * Ask Overpass what is inside a ring.
  *
@@ -1141,7 +1424,7 @@ function overpassGate() {
  * @param {string[]} ids class ids to look for
  * @returns {Promise<{ok:boolean, reason?:string, features?:object[], skipped?:object[], truncated?:boolean, cached?:boolean}>}
  */
-async function fetchRingFeatures(lat, lng, radiusM, ids) {
+async function fetchOverpassFeatures(lat, lng, radiusM, ids) {
   if (!ids || !ids.length) return { ok: false, reason: 'no-classes' };
   if (!isFinite(lat) || !isFinite(lng) || !(radiusM > 0)) return { ok: false, reason: 'no-centre' };
 
@@ -1265,7 +1548,8 @@ if (typeof module !== 'undefined' && module.exports) {
     joinRingFeatures, joinChainsByName, roadNameKey, joinableNames,
     collapseCarriageways, markSharedAlignments, ringSideOf,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
-    ringPathKm, simplifyLatLngs,
+    ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
+    ringFeaturePoint, ringMetresBetween, ringMergeGoogle, RING_SAME_PLACE_M,
     RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,
     RING_CARRIAGEWAY_KM, RING_CARRIAGEWAY_FRAC, RING_SHARED_KM, RING_SHARED_FRAC,
   };

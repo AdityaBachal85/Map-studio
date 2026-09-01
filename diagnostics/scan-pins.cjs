@@ -832,6 +832,108 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     return { locs: locations.length, geoms: geometries.length };
   });
   // Twelve residential parcels would otherwise plant twelve pins to delete.
+  /* -- every ticked area gets a findable, distinguishable marker ----------- */
+
+  const parcels = await p.evaluate(() => {
+    const sq = (lat, lng, d) => [[lat - d, lng - d], [lat - d, lng + d],
+      [lat + d, lng + d], [lat + d, lng - d], [lat - d, lng - d]];
+    // An L-shaped zone. Its corner mean is in the notch, which is a different
+    // parcel — the pin used to land on somebody else's land.
+    const L = [[19.16, 72.94], [19.16, 72.952], [19.164, 72.952],
+      [19.164, 72.944], [19.172, 72.944], [19.172, 72.94], [19.16, 72.94]];
+    const result = [
+      { classId: 'builtUp', kind: 'area', name: 'Kalyan colony', polys: [sq(19.10, 72.88, 0.004)], areaKm2: 0.5 },
+      { classId: 'builtUp', kind: 'area', name: null, polys: [sq(19.11, 72.89, 0.004)], areaKm2: 0.5 },
+      { classId: 'builtUp', kind: 'area', name: null, polys: [sq(19.115, 72.895, 0.004)], areaKm2: 0.5 },
+      { classId: 'industrial', kind: 'area', name: null, polys: [sq(19.12, 72.90, 0.004)], areaKm2: 0.5 },
+      { classId: 'commercial', kind: 'area', name: 'Big Bazaar', polys: [sq(19.13, 72.91, 0.004)], areaKm2: 0.5 },
+      { classId: 'commercial', kind: 'area', name: 'L parcel', polys: [L], areaKm2: 0.5 },
+    ];
+    const lb = locations.length, gb = geometries.length;
+    ringScanState = { loc: null, km: 5, ids: [], picked: new Set(result.map((f, i) => i)), result };
+    keepRingScanSelection();
+    const made = locations.slice(lb);
+    const Lpin = made.find(l => l.name === 'L parcel');
+    return {
+      pins: made.length, shapes: geometries.length - gb,
+      names: made.map(l => l.name),
+      captioned: made.every(l => l.showLabel),
+      pinInsideL: Lpin ? pointInRing([Lpin.lat, Lpin.lng], L) : null,
+    };
+  });
+  // "with the polygon also add the marker ... any unnamed and all should have
+  // a marker with the name as it is."
+  ck('every ticked area is drawn AND pinned, named ones and unnamed alike',
+    parcels.pins === 6 && parcels.shapes === 6,
+    parcels.pins + ' pins for ' + parcels.shapes + ' shapes');
+  ck('and every pin carries its name on the map', parcels.captioned === true);
+  ck('a named parcel keeps the name OpenStreetMap has for it',
+    parcels.names.indexOf('Kalyan colony') >= 0 && parcels.names.indexOf('Big Bazaar') >= 0,
+    parcels.names.join(' | '));
+  // OSM names almost no residential or industrial land, so all of them arrived
+  // as "Built-up / residential land" — identical pins on different parcels,
+  // which is a set of markers you cannot tell apart.
+  ck('two unnamed parcels of one class are told apart',
+    parcels.names.indexOf('Built-up / residential land 1') >= 0
+    && parcels.names.indexOf('Built-up / residential land 2') >= 0,
+    parcels.names.join(' | '));
+  ck('but a lone unnamed one is not numbered for no reason',
+    parcels.names.indexOf('Industrial land') >= 0, parcels.names.join(' | '));
+  // A pin beside the area it marks is worse than no pin: it says a place is
+  // somewhere it is not, and says it confidently.
+  ck('and an L-shaped parcel is pinned ON the parcel, not in its notch',
+    parcels.pinInsideL === true, String(parcels.pinInsideL));
+
+  /* -- and the second opinion, when there is a key for one ----------------- */
+
+  // A scan that found forty things must not report nothing because a second
+  // opinion was unavailable. Google is reachable in a browser and NOT from
+  // this sandbox, so this runs the real failure — a rejected fetch — rather
+  // than a stub of one.
+  const unreachable = await p.evaluate(async () => {
+    const res = { ok: true, features: [{ kind: 'point', classId: 'station', name: 'Kalyan', lat: 19.1, lng: 72.88 }] };
+    const out = await ringAddGooglePlaces(res, 19.1, 72.88, 5000, ['station']);
+    return { keyed: typeof googleReady === 'function' && googleReady(),
+      count: out.features.length, source: out.features[0].source, google: out.google, ok: out.ok };
+  });
+  ck('Google being unreachable leaves the OpenStreetMap answer whole',
+    unreachable.ok === true && unreachable.count === 1 && !unreachable.google,
+    JSON.stringify(unreachable));
+  ck('and the row still says where its one answer came from',
+    unreachable.source === 'osm', unreachable.source);
+
+  // And with no key at all the layer is skipped before it ever reaches the
+  // network — no key means no change in behaviour, and no billable call.
+  const noKey = await p.evaluate(async () => {
+    const real = window.googleReady;
+    window.googleReady = () => false;
+    let calls = 0;
+    const realNearby = window.googleNearby;
+    window.googleNearby = () => { calls++; return Promise.resolve([]); };
+    const res = { ok: true, features: [{ kind: 'point', classId: 'station', name: 'Kalyan', lat: 19.1, lng: 72.88 }] };
+    const out = await ringAddGooglePlaces(res, 19.1, 72.88, 5000, ['station']);
+    window.googleReady = real; window.googleNearby = realNearby;
+    return { calls, count: out.features.length, source: out.features[0].source };
+  });
+  ck('with no key nothing is asked of Google at all',
+    noKey.calls === 0 && noKey.count === 1 && noKey.source === 'osm', JSON.stringify(noKey));
+
+  // And the row renders what the merge decided, rather than the panel having
+  // its own opinion about where a name came from.
+  const rows = await p.evaluate(() => {
+    const mk = (o) => ringScanItemRow(Object.assign({ _i: 0, kind: 'point', name: 'X' }, o), true);
+    return {
+      osm: mk({ source: 'osm' }),
+      both: mk({ source: 'osm+google', googleName: 'Kalyan Junction' }),
+      goog: mk({ source: 'google' }),
+    };
+  });
+  ck('an ordinary OSM row says nothing about its source', !/Google/.test(rows.osm), rows.osm);
+  ck('a row Google named says so, and which name it gave',
+    /OSM \+ Google/.test(rows.both) && /Kalyan Junction/.test(rows.both));
+  ck('and one Google found on its own is marked as Google\'s',
+    /<u[^>]*>Google<\/u>/.test(rows.goog));
+
   ck('and the switch turns the pins off without losing the shape',
     noPins.locs === 0 && noPins.geoms === 1, JSON.stringify(noPins));
 

@@ -91,6 +91,7 @@ async function runRingScan() {
     s.skipped = res.skipped || [];
     s.truncated = !!res.truncated;
     s.cached = !!res.cached;
+    s.google = res.google || null;
     // Everything found starts ticked: the common case is "yes, put the metro
     // line on the map". Unticking a class is one click; ticking six is six.
     s.picked = new Set(s.result.map((f, i) => i));
@@ -154,11 +155,20 @@ function ringScanItemRow(it, on) {
   // not half the road.
   if (it.carriageways > 1) label += ' — ' + it.carriageways + ' carriageways as one';
   const tip = it.parts > 1 ? ' title="' + it.parts + ' OpenStreetMap segments joined into one line"' : '';
+  // WHERE THE ANSWER CAME FROM, on the row. Two sources disagree sometimes, and
+  // a reader who cannot see which one produced a name has no way to judge it.
+  // OSM alone is the ordinary case and says nothing; the other two are worth a
+  // word each.
+  const src = it.source === 'google' ? ' <u title="Google knows this place; '
+      + 'OpenStreetMap has not mapped it">Google</u>'
+    : it.source === 'osm+google' ? ' <u title="OpenStreetMap geometry, Google\'s name'
+      + (it.googleName ? ': ' + esc(it.googleName) : '') + '">OSM + Google</u>'
+    : '';
   return '<label class="chk"' + tip + '><input type="checkbox" data-scan-i="' + it._i + '"'
     + (on ? ' checked' : '') + '> ' + esc(label)
     + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '')
     + (it.areaKm2 > 0.005 ? ' <i>' + fmtScanArea(it.areaKm2) + '</i>' : '')
-    + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + '</label>';
+    + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + src + '</label>';
 }
 
 /** Draw the dialog from `ringScanState`. */
@@ -221,6 +231,15 @@ function renderRingScan() {
       html += '<div class="rs-scan-note">Overpass returned its maximum. There is more inside this'
         + ' ring than is shown — narrow the ring for a complete answer.</div>';
     }
+    // Said out loud, because it is the difference between "the scan found
+    // eleven stations" and "the scan found eleven stations, four of which OSM
+    // had no name for and one of which it has not mapped at all".
+    if (s.google && (s.google.added || s.google.named)) {
+      const bits = [];
+      if (s.google.named) bits.push('named ' + s.google.named + ' that OpenStreetMap left blank');
+      if (s.google.added) bits.push('found ' + s.google.added + ' more it has not mapped');
+      html += '<div class="rs-scan-note">Google ' + bits.join(' and ') + '.</div>';
+    }
     if (s.cached) html += '<div class="rs-scan-note">From this browser\'s cache.</div>';
   }
 
@@ -270,6 +289,30 @@ function keepRingScanSelection() {
   // stays usable.
   const mergePolys = new Map();
 
+  // Unnamed finds of one class, counted so each gets its own name. OSM does not
+  // name most residential and industrial land, so all of them arrived as
+  // "Built-up / residential land" — five identical pins on five different
+  // parcels, which is five ways to lose track of which is which. Numbered only
+  // when there IS more than one, so a lone unnamed parcel is not "… 1".
+  const unnamed = new Map();
+  s.result.forEach((f, i) => {
+    if (!s.picked.has(i) || f.name) return;
+    const fc = ringFeatureClass(f.classId);
+    if (fc && fc.merge) return;             // merged classes number their own
+    unnamed.set(f.classId, (unnamed.get(f.classId) || 0) + 1);
+  });
+  const unnamedSeen = new Map();
+  // Closure over both maps: `unnamed` is how many there are, `unnamedSeen` is
+  // how many have been handed out so far.
+  const ringScanNameOf = (f, fc, total) => {
+    if (f.name) return f.name;
+    const base = fc ? fc.label : 'Feature';
+    if ((total.get(f.classId) || 0) < 2) return base;
+    const n = (unnamedSeen.get(f.classId) || 0) + 1;
+    unnamedSeen.set(f.classId, n);
+    return base + ' ' + n;
+  };
+
   s.result.forEach((f, i) => {
     if (!s.picked.has(i)) return;
     const fc = ringFeatureClass(f.classId);
@@ -282,7 +325,7 @@ function keepRingScanSelection() {
     }
 
     const clsId = fc ? fc.cls : null;
-    const name = f.name || (fc ? fc.label : 'Feature');
+    const name = ringScanNameOf(f, fc, unnamed);
     const iconKey = fc ? fc.icon : null;
     const markerStyle = (fc && fc.marker) || 'pin';
 
@@ -416,6 +459,18 @@ function ringScanPinArea(f, name, clsId, iconKey) {
 function ringScanPointOf(f) {
   if (f.kind === 'point' && isFinite(f.lat) && isFinite(f.lng)) {
     return { lat: f.lat, lng: f.lng };
+  }
+  // INSIDE the ring, not the mean of its corners. The mean of an L-shaped
+  // residential zone is in the notch — on somebody else's land — and of a
+  // C-shaped one is in the gap, which around here is usually the creek the
+  // zone wraps around. A pin beside the area it marks is worse than no pin:
+  // it says a place is somewhere it is not.
+  //
+  // Shared with the scan's own Google merge (services/ringFeatures.js), so a
+  // find and the pin dropped on it can never disagree about where it is.
+  if (typeof ringFeaturePoint === 'function') {
+    const at = ringFeaturePoint(f);
+    if (at) return at;
   }
   const ring = (f.polys && f.polys[0]) || f.pts;
   if (!ring || !ring.length) return null;
