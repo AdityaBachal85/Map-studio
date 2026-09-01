@@ -106,9 +106,25 @@ const RING_FEATURE_CLASSES = [
   // is a grey field several kilometres across covering everything under it —
   // and the answer it is there to give is "the airport is over there, this far
   // away". `asPoint` marks it at the centre of that perimeter instead.
+  // AN AIRSTRIP IS NOT AN AIRPORT. `aeroway=aerodrome` covers flying clubs,
+  // company airstrips, gliding fields and closed military stations alongside
+  // the international airport, and a scan that lists all of them as "Airports"
+  // has answered a question nobody asked — "how far to the airport" means the
+  // one with departure boards. Private, military and disused fields are
+  // filtered at the server, so they never reach the list to be untangled.
+  //
+  // `gPoint` — for this class, take Google's coordinate when the two match.
+  // OSM's aerodrome is the whole perimeter and its middle is a point on a
+  // runway; the distance anybody quotes is to the terminal, which is where
+  // Google's marker is. That is a kilometre or more of difference on the one
+  // number a property sheet is most often read for.
   { id: 'airport', label: 'Airports', cls: 'airport', max: 40, icon: 'airport',
-    place: true, asPoint: true, gtypes: ['airport', 'international_airport'],
-    q: ['way["aeroway"="aerodrome"]', 'relation["aeroway"="aerodrome"]'] },
+    place: true, asPoint: true, gPoint: true,
+    gtypes: ['airport', 'international_airport'],
+    q: ['way["aeroway"="aerodrome"]["aerodrome:type"!~"^(private|military)$"]'
+      + '["access"!="private"]["abandoned"!~"."]["disused"!~"."]',
+      'relation["aeroway"="aerodrome"]["aerodrome:type"!~"^(private|military)$"]'
+      + '["access"!="private"]["abandoned"!~"."]["disused"!~"."]'] },
   { id: 'river', label: 'Rivers', cls: 'water', max: 15,
     q: ['way["waterway"="river"]'] },
   { id: 'stream', label: 'Streams & canals', cls: 'water', max: 5,
@@ -939,7 +955,10 @@ function overpassToFeature(el, classId) {
   const name = (classId === 'powerLine' || classId === 'powerMinor')
     ? powerLineName(t)
     : (t.name || t['name:en'] || null);
-  const ref = t.ref || null;
+  // An airport's ref is its IATA code, which is how everybody refers to it and
+  // is the quickest way to tell the international airport from the airstrip
+  // two rows below it.
+  const ref = t.iata || t.ref || null;
 
   if (el.type === 'node') {
     if (!isFinite(el.lat) || !isFinite(el.lon)) return null;
@@ -1292,6 +1311,59 @@ function ringMetresBetween(a, b) {
 }
 
 /**
+ * How far a point is from a feature's FOOTPRINT, not from its middle.
+ *
+ * A single "same place" radius cannot serve both a station and an airport.
+ * 150 m is right for a station — two nodes further apart than that are two
+ * stations. It is nonsense for an aerodrome: OSM has the whole perimeter, its
+ * centre is a point on a runway, and Google's marker is at the terminal, 1.2 km
+ * away at Mumbai. Compared centre-to-centre the two never met, and the scan
+ * listed the airport TWICE — an unnamed polygon and a Google pin beside it,
+ * which is worse than either source on its own.
+ *
+ * Measuring to the outline fixes it without a number to tune. Inside the
+ * outline is zero. A terminal a hundred metres outside the fence — which
+ * happens, because the fence is what is mapped and the building is what is
+ * marked — is a hundred metres. A station across town is still across town.
+ * For a feature that is only a point, this is exactly the old comparison, so
+ * nothing about the station case changes.
+ *
+ * @param {object} f @param {{lat:number,lng:number}} pt
+ * @param {{lat:number,lng:number}} centre Already computed by the caller.
+ * @returns {number} metres
+ */
+function ringFootprintMetres(f, pt, centre) {
+  const rings = [];
+  if (f.polys && f.polys.length) {
+    f.polys.forEach(poly => {
+      const outer = Array.isArray(poly[0]) && Array.isArray(poly[0][0]) ? poly[0] : poly;
+      if (outer && outer.length > 2) rings.push(outer);
+    });
+  } else if (f.pts && f.pts.length > 1) {
+    rings.push(f.pts);
+  }
+  if (!rings.length) return ringMetresBetween(centre || ringFeaturePoint(f) || pt, pt);
+
+  const kx = 111320 * Math.cos(pt.lat * Math.PI / 180);
+  const px = pt.lng * kx, py = pt.lat * 111320;
+  let best = Infinity;
+  for (const ring of rings) {
+    if (f.polys && pointInRing([pt.lat, pt.lng], ring)) return 0;
+    for (let i = 1; i < ring.length; i++) {
+      const ax = ring[i - 1][1] * kx, ay = ring[i - 1][0] * 111320;
+      const bx = ring[i][1] * kx, by = ring[i][0] * 111320;
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = 0;
+      if (len2 > 0) t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+      const d = Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+/**
  * Fold one class's Google rows into the OSM features already found.
  *
  * Pure, and separate from the fetch, so the merge rules can be proved without
@@ -1314,11 +1386,11 @@ function ringMergeGoogle(features, rows, fc) {
     // Nearest unclaimed feature of this class. Claimed rather than nearest-wins
     // so two Google entries for one station — the building and its entrance —
     // cannot both bind to it and leave a second OSM station unnamed.
-    let best = -1, bestD = RING_SAME_PLACE_M;
+    let best = -1, bestD = Infinity;
     for (let i = 0; i < mine.length; i++) {
       if (taken.has(i) || !pts[i]) continue;
-      const d = ringMetresBetween(pts[i], row);
-      if (d < bestD) { bestD = d; best = i; }
+      const d = ringFootprintMetres(mine[i], row, pts[i]);
+      if (d < RING_SAME_PLACE_M && d < bestD) { bestD = d; best = i; }
     }
     if (best >= 0) {
       taken.add(best);
@@ -1326,12 +1398,29 @@ function ringMergeGoogle(features, rows, fc) {
       const f = mine[best];
       f.source = 'osm+google';
       f.googleName = row.name;
-      // OSM's coordinate is kept: a station node is surveyed and sits on the
-      // platform, which is what a distance should be measured to, while
-      // Google's marker can be the ticket office or the car park.
+      // WHOSE COORDINATE, PER CLASS. A station node is surveyed and sits on
+      // the platform, which is what a distance should be measured to, while
+      // Google's marker can be the ticket office — so OSM keeps it. An
+      // aerodrome's middle is a point on a runway and the distance anybody
+      // quotes is to the terminal, so `gPoint` classes take Google's.
+      if (fc.gPoint) {
+        f.lat = row.lat; f.lng = row.lng;
+        f.kind = 'point';
+      }
       if (!f.name && row.name) { f.name = row.name; named++; }
       return;
     }
+
+    // A SECOND ENTRY FOR A PLACE ALREADY MATCHED IS NOT A SECOND PLACE.
+    // Google lists an airport's terminals separately, so "Terminal 2" arrives
+    // 800 m from the terminal that just claimed the aerodrome — and, being
+    // unclaimed, would be added as another airport in the same field. Anything
+    // standing on a footprint already spoken for is part of it.
+    let swallowed = false;
+    taken.forEach(i => {
+      if (!swallowed && ringFootprintMetres(mine[i], row, pts[i]) < RING_SAME_PLACE_M) swallowed = true;
+    });
+    if (swallowed) return;
     // Google knows a place OSM has not mapped. That is the other half of the
     // accuracy problem and the half a single source can never fix.
     features.push({
@@ -1549,7 +1638,8 @@ if (typeof module !== 'undefined' && module.exports) {
     collapseCarriageways, markSharedAlignments, ringSideOf,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
     ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
-    ringFeaturePoint, ringMetresBetween, ringMergeGoogle, RING_SAME_PLACE_M,
+    ringFeaturePoint, ringMetresBetween, ringFootprintMetres,
+    ringMergeGoogle, RING_SAME_PLACE_M,
     RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,
     RING_CARRIAGEWAY_KM, RING_CARRIAGEWAY_FRAC, RING_SHARED_KM, RING_SHARED_FRAC,
   };

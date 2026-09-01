@@ -483,5 +483,109 @@ ck('and every kind of place a scan can find has one',
 ck('no line or area class asks Google for anything',
   M.RING_FEATURE_CLASSES.filter(c => !c.place).every(c => !c.gtypes));
 
+/* ---- the airport, which is the case a single rule gets wrong -------------- */
+
+/*
+ * ONE "SAME PLACE" RADIUS CANNOT SERVE BOTH A STATION AND AN AIRPORT. 150 m is
+ * right for a station — two nodes further apart than that are two stations. It
+ * is nonsense for an aerodrome: OSM holds the whole perimeter, its centre is a
+ * point on a runway, and Google's marker is at the terminal, which at Mumbai
+ * is 1.2 km away. Compared centre to centre the two never met and the scan
+ * listed the airport TWICE — an unnamed polygon and a Google pin beside it,
+ * which is worse than either source alone.
+ */
+const FIELD = 0.02;                                   // ~2.2 km, an airfield
+const airfield = [[19.09, 72.86], [19.09, 72.86 + FIELD], [19.09 + FIELD, 72.86 + FIELD],
+  [19.09 + FIELD, 72.86], [19.09, 72.86]];
+const aerodrome = () => ({ kind: 'area', classId: 'airport', name: null, polys: [airfield] });
+const AFC = { id: 'airport', gtypes: ['airport'], gPoint: true };
+
+// The measurement the fix rests on, stated before it is relied upon.
+const fieldCentre = M.ringFeaturePoint(aerodrome());
+const terminal = { name: 'CSMIA', lat: 19.095, lng: 72.865 };
+ck('an airfield centre and its terminal are far outside any station radius',
+  M.ringMetresBetween(fieldCentre, terminal) > M.RING_SAME_PLACE_M * 4,
+  Math.round(M.ringMetresBetween(fieldCentre, terminal)) + ' m apart');
+ck('but measured to the airfield OUTLINE the terminal is on it',
+  M.ringFootprintMetres(aerodrome(), terminal, fieldCentre) === 0);
+
+feats = [aerodrome()];
+tally = M.ringMergeGoogle(feats, [terminal], AFC);
+ck('so the airport is one row, not an unnamed polygon and a Google pin',
+  feats.length === 1 && tally.matched === 1 && tally.added === 0,
+  feats.length + ' row(s)');
+ck('and it carries the name Google has for it',
+  feats[0].name === 'CSMIA', feats[0].name);
+// The distance anybody quotes for an airport is to the terminal. OSM's middle
+// is a point on a runway, which is a kilometre wrong on the one number a
+// property sheet is most often read for.
+ck('marked at the terminal, not at the middle of the runways',
+  feats[0].lat === terminal.lat && feats[0].lng === terminal.lng && feats[0].kind === 'point',
+  feats[0].lat + ', ' + feats[0].lng);
+
+// The fence is what OSM maps and the building is what Google marks, so the two
+// do not always agree about which side of the boundary the terminal is on.
+feats = [aerodrome()];
+tally = M.ringMergeGoogle(feats, [{ name: 'CSMIA', lat: 19.0891, lng: 72.87 }], AFC);
+ck('a terminal just outside the mapped fence is still the same airport',
+  feats.length === 1 && tally.matched === 1, feats.length + ' row(s)');
+
+// Google lists terminals separately. Unclaimed, "Terminal 2" would be added as
+// another airport standing in the same field.
+feats = [aerodrome()];
+tally = M.ringMergeGoogle(feats, [
+  { name: 'CSMIA Terminal 1', lat: 19.095, lng: 72.865 },
+  { name: 'CSMIA Terminal 2', lat: 19.102, lng: 72.872 },
+], AFC);
+ck('a second terminal of one airport is not a second airport',
+  feats.length === 1 && tally.added === 0, feats.map(f => f.name).join(' | '));
+
+// And the thing that must still work: a genuinely separate aerodrome.
+feats = [aerodrome()];
+tally = M.ringMergeGoogle(feats, [
+  { name: 'CSMIA', lat: 19.095, lng: 72.865 },
+  { name: 'Juhu Aerodrome', lat: 19.20, lng: 72.83 },
+], AFC);
+ck('but a different airfield across the city still is',
+  feats.length === 2 && tally.added === 1, feats.map(f => f.name).join(' | '));
+
+// A station keeps the surveyed coordinate: its node is on the platform, which
+// is what a distance should be measured to, while Google's marker can be the
+// ticket office. Only the classes that ask for it move.
+feats = [stn(null, 19.10, 72.88)];
+M.ringMergeGoogle(feats, [{ name: 'Kalyan Junction', lat: 19.1004, lng: 72.8801 }], FC);
+ck('and a station is still marked where OpenStreetMap surveyed it',
+  feats[0].lat === 19.10 && feats[0].lng === 72.88, feats[0].lat + ', ' + feats[0].lng);
+ck('because only the classes that ask for it take Google\'s position',
+  M.RING_FEATURE_CLASSES.filter(c => c.gPoint).map(c => c.id).join() === 'airport',
+  M.RING_FEATURE_CLASSES.filter(c => c.gPoint).map(c => c.id).join() || 'none');
+
+/* ---- an airstrip is not an airport --------------------------------------- */
+
+// `aeroway=aerodrome` covers flying clubs, company airstrips, gliding fields
+// and closed military stations alongside the international airport. A scan
+// that lists all of them as "Airports" has answered a question nobody asked:
+// "how far to the airport" means the one with departure boards.
+const air = M.RING_FEATURE_CLASSES.find(c => c.id === 'airport');
+ck('the airport query excludes private and military fields',
+  air.q.every(q => /aerodrome:type.*!~.*private\|military/.test(q)), air.q[0]);
+ck('and fields that are closed or abandoned',
+  air.q.every(q => /abandoned.*!~/.test(q) && /disused.*!~/.test(q)));
+ck('and anything marked private access', air.q.every(q => /access.*!=.*private/.test(q)));
+// A negated filter in Overpass matches elements that lack the key too, so an
+// ordinary aerodrome with none of these tags is still returned. Getting that
+// backwards would return nothing at all.
+ck('every exclusion is a negation, so an untagged aerodrome still comes back',
+  air.q.every(q => !/\["aerodrome:type"="/.test(q) && !/\["access"="/.test(q)));
+
+const { ql } = (function () {
+  // overpassQL is not exported; rebuild the one statement it would emit.
+  return { ql: air.q.map(f => f + '(around:5000,19.100000,72.880000);').join('\n') };
+})();
+ck('and the statement it builds is balanced and terminated',
+  ql.split('[').length === ql.split(']').length
+  && ql.split('(').length === ql.split(')').length
+  && ql.trim().endsWith(';'), ql.split('\n')[0]);
+
 console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
 process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
