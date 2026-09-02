@@ -704,6 +704,18 @@ function registerGeom(layer, shape, meta) {
   const now = new Date().toISOString();
   const clean = {};
   Object.keys(meta || {}).forEach(k => { if (meta[k] !== undefined) clean[k] = meta[k]; });
+  // A SHAPE KEEPS ITS ID ACROSS A REBUILD, the way a location and a route
+  // always have. Without one, every applyProject renumbered the shapes from 1,
+  // so nothing outside the geometry could refer to a particular shape and
+  // still mean it afterwards — which is why an undo could not put back which
+  // shapes had been hidden. An id offered by a foreign GeoJSON is refused if
+  // something already holds it, and nextGeomId is pushed past whatever is
+  // accepted so the next new shape cannot collide with it.
+  if (clean.id != null) {
+    const taken = geometries.some(x => x.id === clean.id);
+    if (taken) delete clean.id;
+    else nextGeomId = Math.max(nextGeomId, clean.id + 1);
+  }
   const g = Object.assign({
     id: nextGeomId++, shape, layer,
     name: nextGeomName(shape), description: '', notes: '',

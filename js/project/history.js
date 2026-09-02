@@ -137,6 +137,62 @@ function historyCommit() {
 }
 
 /**
+ * Which layers are switched off right now.
+ *
+ * WHY THIS IS NOT IN THE SNAPSHOT. Hiding a layer is the same kind of act as
+ * panning: it changes what you are looking at, not what the map IS. The
+ * snapshot deliberately drops `view` for exactly that reason — and visibility
+ * was dropped too, but by omission rather than on purpose, which is a
+ * different thing and had the opposite effect.
+ *
+ * `applyProject` destroys and rebuilds every location, route, shape and
+ * measurement, and the rebuilt ones start visible. So an undo undid one edit
+ * AND every layer anybody had switched off, all at once. Undoing a colour
+ * change and watching thirty hidden shapes reappear does not read as an undo.
+ * It reads as the map resetting, which is what it was called.
+ *
+ * @returns {{loc:Set, rt:Set, geom:Set, meas:Set}}
+ */
+function historyHiddenNow() {
+  const ids = arr => new Set((arr || []).filter(x => x && x._hidden).map(x => x.id));
+  return {
+    loc: ids(typeof locations !== 'undefined' ? locations : []),
+    rt: ids(typeof routes !== 'undefined' ? routes : []),
+    geom: ids(typeof geometries !== 'undefined' ? geometries : []),
+    meas: ids(typeof aerialMeasurements !== 'undefined' ? aerialMeasurements : []),
+  };
+}
+
+/**
+ * Switch back off whatever was off before the snapshot was applied.
+ *
+ * Through the same setters the Layer Manager uses, not by writing `_hidden`:
+ * the flag alone leaves the layer on the map and only the tick box changes, so
+ * a shortcut here would report success and show the shape.
+ *
+ * Anything the undone step deleted simply is not there to hide, and anything
+ * it restored was not hidden when it went away — both fall out of matching on
+ * id rather than needing a rule.
+ *
+ * @param {object} was from {@link historyHiddenNow}
+ */
+function historyRestoreHidden(was) {
+  const put = (arr, set, fn) => {
+    if (!set || !set.size || typeof fn !== 'function') return;
+    (arr || []).forEach(x => { if (x && set.has(x.id)) fn(x, false); });
+  };
+  put(typeof locations !== 'undefined' ? locations : [], was.loc,
+    typeof setLocVisible === 'function' ? setLocVisible : null);
+  put(typeof routes !== 'undefined' ? routes : [], was.rt,
+    typeof setRouteVisible === 'function' ? setRouteVisible : null);
+  put(typeof geometries !== 'undefined' ? geometries : [], was.geom,
+    typeof setGeomVisible === 'function' ? setGeomVisible : null);
+  put(typeof aerialMeasurements !== 'undefined' ? aerialMeasurements : [], was.meas,
+    typeof setAerialMeasurementVisible === 'function' ? setAerialMeasurementVisible : null);
+  if (typeof refreshLayers === 'function') refreshLayers();
+}
+
+/**
  * Put a snapshot back on the map, without moving the map.
  *
  * The snapshot has no `view` — see historySnapshot() — and applyProject()
@@ -149,11 +205,13 @@ function historyCommit() {
  */
 function historyApply(json) {
   historyApplying = true;
+  const wasHidden = historyHiddenNow();
   try {
     const proj = JSON.parse(json);
     const c = map.getCenter();
     proj.view = { c: [c.lat, c.lng], z: map.getZoom() };
     applyProject(proj, { silent: true });
+    historyRestoreHidden(wasHidden);
   } catch (e) {
     console.warn('History: could not apply a step —', e && e.message);
   } finally {

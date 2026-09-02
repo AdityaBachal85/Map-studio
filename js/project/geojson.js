@@ -17,6 +17,10 @@ function geomToGeoJSONFeature(g) {
   return {
     type: 'Feature',
     properties: {
+      // Its own id, so a shape is still the same shape after a rebuild — see
+      // registerGeom. An undo restores the map from one of these, and without
+      // it every shape came back as a stranger.
+      id: g.id,
       shape: g.shape, name: g.name, description: g.description, notes: g.notes,
       fillColor: g.fillColor, borderColor: g.borderColor, borderWidth: g.borderWidth, fillOpacity: g.fillOpacity,
       lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
@@ -103,6 +107,7 @@ function importGeoJSONFeature(feat) {
   } catch (e) { return false; }
   if (!layer) return false;
   registerGeom(layer, shape, {
+    id: props.id != null ? props.id : undefined,
     name: props.name || undefined, description: props.description || '', notes: props.notes || '',
     fillColor: props.fillColor, borderColor: props.borderColor,
     borderWidth: props.borderWidth != null ? +props.borderWidth : undefined,
