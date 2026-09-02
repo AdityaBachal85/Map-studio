@@ -68,6 +68,9 @@ const OVERPASS_CACHE_MAX_BYTES = 1.5e6;
  * beside the query that produces the feature, so adding a class means adding
  * one row rather than editing a lookup table somewhere else that will drift.
  *
+ * `proposed` marks a whole class as not-yet-built: its features are drawn
+ * dashed in their class colour and listed in the legend as "(proposed)".
+ *
  * `gtypes` is the same class said in Google Places' vocabulary, and only the
  * POINT classes carry one. Google returns a coordinate and a name, never a
  * polygon or a line, so it can say what a station is called and nothing at all
@@ -138,6 +141,45 @@ const RING_FEATURE_CLASSES = [
     place: true, asPoint: true, gtypes: ['ferry_terminal'],
     q: ['node["amenity"="ferry_terminal"]', 'way["landuse"="port"]'] },
 
+  /* ---- what is COMING, which is half of what a site is worth --------------
+   * A connectivity sheet argues about the future as much as the present: "the
+   * metro opens in 2027, 800 m from the gate" is often the strongest line on
+   * the page, and until now the only way to put it on the map was to draw it
+   * by hand from memory. OSM has these mapped, tagged with what they will be.
+   *
+   * `proposed: true` marks the whole class as not-yet-built. The app already
+   * had the vocabulary for that — a proposed line is drawn dashed in its own
+   * class's colour and gets its own "(proposed)" row in the legend — because a
+   * proposed motorway is still a motorway, and a separate colour would say it
+   * is a different kind of thing. What it must never do is read as built.
+   *
+   * Under construction and merely proposed are the same class deliberately.
+   * OSM's line between them is drawn by whoever last edited the way, an
+   * excavator on site is `construction` to one mapper and `proposed` to
+   * another, and a sheet that claimed the difference would be claiming a
+   * precision the data does not have. Both say: not there yet.
+   */
+  { id: 'plannedRoad', label: 'Proposed & under-construction roads', cls: 'expressway',
+    max: 25, proposed: true,
+    q: ['way["highway"~"^(proposed|construction)$"]',
+      'way["proposed:highway"~"^(motorway|trunk|primary|secondary)$"]',
+      'way["construction:highway"~"^(motorway|trunk|primary|secondary)$"]'] },
+  { id: 'plannedRail', label: 'Proposed & under-construction metro / rail', cls: 'metro',
+    max: 25, proposed: true,
+    q: ['way["railway"~"^(proposed|construction)$"]'] },
+  // A TUNNEL IS A ROAD YOU CANNOT SEE ON THE IMAGERY, which is exactly why it
+  // is worth marking: the reader looking at a satellite tile sees a hillside
+  // between the site and the highway and concludes there is no link. The big
+  // ones here — the coastal road tube, the Thane-Borivali twin tunnel — are
+  // the connectivity argument for whole suburbs.
+  //
+  // Not `proposed`: a tunnel that exists is a road that exists. One still
+  // being bored carries `highway=construction` and is found by the class
+  // above, marked not-yet-built, which is the honest place for it.
+  { id: 'tunnel', label: 'Road & rail tunnels', cls: 'major', max: 15,
+    q: ['way["tunnel"]["highway"~"^(motorway|trunk|primary|secondary)$"]',
+      'way["tunnel"]["railway"~"^(rail|subway|light_rail)$"]'] },
+
   /* ---- power: a constraint on the land, not a service to it ---- */
   { id: 'powerLine', label: 'HT / transmission lines', cls: 'powerLine', max: 25,
     q: ['way["power"="line"]'] },
@@ -179,7 +221,11 @@ const RING_FEATURE_CLASSES = [
 
 /** What a fresh install looks for. */
 const RING_FEATURE_DEFAULTS = ['expressway', 'highway', 'metro', 'rail', 'station',
-  'airport', 'river', 'powerLine'];
+  'airport', 'river', 'powerLine',
+  // Looked for by default, because what is coming is half of what a site is
+  // worth and there are far fewer planned ways than built ones — this costs
+  // the scan almost nothing and is often the strongest line on the sheet.
+  'plannedRoad', 'plannedRail'];
 
 /** @param {string} id @returns {object|null} */
 function ringFeatureClass(id) { return RING_FEATURE_CLASSES.find(c => c.id === id) || null; }
@@ -233,6 +279,23 @@ function overpassClassOf(el, ids) {
   const t = el.tags || {};
   const has = id => ids.indexOf(id) >= 0;
 
+  // PLANNED FIRST. `highway=construction` matches none of the rules below, so
+  // this is not a precedence contest — but a way tagged `construction=trunk`
+  // would be claimed by the trunk rule if that ever changed, and a road that
+  // does not exist yet must never be classed as one that does.
+  if (/^(proposed|construction)$/.test(t.highway || '')
+    || t['proposed:highway'] || t['construction:highway']) {
+    if (has('plannedRoad')) return 'plannedRoad';
+  }
+  if (/^(proposed|construction)$/.test(t.railway || '') && has('plannedRail')) return 'plannedRail';
+  // Then tunnels, ahead of the plain road and rail rules: being a tunnel is
+  // the more specific fact about a trunk road that runs through a hill, and a
+  // reader who ticked Tunnels asked for exactly that distinction. Untick it
+  // and the same way falls through to its ordinary class below.
+  if (t.tunnel && t.tunnel !== 'no' && has('tunnel')
+    && (/^(motorway|trunk|primary|secondary)$/.test(t.highway || '')
+      || /^(rail|subway|light_rail)$/.test(t.railway || ''))) return 'tunnel';
+
   if (t.aeroway === 'aerodrome' && has('airport')) return 'airport';
   if (t.railway === 'station' || t.station === 'subway') {
     if ((t.station === 'subway' || t.subway === 'yes') && has('metroStation')) return 'metroStation';
@@ -267,6 +330,37 @@ function overpassClassOf(el, ids) {
   // Last, and only if nothing above claimed it: almost every building also
   // carries other tags, and a school building must not outrank the school.
   if (t.building && has('building')) return 'building';
+  return null;
+}
+
+/**
+ * The connectivity class a planned road or a tunnel should be drawn in.
+ *
+ * WITHOUT THIS EVERY PLANNED ROAD IS AN EXPRESSWAY. The scan class has one
+ * `cls` and the things it finds do not: OSM tags a way under construction with
+ * what it is going to BE — `construction=motorway`, `proposed=secondary` — so
+ * a planned residential street and a planned national highway arrive in the
+ * same bag. Drawn from the class alone the street would be six pixels of
+ * expressway blue, which is not a small cosmetic error on a sheet somebody is
+ * making a decision from.
+ *
+ * A tunnel is the same problem the other way round: the class says `major`
+ * because it must say something, but the way itself knows whether it is a
+ * motorway tube or a metro bore.
+ *
+ * @param {object} t the element's tags @returns {string|null}
+ */
+function overpassLineClass(t) {
+  const road = t.highway === 'proposed' || t.highway === 'construction'
+    ? (t.proposed || t.construction || t['proposed:highway'] || t['construction:highway'] || '')
+    : (t.highway || t['proposed:highway'] || t['construction:highway'] || '');
+  if (road === 'motorway' || road === 'trunk' || road === 'primary') return 'expressway';
+  if (road === 'secondary' || road === 'tertiary') return 'major';
+  const rail = t.railway === 'proposed' || t.railway === 'construction'
+    ? (t.proposed || t.construction || '')
+    : (t.railway || '');
+  if (/^(subway|light_rail|monorail)$/.test(rail)) return 'metro';
+  if (/^(rail|narrow_gauge)$/.test(rail)) return 'railway';
   return null;
 }
 
@@ -783,6 +877,11 @@ function collapseCarriageways(chains) {
     for (let j = i + 1; j < order.length; j++) {
       const o = order[j];
       if (dropped.has(o) || o.kind !== 'line' || !o.pts || o.pts.length < 2) continue;
+      // A WIDENING PROJECT SHARES ITS ROAD'S NAME. "NH 48" the built highway
+      // and "NH 48" the proposed six-laning run alongside each other for their
+      // whole length and match every geometric test for a dual carriageway —
+      // and collapsing them would delete the one piece of news on the map.
+      if (!!c.proposed !== !!o.proposed) continue;
       const oKey = roadNameKey(o.name || '');
       const oRef = roadNameKey(o.ref || '');
       // Same road, said either way round. A carriageway often carries the ref
@@ -813,8 +912,8 @@ const RING_SHARED_KM = 0.030;
 const RING_SHARED_FRAC = 0.20;
 
 /** Classes that are a road, and classes that ride over one. */
-const RING_ROAD_CLASSES = ['expressway', 'highway', 'arterial'];
-const RING_OVER_ROAD_CLASSES = ['metro', 'rail'];
+const RING_ROAD_CLASSES = ['expressway', 'highway', 'arterial', 'plannedRoad', 'tunnel'];
+const RING_OVER_ROAD_CLASSES = ['metro', 'rail', 'plannedRail'];
 
 /**
  * Mark the lines that run along a road, so both can still be seen.
@@ -952,6 +1051,14 @@ function joinChainsByName(chains, near) {
  */
 function overpassToFeature(el, classId) {
   const t = el.tags || {};
+  // Only where the scan class covers several real classes at once — planned
+  // infrastructure and tunnels. Everywhere else the class already says it.
+  const cls = (classId === 'plannedRoad' || classId === 'plannedRail' || classId === 'tunnel')
+    ? overpassLineClass(t) : null;
+  // On the FEATURE, not only on its scan class: the joiner below has to be
+  // able to tell a planned bypass from the built road it is named after, and
+  // it only ever sees features.
+  const proposed = (classId === 'plannedRoad' || classId === 'plannedRail') || undefined;
   const name = (classId === 'powerLine' || classId === 'powerMinor')
     ? powerLineName(t)
     : (t.name || t['name:en'] || null);
@@ -962,7 +1069,7 @@ function overpassToFeature(el, classId) {
 
   if (el.type === 'node') {
     if (!isFinite(el.lat) || !isFinite(el.lon)) return null;
-    return { kind: 'point', classId, name: name || ref, ref, lat: el.lat, lng: el.lon, km: 0 };
+    return { kind: 'point', classId, cls, proposed, name: name || ref, ref, lat: el.lat, lng: el.lon, km: 0 };
   }
 
   /* ---- relations: real multipolygons, with holes ----
@@ -995,7 +1102,7 @@ function overpassToFeature(el, classId) {
       }
       polys[idx].push(simplifyLatLngs(h, OVERPASS_SIMPLIFY_DEG));
     });
-    return { kind: 'area', classId, name, ref, polys, km: 0, areaKm2: polysAreaKm2(polys) };
+    return { kind: 'area', classId, cls, proposed, name, ref, polys, km: 0, areaKm2: polysAreaKm2(polys) };
   }
 
   const geom = el.geometry || [];
@@ -1007,10 +1114,10 @@ function overpassToFeature(el, classId) {
   const closed = pts.length >= 4
     && Math.abs(first[0] - last[0]) < 1e-7 && Math.abs(first[1] - last[1]) < 1e-7;
   if (closed && isAreaTagged(t)) {
-    return { kind: 'area', classId, name, ref, polys: [[pts]], km: 0, areaKm2: polysAreaKm2([[pts]]) };
+    return { kind: 'area', classId, cls, proposed, name, ref, polys: [[pts]], km: 0, areaKm2: polysAreaKm2([[pts]]) };
   }
 
-  return { kind: 'line', classId, name, ref, pts, km: ringPathKm(pts) };
+  return { kind: 'line', classId, cls, proposed, name, ref, pts, km: ringPathKm(pts) };
 }
 
 /**
@@ -1635,7 +1742,8 @@ function ringFeatureRetryable(reason) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     joinRingFeatures, joinChainsByName, roadNameKey, joinableNames,
-    collapseCarriageways, markSharedAlignments, ringSideOf,
+    collapseCarriageways, markSharedAlignments, ringSideOf, overpassLineClass,
+    overpassClassOf, overpassToFeature,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
     ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,

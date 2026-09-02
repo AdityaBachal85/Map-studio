@@ -587,5 +587,98 @@ ck('and the statement it builds is balanced and terminated',
   && ql.split('(').length === ql.split(')').length
   && ql.trim().endsWith(';'), ql.split('\n')[0]);
 
+/* ---- what is coming, not only what is there ------------------------------- */
+
+/*
+ * A connectivity sheet argues about the future as much as the present. OSM has
+ * planned infrastructure mapped and tagged with what it will BE, which is the
+ * detail that matters: a scan class has one class and the ways it finds do
+ * not, so drawn from the class alone a planned residential street would be six
+ * pixels of expressway blue on a sheet somebody is deciding from.
+ */
+const IDS = ['plannedRoad', 'plannedRail', 'tunnel', 'expressway', 'highway',
+  'arterial', 'metro', 'rail'];
+const classOf = t => M.overpassClassOf({ tags: t }, IDS);
+
+ck('a motorway under construction is found as planned road',
+  classOf({ highway: 'construction', construction: 'motorway' }) === 'plannedRoad');
+ck('and one merely proposed is the same class',
+  classOf({ highway: 'proposed', proposed: 'trunk' }) === 'plannedRoad');
+// OSM's line between "proposed" and "under construction" is drawn by whoever
+// last edited the way. A sheet that claimed the difference would be claiming a
+// precision the data does not have.
+ck('the prefixed spellings are found too',
+  classOf({ 'construction:highway': 'primary' }) === 'plannedRoad'
+  && classOf({ 'proposed:highway': 'motorway' }) === 'plannedRoad');
+ck('a metro under construction is found as planned rail',
+  classOf({ railway: 'construction', construction: 'subway' }) === 'plannedRail');
+
+// The class it is DRAWN in comes from the way, not from the bag it arrived in.
+ck('a planned motorway is drawn as an expressway',
+  M.overpassLineClass({ highway: 'construction', construction: 'motorway' }) === 'expressway');
+ck('but a planned side street is drawn as a major road, not an expressway',
+  M.overpassLineClass({ highway: 'proposed', proposed: 'secondary' }) === 'major');
+ck('a planned metro is drawn as a metro',
+  M.overpassLineClass({ railway: 'construction', construction: 'subway' }) === 'metro');
+
+// A tunnel is a road you cannot see on the imagery, which is why it is worth
+// marking: the reader sees a hillside and concludes there is no link.
+ck('a trunk road through a hill is found as a tunnel when tunnels are asked for',
+  classOf({ highway: 'trunk', tunnel: 'yes' }) === 'tunnel');
+ck('and drawn in the class the road itself is',
+  M.overpassLineClass({ highway: 'trunk', tunnel: 'yes' }) === 'expressway'
+  && M.overpassLineClass({ railway: 'subway', tunnel: 'yes' }) === 'metro');
+// Untick Tunnels and the same way is an ordinary trunk road again, rather than
+// disappearing because one rule claimed it and another was not asked.
+ck('untick tunnels and the same road is found as a highway',
+  M.overpassClassOf({ tags: { highway: 'trunk', tunnel: 'yes' } },
+    ['expressway', 'highway']) === 'highway');
+ck('and a road that is not in a tunnel is never claimed as one',
+  classOf({ highway: 'trunk' }) === 'highway'
+  && classOf({ highway: 'trunk', tunnel: 'no' }) === 'highway');
+
+// A tunnel that exists is a road that exists. One still being bored carries
+// highway=construction and is found by the planned class, which is the honest
+// place for it.
+ck('a tunnel is not marked as unbuilt, but a tunnel under construction is',
+  !M.overpassToFeature({ type: 'way', tags: { highway: 'trunk', tunnel: 'yes' },
+    geometry: [{ lat: 19.1, lon: 72.8 }, { lat: 19.2, lon: 72.9 }] }, 'tunnel').proposed
+  && M.overpassToFeature({ type: 'way', tags: { highway: 'construction', tunnel: 'yes' },
+    geometry: [{ lat: 19.1, lon: 72.8 }, { lat: 19.2, lon: 72.9 }] }, 'plannedRoad').proposed === true);
+
+// THE ONE THAT WOULD HAVE DELETED THE NEWS. A widening project shares its
+// road's name and runs alongside it for its whole length, so it matches every
+// geometric test for a dual carriageway.
+const built = line({ classId: 'highway', name: 'NH 48', pts: base, km: 4 });
+const plan = line({ classId: 'plannedRoad', name: 'NH 48', pts: shift(base, 18), km: 3.9 });
+plan.proposed = true;
+const kept2 = M.collapseCarriageways([built, plan]);
+ck('a proposed six-laning is not collapsed into the road it is named after',
+  kept2.length === 2, kept2.length + ' line(s)');
+// While the case the collapse exists for still works.
+const bothBuilt = M.collapseCarriageways([
+  line({ classId: 'highway', name: 'NH 48', pts: base, km: 4 }),
+  line({ classId: 'highway', name: 'NH 48', pts: shift(base, 18), km: 3.9 }),
+]);
+ck('and two built carriageways of one road still are', bothBuilt.length === 1);
+
+// A planned metro over an existing road is exactly the pair the separation
+// exists for — it is the case people most want to see side by side.
+const planOver = [
+  line({ classId: 'arterial', name: 'LBS Marg', pts: base, km: 4 }),
+  line({ classId: 'plannedRail', name: 'Metro Line 5', pts: shift(base, 8), km: 4 }),
+];
+M.markSharedAlignments(planOver);
+ck('a planned metro over a road is moved clear of it like a built one',
+  planOver[1].overRoad === true && Math.abs(planOver[1].shiftSide) === 1);
+
+const planned = M.RING_FEATURE_CLASSES.filter(c => c.proposed);
+ck('the planned classes say they are not built, and only they do',
+  planned.map(c => c.id).sort().join() === 'plannedRail,plannedRoad',
+  planned.map(c => c.id).join());
+ck('and a fresh scan looks for them, because they are the news on the sheet',
+  M.RING_FEATURE_DEFAULTS.indexOf('plannedRoad') >= 0
+  && M.RING_FEATURE_DEFAULTS.indexOf('plannedRail') >= 0);
+
 console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
 process.exit(R.filter(Boolean).length === R.length ? 0 : 1);

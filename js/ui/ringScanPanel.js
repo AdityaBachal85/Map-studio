@@ -159,6 +159,12 @@ function ringScanItemRow(it, on) {
   // a reader who cannot see which one produced a name has no way to judge it.
   // OSM alone is the ordinary case and says nothing; the other two are worth a
   // word each.
+  // NOT BUILT YET, on the row as well as on the map. Somebody reading the list
+  // is choosing what to put in front of a client, and "Mumbai-Ahmedabad
+  // High-Speed Rail Corridor" reads as a railway unless the list says when.
+  const soon = it.proposed
+    ? ' <u title="Mapped as proposed or under construction — not built yet">not built yet</u>'
+    : '';
   const src = it.source === 'google' ? ' <u title="Google knows this place; '
       + 'OpenStreetMap has not mapped it">Google</u>'
     : it.source === 'osm+google' ? ' <u title="OpenStreetMap geometry, Google\'s name'
@@ -168,7 +174,7 @@ function ringScanItemRow(it, on) {
     + (on ? ' checked' : '') + '> ' + esc(label)
     + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '')
     + (it.areaKm2 > 0.005 ? ' <i>' + fmtScanArea(it.areaKm2) + '</i>' : '')
-    + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + src + '</label>';
+    + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + soon + src + '</label>';
 }
 
 /** Draw the dialog from `ringScanState`. */
@@ -324,7 +330,11 @@ function keepRingScanSelection() {
       return;
     }
 
-    const clsId = fc ? fc.cls : null;
+    // The feature's OWN class where it has one. A scan class that covers
+    // several real ones — planned roads, tunnels — derives it per way from
+    // what the way says it is going to be, so a planned residential street is
+    // not drawn as six pixels of expressway blue.
+    const clsId = f.cls || (fc ? fc.cls : null);
     const name = ringScanNameOf(f, fc, unnamed);
     const iconKey = fc ? fc.icon : null;
     const markerStyle = (fc && fc.marker) || 'pin';
@@ -367,7 +377,7 @@ function keepRingScanSelection() {
 
     added.push(registerGeom(layer, shape,
       ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel,
-        f.overRoad, f.shiftRank, f.shiftSide, !f.name)));
+        f.overRoad, f.shiftRank, f.shiftSide, !f.name, f.proposed)));
     n++;
     if (f.kind === 'area') { placed += ringScanPinArea(f, name, clsId, iconKey); }
   });
@@ -491,7 +501,7 @@ function ringScanPointOf(f) {
  * @param {boolean} [wantLabel] Whether to caption it on the map.
  * @returns {object}
  */
-function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad, shiftRank, shiftSide, isClassLabel) {
+function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad, shiftRank, shiftSide, isClassLabel, proposed) {
   const cc = typeof connClass === 'function' ? connClass(clsId) : null;
   const meta = { name, cls: clsId, fromRing: true };
   // A metro mapped along the road it flies over, drawn beside it so both can
@@ -521,10 +531,16 @@ function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overR
   // class label, and "Major roads" written along forty roads is not a set of
   // labels, it is a wall. Same rule a route follows.
   if (shape === 'Line') meta.showLabel = wantLabel !== false && !!(name && !isClassLabel);
+  // NOT THERE YET, and the map has to say so. A proposed motorway drawn like a
+  // built one is not a cosmetic slip on a sheet somebody is deciding from — it
+  // is the sheet asserting a road exists. The standard already draws a
+  // proposed line dashed in its class's colour and gives it its own
+  // "(proposed)" row in the legend.
+  if (proposed) meta.proposed = true;
   if (cc) {
     meta.borderColor = cc.color;
     meta.borderWidth = cc.weight;
-    meta.lineStyle = cc.dash ? 'dashed' : 'solid';
+    meta.lineStyle = (cc.dash || proposed) ? 'dashed' : 'solid';
     if (shape !== 'Line') {
       meta.fillColor = cc.color;
       meta.fillOpacity = cc.fill == null ? 0.18 : cc.fill;

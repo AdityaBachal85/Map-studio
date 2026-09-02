@@ -843,6 +843,85 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     return { locs: locations.length, geoms: geometries.length };
   });
   // Twelve residential parcels would otherwise plant twelve pins to delete.
+  /* -- what is coming, drawn so it cannot be read as built ------------------ */
+
+  const soon = await p.evaluate(() => {
+    map.setView([19.30, 72.86], 12, { animate: false });
+    const mk = (lat) => {
+      const a = [];
+      for (let m = 0; m <= 6000; m += 300) {
+        a.push([lat, 72.82 + m / (111320 * Math.cos(19.3 * Math.PI / 180))]);
+      }
+      return a;
+    };
+    const gb = geometries.length;
+    const els = [
+      { type: 'way', tags: { highway: 'construction', construction: 'motorway',
+        name: 'Virar-Alibaug Corridor' }, geometry: mk(19.30).map(c => ({ lat: c[0], lon: c[1] })) },
+      { type: 'way', tags: { highway: 'proposed', proposed: 'secondary',
+        name: 'Link Road extension' }, geometry: mk(19.31).map(c => ({ lat: c[0], lon: c[1] })) },
+      { type: 'way', tags: { railway: 'construction', construction: 'subway',
+        name: 'Metro Line 5' }, geometry: mk(19.32).map(c => ({ lat: c[0], lon: c[1] })) },
+      { type: 'way', tags: { highway: 'trunk', tunnel: 'yes',
+        name: 'Thane-Borivali Twin Tunnel' }, geometry: mk(19.33).map(c => ({ lat: c[0], lon: c[1] })) },
+    ];
+    const ids = ['plannedRoad', 'plannedRail', 'tunnel'];
+    const found = joinRingFeatures(els.map(el => overpassToFeature(el, overpassClassOf(el, ids))));
+    ringScanState = { loc: null, km: 9, ids, picked: new Set(found.map((f, i) => i)), result: found };
+    keepRingScanSelection();
+    const made = geometries.slice(gb);
+    const by = n => made.find(g => g.name === n);
+    const rows = found.map(f => ringScanItemRow(Object.assign({ _i: 0 }, f), true));
+    return {
+      count: made.length,
+      corridor: by('Virar-Alibaug Corridor') && {
+        cls: by('Virar-Alibaug Corridor').cls,
+        dash: by('Virar-Alibaug Corridor').lineStyle,
+        proposed: by('Virar-Alibaug Corridor').proposed === true,
+        stroke: by('Virar-Alibaug Corridor').layer._path.getAttribute('stroke-dasharray'),
+      },
+      street: by('Link Road extension') && { cls: by('Link Road extension').cls },
+      metro: by('Metro Line 5') && { cls: by('Metro Line 5').cls,
+        proposed: by('Metro Line 5').proposed === true },
+      tunnel: by('Thane-Borivali Twin Tunnel') && {
+        cls: by('Thane-Borivali Twin Tunnel').cls,
+        dash: by('Thane-Borivali Twin Tunnel').lineStyle,
+        proposed: !!by('Thane-Borivali Twin Tunnel').proposed,
+      },
+      legend: connLegendRows().map(r => r.label),
+      saysSoon: rows.filter(r => /not built yet/.test(r)).length,
+      named: made.filter(g => g.showLabel).map(g => g.name),
+    };
+  });
+  ck('a scan finds the roads and rail that are still being built',
+    soon.count === 4, soon.count + ' of 4');
+  // Drawn from the scan class alone, a planned side street would be six pixels
+  // of expressway blue on a sheet somebody is deciding from.
+  ck('each is drawn as the class it is GOING to be, not as one flat kind',
+    soon.corridor.cls === 'expressway' && soon.street.cls === 'major'
+    && soon.metro.cls === 'metro',
+    [soon.corridor.cls, soon.street.cls, soon.metro.cls].join(' / '));
+  // A proposed motorway drawn like a built one is the sheet asserting a road
+  // exists. That is not a cosmetic slip.
+  ck('and dashed, because it is not there yet',
+    soon.corridor.dash === 'dashed' && !!soon.corridor.stroke && soon.corridor.proposed === true,
+    JSON.stringify(soon.corridor));
+  ck('the legend says which rows are proposed rather than leaving it to the dash',
+    soon.legend.some(l => /\(proposed\)/.test(l)), soon.legend.join(' | '));
+  ck('and the scan list says so too, before anything reaches the map',
+    soon.saysSoon === 3, soon.saysSoon + ' of 3 rows marked');
+
+  // A tunnel that exists is a road that exists. Marking it unbuilt would be
+  // the opposite error to the one above, and just as wrong.
+  ck('a tunnel that is open is NOT marked as unbuilt',
+    soon.tunnel.proposed === false && soon.tunnel.dash === 'solid',
+    JSON.stringify(soon.tunnel));
+  ck('but it is drawn in the class of the road that runs through it',
+    soon.tunnel.cls === 'expressway', soon.tunnel.cls);
+  // These carry project names, which is exactly what a reader needs to see.
+  ck('and every one of them carries its project name onto the map',
+    soon.named.length === 4, soon.named.join(' | '));
+
   /* -- a shape's name is a label you can pick up ---------------------------- */
 
   /*
@@ -866,10 +945,15 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       { kind: 'line', classId: 'arterial', name: null, parts: 1, km: 4,
         pts: road.map(q => [q[0] + 0.03, q[1]]) },
     ]);
+    const gb = geometries.length;
     ringScanState = { loc: null, km: 5, ids: [], picked: new Set(found.map((f, i) => i)), result: found };
     keepRingScanSelection();
-    const named = geometries.find(g => g.name === 'Airoli - Katai Naka');
-    const anon = geometries.find(g => g.cls === 'major' && g !== named);
+    // Sliced from what THIS block added. Picking "the other major road" off the
+    // whole map found a named road an earlier block had left there, and the
+    // assertion failed for a reason that had nothing to do with it.
+    const made = geometries.slice(gb);
+    const named = made.find(g => g.name === 'Airoli - Katai Naka');
+    const anon = made.find(g => g !== named);
     // Wait for the label to be PLACED before measuring where it started. The
     // billboard positions on requestAnimationFrame, so a fixed sleep measured
     // an unplaced box at 0,0 about one run in three and reported the whole
