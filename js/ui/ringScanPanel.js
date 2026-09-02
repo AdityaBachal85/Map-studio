@@ -367,7 +367,7 @@ function keepRingScanSelection() {
 
     added.push(registerGeom(layer, shape,
       ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel,
-        f.overRoad, f.shiftRank, f.shiftSide)));
+        f.overRoad, f.shiftRank, f.shiftSide, !f.name)));
     n++;
     if (f.kind === 'area') { placed += ringScanPinArea(f, name, clsId, iconKey); }
   });
@@ -491,7 +491,7 @@ function ringScanPointOf(f) {
  * @param {boolean} [wantLabel] Whether to caption it on the map.
  * @returns {object}
  */
-function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad, shiftRank, shiftSide) {
+function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overRoad, shiftRank, shiftSide, isClassLabel) {
   const cc = typeof connClass === 'function' ? connClass(clsId) : null;
   const meta = { name, cls: clsId, fromRing: true };
   // A metro mapped along the road it flies over, drawn beside it so both can
@@ -511,6 +511,16 @@ function ringScanMeta(name, clsId, shape, iconKey, markerStyle, wantLabel, overR
     const step = (typeof GEOM_SHIFT_STEP === 'number' ? GEOM_SHIFT_STEP : 7);
     meta.shiftPx = (shiftSide < 0 ? -1 : 1) * Math.max(1, shiftRank || 1) * step;
   }
+  // A SCANNED ROAD CARRIES ITS NAME, the same as one you draw. The scan knows
+  // the road is "Mumbai-Ahmedabad High-Speed Rail Corridor" and was drawing it
+  // as an unlabelled line, so the one useful thing it had found — what the
+  // thing is called — stayed in the sidebar where the reader of the map never
+  // sees it.
+  //
+  // Only when the scan found a REAL name. An unnamed line falls back to its
+  // class label, and "Major roads" written along forty roads is not a set of
+  // labels, it is a wall. Same rule a route follows.
+  if (shape === 'Line') meta.showLabel = wantLabel !== false && !!(name && !isClassLabel);
   if (cc) {
     meta.borderColor = cc.color;
     meta.borderWidth = cc.weight;

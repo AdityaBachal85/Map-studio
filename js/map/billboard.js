@@ -119,6 +119,18 @@
           if (!rt._labelEl || !rt.anchor) return;
           if (rt.showLabel) entries.push(rt);
         });
+        // A DRAWN SHAPE'S NAME IS A LABEL LIKE ANY OTHER. It used to be a
+        // Leaflet divIcon pinned to the shape's centre and marked
+        // `interactive: false`, so it could not be moved, took no part in
+        // collision avoidance, and had no leader line back to what it named.
+        // Here it is an entry like a location's or a route's, and gets all
+        // three for free.
+        if (typeof geometries !== 'undefined') {
+          geometries.forEach(g => {
+            if (!g._labelEl || !g.anchor || !g.showLabel || g._hidden) return;
+            entries.push(g);
+          });
+        }
 
         // snapping.js loads *after* this file, so a repaint triggered while the
         // page is still parsing scripts would throw on an undefined global and
@@ -578,10 +590,11 @@ const PIN_HEAD_BOX = 'position:absolute;left:22.5%;top:13.75%;width:55%;height:4
       }
 
       function makeLabelEl(ent, kind, opts, animate) {
-        // kind: 'loc' | 'route' | 'ring'
+        // kind: 'loc' | 'route' | 'geom' | 'ring'
         const wrap = document.createElement('div');
         wrap.className = 'bb' + (animate ? ' drop-label' : '');
-        wrap.style.zIndex = (kind === 'loc' ? 380 : (kind === 'route' ? 370 : 360));
+        wrap.style.zIndex = (kind === 'loc' ? 380
+          : (kind === 'route' ? 370 : (kind === 'geom' ? 365 : 360)));
         const badge = document.createElement('div');
         badge.className = 'label-badge ' + (opts.klass || '');
         if (opts.bg) badge.style.background = opts.bg;

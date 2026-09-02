@@ -96,8 +96,14 @@
        */
       function cacheRouteLabelDrag(rt) {
         rt._dragPts = null;
-        if (!rt.line || typeof projectPin !== 'function') return;
-        let lls = rt.line.getLatLngs();
+        // `line` on a route, `layer` on a drawn shape. These three helpers only
+        // ever needed "the entity's polyline, its anchor and its label box", so
+        // a drawn line's label re-ties itself to its own geometry exactly as a
+        // route's does rather than growing a second copy of this that would
+        // drift from it on the first change to either.
+        const path = rt.line || rt.layer;
+        if (!path || typeof projectPin !== 'function') return;
+        let lls = path.getLatLngs();
         if (Array.isArray(lls[0])) lls = lls[0];
         if (!lls || lls.length < 2) return;
 

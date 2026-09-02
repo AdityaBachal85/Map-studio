@@ -276,7 +276,7 @@ function refreshGeomShifts() {
     if (!g.shiftPx || g.shape !== 'Line' || !g._baseLatLngs) return;
     g.layer.setLatLngs(geomOffsetLatLngs(g._baseLatLngs, g.shiftPx));
     if (g.glowLayer) syncGlowGeometry(g);
-    if (g.labelMarker) g.labelMarker.setLatLng(geomLabelLatLng(g));
+    if (g._labelEl) g.anchor = geomLabelLatLng(g);
   });
 }
 
@@ -329,41 +329,111 @@ function ensureGlow(g) {
 // ---------- on-map name label (a small frosted chip centered on the shape) ----------
 
 function geomLabelLatLng(g) {
+  // A LINE IS TIED SOMEWHERE ALONG ITSELF, not to the middle of its bounding
+  // box. For anything but a straight line those are different points, and for
+  // a road that bends round a hill the box centre is off the road entirely —
+  // so the leader line pointed at open ground beside the thing it named.
+  if (g.shape === 'Line') {
+    try {
+      let lls = g.layer.getLatLngs();
+      if (Array.isArray(lls[0])) lls = lls[0];
+      const at = routeAnchorAt(lls.map(ll => [ll.lat, ll.lng]),
+        g.labelPos == null ? 0.5 : g.labelPos);
+      if (at) return at;
+    } catch (e) { /* fall through to the bounds centre */ }
+  }
+  // An area is tied inside itself for the same reason a scanned parcel is
+  // pinned inside itself: the centre of an L-shaped zone's bounding box is in
+  // the notch, which is a different piece of land.
+  if ((g.shape === 'Polygon' || g.shape === 'Rectangle')
+    && typeof ringInteriorPoint === 'function') {
+    try {
+      let lls = g.layer.getLatLngs();
+      while (Array.isArray(lls[0]) && Array.isArray(lls[0][0])) lls = lls[0];
+      if (Array.isArray(lls) && lls.length > 2 && lls[0] && lls[0].lat != null) {
+        const at = ringInteriorPoint(lls.map(ll => [ll.lat, ll.lng]));
+        if (at) return L.latLng(at.lat, at.lng);
+      }
+    } catch (e) { /* fall through */ }
+  }
   try { return g.layer.getBounds ? g.layer.getBounds().getCenter() : g.layer.getLatLng(); }
   catch (e) { return g.layer.getLatLng ? g.layer.getLatLng() : map.getCenter(); }
 }
 
-function geomLabelIcon(g) {
-  // A pin is anchored at its tip and stands 32px above it, so a chip centred on
-  // the same coordinate lands across the pin's head and hides the thing it is
-  // naming. `on-pin` lifts it clear.
-  const onPin = (g.shape === 'Marker' && geomMarkerStyle(g) === 'pin') ? ' on-pin' : '';
-  // Its own field, not `labelSize`: that one belongs to Text shapes, where it
-  // sizes the words that ARE the shape. This sizes a caption attached to
-  // something else, and the two want different defaults — reusing one field
-  // would have made every existing caption jump from 11px to 15px the moment
-  // this control shipped.
-  const size = +g.captionSize > 0 ? +g.captionSize : 11;
-  return L.divIcon({
-    className: 'geom-label-wrap',
-    html: `<span class="geom-label${onPin}" style="border-color:${g.borderColor};font-size:${size}px">${esc(g.name)}</span>`,
-    iconSize: [0, 0],
-  });
+/**
+ * Where a shape's label sits before anybody moves it.
+ *
+ * A pin is anchored at its tip and stands 32px above it, so a box centred on
+ * the same coordinate lands across the pin's head and hides the thing it is
+ * naming. Everything else is offset up and to the right, the way a route's is,
+ * so the leader line has somewhere to go.
+ */
+function defaultGeomLabelOffset(g) {
+  return (g.shape === 'Marker' && geomMarkerStyle(g) === 'pin')
+    ? { x: 0, y: -52 }
+    : { x: 16, y: -30 };
 }
 
-/** Create/refresh or remove a shape's on-map name label to match g.showLabel. @param {object} g */
+/**
+ * A shape's name, on the map, as a label you can pick up and move.
+ *
+ * IT USED TO BE A LEAFLET divIcon PINNED TO THE SHAPE'S CENTRE, and
+ * `interactive: false` — so a road's name sat wherever the geometry put it,
+ * on top of the road itself or over the next label along, and there was no
+ * way at all to move it. On a sheet with a dozen scanned roads that is a dozen
+ * names nobody can arrange.
+ *
+ * It is the same label a location and a route already use now: dragged, tied
+ * back to its shape by a leader line, and for a line re-tied to the nearest
+ * point on the line as it moves, so the tie-point slides along the road while
+ * the box stays where it was dropped. None of that is new code — it is the one
+ * implementation in map/billboard.js, which is why a second copy of it was
+ * never worth writing.
+ *
+ * @param {object} g
+ */
 function ensureGeomLabel(g) {
-  if (g._hidden) { if (g.labelMarker) { map.removeLayer(g.labelMarker); g.labelMarker = null; } return; }
-  if (g.showLabel) {
-    if (!g.labelMarker) {
-      g.labelMarker = L.marker(geomLabelLatLng(g), { icon: geomLabelIcon(g), interactive: false, keyboard: false, zIndexOffset: 500 }).addTo(map);
-    } else {
-      g.labelMarker.setLatLng(geomLabelLatLng(g));
-      g.labelMarker.setIcon(geomLabelIcon(g));
-    }
-  } else if (g.labelMarker) {
-    map.removeLayer(g.labelMarker); g.labelMarker = null;
+  const gone = () => { if (g._labelEl) { removeBB(g._labelEl); g._labelEl = null; g._el = null; } };
+  if (g._hidden || !g.showLabel || !g.name) { gone(); return; }
+  if (typeof makeLabelEl !== 'function') return;   // billboard not wired yet
+
+  if (!g.labelOffset) g.labelOffset = defaultGeomLabelOffset(g);
+  // `captionSize` is an ABSOLUTE size in px and stays one. The billboard sizes
+  // its labels by percentage, and routing the number through that would have
+  // turned "17px" into "155% of whatever the chip font is" — a control that
+  // says px and no longer means px. The percentage drives the padding, so the
+  // box still grows with the type, and the type itself is set in px below.
+  const cap = +g.captionSize > 0 ? +g.captionSize : 11;
+  g.labelScale = Math.round(cap / 11 * 100);
+  g.anchor = geomLabelLatLng(g);
+
+  gone();
+  const el = makeLabelEl(g, 'geom', {
+    klass: 'geom', bg: '#FFFFFF', color: textOn('#FFFFFF'), text: g.name,
+  });
+  g._labelEl = el;
+  g._el = el.firstChild;
+  if (g._el) g._el.style.fontSize = cap + 'px';
+  g._leaderColor = g.borderColor;
+  if (g.shape === 'Line') {
+    g.onLabelDragStart = () => cacheRouteLabelDrag(g);
+    g.onLabelDrag = () => reanchorRouteLabel(g);
+    g.onLabelDragEnd = () => endRouteLabelDrag(g);
+  } else {
+    g.onLabelDragStart = null; g.onLabelDrag = null; g.onLabelDragEnd = null;
   }
+  g.onLabelDblclick = () => {
+    const v = prompt('Label for this shape:', g.name || '');
+    if (v !== null && v.trim()) { g.name = v.trim(); renameGeomCard(g); applyGeomStyle(g); }
+  };
+  if (typeof scheduleRepaint === 'function') scheduleRepaint();
+}
+
+/** Keep the sidebar card's title in step when a label is renamed on the map. @param {object} g */
+function renameGeomCard(g) {
+  if (!g.card) return;
+  const t = g.card.querySelector('.gnm');
+  if (t) { if ('value' in t) t.value = g.name; else t.textContent = g.name; }
 }
 
 /**
@@ -404,7 +474,10 @@ function updateGeomMeasurement(g, live) {
   g.measureText = m.text;
   if (g.card) { const el = g.card.querySelector('.geom-measure'); if (el) el.textContent = m.text; }
   if (g.glowLayer) syncGlowGeometry(g);
-  if (g.labelMarker) g.labelMarker.setLatLng(geomLabelLatLng(g));
+  // Re-tied as the shape is reshaped, so a label does not stay pointing at
+  // where a vertex used to be. `labelPos` is a fraction of the line's length,
+  // so it survives the line getting longer or shorter.
+  if (g._labelEl) { g.anchor = geomLabelLatLng(g); if (typeof scheduleRepaint === 'function') scheduleRepaint(); }
   if (live) {
     const box = $('drawLiveStats');
     box.textContent = `${g.name} — ${m.text}`;
@@ -518,6 +591,8 @@ function snapshotGeom(g) {
     lineStyle: g.lineStyle, corner: g.corner, fillPattern: g.fillPattern,
     labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
     showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey, captionSize: g.captionSize,
+    labelOffset: g.labelOffset && { x: g.labelOffset.x, y: g.labelOffset.y },
+    labelPinned: g.labelPinned, labelPos: g.labelPos,
     // Same reason as the GeoJSON properties: restore the look without the
     // class and an undone shape is unclassed, so it drops out of the colour key
     // and the standard stops owning it.
@@ -617,7 +692,7 @@ function removeGeomById(id) {
   const g = geometries[idx];
   if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
   if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
-  if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
+  if (g._labelEl) { removeBB(g._labelEl); g._labelEl = null; g._el = null; }
   if (g.card && g.card.parentNode) g.card.parentNode.removeChild(g.card);
   geometries.splice(idx, 1);
   syncGeomEmpty();
@@ -654,7 +729,7 @@ function setGeomVisible(g, on) {
   } else {
     if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
     if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
-    if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
+    if (g._labelEl) { removeBB(g._labelEl); g._labelEl = null; g._el = null; }
   }
 }
 
@@ -747,7 +822,7 @@ function clearAllGeometries() {
   geometries.slice().forEach(g => {
     if (map.hasLayer(g.layer)) map.removeLayer(g.layer);
     if (g.glowLayer && map.hasLayer(g.glowLayer)) map.removeLayer(g.glowLayer);
-    if (g.labelMarker && map.hasLayer(g.labelMarker)) map.removeLayer(g.labelMarker);
+    if (g._labelEl) { removeBB(g._labelEl); g._labelEl = null; g._el = null; }
     if (g.card && g.card.parentNode) g.card.parentNode.removeChild(g.card);
   });
   geometries.length = 0;

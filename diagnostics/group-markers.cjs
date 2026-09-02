@@ -104,8 +104,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   await p.waitForTimeout(700);
   const sized = await p.evaluate(() => {
     const purple = geometries.filter(g => g.fillColor === '#7048e8');
-    const lbl = purple[0].labelMarker && purple[0].labelMarker.getElement();
-    const span = lbl && lbl.querySelector('.geom-label');
+    const span = purple[0]._el;
     return {
       all17: purple.every(g => g.captionSize === 17),
       rendered: span ? getComputedStyle(span).fontSize : null,
@@ -125,7 +124,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   await p.waitForTimeout(700);
   const restyled = await p.evaluate(() => ({
     squares: geometries.filter(g => g.fillColor === '#7048e8' && geomMarkerStyle(g) === 'square').length,
-    captions: document.querySelectorAll('.geom-label').length,
+    captions: document.querySelectorAll('.label-badge.geom').length,
     orangePins: geometries.filter(g => g.fillColor === '#f76707' && geomMarkerStyle(g) === 'pin').length,
   }));
   ck('marker style applies across the group', restyled.squares === 7, JSON.stringify(restyled));

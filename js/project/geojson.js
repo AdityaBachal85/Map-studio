@@ -23,6 +23,16 @@ function geomToGeoJSONFeature(g) {
       labelSize: g.labelSize, labelBold: g.labelBold, labelStyle: g.labelStyle, labelAngle: g.labelAngle,
       showLabel: g.showLabel, glow: g.glow, markerStyle: g.markerStyle, iconKey: g.iconKey,
       captionSize: g.captionSize,
+      // WHERE SOMEBODY PUT THE LABEL. A shape's name can be dragged clear of
+      // the shape now, and an arrangement of a dozen road names is real work —
+      // reopening the project to find every one of them back on top of its own
+      // road would throw that work away silently.
+      labelOffset: g.labelOffset || undefined,
+      labelPinned: g.labelPinned || undefined,
+      // No labelScale: for a shape it is derived from captionSize on every
+      // draw, and a saved copy would be a second size field to disagree with
+      // the first the moment either changed.
+      labelPos: g.labelPos == null ? undefined : g.labelPos,
       // Where this line came from. A converted contour has to stay recognisable
       // across a save, or reopening the project turns it back into an ordinary
       // hand-drawn line that "Clear the contour map" can no longer find.
@@ -112,6 +122,9 @@ function importGeoJSONFeature(feat) {
     contourMapId: props.contourMapId || undefined,
     iconKey: props.iconKey || undefined,
     captionSize: props.captionSize != null ? +props.captionSize : undefined,
+    labelOffset: props.labelOffset || undefined,
+    labelPinned: props.labelPinned != null ? !!props.labelPinned : undefined,
+    labelPos: props.labelPos != null ? +props.labelPos : undefined,
     createdAt: props.createdAt, modifiedAt: props.modifiedAt,
     cls: props.cls || undefined,
     proposed: props.proposed != null ? !!props.proposed : undefined,

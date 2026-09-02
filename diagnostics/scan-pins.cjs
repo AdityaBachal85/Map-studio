@@ -59,7 +59,10 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   await p.waitForTimeout(600);
   const dom = await p.evaluate(() => {
     const pin = document.querySelector('.geom-marker-pin');
-    const lbl = document.querySelector('.geom-label.on-pin');
+    // The name is a billboard label now, not a Leaflet divIcon tied to the
+    // pin's own coordinate — so it is found through the geometry that owns it.
+    const owner = geometries.find(g => g.shape === 'Marker' && g._labelEl);
+    const lbl = owner && owner._el;
     if (!pin) return { err: 'no pin element' };
     const pr = pin.getBoundingClientRect();
     const svg = pin.querySelector('svg');
@@ -70,6 +73,12 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       // Leaflet's default divIcon paints a white box with a blue border.
       bg: cs.backgroundColor, border: cs.borderTopWidth,
       label: lbl ? lbl.textContent : null,
+      // A pin stands 32px above the coordinate it names, so a label placed on
+      // that coordinate lands across its head. The lift used to be a CSS class
+      // and is the label's own starting offset now — which is the difference
+      // that matters: an offset can be dragged, a class cannot.
+      lift: owner ? owner.labelOffset : null,
+      draggable: !!(owner && owner._labelEl && owner._labelEl.onpointerdown !== undefined),
     };
     if (lbl) {
       const lr = lbl.getBoundingClientRect();
@@ -85,6 +94,8 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('the name is drawn on the map', dom.label === 'Ghatkopar', 'label=' + dom.label);
   ck('the label sits above the pin, not across its head',
     dom.labelAbovePin === true && dom.labelH > 0, JSON.stringify(dom));
+  ck('and it is lifted by an offset somebody can change, not a fixed rule',
+    !!dom.lift && dom.lift.y < -40, JSON.stringify(dom.lift));
 
   // The symbol is inside the head, in white, and is the right one per class.
   const glyphs = await p.evaluate(() => {
@@ -202,7 +213,7 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
       labelled: made.filter(g => g.showLabel).length,
       cls: el ? el.className : null,
       w: r ? Math.round(r.width) : 0, h: r ? Math.round(r.height) : 0,
-      captionsOnMap: document.querySelectorAll('.geom-label').length,
+      captionsOnMap: document.querySelectorAll('.label-badge.geom').length,
       pinsOnMap: document.querySelectorAll('.geom-marker-pin').length,
       squaresOnMap: document.querySelectorAll('.geom-marker-square').length,
     };
@@ -832,6 +843,135 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     return { locs: locations.length, geoms: geometries.length };
   });
   // Twelve residential parcels would otherwise plant twelve pins to delete.
+  /* -- a shape's name is a label you can pick up ---------------------------- */
+
+  /*
+   * IT WAS A LEAFLET divIcon PINNED TO THE SHAPE'S CENTRE, and `interactive:
+   * false`. So a road's name sat wherever the geometry put it — across the
+   * road itself, or on top of the next name along — and there was no way at
+   * all to move it. On a sheet with a dozen scanned roads that is a dozen
+   * names nobody can arrange.
+   */
+  const gl = await p.evaluate(async () => {
+    map.setView([19.20, 72.86], 13, { animate: false });
+    // 12 km, not 4: the label box is ~160px wide and its CENTRE is what gets
+    // re-tied, so on a short road the tie clamps to the end before the drag
+    // has told you anything about sliding.
+    const road = [];
+    for (let m = 0; m <= 12000; m += 200) {
+      road.push([19.20, 72.80 + m / (111320 * Math.cos(19.2 * Math.PI / 180))]);
+    }
+    const found = joinRingFeatures([
+      { kind: 'line', classId: 'arterial', name: 'Airoli - Katai Naka', pts: road, parts: 1, km: 4 },
+      { kind: 'line', classId: 'arterial', name: null, parts: 1, km: 4,
+        pts: road.map(q => [q[0] + 0.03, q[1]]) },
+    ]);
+    ringScanState = { loc: null, km: 5, ids: [], picked: new Set(found.map((f, i) => i)), result: found };
+    keepRingScanSelection();
+    const named = geometries.find(g => g.name === 'Airoli - Katai Naka');
+    const anon = geometries.find(g => g.cls === 'major' && g !== named);
+    // Wait for the label to be PLACED before measuring where it started. The
+    // billboard positions on requestAnimationFrame, so a fixed sleep measured
+    // an unplaced box at 0,0 about one run in three and reported the whole
+    // viewport as the drag distance.
+    for (let i = 0; i < 90 && !named._labelEl.style.transform; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    const before = named._labelEl.getBoundingClientRect();
+    const tf0 = named._labelEl.style.transform;
+    const anchor0 = { lat: named.anchor.lat, lng: named.anchor.lng };
+    // The real gesture, through the same pointer events a hand produces.
+    const at = (t, x, y) => named._labelEl.dispatchEvent(new PointerEvent(t, {
+      clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
+    named._labelEl.setPointerCapture = () => {};
+    // 60px, not 200: the road is about 210px long on screen here, and a drag
+    // past its end would clamp the tie-point to 1.0 and prove nothing about
+    // the sliding.
+    at('pointerdown', before.left + 5, before.top + 5);
+    at('pointermove', before.left + 65, before.top - 55);
+    at('pointerup', before.left + 65, before.top - 55);
+    // WAITED FOR, not slept through. The repaint runs on requestAnimationFrame
+    // and a throttled page can skip several — a fixed 200ms passed most of the
+    // time and failed the rest, which is the worst kind of test.
+    for (let i = 0; i < 60 && named._labelEl.style.transform === tf0; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    const after = named._labelEl.getBoundingClientRect();
+
+    return {
+      namedShows: named.showLabel === true && !!named._labelEl,
+      text: named._el && named._el.textContent,
+      anonShows: anon ? anon.showLabel === true : null,
+      movedX: Math.round(after.left - before.left),
+      movedY: Math.round(after.top - before.top),
+      pinned: named.labelPinned === true,
+      // The box ends where it was dropped; what moved to get it there is the
+      // anchor, the offset, or both — the reader only ever sees the box.
+      anchorMoved: Math.abs(named.anchor.lng - anchor0.lng) > 1e-6,
+      labelPos: named.labelPos,
+      leader: !!document.querySelector('#billboardLayer canvas'),
+    };
+  });
+  // "when i use scan it the roads also we cannot give the name" — the scan knew
+  // the road was "Airoli - Katai Naka" and drew it as an unlabelled line, so
+  // the one useful thing it found stayed in the sidebar.
+  ck('a scanned road carries the name the scan found for it',
+    gl.namedShows === true && gl.text === 'Airoli - Katai Naka', gl.text);
+  // "Major roads" written along forty roads is not a set of labels, it is a
+  // wall — the same rule a route follows.
+  ck('but a road the scan could not name is not captioned with its class',
+    gl.anonShows === false, String(gl.anonShows));
+
+  // "the draw lines lable is in the fix location it cannot able to move."
+  ck('the label can be picked up and moved',
+    Math.abs(gl.movedX - 60) <= 2 && Math.abs(gl.movedY + 60) <= 2,
+    gl.movedX + ', ' + gl.movedY);
+  ck('and it is marked as placed by hand, so nothing tidies it away again',
+    gl.pinned === true);
+  // The useful half of "snap to the line": the box stays where it was dropped
+  // and the point it is tied to slides along the road. Snapping the box itself
+  // would put type on top of the very thing it labels, with no way to nudge it
+  // clear. So the offset is NOT expected to grow by the drag distance — the
+  // anchor takes most of it, which is the whole mechanism.
+  ck('while its tie-point slides along the road it names',
+    gl.anchorMoved === true && gl.labelPos > 0 && gl.labelPos < 1,
+    'labelPos ' + (gl.labelPos == null ? 'unset' : gl.labelPos.toFixed(3)));
+  ck('and a leader line ties the box back to the road',
+    gl.leader === true);
+
+  // An arrangement of a dozen road names is real work; reopening to find every
+  // one back on top of its own road would throw it away without a word.
+  const labelKept = await p.evaluate(async () => {
+    const was = geometries.find(g => g.name === 'Airoli - Katai Naka')
+      ._labelEl.getBoundingClientRect();
+    const snap = JSON.parse(JSON.stringify(serialiseProject()));
+    const feat = (snap.geometries || [])
+      .find(x => (x.properties || {}).name === 'Airoli - Katai Naka');
+    clearProject();
+    applyProject(snap);
+    const back = geometries.find(g => g.name === 'Airoli - Katai Naka');
+    for (let i = 0; i < 60 && back && back._labelEl
+      && !back._labelEl.style.transform; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    const p2 = back && back._labelEl ? back._labelEl.getBoundingClientRect() : null;
+    return {
+      saved: feat && feat.properties.labelOffset,
+      offset: back && back.labelOffset && { x: Math.round(back.labelOffset.x), y: Math.round(back.labelOffset.y) },
+      pinned: back && back.labelPinned === true,
+      pos: back && back.labelPos,
+      samePlace: !!(p2 && Math.abs(p2.left - was.left) <= 2 && Math.abs(p2.top - was.top) <= 2),
+      was: { l: Math.round(was.left), t: Math.round(was.top) },
+      now: p2 ? { l: Math.round(p2.left), t: Math.round(p2.top) } : null,
+    };
+  });
+  ck('where the label was put is written into the file',
+    !!labelKept.saved && isFinite(labelKept.saved.x), JSON.stringify(labelKept.saved));
+  // The guarantee that matters is not which field survived — it is that the
+  // box comes back on the same piece of map.
+  ck('and the box comes back in the same place, not on top of its road',
+    labelKept.pinned === true && labelKept.samePlace === true, JSON.stringify(labelKept));
+
   /* -- every ticked area gets a findable, distinguishable marker ----------- */
 
   const parcels = await p.evaluate(() => {
