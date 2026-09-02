@@ -80,9 +80,22 @@ async function runRingScan() {
   if (!ringScanState) return;
   const s = ringScanState;
   s.busy = true; s.error = null; s.result = null;
+  // A SEARCH THAT SAYS NOTHING FOR TWENTY SECONDS READS AS A BROKEN ONE.
+  // Overpass is a donated service under real load and a wide ring genuinely
+  // takes that long; the fault was never that it was quiet, it was that the
+  // dialog gave a reader no way to tell waiting from hung. The clock ticks and
+  // the note names what is being waited on.
+  s.startedAt = Date.now();
+  s.step = { mirror: 1, of: 1 };
+  s.tick = setInterval(() => { if (ringScanState === s && s.busy) renderRingScan(); }, 1000);
   renderRingScan();
 
-  const res = await fetchRingFeatures(s.loc.lat, s.loc.lng, s.km * 1000, s.ids);
+  const res = await fetchRingFeatures(s.loc.lat, s.loc.lng, s.km * 1000, s.ids, step => {
+    if (ringScanState !== s) return;
+    s.step = Object.assign({}, s.step, step);
+    renderRingScan();
+  });
+  clearInterval(s.tick); s.tick = null;
   if (!ringScanState || ringScanState !== s) return;    // dialog closed mid-flight
   s.busy = false;
   if (!res.ok) { s.error = res.reason; s.skipped = res.skipped || []; }
@@ -197,8 +210,20 @@ function renderRingScan() {
     }).join('') + '</div>';
 
   if (s.busy) {
-    html += '<div class="rs-scan-note">Searching OpenStreetMap inside the '
-      + esc(String(s.km)) + ' km ring…</div>';
+    const secs = s.startedAt ? Math.round((Date.now() - s.startedAt) / 1000) : 0;
+    const st = s.step || {};
+    const where = st.stage === 'google' ? 'Asking Google about the places found'
+      : (st.mirror > 1
+        ? 'The first OpenStreetMap server did not answer — trying number '
+          + st.mirror + ' of ' + st.of
+        : 'Searching OpenStreetMap inside the ' + esc(String(s.km)) + ' km ring');
+    // The count is worth saying: a scan is one request covering every ticked
+    // type, so ten types is a heavier question than three, and the reader is
+    // the only one who can make it lighter.
+    html += '<div class="rs-scan-note">' + where + ' — ' + s.ids.length
+      + ' type' + (s.ids.length === 1 ? '' : 's') + ', ' + secs + 's'
+      + (secs >= 20 ? '. A wide ring over a city takes this long; untick types'
+        + ' you do not need to make it lighter.' : '…') + '</div>';
   } else if (s.error) {
     html += '<div class="rs-scan-err">' + esc(ringFeatureMessage(s.error, { skipped: s.skipped })) + '</div>';
   } else if (s.result) {

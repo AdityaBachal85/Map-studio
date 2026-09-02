@@ -843,6 +843,67 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     return { locs: locations.length, geoms: geometries.length };
   });
   // Twelve residential parcels would otherwise plant twelve pins to delete.
+  /* -- and how long the waiting feels -------------------------------------- */
+
+  // FIVE INDEPENDENT LOOKUPS, ASKED IN A LOOP WITH AN AWAIT IN IT. None of the
+  // five depends on any other's answer, so serialising them added seconds to
+  // every scan for nothing. Measured against a stub with a known delay, since
+  // the real service is not reachable from here and the point is the shape of
+  // the calling, not the speed of Google.
+  const par = await p.evaluate(async () => {
+    const real = window.googleNearby, ready = window.googleReady;
+    window.googleReady = () => true;
+    let live = 0, most = 0;
+    window.googleNearby = async () => {
+      most = Math.max(most, ++live);
+      await new Promise(r => setTimeout(r, 120));
+      live--;
+      return [];
+    };
+    const ids = ['station', 'metroStation', 'airport', 'busTerminal', 'port'];
+    const t0 = Date.now();
+    await ringAddGooglePlaces({ ok: true, features: [] }, 19.1, 72.88, 5000, ids);
+    const ms = Date.now() - t0;
+    window.googleNearby = real; window.googleReady = ready;
+    return { ms, most, classes: ids.length };
+  });
+  ck('the five place lookups are asked at once, not one after another',
+    par.most === par.classes, par.most + ' of ' + par.classes + ' in flight at once');
+  ck('so they cost one round trip rather than five',
+    par.ms < 120 * 2.5, par.ms + 'ms for ' + par.classes + ' x 120ms');
+
+  // A SEARCH THAT SAYS NOTHING FOR TWENTY SECONDS READS AS A BROKEN ONE.
+  // Overpass is donated and under real load; a wide ring genuinely takes that
+  // long. The fault was never that it was quiet, but that the dialog gave a
+  // reader no way to tell waiting from hung.
+  const busy = await p.evaluate(() => {
+    ringScanState = { loc: { lat: 19.1, lng: 72.88 }, km: 5, busy: true,
+      ids: ['expressway', 'metro', 'rail'], startedAt: Date.now() - 24000,
+      step: { mirror: 1, of: 4 }, picked: new Set(), result: null };
+    renderRingScan();
+    const t = document.getElementById('ringScanBody').textContent;
+    ringScanState.step = { mirror: 3, of: 4 };
+    renderRingScan();
+    const t2 = document.getElementById('ringScanBody').textContent;
+    ringScanState.step = { stage: 'google' };
+    renderRingScan();
+    const t3 = document.getElementById('ringScanBody').textContent;
+    ringScanState = null;
+    return { t, t2, t3 };
+  });
+  ck('a scan in progress shows how long it has been going',
+    /2[34]s/.test(busy.t), (busy.t.match(/\d+s/) || ['none'])[0]);
+  // Ten types is a heavier question than three, and the reader is the only one
+  // who can make it lighter.
+  ck('and says how many types it is asking about, which is what makes it heavy',
+    /3 types/.test(busy.t), busy.t.slice(0, 120));
+  ck('after twenty seconds it says what to do about it rather than just waiting',
+    /untick types/.test(busy.t), /untick types/.test(busy.t) ? 'advises unticking' : 'silent');
+  ck('a dead server is named as a dead server, not left as silence',
+    /did not answer/.test(busy.t2) && /number 3 of 4/.test(busy.t2), busy.t2.slice(0, 110));
+  ck('and the Google pass says it is a different thing being waited on',
+    /Asking Google/.test(busy.t3), busy.t3.slice(0, 90));
+
   /* -- what is coming, drawn so it cannot be read as built ------------------ */
 
   const soon = await p.evaluate(() => {

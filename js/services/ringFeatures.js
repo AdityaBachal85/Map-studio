@@ -41,6 +41,17 @@ const OVERPASS_MIRRORS = [
 const OVERPASS_TIMEOUT_S = 25;
 const OVERPASS_FETCH_MS = 30000;
 
+/**
+ * The budget for a mirror AFTER the first has already spent its own.
+ *
+ * Four mirrors at thirty seconds each is a two-minute wait ending in a
+ * failure, and by the second attempt the question is no longer "can this
+ * server answer a heavy query" — the first one already had thirty seconds to
+ * do that. It is "is this server responding at all", and a mirror that cannot
+ * begin to answer in twelve seconds is not the one that will rescue the scan.
+ */
+const OVERPASS_RETRY_MS = 12000;
+
 /** Overpass's usage policy is a condition of use, not a suggestion. */
 const OVERPASS_MIN_GAP_MS = 1200;
 
@@ -1340,8 +1351,24 @@ const _overpassPending = new Map();
 
 /** Serialises outbound requests with a minimum gap. */
 let _overpassGate = Promise.resolve();
+let _overpassLast = 0;
+
+/**
+ * Wait until Overpass may be asked again.
+ *
+ * A MINIMUM GAP BETWEEN REQUESTS, WHICH IS NOT THE SAME AS A DELAY BEFORE
+ * EVERY ONE. This slept 1.2 s unconditionally, so the first scan of a session
+ * paid it having asked nothing at all, and a scan that had to try all four
+ * mirrors paid it four times — nearly five seconds of the wait was the app
+ * sitting still on purpose. The policy this exists to honour is about the
+ * interval between calls; measuring from the last call obeys it exactly and
+ * charges nothing when there was no last call.
+ */
 function overpassGate() {
-  const wait = _overpassGate.then(() => new Promise(r => setTimeout(r, OVERPASS_MIN_GAP_MS)));
+  const wait = _overpassGate.then(() => {
+    const due = OVERPASS_MIN_GAP_MS - (Date.now() - _overpassLast);
+    return due > 0 ? new Promise(r => setTimeout(r, due)) : undefined;
+  }).then(() => { _overpassLast = Date.now(); });
   _overpassGate = wait;
   return wait;
 }
@@ -1566,25 +1593,38 @@ async function ringAddGooglePlaces(res, lat, lng, radiusM, ids) {
   let wrote = false;
   const tally = { named: 0, added: 0, matched: 0 };
 
-  for (const fc of classes) {
+  // ALL AT ONCE, NOT ONE AFTER ANOTHER. These are five independent lookups
+  // against a service with no rate gate of its own, and asking them in a `for`
+  // loop with an `await` in it turned five parallel round-trips into five
+  // serial ones — seconds of waiting added to every scan for nothing, since
+  // none of the five depends on any other's answer.
+  //
+  // Overpass is different and stays serial: its gap is a condition of using a
+  // donated service, not a performance choice.
+  const asked = await Promise.all(classes.map(async fc => {
     const key = fc.id + '|' + lat.toFixed(4) + '|' + lng.toFixed(4) + '|' + Math.round(radiusM);
-    let rows = null;
     const hit = cache[key];
-    if (hit && Date.now() - hit.at < RING_GOOGLE_TTL_MS) rows = hit.r;
-    if (!rows) {
-      try {
-        rows = await googleNearby(lat, lng, radiusM, fc.gtypes);
-        cache[key] = { at: Date.now(), r: rows };
-        wrote = true;
-      } catch (e) {
-        // One class failing is not the scan failing.
-        console.warn('Ring scan: Google ' + fc.id + ' failed:', e && e.message);
-        continue;
-      }
+    if (hit && Date.now() - hit.at < RING_GOOGLE_TTL_MS) return { fc, rows: hit.r };
+    try {
+      const rows = await googleNearby(lat, lng, radiusM, fc.gtypes);
+      cache[key] = { at: Date.now(), r: rows };
+      wrote = true;
+      return { fc, rows };
+    } catch (e) {
+      // One class failing is not the scan failing.
+      console.warn('Ring scan: Google ' + fc.id + ' failed:', e && e.message);
+      return null;
     }
-    const n = ringMergeGoogle(res.features, rows, fc);
+  }));
+
+  // Merged in the declared order, not in whichever order the answers landed:
+  // a merge claims features, so the order decides which class gets a place
+  // that two of them could each match, and a scan must not vary run to run.
+  asked.forEach(a => {
+    if (!a) return;
+    const n = ringMergeGoogle(res.features, a.rows, a.fc);
     tally.named += n.named; tally.added += n.added; tally.matched += n.matched;
-  }
+  });
 
   if (wrote) {
     // Bounded: an entry is a handful of names, but a user who scans all day
@@ -1607,8 +1647,9 @@ async function ringAddGooglePlaces(res, lat, lng, radiusM, ids) {
  * @param {number} lat @param {number} lng @param {number} radiusM
  * @param {string[]} ids @returns {Promise<object>}
  */
-async function fetchRingFeatures(lat, lng, radiusM, ids) {
-  const res = await fetchOverpassFeatures(lat, lng, radiusM, ids);
+async function fetchRingFeatures(lat, lng, radiusM, ids, onStep) {
+  const res = await fetchOverpassFeatures(lat, lng, radiusM, ids, onStep);
+  if (onStep) onStep({ stage: 'google' });
   try { return await ringAddGooglePlaces(res, lat, lng, radiusM, ids); }
   catch (e) { console.warn('Ring scan: the Google pass failed:', e && e.message); return res; }
 }
@@ -1620,7 +1661,7 @@ async function fetchRingFeatures(lat, lng, radiusM, ids) {
  * @param {string[]} ids class ids to look for
  * @returns {Promise<{ok:boolean, reason?:string, features?:object[], skipped?:object[], truncated?:boolean, cached?:boolean}>}
  */
-async function fetchOverpassFeatures(lat, lng, radiusM, ids) {
+async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   if (!ids || !ids.length) return { ok: false, reason: 'no-classes' };
   if (!isFinite(lat) || !isFinite(lng) || !(radiusM > 0)) return { ok: false, reason: 'no-centre' };
 
@@ -1637,12 +1678,15 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids) {
 
   const run = (async () => {
     const reasons = [];
+    let attempt = 0;
     for (const host of OVERPASS_MIRRORS) {
+      if (onStep) onStep({ mirror: attempt + 1, of: OVERPASS_MIRRORS.length });
       await overpassGate();
       let res;
       try {
         const ctl = new AbortController();
-        const timer = setTimeout(() => ctl.abort(), OVERPASS_FETCH_MS);
+        const timer = setTimeout(() => ctl.abort(),
+          attempt++ ? OVERPASS_RETRY_MS : OVERPASS_FETCH_MS);
         res = await fetch(host, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1746,6 +1790,7 @@ if (typeof module !== 'undefined' && module.exports) {
     overpassClassOf, overpassToFeature,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
     ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
+    overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_RETRY_MS, OVERPASS_FETCH_MS,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,
     ringMergeGoogle, RING_SAME_PLACE_M,
     RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,

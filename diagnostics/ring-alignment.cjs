@@ -680,5 +680,65 @@ ck('and a fresh scan looks for them, because they are the news on the sheet',
   M.RING_FEATURE_DEFAULTS.indexOf('plannedRoad') >= 0
   && M.RING_FEATURE_DEFAULTS.indexOf('plannedRail') >= 0);
 
-console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
-process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
+/* ---- how long the waiting is ---------------------------------------------- */
+
+/*
+ * The scan's own work is not the wait. Chaining 600 OSM ways into roads takes
+ * a tenth of a second; everything else is the network, and some of what was
+ * being waited for was the app sitting still on purpose.
+ */
+(async () => {
+  // A city-scale answer, at the cap Overpass returns.
+  const pieces = [];
+  for (let r = 0; r < 50; r++) {
+    for (let p = 0; p < 12; p++) {
+      const pts = [];
+      for (let k = 0; k <= 6; k++) pts.push([19.05 + r * 0.004, 72.80 + (p * 6 + k) * 0.0004]);
+      pieces.push({ kind: 'line', name: 'Road ' + r, parts: 1, pts, km: M.ringPathKm(pts),
+        classId: ['expressway', 'highway', 'arterial', 'metro', 'rail'][r % 5] });
+    }
+  }
+  const t0 = Date.now();
+  const joined = M.joinRingFeatures(pieces);
+  const ms = Date.now() - t0;
+  ck('600 OSM ways become roads in well under a second, so the wait is the network',
+    joined.length === 50 && ms < 400, ms + 'ms for ' + pieces.length + ' ways');
+
+  // A MINIMUM GAP BETWEEN REQUESTS IS NOT A DELAY BEFORE EVERY ONE. This slept
+  // unconditionally, so the first scan of a session paid it having asked
+  // nothing at all, and a scan that tried all four mirrors paid it four times.
+  let t = Date.now();
+  await M.overpassGate();
+  const first = Date.now() - t;
+  ck('the first request is not made to wait for a request that never happened',
+    first < 60, first + 'ms');
+
+  t = Date.now();
+  await M.overpassGate();
+  const second = Date.now() - t;
+  // And the policy it exists for is still honoured exactly.
+  ck('but a second one straight after still waits the full gap',
+    second >= M.OVERPASS_MIN_GAP_MS - 60, second + 'ms of ' + M.OVERPASS_MIN_GAP_MS);
+
+  await new Promise(r => setTimeout(r, M.OVERPASS_MIN_GAP_MS + 40));
+  t = Date.now();
+  await M.overpassGate();
+  ck('and one made after the gap has already passed waits for nothing',
+    Date.now() - t < 60, (Date.now() - t) + 'ms');
+
+  // Four mirrors at thirty seconds each is a two-minute wait ending in a
+  // failure. By the second attempt the question is not "can this server answer
+  // a heavy query" — the first had thirty seconds for that — but "is it
+  // responding at all".
+  const worst = M.OVERPASS_FETCH_MS + 3 * M.OVERPASS_RETRY_MS;
+  ck('a mirror that has gone quiet does not cost a full budget every time',
+    M.OVERPASS_RETRY_MS < M.OVERPASS_FETCH_MS && worst <= 70000,
+    'worst case ' + (worst / 1000) + 's, was ' + (4 * M.OVERPASS_FETCH_MS / 1000) + 's');
+  // The first attempt keeps the long budget: a wide ring over a city genuinely
+  // needs it, and cutting that would trade a slow answer for no answer.
+  ck('while the first attempt keeps the budget a real query needs',
+    M.OVERPASS_FETCH_MS >= 30000, M.OVERPASS_FETCH_MS + 'ms');
+
+  console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
+  process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
+})();
