@@ -143,6 +143,11 @@ function serialiseProject() {
     // The board and the sheet travel with the map they describe: they are
     // about this place, not about this browser.
     dashboard: (typeof dashCards !== 'undefined' && dashCards.length) ? dashCards : undefined,
+    // Which grid the card geometry is in. A file without it was written on the
+    // 12-column grid and is migrated on open — see dashMigrateGrid. Written
+    // even when there is no board, so a project saved empty and filled later
+    // is not mistaken for an old one.
+    dashGrid: (typeof DASH_COLS !== 'undefined') ? DASH_COLS : undefined,
     // The map's tile goes with them: how big the map was on the board is part
     // of the layout somebody arranged, not a preference of this browser.
     dashMap: (typeof dashMapTile !== 'undefined' && dashMapTile) ? dashMapTile : undefined,
@@ -248,6 +253,12 @@ function applyProject(proj, opts) {
 
   if (typeof dashCards !== 'undefined') {
     dashCards = Array.isArray(proj.dashboard) ? proj.dashboard : [];
+    // Before anything measures or draws them: a board saved on the old grid
+    // holds numbers a tenth the size, and laid out as-is every card would be a
+    // sliver in the top-left corner.
+    if (typeof dashMigrateGrid === 'function') {
+      dashMigrateGrid(dashCards.concat(proj.dashMap ? [proj.dashMap] : []), proj.dashGrid);
+    }
     // Keep new cards from colliding with restored ids.
     dashCardSeq = dashCards.reduce((n, c) => Math.max(n, (parseInt(String(c.id).slice(1), 10) || 0) + 1), 1);
   }
@@ -257,7 +268,7 @@ function applyProject(proj, opts) {
     // width would put the map off the canvas with no handle to drag it back.
     dashMapTile = (m && isFinite(m.x) && isFinite(m.y) && m.w > 0 && m.h > 0)
       ? { id: DASH_MAP_ID, x: +m.x, y: +m.y, w: +m.w, h: +m.h }
-      : { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
+      : { id: DASH_MAP_ID, x: 0, y: 0, w: 64, h: 28 };
   }
   if (typeof reportSheet !== 'undefined') {
     reportSheet = (proj.reportSheet && typeof proj.reportSheet === 'object') ? proj.reportSheet : null;

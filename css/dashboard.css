@@ -52,17 +52,23 @@
    the canvas; where each tile sits inside the canvas is the user's business,
    not the stylesheet's. */
 .app[data-mode="dashboard"] {
-  grid-template-columns: 210px minmax(0, 1fr) 0;
+  /* NO NAV COLUMN. The rail cost the canvas 210px plus its gutter — a sixth of
+     a laptop screen — to hold four buttons, on the one screen in the app whose
+     whole job is to be as wide as the document it produces. The document is
+     landscape; the board it is arranged on should be too. The two buttons that
+     have to be reachable moved into the top bar, which was already there and
+     had room. */
+  grid-template-columns: minmax(0, 1fr) 0;
   /* 44, not 58. The row was sized around the map's 46px search pill back when
      that pill came into the bar wearing its map styling; the controls in it are
      32px and the bar had 26px of air it was not using. */
   grid-template-rows: 44px auto;
   grid-template-areas:
-    "nav  top    fmt"
-    "nav  canvas fmt";
+    "top    fmt"
+    "canvas fmt";
   column-gap: 14px;
   row-gap: 14px;
-  padding: 0 14px 14px 0;
+  padding: 0 14px 14px 14px;
   /* Deliberately NOT transitioned. Animating the column width means the canvas
      is a different size on every frame, and the tile geometry is computed from
      that width — so the layout would either be measured mid-animation (wrong)
@@ -73,9 +79,8 @@
 
 /* The format pane only takes a column when it has something to show. A
    permanent empty rail costs the board 270px for nothing. */
-.app[data-mode="dashboard"].df-open { grid-template-columns: 210px minmax(0, 1fr) 268px; }
+.app[data-mode="dashboard"].df-open { grid-template-columns: minmax(0, 1fr) 268px; }
 
-.app[data-mode="dashboard"] #dashNav { display: flex; grid-area: nav; }
 .app[data-mode="dashboard"] #dashTop { display: flex; grid-area: top; }
 .app[data-mode="dashboard"] #dashGrid { display: block; grid-area: canvas; }
 .app[data-mode="dashboard"].df-open #dashFormat { display: block; grid-area: fmt; }
@@ -344,8 +349,11 @@
 
 /* The nav is the switcher once you are out of map mode; two of them on screen
    at once is one too many. */
-.app[data-mode="dashboard"] #modeSwitch,
-.app[data-mode="report"] #modeSwitch { display: none; }
+/* Hidden on the board only while it is still on the MAP — the map is a tile
+   there, and a mode pill floating inside one card is chrome in the wrong
+   place. Moved into the top bar it is the only way back to the map, so the
+   rule has to spare it. */
+.app[data-mode="dashboard"] #mapWrap #modeSwitch { display: none; }
 
 /* Chrome, not map content — out of exports with the rest of the furniture. */
 .map-wrap.capturing #modeSwitch { display: none; }
@@ -2755,3 +2763,40 @@ body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
    what an assertion reading the cell rather than the words in it missed. */
 .dc-table .dc-cell.dc-sized .dc-th,
 .dc-table .dc-cell.dc-sized .dc-td { font-size: inherit; }
+
+/* ---------------------------------------------------------------------------
+ * The nav's controls, in the top bar
+ *
+ * They arrive here by re-parenting when the board opens (ui/appMode.js), so
+ * they carry their map-mode styling with them and have to be told to look like
+ * the bar rather than like the rail or the frosted map chrome.
+ * ------------------------------------------------------------------------ */
+
+#dashTopNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* The pill lives on the map with `position: absolute` and a frosted ground.
+   In the bar it is an ordinary inline control. */
+.app[data-mode="dashboard"] #dashTopNav #modeSwitch {
+  display: flex;
+  position: static;
+  inset: auto;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--field, rgba(0, 0, 0, .04));
+  border: 1px solid var(--field-edge, rgba(0, 0, 0, .08));
+}
+
+/* The rail's items are full-width rows with a left-aligned label; in the bar
+   they are buttons the width of their own text. */
+.app[data-mode="dashboard"] #dashTopNav .dn-item {
+  width: auto;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}

@@ -23,11 +23,17 @@
  */
 
 /**
- * The board's grid, restated so a writer can lay a page out without measuring
- * the screen. These mirror dashLayout.js — kept in step by
- * dash-export-model.cjs, which fails if they drift.
+ * The board's grid, so a writer can lay a page out without measuring the
+ * screen.
+ *
+ * TAKEN FROM dashLayout, not restated. It was a copy — a second 12 sitting
+ * beside the real one — and when the grid went to 96 columns to make resizing
+ * fine-grained, every writer went on dividing the page into twelfths while the
+ * cards were positioned in ninety-sixths. Every card would have landed at an
+ * eighth of its proper width, off the right of the page. The literal is only a
+ * fallback for the Node tests, which load this file without the browser's.
  */
-const DASH_MODEL_COLS = 12;
+const DASH_MODEL_COLS = (typeof DASH_COLS === 'number') ? DASH_COLS : 96;
 
 /**
  * Turn a slot reference into something a file format can use.

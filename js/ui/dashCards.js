@@ -114,35 +114,37 @@ function dashNewCard(key) {
  * from the moment it appears.
  */
 function dashDefaultCards() {
+  // Geometry is in grid units, and the grid is 96 x 8px now — the same layout
+  // as before, said in the finer units. See DASH_COLS.
   dashCardSeq = 1;
-  dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
+  dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 64, h: 28 };
   const c = (key, over) => Object.assign(dashNewCard(key), over);
   return [
-    c('text', { x: 8, y: 0, w: 4, h: 5, title: 'Property location & access',
+    c('text', { x: 64, y: 0, w: 32, h: 10, title: 'Property location & access',
       body: 'Type the address, the coordinates and anything else worth saying up front.' }),
-    c('stats', { x: 8, y: 5, w: 4, h: 4, title: 'Scores', items: [
+    c('stats', { x: 64, y: 10, w: 32, h: 8, title: 'Scores', items: [
       { label: 'Investment', value: '' }, { label: 'Growth', value: '' }, { label: 'Risk', value: '' }] }),
-    c('access', { x: 8, y: 9, w: 4, h: 5, title: 'Key access points' }),
+    c('access', { x: 64, y: 18, w: 32, h: 10, title: 'Key access points' }),
 
     // No colours here: each ring takes the next viz slot, which is what keeps
     // the board readable in both themes. Four rings on two repeated hexes also
     // made Connectivity and Livability look like the same measurement.
-    c('gauges', { x: 0, y: 14, w: 5, h: 7, title: 'Infrastructure score', items: [
+    c('gauges', { x: 0, y: 28, w: 40, h: 14, title: 'Infrastructure score', items: [
       { cap: 'Connectivity', value: '' },
       { cap: 'Infrastructure', value: '' },
       { cap: 'Development', value: '' },
       { cap: 'Livability', value: '' }] }),
-    c('area', { x: 5, y: 14, w: 4, h: 7, title: 'Property price trend',
+    c('area', { x: 40, y: 28, w: 32, h: 14, title: 'Property price trend',
       labels: ['2021', '2022', '2023', '2024', '2025'],
       seriesList: [{ name: 'Rs / sq ft', values: [], slot: 1 }] }),
     // The colour key the map tile no longer carries. Live, like Key access
     // points — it fills itself the moment anything on the map has a colour,
     // which is what earns it a place on a default board where most cards are
     // waiting to be typed into.
-    c('legend', { x: 9, y: 14, w: 3, h: 7, title: 'Legend' }),
-    c('text', { x: 0, y: 21, w: 6, h: 6, title: 'Executive summary',
+    c('legend', { x: 72, y: 28, w: 24, h: 14, title: 'Legend' }),
+    c('text', { x: 0, y: 42, w: 48, h: 12, title: 'Executive summary',
       body: 'Type the summary that opens the report.' }),
-    c('list', { x: 6, y: 21, w: 6, h: 6, title: 'Timeline (development)', items: [
+    c('list', { x: 48, y: 42, w: 48, h: 12, title: 'Timeline (development)', items: [
       { name: 'Milestone', meta: 'Year' }] }),
   ];
 }

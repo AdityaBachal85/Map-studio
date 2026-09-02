@@ -148,9 +148,9 @@ const M = require(path.join(REPO, 'js/export/dashExportModel.js'));
 
   await p.evaluate(() => {
     setAppMode('dashboard');
-    dashCards = [Object.assign(dashNewCard('text'), { id: 't1', title: 'Summary', x: 0, y: 0, w: 9, h: 7,
+    dashCards = [Object.assign(dashNewCard('text'), { id: 't1', title: 'Summary', x: 0, y: 0, w: 72, h: 14,
       body: 'The site sits 2.4 km from the station and 12 km from the airport.' })];
-    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 64, h: 28 };
     dashEditing = true;
     renderDashboard(); dashLayoutApply();
   });
@@ -233,7 +233,7 @@ const M = require(path.join(REPO, 'js/export/dashExportModel.js'));
   /* -- the parsed fields are left completely alone -------------------------- */
 
   const parsed = await p.evaluate(async () => {
-    const c = Object.assign(dashNewCard('column'), { id: 'c1', title: 'C', x: 0, y: 8, w: 8, h: 7,
+    const c = Object.assign(dashNewCard('column'), { id: 'c1', title: 'C', x: 0, y: 16, w: 64, h: 14,
       labels: ['North', 'East'], seriesList: [{ name: 'S', values: [1, 2], slot: 1 }] });
     dashCards = dashCards.concat([c]);
     dashEditing = true; dashSelectedId = 'c1';

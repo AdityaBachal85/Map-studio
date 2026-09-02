@@ -51,14 +51,14 @@ const alignGrid = p => p.evaluate(() =>
     dashEditing = true;
     dashTableSel = null;
     dashCards = [Object.assign(dashNewCard('table'), {
-      id: 't1', title: 'Key distances', x: 0, y: 0, w: 12, h: 10,
+      id: 't1', title: 'Key distances', x: 0, y: 0, w: 96, h: 20,
       columns: ['CONNECTIVITY', 'DISTANCE (KM)', 'TIME'],
       rows: [['mumbai - nashik road', '2.0', '8 min'],
         ['KALYAN PADGHA ROAD', '2.4', '9 min'],
         ['Kalyan Station', '24.9', '41 min'],
         ["o'brien navi-mumbai", '6.7', '16 min']],
     })];
-    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 64, h: 28 };
     renderDashboard();
     dashSelect('t1');
   });

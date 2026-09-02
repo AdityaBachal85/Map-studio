@@ -8,9 +8,9 @@
  * `dashboard` shrinks the map into a panel and fills the rest with cards you
  * fill in yourself — the board you build a report on top of.
  *
- * `report` puts the map in the middle of an A4 sheet with the legend, the
- * distances, the highlights and the comment around it: the thing that actually
- * goes to a client.
+ * There was a third, `report` — a fixed A4 sheet with the map in the middle of
+ * it — and it is gone; see APP_MODES for why and for what was deliberately
+ * left alone.
  *
  * THE MAP IS NEVER MOVED OR REBUILT. Every mode is the same CSS grid with the
  * map as one of its items, so switching changes which cell it occupies and
@@ -25,7 +25,20 @@
  * pins from them, so both are told the box changed.
  */
 
-const APP_MODES = ['map', 'dashboard', 'report'];
+/*
+ * REPORT SHEET IS GONE FROM THE UI. It was a third mode — a fixed A4 page of
+ * editable panels — and the board does the same job without the fixed page: it
+ * exports landscape, paginates, and its cards are the same cards. Two ways to
+ * make one document is one more than anybody needs to learn.
+ *
+ * Removed from the modes rather than hidden, so nothing can route to a screen
+ * with no way back to it. What is NOT removed is `reportSheet` in the saved
+ * project: a file written before this still carries its panels, and dropping
+ * them on open would quietly destroy work that is not this feature's to
+ * destroy. js/ui/reportSheet.js is likewise left loading and unreferenced —
+ * see the AI-reports removal for the same reasoning.
+ */
+const APP_MODES = ['map', 'dashboard'];
 
 /** Where the search box lives in map mode, so it can be put back. */
 let appModeSearchHome = null;
@@ -40,6 +53,9 @@ let appModeSearchWasCollapsed = true;
  * sidebar's edge handle, Escape and the scrim — and each of them has to leave
  * the button telling the truth.
  */
+/** Where the nav controls came from, so leaving the board puts them back. */
+const appModeNavHome = {};
+
 function syncDashToolsBtn() {
   const app = document.getElementById('app');
   const btn = document.getElementById('dnTools');
@@ -77,6 +93,26 @@ function setAppMode(mode, opts) {
   // list. In dashboard mode it belongs in the top bar, so it is re-parented
   // rather than duplicated — a second search input would be a second thing to
   // keep in step with the first.
+  // THE NAV RAIL IS GONE ON THE BOARD, so the two controls that have to stay
+  // reachable come with it into the top bar — the mode pill, which is the only
+  // way back to the map, and Tools. Re-parented, never duplicated: a second
+  // copy of either is a second thing to keep in step with the first.
+  const navSlot = document.getElementById('dashTopNav');
+  if (navSlot) {
+    [['modeSwitch', 'appModeSwitchHome'], ['dnTools', 'appModeToolsHome'],
+      ['dnProjects', 'appModeProjectsHome']].forEach(([id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!appModeNavHome[id]) appModeNavHome[id] = { parent: el.parentNode, next: el.nextSibling };
+      if (mode === 'dashboard') {
+        if (el.parentNode !== navSlot) navSlot.appendChild(el);
+      } else if (el.parentNode === navSlot) {
+        const home = appModeNavHome[id];
+        home.parent.insertBefore(el, home.next);
+      }
+    });
+  }
+
   const search = document.getElementById('searchBox');
   const slot = document.getElementById('dashTopSearch');
   if (search && slot) {
@@ -91,9 +127,6 @@ function setAppMode(mode, opts) {
       appModeSearchHome.appendChild(search);
       if (appModeSearchWasCollapsed) search.classList.add('collapsed');
     }
-    // On the sheet it is a tool, not part of the page — collapsed to its icon
-    // so a 300px search bar is not lying across the middle of the map.
-    if (mode === 'report') search.classList.add('collapsed');
   }
 
   document.querySelectorAll('[data-mode-btn]').forEach(b => {
@@ -109,7 +142,6 @@ function setAppMode(mode, opts) {
   if (typeof dashMapToCanvas === 'function') dashMapToCanvas(mode === 'dashboard');
 
   if (mode === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
-  if (mode === 'report' && typeof renderReportSheet === 'function') renderReportSheet();
 
   // The account chip is drawn on the way in, not at wire time. This file loads
   // well before auth/session.js, so the call in wireAppMode() runs while
@@ -141,7 +173,6 @@ function setAppMode(mode, opts) {
 
   if (!(opts && opts.silent) && typeof status === 'function') {
     if (mode === 'dashboard') status('Dashboard. The map is still live — draw, drag and edit exactly as before.');
-    else if (mode === 'report') status('Report sheet. Every panel is editable; the map in the middle is the real map.');
     else status('Map studio.');
   }
 }
@@ -377,6 +408,11 @@ function applyBoardTheme() {
   // project opened by a colleague should not drag them into a mode.
   let saved = null;
   try { saved = localStorage.getItem('dbot.appMode'); } catch (e) { /* ignore */ }
+  // A mode that no longer exists reads as map — and takes the map branch here
+  // rather than the setAppMode branch, which would return early on "already in
+  // that mode" and leave the nav with nothing lit. Anybody whose last session
+  // ended on the report sheet lands on the map, correctly marked.
+  if (saved && APP_MODES.indexOf(saved) === -1) saved = null;
   if (saved && saved !== 'map') setTimeout(() => setAppMode(saved, { silent: true }), 400);
   else document.querySelectorAll('[data-mode-btn="map"]').forEach(b => b.classList.add('on'));
 })();

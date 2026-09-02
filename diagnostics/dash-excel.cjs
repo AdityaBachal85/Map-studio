@@ -60,12 +60,12 @@ async function typeInto(p, sel, value) {
     setAppMode('dashboard');
     dashEditing = true;
     dashCards = [Object.assign(dashNewCard('column'), {
-      id: 'c1', title: 'Trips', x: 0, y: 0, w: 8, h: 8,
+      id: 'c1', title: 'Trips', x: 0, y: 0, w: 64, h: 16,
       labels: ['2021', '2022', '2023', '2024'],
       seriesList: [{ name: 'Trips', values: [1200, 3000, 2200, 4100], slot: 1 }],
       fmt: { labels: true, xAxis: true, yAxis: true },
     })];
-    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 8, h: 14 };
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 64, h: 28 };
     renderDashboard();
     dashSelect('c1');
   });
@@ -121,7 +121,7 @@ async function typeInto(p, sel, value) {
     return { w: c.w, h: c.h, x: c.x, y: c.y, dp: c.fmt.decimals };
   });
   ck('typing a decimal count did not move or resize the tile',
-    geom.w === 8 && geom.h === 8 && geom.x === 0 && geom.y === 0 && geom.dp === 1,
+    geom.w === 64 && geom.h === 16 && geom.x === 0 && geom.y === 0 && geom.dp === 1,
     JSON.stringify(geom));
 
   // BOTH OF THESE WERE FOUND BY LOOKING AT THE PICTURE, not by an assertion.
@@ -238,7 +238,7 @@ async function typeInto(p, sel, value) {
 
   await p.evaluate(() => {
     dashCards = [Object.assign(dashNewCard('gauges'), {
-      id: 'g1', title: 'Scores', x: 0, y: 0, w: 8, h: 6,
+      id: 'g1', title: 'Scores', x: 0, y: 0, w: 64, h: 12,
       items: [{ cap: 'Access', value: '8' }, { cap: 'Retail', value: '6' }],
     })];
     renderDashboard(); dashSelect('g1');
@@ -262,7 +262,7 @@ async function typeInto(p, sel, value) {
 
   const model = await p.evaluate(() => {
     dashCards = [Object.assign(dashNewCard('column'), {
-      id: 'c9', title: 'Trips', x: 0, y: 0, w: 8, h: 8,
+      id: 'c9', title: 'Trips', x: 0, y: 0, w: 64, h: 16,
       labels: ['2021', '2022'],
       seriesList: [{ name: 'Trips', values: [1200, 3000], slot: 1 }],
       fmt: { decimals: 1, numPrefix: '₹', xTitle: 'Year', yTitle: 'Rupees' },
@@ -291,7 +291,7 @@ async function typeInto(p, sel, value) {
 
   await p.evaluate(() => {
     dashCards = [Object.assign(dashNewCard('table'), {
-      id: 't1', title: 'Rates', x: 0, y: 0, w: 10, h: 8,
+      id: 't1', title: 'Rates', x: 0, y: 0, w: 80, h: 16,
       columns: ['Place', 'km'],
       rows: [['Andheri', '4.2'], ['Bandra', '9.1']],
     })];

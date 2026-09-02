@@ -29,19 +29,67 @@
  * a dragged mouse.
  */
 
-const DASH_COLS = 12;
-const DASH_ROW_H = 28;
+/*
+ * THE GRID, AND WHY IT IS THIS FINE.
+ *
+ * It was 12 columns of 28px rows. A column step is (width + gap) / columns, so
+ * on a 1200px board that is 101px sideways and 40px down: drag a card's edge
+ * and it jumps a tenth of the board at a time, and the size you actually
+ * wanted is between two of them and unreachable. "There is no middle way" is
+ * exactly right, and it is the grid saying it.
+ *
+ * 96 columns and 8px rows puts the steps at about 13px and 20px — fine enough
+ * that resizing feels continuous under the hand, coarse enough that cards
+ * still line up with each other without anybody aligning anything, which is
+ * the whole reason there is a grid rather than free pixels.
+ *
+ * The numbers are exact multiples of the old ones — 12 x 8 = 96, and the row
+ * step halves from 40 to 20 — so a board saved before this migrates by
+ * multiplying rather than by rounding, and comes back looking identical rather
+ * than nearly so. See dashMigrateGrid.
+ */
+const DASH_COLS = 96;
+const DASH_ROW_H = 8;
 const DASH_GAP = 12;
+
+/** What the columns and the row step were before, for migrating saved boards. */
+const DASH_GRID_WAS = { cols: 12, stepY: 40 };
 
 /** The map's tile. A reserved id so it can never collide with a card's. */
 const DASH_MAP_ID = '__map';
 
-/** Smallest a tile may be dragged down to, in grid units. */
-const DASH_MIN = { w: 2, h: 3 };
-const DASH_MAP_MIN = { w: 3, h: 6 };
+/** Smallest a tile may be dragged down to, in grid units — the same sizes as before. */
+const DASH_MIN = { w: 16, h: 6 };
+const DASH_MAP_MIN = { w: 24, h: 12 };
 
 /** The map tile's geometry. Serialised with the board. */
-let dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 8, h: 14 };
+let dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 64, h: 28 };
+
+/**
+ * Bring a board saved on the old 12-column grid onto this one.
+ *
+ * Multiplication, not rounding: 96 is 12 x 8 and the row step halved, so every
+ * card lands exactly where it was rather than a pixel or two off — and a board
+ * somebody spent an afternoon arranging is not something to approximate.
+ *
+ * Detected by the absence of `dashGrid` in the file rather than by guessing
+ * from the numbers, because a card 8 columns wide is a perfectly ordinary card
+ * on either grid.
+ *
+ * @param {object[]} tiles mutated in place @param {number} [cols] the file's grid
+ */
+function dashMigrateGrid(tiles, cols) {
+  if (cols === DASH_COLS) return 0;
+  const kx = DASH_COLS / (cols || DASH_GRID_WAS.cols);
+  const ky = DASH_GRID_WAS.stepY / (DASH_ROW_H + DASH_GAP);
+  if (kx === 1 && ky === 1) return 0;
+  (tiles || []).forEach(t => {
+    if (!t) return;
+    t.x = Math.round((t.x || 0) * kx); t.w = Math.max(1, Math.round((t.w || 1) * kx));
+    t.y = Math.round((t.y || 0) * ky); t.h = Math.max(1, Math.round((t.h || 1) * ky));
+  });
+  return (tiles || []).length;
+}
 
 /** Where `.map-wrap` sits when it is not on the canvas, so it can go back. */
 let dashMapHome = null;
