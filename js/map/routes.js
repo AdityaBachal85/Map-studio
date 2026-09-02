@@ -19,7 +19,13 @@
         const alt = rt.alts && rt.alts[rt.altIndex];
         if (!alt) return '…';
         const km = (alt.d / 1000).toFixed(1) + ' km';
-        return rt.approx ? km + ' (direct)' : km + ' • ' + Math.round(alt.t / 60) + ' min';
+        if (rt.approx) return km + ' (direct)';
+        // Named, because Google falling through to OSRM is silent and the two
+        // disagree about Indian roads — which is the whole reason Google is
+        // first. A number whose source cannot be seen cannot be checked.
+        const via = rt.via === 'google' ? ' · Google'
+          : (rt.via === 'osrm' ? ' · OSM' : '');
+        return km + ' • ' + Math.round(alt.t / 60) + ' min' + via;
       }
       function routeLabelText(rt) { return rt.labelText && rt.labelText.trim() ? rt.labelText : routeAutoText(rt); }
       /* ---------- where along the route the label sits ---------- */
@@ -211,6 +217,160 @@
         updateRtCardStats(rt);
         scheduleRepaint();
       }
+      /* ---------- how far the SITE is from a route ----------
+       *
+       * WHAT A KEY DISTANCE IS FOR. The card answers one question — how far is
+       * this place from the site — and for a route drawn from the site that is
+       * the route's own length, which is what it reported.
+       *
+       * It is not that for a road drawn across the map with the site sitting
+       * beside it. A highway traced from one town to another and passing the
+       * plot reported the distance between those two towns: a real number,
+       * measuring something nobody asked about, in the row where the reader is
+       * looking for "the highway is 200 m away". A T-junction is the same
+       * shape of mistake — the arm the site sits on is what matters, and the
+       * length of the crossbar is not.
+       *
+       * So a route that does not begin or end at the site is measured from the
+       * site to the nearest point ON it: the approach. Through the same
+       * provider chain the routes themselves use, so it is a driven distance
+       * on real roads rather than a line across whatever is in between.
+       */
+
+      /**
+       * The point on a route's drawn path closest to a coordinate.
+       *
+       * Nearest by ground distance over the path's own vertices, then refined
+       * onto the segment between the two nearest — a road is drawn every
+       * hundred metres or so and the true nearest point is usually between two
+       * of them, which for a plot beside a highway is most of the answer.
+       *
+       * @param {object} rt @param {{lat:number,lng:number}} at
+       * @returns {{lat:number,lng:number,km:number}|null}
+       */
+      function routeNearestPoint(rt, at) {
+        const alt = rt.alts && rt.alts[rt.altIndex];
+        if (!alt || !alt.coords || alt.coords.length < 1) return null;
+        const cs = alt.coords;
+        const kx = 111.32 * Math.cos(at.lat * Math.PI / 180), ky = 111.32;
+        const x = c => (Array.isArray(c) ? c[1] : c.lng) * kx;
+        const y = c => (Array.isArray(c) ? c[0] : c.lat) * ky;
+        const px = at.lng * kx, py = at.lat * ky;
+
+        let best = null, bestD = Infinity;
+        for (let i = 1; i < cs.length; i++) {
+          const ax = x(cs[i - 1]), ay = y(cs[i - 1]);
+          const dx = x(cs[i]) - ax, dy = y(cs[i]) - ay;
+          const len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+          const qx = ax + dx * t, qy = ay + dy * t;
+          const d = Math.hypot(px - qx, py - qy);
+          if (d < bestD) { bestD = d; best = { lat: qy / ky, lng: qx / kx, km: d }; }
+        }
+        if (!best && cs.length === 1) {
+          const c = cs[0];
+          const lat = Array.isArray(c) ? c[0] : c.lat, lng = Array.isArray(c) ? c[1] : c.lng;
+          return { lat, lng, km: haversineKm(at.lat, at.lng, lat, lng) };
+        }
+        return best;
+      }
+
+      /** The site this map is about, or null. */
+      function routeSite() {
+        return (typeof locations !== 'undefined' && locations.find(l => l.type === 'site')) || null;
+      }
+
+      /** Does this route already start or end at the site? @param {object} rt */
+      function routeTouchesSite(rt) {
+        const s = routeSite();
+        return !!s && (rt.fromId === s.id || rt.toId === s.id);
+      }
+
+      /**
+       * Fingerprint of everything the approach depends on, so it is recomputed
+       * when the site moves or the road is redrawn and not on every repaint.
+       */
+      function routeApproachSig(rt, site) {
+        const alt = rt.alts && rt.alts[rt.altIndex];
+        const n = alt && alt.coords ? alt.coords.length : 0;
+        return [site.id, site.lat.toFixed(5), site.lng.toFixed(5),
+          rt.id, rt.altIndex, n, Math.round(alt ? alt.d : 0)].join('|');
+      }
+
+      /** In-flight approaches, so a rebuild storm is one request. */
+      const _approachPending = new Set();
+
+      /**
+       * Measure, and cache, how far the site is from a route it does not touch.
+       *
+       * Straight-line first and immediately, so the card has an honest number
+       * to show in the same frame rather than a dash that turns into a number
+       * later; then routed properly and replaced. `approx` says which of the
+       * two is on screen, so a reader is never shown a crow-flies figure that
+       * looks like a driven one.
+       *
+       * @param {object} rt @returns {boolean} whether anything changed now
+       */
+      function ensureRouteApproach(rt) {
+        const site = routeSite();
+        if (!site || routeTouchesSite(rt)) {
+          if (rt.approach) { rt.approach = null; return true; }
+          return false;
+        }
+        const sig = routeApproachSig(rt, site);
+        if (rt.approach && rt.approach.sig === sig) return false;
+
+        const near = routeNearestPoint(rt, site);
+        if (!near) { rt.approach = null; return true; }
+        rt.approach = { sig, at: { lat: near.lat, lng: near.lng },
+          d: near.km * 1000, t: null, approx: true };
+
+        // A plot ON the road has nothing to drive. Routing a 12 m approach
+        // costs a request to be told what the geometry already said.
+        if (near.km < 0.03) { rt.approach.approx = false; return true; }
+        if (_approachPending.has(rt.id)) return true;
+        _approachPending.add(rt.id);
+        (async () => {
+          try {
+            const legs = await routeLegs(site, { lat: near.lat, lng: near.lng }, rt.mode);
+            if (legs && rt.approach && rt.approach.sig === sig) {
+              rt.approach.d = legs.d;
+              rt.approach.t = legs.t;
+              rt.approach.approx = false;
+              rt.approach.via = legs.via;
+              if (typeof rebuildLegend === 'function') rebuildLegend();
+            }
+          } catch (e) { /* the straight line stands, and says it is one */ }
+          finally { _approachPending.delete(rt.id); }
+        })();
+        return true;
+      }
+
+      /**
+       * One A→B leg through the same chain a route uses: Google, then OSRM.
+       * Returns null rather than throwing when neither can answer.
+       */
+      async function routeLegs(from, to, mode) {
+        if (typeof googleReady === 'function' && googleReady() && typeof googleRoute === 'function') {
+          try {
+            const g = await googleRoute(from, to, mode || 'car', []);
+            if (g && g.length) return { d: g[0].d, t: g[0].t, via: 'google' };
+          } catch (e) { /* fall through to OSRM */ }
+        }
+        const coordStr = from.lng + ',' + from.lat + ';' + to.lng + ',' + to.lat;
+        for (const base of (ROUTERS[mode] || ROUTERS.car)) {
+          try {
+            const res = await fetch(base + '/route/v1/driving/' + coordStr + '?overview=false');
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (data.routes && data.routes.length) {
+              return { d: data.routes[0].distance, t: data.routes[0].duration, via: 'osrm' };
+            }
+          } catch (e) { /* try the next server */ }
+        }
+        return null;
+      }
+
       async function computeRoute(rt) {
         const A = locById(rt.fromId), B = locById(rt.toId);
         if (!A || !B || A === B) { updateRtCardStats(rt); return; }
@@ -236,6 +396,11 @@
               rt.alts = g.map(r => ({ d: r.d, t: r.t, coords: r.coords }));
               rt.altIndex = Math.min(rt.altIndex || 0, rt.alts.length - 1);
               rt.approx = false;
+              // WHICH SERVICE ANSWERED, recorded rather than assumed. Google is
+              // first in this chain and falls through to OSRM without a word
+              // when it cannot help, so "are these Google's roads" was a
+              // question nobody could answer by looking. Now the card says.
+              rt.via = 'google';
               ok = true;
               const named = g[0].desc ? ' via ' + g[0].desc : '';
               const altSuffix = g.length > 1 ? ' (' + g.length + ' alternatives — ⇆ to compare)' : '';
@@ -254,6 +419,7 @@
             rt.alts = data.routes.map(r => ({ d: r.distance, t: r.duration, coords: r.geometry.coordinates.map(c => [c[1], c[0]]) }));
             rt.altIndex = Math.min(rt.altIndex || 0, rt.alts.length - 1);
             rt.approx = false;
+            rt.via = 'osrm';
             ok = true;
             const altSuffix = rt.alts.length > 1 ? ' (' + rt.alts.length + ' alternatives — ⇆ to compare)' : '';
             status('Route found: ' + A.name + ' → ' + B.name + viaLabel + altSuffix);
@@ -266,7 +432,7 @@
           let d = 0;
           for (let i = 1; i < pts.length; i++) d += haversineKm(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) * 1000;
           rt.alts = [{ d, t: null, coords: pts }];
-          rt.altIndex = 0; rt.approx = true;
+          rt.altIndex = 0; rt.approx = true; rt.via = 'line';
           status('Live routing unavailable for ' + A.name + ' → ' + B.name + ' — showing straight line. Check internet or try ↻.', true);
         }
         drawRoute(rt); renderViaDots(rt); rebuildLegend();
@@ -405,6 +571,7 @@
           // way to get rid of them, and that changes the route.
           viaHidden: !!opts.viaHidden,
           alts: opts.saved ? [opts.saved] : null, altIndex: 0, approx: opts.saved ? !!opts.saved.approx : false,
+          via: opts.via || null,
           line: null, _labelEl: null, _el: null, _viaEls: [], anchor: null, card: null
         };
         bumpId(rt.id);

@@ -87,12 +87,33 @@ function legendDerivedRow(rt) {
   if (!A || !B || !rt.alts) return null;
   const alt = rt.alts[rt.altIndex];
   if (!alt) return null;
+
+  // THE CARD ANSWERS ONE QUESTION: how far is this from the site. For a route
+  // drawn from the site that is the route's own length, and it always was.
+  //
+  // It is not that for a road traced across the map with the site sitting
+  // beside it. A highway drawn from one town to another and passing the plot
+  // reported the distance between those two towns — a real number, measuring
+  // something nobody asked about, in the row where the reader is looking for
+  // "the highway is 200 m away". So a route that does not begin or end at the
+  // site is reported as the APPROACH: from the site to the nearest point on
+  // it, driven on real roads through the same providers the route itself used.
+  const ap = rt.approach;
+  const km = ap ? ap.d / 1000 : alt.d / 1000;
+  const secs = ap ? ap.t : alt.t;
   return {
     color: rt.color,
     name: rt.labelText && rt.labelText.trim() ? rt.labelText
-      : (A.type === 'site' ? B.name : A.name + ' → ' + B.name),
-    km: (alt.d / 1000).toFixed(1) + ' km',
-    min: alt.t ? Math.round(alt.t / 60) + ' min' : '—',
+      : (A.type === 'site' ? B.name : (B.type === 'site' ? A.name : A.name + ' → ' + B.name)),
+    // Two decimals under a kilometre: "0.2 km" and "0.15 km" are different
+    // answers to "can I walk to the highway", and one decimal makes them the
+    // same one. Above that the extra digit is noise.
+    km: (km < 1 ? km.toFixed(2) : km.toFixed(1)) + ' km',
+    min: secs ? Math.round(secs / 60) + ' min' : '—',
+    // What the number MEANS, for the row's tooltip. A reader who cannot tell
+    // an approach from a journey cannot check either.
+    approach: !!ap,
+    approx: !!(ap && ap.approx),
   };
 }
 
@@ -110,6 +131,10 @@ function legendRows() {
   const out = [];
 
   routes.forEach(rt => {
+    // Measured here rather than when the route is computed, because it also
+    // has to change when the SITE moves — and a site being dragged does not
+    // recompute a single route.
+    if (typeof ensureRouteApproach === 'function') ensureRouteApproach(rt);
     const base = legendDerivedRow(rt);
     if (!base) return;
     const e = legendEdits[rt.id] || {};
@@ -128,6 +153,8 @@ function legendRows() {
       min: e.min != null && e.min !== '' ? e.min : base.min,
       iconKey: e.iconKey || null,
       iconImage: e.iconImage || null,
+      approach: base.approach,
+      approx: base.approx,
       edited: !!(e.name || e.km || e.min || e.color || e.iconKey || e.iconImage),
     });
   });
@@ -231,7 +258,15 @@ function rebuildLegend() {
       '<td class="legend-mark"' + (legendEditing ? ' title="Click to choose a logo or icon"' : '') + '>'
         + legendMarkHtml(r) + '</td>'
       + '<td class="legend-name"' + ed + '>' + esc(r.name) + '</td>'
-      + '<td class="num legend-km"' + ed + '>' + esc(r.km) + '</td>'
+      // WHAT THE NUMBER MEANS, where a reader can check it. A row measuring
+      // the approach to a road is answering a different question from one
+      // measuring a journey, and the two look identical in the cell.
+      + '<td class="num legend-km"' + ed
+        + (r.approach
+          ? ' title="From the site to where it meets this road'
+            + (r.approx ? ' — straight line; live routing was unavailable' : '') + '"'
+          : (r.approx ? ' title="Straight line — live routing was unavailable"' : ''))
+        + '>' + esc(r.km) + '</td>'
       + (legendShowTime ? '<td class="num legend-min"' + ed + '>' + esc(r.min) + '</td>' : '')
       + (legendEditing
         ? '<td class="legend-actions">'

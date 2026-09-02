@@ -75,6 +75,9 @@ function serialiseRoute(r) {
     // The computed geometry travels with the route so reopening a project
     // does not re-spend a routing request per route.
     saved: alt ? { d: alt.d, t: alt.t, coords: alt.coords, approx: r.approx } : null,
+    // Which service drew it. Without this a reopened project shows every route
+    // as sourceless, and re-deriving it would be a guess.
+    via: r.via || undefined,
   };
 }
 
