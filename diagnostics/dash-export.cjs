@@ -214,11 +214,18 @@ function zipText(buf, entries, name) {
     const g = document.getElementById('dashGrid');
     return { w: g.getBoundingClientRect().width, h: g.scrollHeight };
   });
-  const wantLandscape = board.w / board.h > 1.15;
-  ck('the page is turned to suit the board, not fixed landscape',
-    (boxes[0].w > boxes[0].h) === wantLandscape,
+  // TURNED BY THE BOARD, THEN NOT. This asserted that a portrait-shaped board
+  // produced a portrait sheet, which was the right answer to the question it
+  // was asked: it removed the forty per cent of blank margin a tall board left
+  // on a landscape page. It is the wrong answer to the one that matters. The
+  // document is a connectivity sheet — a map beside its cards, read across,
+  // shown on a screen in a meeting and printed into a landscape deck — and a
+  // portrait page of it is not a tighter version of that, it is a different
+  // document. A tall board paginates DOWN landscape pages instead.
+  ck('the report sheet is landscape whatever shape the board happens to be',
+    boxes[0].w > boxes[0].h,
     'board ' + Math.round(board.w) + '×' + Math.round(board.h)
-      + ' → ' + (boxes[0].w > boxes[0].h ? 'landscape' : 'portrait'));
+      + ' (portrait) → ' + (boxes[0].w > boxes[0].h ? 'landscape' : 'portrait') + ' sheet');
 
   // THE 40%-MARGIN REGRESSION. The old writer centred one image with a uniform
   // fit, so a portrait board on a landscape sheet left 152pt of white down each

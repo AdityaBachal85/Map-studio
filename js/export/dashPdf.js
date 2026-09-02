@@ -96,21 +96,23 @@ function dashPdfPalette() {
 /**
  * Which paper, and which way round.
  *
- * The board's own aspect decides the orientation — that single choice is what
- * removes the blank margin, because the sheet is now the shape of the thing
- * being put on it. Only a genuinely wide board turns the page sideways;
- * anything near square stays portrait, since portrait paginates better and a
- * board is read down.
+ * LANDSCAPE, WHATEVER SHAPE THE BOARD IS. This chose from the board's own
+ * aspect, which was the right answer to the question it was asked — it removed
+ * the blank margin a portrait board left on a landscape sheet — and the wrong
+ * answer to the one that matters. This document is a connectivity sheet: a map
+ * beside its cards, read across, shown on a screen in a meeting and printed to
+ * sit in a landscape deck with everything else. A portrait page of it is not a
+ * tighter version of that, it is a different document.
  *
- * @param {string} size 'a4' | 'a3' @param {number} boardW @param {number} boardH
+ * The board is fitted to the sheet rather than the sheet to the board, so a
+ * tall board paginates down landscape pages instead of turning the paper.
+ *
+ * @param {string} size 'a4' | 'a3'
  * @returns {{w:number,h:number,label:string}}
  */
-function dashPdfPaper(size, boardW, boardH) {
+function dashPdfPaper(size) {
   const base = DASH_PAPER_MM[size] || DASH_PAPER_MM.a4;
-  const landscape = boardW / Math.max(1, boardH) > 1.15;
-  return landscape
-    ? { w: base.h, h: base.w, label: base.label + ' landscape' }
-    : { w: base.w, h: base.h, label: base.label + ' portrait' };
+  return { w: base.h, h: base.w, label: base.label + ' landscape' };
 }
 
 /**
@@ -435,7 +437,7 @@ function dashBuildDocument(model, canvas, rects, scale, size) {
   const mapCanvas = (canvas && canvas._dashMap && canvas._dashMap.canvas) || null;
   const boardW = canvas.width / scale;
   const boardH = canvas.height / scale;
-  const paper = dashPdfPaper(size, boardW, boardH);
+  const paper = dashPdfPaper(size);
 
   const contentW = paper.w - DASH_PDF_MARGIN * 2;
   const contentH = paper.h - DASH_PDF_MARGIN * 2 - DASH_PDF_HEADER - DASH_PDF_FOOTER;

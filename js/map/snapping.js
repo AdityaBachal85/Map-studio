@@ -15,6 +15,30 @@
           e._py = pin.y + (e.labelOffset.y || 0);
         });
         const PAD = 3;
+        /*
+         * HOW FAR A LABEL MAY BE SHOVED, which used to be "as far as it takes".
+         *
+         * The solver pushes overlapping boxes apart and iterates, and with
+         * nothing to stop it a crowded sheet walks a label right across the
+         * map: each pass moves it half an overlap, each neighbour it lands on
+         * moves it again, and ten labels stacked in one band compound into
+         * hundreds of pixels. The result is a road name floating over open
+         * ground with a leader line reaching back to the road — which is not a
+         * solution to an overlap. It is a worse problem, because the reader
+         * now has to work out which line the name belongs to, and the obvious
+         * guess is whatever is underneath it.
+         *
+         * This went from a rounding error to the first thing you notice when
+         * drawn shapes joined the billboard: a station chip is 90px wide, and
+         * "Mumbai-Ahmedabad High-Speed Rail Corridor" is 263px, so road names
+         * overlap far more and shove far harder.
+         *
+         * Capped, and overlap accepted past the cap — which is what every
+         * cartographic label placer does, because a legible collision beats an
+         * illegible attribution. Anything still colliding can be dragged, and
+         * a dragged label is pinned and exempt from this entirely.
+         */
+        const MAX_SHOVE = 40;
         for (let iter = 0; iter < 12; iter++) {
           let moved = false;
           for (let i = 0; i < items.length; i++) {
@@ -45,8 +69,20 @@
         items.forEach(e => {
           if (!e.labelPinned) {
             const pin = projectPin(e.anchor);
-            e._autoOffsetX = e._px - pin.x;
-            e._autoOffsetY = e._py - pin.y;
+            let ox = e._px - pin.x, oy = e._py - pin.y;
+            // Measured from where the label WANTED to be, not from the anchor:
+            // the base offset already lifts a chip clear of its own pin, and
+            // charging that against the budget would leave nothing to avoid
+            // with.
+            const dx = ox - (e.labelOffset.x || 0), dy = oy - (e.labelOffset.y || 0);
+            const d = Math.hypot(dx, dy);
+            if (d > MAX_SHOVE) {
+              const k = MAX_SHOVE / d;
+              ox = (e.labelOffset.x || 0) + dx * k;
+              oy = (e.labelOffset.y || 0) + dy * k;
+            }
+            e._autoOffsetX = ox;
+            e._autoOffsetY = oy;
           }
         });
       }

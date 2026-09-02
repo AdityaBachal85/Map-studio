@@ -173,6 +173,78 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('a route says which service drew it', /Google/.test(via.google), via.google);
   ck('and says when it was the free one instead', /OSM/.test(via.osrm), via.osrm);
 
+  /* -- a road's name stays on its road ------------------------------------- */
+
+  /*
+   * THE SOLVER PUSHED OVERLAPPING LABELS APART AND ITERATED, WITH NOTHING TO
+   * STOP IT. Each pass moves a box half an overlap, each neighbour it lands on
+   * moves it again, and a crowded sheet compounds that into hundreds of pixels
+   * — a road name floating over open ground with a leader reaching back to the
+   * road it belongs to. That is not a solution to an overlap. It is a worse
+   * problem, because the reader now has to work out which line the name is
+   * for, and the obvious guess is whatever is underneath it.
+   *
+   * It went from a rounding error to the first thing you notice when drawn
+   * shapes joined the billboard: a station chip is about 90px wide and
+   * "Mumbai-Ahmedabad High-Speed Rail Corridor" is 263px, so road names
+   * overlap far more and shove far harder.
+   */
+  const shove = await p.evaluate(async () => {
+    clearProject();
+    map.setView([19.16, 73.00], 13, { animate: false });
+    const names = [];
+    for (let i = 0; i < 12; i++) {
+      names.push(['Kalyan - Shil Road', 'Mumbai-Ahmedabad High-Speed Rail Corridor',
+        'Airoli - Katai Naka', 'Mumbai Panvel Highway', 'Shil Phata - Mahape Road'][i % 5] + ' ' + i);
+    }
+    // Stacked 44 m apart, so every box wants the same band of the map.
+    const els = names.map((n, i) => {
+      const g = [];
+      for (let k = 0; k <= 20; k++) g.push({ lat: 19.160 + i * 0.0004, lon: 72.97 + k * 0.003 });
+      return { type: 'way', tags: { highway: 'trunk', name: n }, geometry: g };
+    });
+    const found = joinRingFeatures(els.map(el => overpassToFeature(el, 'highway')));
+    ringScanState = { loc: null, km: 9, ids: ['highway'],
+      picked: new Set(found.map((f, i) => i)), result: found };
+    keepRingScanSelection();
+    await new Promise(r => setTimeout(r, 900));
+    const gs = geometries.filter(g => g._labelEl);
+    const pushed = gs.map(g => {
+      const ax = g._autoOffsetX == null ? g.labelOffset.x : g._autoOffsetX;
+      const ay = g._autoOffsetY == null ? g.labelOffset.y : g._autoOffsetY;
+      return Math.round(Math.hypot(ax - g.labelOffset.x, ay - g.labelOffset.y));
+    });
+    const widest = Math.max(...gs.map(g => Math.round(g._labelEl.getBoundingClientRect().width)));
+    return { n: gs.length, max: Math.max(...pushed), any: pushed.some(v => v > 0), widest };
+  });
+  ck('a dozen road names crowded into one band still avoid each other',
+    shove.n === 12 && shove.any === true, shove.n + ' labels, some moved');
+  ck('but none of them is shoved off the road it names',
+    shove.max <= 41, 'furthest ' + shove.max + 'px');
+  // The long names are the ones that used to walk furthest, so the cap has to
+  // hold for them in particular.
+  ck('including the long ones, which overlap most and used to shove hardest',
+    shove.widest > 200, 'widest label ' + shove.widest + 'px');
+
+  /* -- the report is landscape, whatever shape the board is ---------------- */
+
+  // A connectivity sheet is a map beside its cards, read across, shown on a
+  // screen in a meeting and printed into a landscape deck. A portrait page of
+  // it is not a tighter version of that, it is a different document.
+  const paper = await p.evaluate(() => ({
+    tall: dashPdfPaper('a4'),
+    a3: dashPdfPaper('a3'),
+  }));
+  ck('an A4 report sheet is landscape', paper.tall.w > paper.tall.h
+    && /landscape/.test(paper.tall.label), paper.tall.label);
+  ck('and so is A3', paper.a3.w > paper.a3.h && /landscape/.test(paper.a3.label), paper.a3.label);
+  // It used to choose from the board's own aspect, so a tall board turned the
+  // paper. A tall board should paginate down landscape pages instead — and the
+  // proof is that the function cannot see the board at all any more.
+  const arity = await p.evaluate(() => dashPdfPaper.length);
+  ck('and the shape of the board cannot turn the paper, because it is not asked',
+    arity === 1, 'dashPdfPaper takes ' + arity + ' argument' + (arity === 1 ? '' : 's'));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' | ') || 'none');
 
   await p.screenshot({ path: path.join(REPO, 'diagnostics', 'shot-key-distance.png') });
