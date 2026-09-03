@@ -47,6 +47,14 @@ let dashCardSeq = 1;
  * line chart keeps its data — which is the whole reason Power BI's visual
  * switcher is useful and a "delete it and add another" flow is not.
  */
+/*
+ * Sizes are in grid units, and the grid is 96 columns of 8px rows. They were
+ * written for the old 12-column one and missed when it changed, so every card
+ * added from here arrived an eighth of its width and half its height — a
+ * thumbnail with an icon in it, which is what "whenever I add, it comes in
+ * this size" was. The default BOARD was scaled at the time; this list was not,
+ * and nothing tied the two together to notice.
+ */
 const DASH_GALLERY = [
   ['column', 'Column', 'Compare', () => dashChartShape('column')],
   ['bar', 'Bar', 'Compare', () => dashChartShape('bar')],
@@ -63,26 +71,24 @@ const DASH_GALLERY = [
   ['ring', 'Rings', 'Scores', () => dashChartShape('ring')],
   ['gauge', 'Gauge', 'Scores', () => dashChartShape('gauge')],
   ['radar', 'Radar', 'Scores', () => dashChartShape('radar')],
-  ['stat', 'KPI number', 'Figures', () => ({ type: 'stat', title: 'Metric', label: 'Metric', value: '', sub: '', w: 3, h: 5 })],
-  ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 4, h: 5, items: [
+  ['stat', 'KPI number', 'Figures', () => ({ type: 'stat', title: 'Metric', label: 'Metric', value: '', sub: '', w: 24, h: 10 })],
+  ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 32, h: 10, items: [
     { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
-  ['gauges', 'Score rings', 'Figures', () => ({ type: 'gauges', title: 'Scores', w: 6, h: 7, items: [
+  ['gauges', 'Score rings', 'Figures', () => ({ type: 'gauges', title: 'Scores', w: 48, h: 14, items: [
     { cap: 'Connectivity', value: '' },
     { cap: 'Infrastructure', value: '' }] })],
-  ['table', 'Table', 'Text', () => ({ type: 'table', title: 'Table', w: 5, h: 8,
+  ['table', 'Table', 'Text', () => ({ type: 'table', title: 'Table', w: 40, h: 16,
     columns: ['Item', 'Value'], rows: [['', ''], ['', '']] })],
-  ['list', 'List', 'Text', () => ({ type: 'list', title: 'List', w: 4, h: 7, items: [{ name: 'Item', meta: '' }] })],
-  ['text', 'Text', 'Text', () => ({ type: 'text', title: 'Notes', body: 'Type here.', w: 4, h: 5 })],
-  ['slicer', 'Slicer', 'Filter', () => ({ type: 'slicer', title: 'Filter', w: 3, h: 7,
+  ['list', 'List', 'Text', () => ({ type: 'list', title: 'List', w: 32, h: 14, items: [{ name: 'Item', meta: '' }] })],
+  ['text', 'Text', 'Text', () => ({ type: 'text', title: 'Notes', body: 'Type here.', w: 32, h: 10 })],
+  ['slicer', 'Slicer', 'Filter', () => ({ type: 'slicer', title: 'Filter', w: 24, h: 14,
     items: ['2021', '2022', '2023'], picked: [] })],
-  ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 4, h: 7 })],
-  ['legend', 'Legend (live)', 'From the map', () => ({ type: 'legend', title: 'Legend', w: 4, h: 6 })],
+  ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 32, h: 14 })],
+  ['legend', 'Legend (live)', 'From the map', () => ({ type: 'legend', title: 'Legend', w: 32, h: 12 })],
   ['comment', 'Location comment', 'Text', () => ({ type: 'comment', title: 'Location comment',
-    body: 'Type the closing read on the location.', w: 8, h: 5,
-    fmt: { head: 'bar', headTone: 'green' } })],
+    body: 'Type the closing read on the location.', w: 64, h: 10 })],
   ['rating', 'Overall rating', 'Figures', () => ({ type: 'rating', title: 'Overall rating',
-    label: 'Villa funding (location perspective)', value: '', body: '', w: 4, h: 5,
-    fmt: { head: 'bar', headTone: 'navy' } })],
+    label: 'Villa funding (location perspective)', value: '', body: '', w: 32, h: 10 })],
 ];
 
 /** @param {string} kind @returns {object} a fresh chart of that kind */
@@ -91,7 +97,7 @@ function dashChartShape(kind) {
     type: 'chart',
     kind,
     title: 'Chart',
-    w: 6, h: 8,
+    w: 48, h: 16,
     labels: ['2021', '2022', '2023', '2024', '2025'],
     seriesList: [{ name: 'Series 1', values: [], slot: 1 }],
     fmt: { legend: 'auto', labels: false, grid: true, xAxis: true, yAxis: true, smooth: false },
@@ -99,12 +105,31 @@ function dashChartShape(kind) {
 }
 
 /** @param {string} key a gallery key @returns {object} a new visual */
+/**
+ * How every card looks before anybody styles it.
+ *
+ * A navy header bar with the title centred in it. Two card kinds used to carry
+ * that as a private setting and the rest came up bare, so a board was a mix of
+ * headed and unheaded cards and the first thing anybody did was go round
+ * setting each one — which is a default doing the opposite of its job.
+ *
+ * A card kind may still override any of these; nothing here is a rule, it is
+ * where a card STARTS. Boards already saved keep exactly the styling they were
+ * given: this changes what a NEW card looks like, not what an old one does.
+ */
+const DASH_CARD_FMT = { head: 'bar', headTone: 'navy', align: 'center' };
+
 function dashNewCard(key) {
   const def = DASH_GALLERY.find(t => t[0] === key) || DASH_GALLERY[0];
+  const shape = def[3]();
   return Object.assign({
     id: 'c' + (dashCardSeq++),
-    x: 0, y: 9999, w: 4, h: 5,   // y past the end: it lands at the bottom, then settles up
-  }, def[3]());
+    x: 0, y: 9999, w: 32, h: 10,   // y past the end: it lands at the bottom, then settles up
+  }, shape, {
+    // Merged, not replaced: a chart's own legend and grid settings live in the
+    // same object, and assigning the shape wholesale would drop them.
+    fmt: Object.assign({}, DASH_CARD_FMT, shape.fmt || {}),
+  });
 }
 
 /**

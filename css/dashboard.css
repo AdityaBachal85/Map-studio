@@ -223,15 +223,18 @@
    below: a test could see a nav item, click it, and hit a sidebar tab
    instead.) Off-canvas by default here; the nav's Tools item slides it back in
    over the top, which is what an overlay panel should do anyway. */
-/* Offset by the nav's width rather than sitting at left:0. Flush left it
-   covered the nav completely — including the Tools item that opened it — so
-   once the panel was up there was no button anywhere on screen to put it back
-   down. Beside the nav, Tools stays visible and is the way out, and it reads
-   as pressed while the panel is up. */
+/* FLUSH LEFT, like everywhere else. It was offset 210px for one reason: the
+   nav rail lived there, and a panel flush against the edge covered it
+   completely — including the Tools item that opened it, so once the panel was
+   up there was no button on screen to put it back down.
+   The rail is gone and Tools is in the top bar, which the panel does not
+   reach, so the offset now buys nothing and costs the obvious thing: the panel
+   floated in from the middle of the board, detached from any edge, looking
+   like a dialog that had lost its way. */
 .app[data-mode="dashboard"] .sidebar,
 .app[data-mode="report"] .sidebar {
-  left: 210px;
-  transform: translateX(calc(-100% - 212px)) translateZ(0);
+  left: 0;
+  transform: translateX(calc(-100% - 12px)) translateZ(0);
 }
 
 .app[data-mode="dashboard"].dash-side-open .sidebar,
@@ -246,7 +249,9 @@
 .app[data-mode="dashboard"].dash-side-open #sideToggle,
 .app[data-mode="report"].dash-side-open #sideToggle {
   display: flex;
-  left: calc(var(--sbw) + 210px);
+  /* At the panel's own right edge, which is now the panel's width and nothing
+     more — the 210px it used to add was the nav rail's. */
+  left: var(--sbw);
 }
 
 /* A dimmed board behind the panel: it says the panel is a layer over the board

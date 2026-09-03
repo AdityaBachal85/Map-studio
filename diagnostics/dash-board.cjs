@@ -703,6 +703,70 @@ const SCENE = [
   await p.evaluate(() => { setAppMode('dashboard'); setDashEditing(true); });
   await p.waitForTimeout(500);
 
+  /* -- a card arrives the size of a card ----------------------------------- */
+
+  /*
+   * THE SIZES IN DASH_GALLERY ARE IN GRID UNITS, and when the grid went from 12
+   * columns to 96 to make resizing fine-grained, this list was missed. The
+   * default BOARD was scaled at the time; the gallery was not, and nothing tied
+   * the two together to notice — so every card added from the picker arrived an
+   * eighth of its width and half its height, a thumbnail with an icon in it.
+   *
+   * Asserted in PIXELS rather than in units, so it is a statement about what
+   * lands on the board rather than a copy of the numbers being checked.
+   */
+  const sizes = await p.evaluate(async () => {
+    setAppMode('dashboard');
+    await new Promise(r => setTimeout(r, 800));
+    dashEditing = true;
+    const m = dashMetrics();
+    const step = DASH_ROW_H + 12;
+    return DASH_GALLERY.map(g => {
+      const c = dashNewCard(g[0]);
+      return { key: g[0], w: Math.round(c.w * m.stepX - 12), h: Math.round(c.h * step - 12) };
+    });
+  });
+  const tiny = sizes.filter(s => s.w < 200 || s.h < 110);
+  ck('every kind of card in the picker arrives at a usable size',
+    tiny.length === 0, tiny.length ? tiny.map(t => t.key + ' ' + t.w + 'x' + t.h).join(', ')
+      : sizes.length + ' kinds, smallest ' + Math.min.apply(null, sizes.map(s => s.w)) + 'px wide');
+  // And none of them is wider than the board it lands on.
+  const over = await p.evaluate(() =>
+    DASH_GALLERY.map(g => dashNewCard(g[0])).filter(c => c.w > DASH_COLS).map(c => c.type));
+  ck('and none wider than the board itself', over.length === 0, over.join(', ') || 'none');
+
+  /* -- and wearing the house style ----------------------------------------- */
+
+  // Two card kinds used to carry a header bar as a private setting and the rest
+  // came up bare, so a board was a mix of headed and unheaded cards and the
+  // first thing anybody did was go round setting each one — a default doing
+  // the opposite of its job.
+  const dressed = await p.evaluate(async () => {
+    const kinds = ['text', 'table', 'stat', 'column', 'comment', 'legend', 'gauges'];
+    dashCards = kinds.map(k => dashNewCard(k));
+    dashMapTile = { id: DASH_MAP_ID, x: 0, y: 9999, w: 64, h: 28 };
+    renderDashboard();
+    await new Promise(r => setTimeout(r, 700));
+    return {
+      fmt: dashCards.map(c => [c.fmt.head, c.fmt.headTone, c.fmt.align].join('/')),
+      headed: document.querySelectorAll('#dashGrid .dash-card.headed').length,
+      navy: document.querySelectorAll('#dashGrid .dash-card.head-navy').length,
+      centred: document.querySelectorAll('#dashGrid .dash-card.talign-center').length,
+      total: document.querySelectorAll('#dashGrid .dash-card').length,
+      // A chart's own settings live in the same object; assigning the shape
+      // wholesale would have dropped them.
+      chartKeeps: !!dashCards.find(c => c.type === 'chart').fmt.grid,
+    };
+  });
+  ck('every new card starts with a navy header bar and a centred title',
+    dressed.fmt.every(f => f === 'bar/navy/center'), [...new Set(dressed.fmt)].join(' | '));
+  ck('and that is what actually reaches the board, not just the record',
+    dressed.headed === dressed.total && dressed.navy === dressed.total
+    && dressed.centred === dressed.total,
+    dressed.headed + '/' + dressed.navy + '/' + dressed.centred + ' of ' + dressed.total);
+  ck('while a card kind\'s own format settings survive the default being applied',
+    dressed.chartKeeps === true);
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' // ') || 'none');
   await b.close();
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
