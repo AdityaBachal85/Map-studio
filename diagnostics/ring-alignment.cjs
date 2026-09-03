@@ -726,18 +726,43 @@ ck('and a fresh scan looks for them, because they are the news on the sheet',
   ck('and one made after the gap has already passed waits for nothing',
     Date.now() - t < 60, (Date.now() - t) + 'ms');
 
-  // Four mirrors at thirty seconds each is a two-minute wait ending in a
-  // failure. By the second attempt the question is not "can this server answer
-  // a heavy query" — the first had thirty seconds for that — but "is it
-  // responding at all".
-  const worst = M.OVERPASS_FETCH_MS + 3 * M.OVERPASS_RETRY_MS;
-  ck('a mirror that has gone quiet does not cost a full budget every time',
-    M.OVERPASS_RETRY_MS < M.OVERPASS_FETCH_MS && worst <= 70000,
-    'worst case ' + (worst / 1000) + 's, was ' + (4 * M.OVERPASS_FETCH_MS / 1000) + 's');
-  // The first attempt keeps the long budget: a wide ring over a city genuinely
-  // needs it, and cutting that would trade a slow answer for no answer.
-  ck('while the first attempt keeps the budget a real query needs',
-    M.OVERPASS_FETCH_MS >= 30000, M.OVERPASS_FETCH_MS + 'ms');
+  // THE BOUND IS ON THE TOTAL, NOT ON EACH ATTEMPT. It was on each attempt for
+  // a few hours: twelve seconds for every mirror after the first, on the
+  // reasoning that by then the question is "is this server responding at all".
+  // It is not. Overpass is TOLD it may take twenty-five seconds — the query
+  // says so — and a mirror can be perfectly responsive and still need all of
+  // it for a wide ring. A client budget under the server's own timeout does
+  // not detect a dead mirror; it guarantees hanging up on a live one, on every
+  // attempt after the first.
+  ck('no attempt is given less time than the server is allowed to take',
+    M.OVERPASS_MIN_ATTEMPT_MS > M.OVERPASS_TIMEOUT_S * 1000
+    && M.OVERPASS_FETCH_MS > M.OVERPASS_TIMEOUT_S * 1000,
+    'server may take ' + M.OVERPASS_TIMEOUT_S + 's; the floor is '
+      + (M.OVERPASS_MIN_ATTEMPT_MS / 1000) + 's');
+  // A hung first mirror still must not eat the afternoon.
+  ck('but the whole scan is still bounded',
+    M.OVERPASS_TOTAL_MS <= 120000 && M.OVERPASS_TOTAL_MS >= 2 * M.OVERPASS_FETCH_MS,
+    'total ' + (M.OVERPASS_TOTAL_MS / 1000) + 's, room for '
+      + Math.floor(M.OVERPASS_TOTAL_MS / M.OVERPASS_FETCH_MS) + ' full attempts');
+
+  // OUR OWN TIMEOUT IS NOT A BLOCKED CONNECTION, and they used to be the same
+  // word — so a scan that merely took too long told the reader a firewall was
+  // blocking Overpass. A confident, checkable, wrong diagnosis, and one that
+  // sends somebody to their IT department over a ring that was too wide.
+  ck('a timeout says the query was heavy, not that the network is blocked',
+    /did not finish in time/.test(M.ringFeatureMessage('timeout'))
+    && !/firewall/.test(M.ringFeatureMessage('timeout')),
+    M.ringFeatureMessage('timeout').slice(0, 76));
+  ck('while a refused connection still says what that looks like',
+    /firewall/.test(M.ringFeatureMessage('network')),
+    M.ringFeatureMessage('network').slice(0, 60));
+  ck('and where both happened the timeout is what gets reported',
+    M.overpassWorstReason(['network', 'timeout', 'network']) === 'timeout',
+    M.overpassWorstReason(['network', 'timeout', 'network']));
+  ck('but a definite refusal from the server still outranks both',
+    M.overpassWorstReason(['timeout', 'http-429']) === 'http-429'
+    && M.overpassWorstReason(['timeout', 'http-400']) === 'http-400');
+  ck('and a timeout is worth offering a retry for', M.ringFeatureRetryable('timeout') === true);
 
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
   process.exit(R.filter(Boolean).length === R.length ? 0 : 1);

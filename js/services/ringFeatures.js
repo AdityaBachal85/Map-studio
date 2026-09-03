@@ -42,15 +42,31 @@ const OVERPASS_TIMEOUT_S = 25;
 const OVERPASS_FETCH_MS = 30000;
 
 /**
- * The budget for a mirror AFTER the first has already spent its own.
+ * How long the whole scan may take, across every mirror it tries.
  *
- * Four mirrors at thirty seconds each is a two-minute wait ending in a
- * failure, and by the second attempt the question is no longer "can this
- * server answer a heavy query" — the first one already had thirty seconds to
- * do that. It is "is this server responding at all", and a mirror that cannot
- * begin to answer in twelve seconds is not the one that will rescue the scan.
+ * THIS REPLACES A SHORTER BUDGET FOR RETRIES, WHICH WAS WRONG. The idea was
+ * that by the second attempt the question is "is this server responding at
+ * all", so twelve seconds is plenty. It is not: Overpass is TOLD it may take
+ * twenty-five (OVERPASS_TIMEOUT_S, in the query itself), and a mirror can be
+ * perfectly responsive and still legitimately need all of it for a wide ring
+ * over a city. A client budget below the server's own timeout does not detect
+ * a dead mirror — it guarantees we hang up on a live one before it can
+ * finish, on every attempt after the first. Three mirrors that would have
+ * answered were being cut off mid-sentence, and the scan then reported that
+ * nothing could be reached at all.
+ *
+ * So every attempt gets a budget that can actually accommodate the answer, and
+ * the bound moves to the total. A hung first mirror still cannot eat the whole
+ * afternoon, and a slow live one is still allowed to finish.
  */
-const OVERPASS_RETRY_MS = 12000;
+const OVERPASS_TOTAL_MS = 95000;
+
+/**
+ * Below this much time left, a further attempt is not worth making: the server
+ * could not answer inside it even if it wanted to, so the request would only
+ * be aborted again and reported as another failure.
+ */
+const OVERPASS_MIN_ATTEMPT_MS = OVERPASS_TIMEOUT_S * 1000 + 3000;
 
 /** Overpass's usage policy is a condition of use, not a suggestion. */
 const OVERPASS_MIN_GAP_MS = 1200;
@@ -1679,14 +1695,22 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   const run = (async () => {
     const reasons = [];
     let attempt = 0;
+    const deadline = Date.now() + OVERPASS_TOTAL_MS;
     for (const host of OVERPASS_MIRRORS) {
+      const left = deadline - Date.now();
+      if (left < OVERPASS_MIN_ATTEMPT_MS) { reasons.push('timeout'); break; }
       if (onStep) onStep({ mirror: attempt + 1, of: OVERPASS_MIRRORS.length });
       await overpassGate();
+      attempt++;
       let res;
+      let timedOut = false;
       try {
         const ctl = new AbortController();
-        const timer = setTimeout(() => ctl.abort(),
-          attempt++ ? OVERPASS_RETRY_MS : OVERPASS_FETCH_MS);
+        // Never below what the server was told it may take: aborting first
+        // turns a slow answer into no answer.
+        const budget = Math.max(OVERPASS_MIN_ATTEMPT_MS,
+          Math.min(OVERPASS_FETCH_MS, deadline - Date.now()));
+        const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, budget);
         res = await fetch(host, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1694,7 +1718,15 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
           signal: ctl.signal,
         });
         clearTimeout(timer);
-      } catch (e) { reasons.push('network'); continue; }
+      } catch (e) {
+        // OUR OWN TIMEOUT IS NOT A BLOCKED CONNECTION, and they were the same
+        // word. So a scan that simply took too long told the reader that a
+        // firewall was blocking Overpass — a confident, checkable, wrong
+        // diagnosis, and one that sends somebody to their IT department over a
+        // ring that was merely too wide.
+        reasons.push(timedOut ? 'timeout' : 'network');
+        continue;
+      }
 
       // A syntax error fails identically everywhere — cycling four mirrors on
       // it wastes five seconds and four slots of rate-limit budget.
@@ -1740,7 +1772,11 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
  * @param {string[]} reasons @returns {string}
  */
 function overpassWorstReason(reasons) {
-  const rank = r => (r === 'http-400' ? 4 : r === 'http-429' ? 3 : /^http-5/.test(r) ? 2 : 1);
+  // A timeout outranks a bare transport failure: "it did not finish in time"
+  // is a fact about the query, and "could not connect" is a guess about the
+  // network. Where both happened, the one that can be acted on wins.
+  const rank = r => (r === 'http-400' ? 5 : r === 'http-429' ? 4
+    : /^http-5/.test(r) ? 3 : r === 'timeout' ? 2 : 1);
   return reasons.slice().sort((a, b) => rank(b) - rank(a))[0] || 'network';
 }
 
@@ -1767,6 +1803,11 @@ function ringFeatureMessage(reason, ctx) {
     case 'http-429':
       return 'Overpass is rate-limiting. It is a donated service shared by everyone —'
         + ' wait half a minute and try again.';
+    case 'timeout':
+      return 'Overpass did not finish in time. That is the query being heavy rather than'
+        + ' the network being down — a wide ring with many types ticked is a lot to ask of'
+        + ' a donated service. Untick the types you do not need, or narrow the ring, and'
+        + ' try again.';
     case 'network':
     default:
       return 'Could not reach any Overpass server (tried ' + OVERPASS_MIRRORS.length + ').'
@@ -1777,7 +1818,10 @@ function ringFeatureMessage(reason, ctx) {
 
 /** Whether a failure is worth offering a retry for. */
 function ringFeatureRetryable(reason) {
-  return reason === 'network' || reason === 'http-429' || /^http-5/.test(reason || '');
+  // A timeout is the most retryable of the lot: the same query with two types
+  // unticked usually comes straight back, and the message says so.
+  return reason === 'network' || reason === 'timeout' || reason === 'http-429'
+    || /^http-5/.test(reason || '');
 }
 
 /* Node/test interop — harmless in the browser. The geometry below is pure
@@ -1790,7 +1834,9 @@ if (typeof module !== 'undefined' && module.exports) {
     overpassClassOf, overpassToFeature,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
     ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
-    overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_RETRY_MS, OVERPASS_FETCH_MS,
+    overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_FETCH_MS,
+    OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S,
+    overpassWorstReason, ringFeatureMessage, ringFeatureRetryable,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,
     ringMergeGoogle, RING_SAME_PLACE_M,
     RING_FEATURE_CLASSES, RING_FEATURE_DEFAULTS, ringFeatureClass,
