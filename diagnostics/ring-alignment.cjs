@@ -676,9 +676,16 @@ const planned = M.RING_FEATURE_CLASSES.filter(c => c.proposed);
 ck('the planned classes say they are not built, and only they do',
   planned.map(c => c.id).sort().join() === 'plannedRail,plannedRoad',
   planned.map(c => c.id).join());
-ck('and a fresh scan looks for them, because they are the news on the sheet',
-  M.RING_FEATURE_DEFAULTS.indexOf('plannedRoad') >= 0
-  && M.RING_FEATURE_DEFAULTS.indexOf('plannedRail') >= 0);
+// AND A FRESH SCAN NO LONGER LOOKS FOR THEM, which reverses what this
+// asserted a day ago. They went into the defaults because what is coming is
+// half of what a site is worth, and that reasoning still holds — but
+// `plannedRoad` alone is three query statements, so the default scan went from
+// nine to thirteen against Overpass's twenty-five second ceiling, and started
+// timing out and then being rate-limited. A scan that returns nothing is a
+// worse answer about the future than not asking. See the defaults themselves.
+ck('but a fresh scan does not ask for them, because a scan that times out finds nothing',
+  M.RING_FEATURE_DEFAULTS.indexOf('plannedRoad') < 0
+  && M.RING_FEATURE_DEFAULTS.indexOf('plannedRail') < 0);
 
 /* ---- how long the waiting is ---------------------------------------------- */
 
@@ -763,6 +770,109 @@ ck('and a fresh scan looks for them, because they are the news on the sheet',
     M.overpassWorstReason(['timeout', 'http-429']) === 'http-429'
     && M.overpassWorstReason(['timeout', 'http-400']) === 'http-400');
   ck('and a timeout is worth offering a retry for', M.ringFeatureRetryable('timeout') === true);
+
+  /* ---- what the scan actually asks for ------------------------------------ */
+
+  /*
+   * `(around:5000,lat,lng)` makes Overpass compute a distance for every
+   * candidate element, and it was on EVERY statement — thirteen passes over
+   * the same data for a full scan. A bbox in the header is applied once, by
+   * the index rather than by arithmetic, and every statement inherits it.
+   */
+  const q = M.overpassQL(M.RING_FEATURE_DEFAULTS, 19.1, 72.88, 5000);
+  ck('the ring is asked for as one bounding box, not a distance per statement',
+    /\[bbox:[-\d.,]+\]/.test(q.ql) && !/around:/.test(q.ql),
+    (q.ql.split('\n')[0] || '').slice(0, 64));
+  ck('and the box is centred on the ring and about its size', (() => {
+    const m = q.ql.match(/\[bbox:([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\]/);
+    if (!m) return false;
+    const s2 = +m[1], w = +m[2], n = +m[3], e = +m[4];
+    const midLat = (s2 + n) / 2, midLng = (w + e) / 2;
+    const halfKm = (n - s2) / 2 * 111.32;
+    return Math.abs(midLat - 19.1) < 1e-4 && Math.abs(midLng - 72.88) < 1e-4
+      && Math.abs(halfKm - 5) < 0.1;
+  })());
+
+  // A square around a circle is 27% more ground, so the corners come back too
+  // and the panel promised a circle. Trimmed here, where distance arithmetic
+  // over a few hundred features is free.
+  const inRing = f => M.ringHoldsFeature(f, 19.1, 72.88, 5000);
+  ck('a point in the box but outside the ring is dropped',
+    inRing({ kind: 'point', lat: 19.1 + 4.9 / 111.32, lng: 72.88 }) === true
+    && inRing({ kind: 'point', lat: 19.1 + 4.9 / 111.32, lng: 72.88 + 4.9 / 105 }) === false);
+  // A road that merely clips the edge of the ring IS in the ring — testing
+  // only its middle would drop the very roads a catchment is about.
+  ck('a road that only clips the edge of the ring is kept',
+    inRing({ kind: 'line', pts: [[19.1 + 0.2, 72.88 + 0.2], [19.1 + 0.03, 72.88]] }) === true);
+  ck('and one wholly outside it is not',
+    inRing({ kind: 'line', pts: [[19.3, 73.2], [19.31, 73.21]] }) === false);
+
+  // plannedRoad alone is three statements — OSM spells lifecycle three ways —
+  // so having it on by default took a scan from nine statements to thirteen
+  // against a twenty-five second ceiling. A scan that times out finds nothing,
+  // which is a worse answer about the future than not asking.
+  ck('a default scan is back to eight types',
+    M.RING_FEATURE_DEFAULTS.length === 8, M.RING_FEATURE_DEFAULTS.length + ' types');
+  ck('and planned infrastructure is a tick away rather than always asked for',
+    M.RING_FEATURE_DEFAULTS.indexOf('plannedRoad') < 0
+    && !!M.RING_FEATURE_CLASSES.find(c => c.id === 'plannedRoad'));
+
+  // "I am the only one using this" is true of Map Studio and irrelevant here.
+  const msg = M.ringFeatureMessage('http-429');
+  ck('the rate-limit message says whose limit it is',
+    /shared by everyone using OSM worldwide/.test(msg) && /not about how busy YOUR map is/.test(msg));
+  // Aborting a fetch does not stop Overpass working on the query, so a scan
+  // that timed out is still holding its slot when we come back.
+  ck('and that a timed-out scan of our own is still counting against us',
+    /still running on their side/.test(msg));
+  ck('a rate limit is waited out rather than hopped past in a second',
+    M.OVERPASS_BACKOFF_MS >= 5000, M.OVERPASS_BACKOFF_MS + 'ms');
+
+  /* ---- how far each find is from the site --------------------------------- */
+
+  // The point of a ring scan is "what is near this plot", and the list gave
+  // names with no distances against them.
+  const at = (f) => M.ringDistanceKm(f, 19.10, 72.88);
+  ck('a station two kilometres north is two kilometres away',
+    Math.abs(at({ kind: 'point', lat: 19.10 + 2 / 111.32, lng: 72.88 }) - 2) < 0.02,
+    at({ kind: 'point', lat: 19.10 + 2 / 111.32, lng: 72.88 }).toFixed(3) + ' km');
+  // NEAREST APPROACH, not distance to the middle. A highway running past the
+  // plot is 200 m away; to the midpoint of the whole road is kilometres, and
+  // answers a question nobody asked — the same distinction Key Distances draws.
+  const longRoad = { kind: 'line', pts: [] };
+  for (let i = 0; i <= 40; i++) longRoad.pts.push([19.10 + 0.2 / 111.32, 72.60 + i * 0.014]);
+  ck('a road passing the plot is measured where it passes, not at its midpoint',
+    at(longRoad) < 0.25, at(longRoad).toFixed(3) + ' km');
+  // Standing inside a parcel is nought away from it, however far its edge is.
+  const around = [[19.05, 72.83], [19.05, 72.93], [19.15, 72.93], [19.15, 72.83], [19.05, 72.83]];
+  ck('a parcel the site stands inside is zero away',
+    at({ kind: 'area', polys: [around] }) === 0);
+  ck('and one it does not is measured to its nearest edge',
+    Math.abs(at({ kind: 'area', polys: [[[19.20, 72.88], [19.20, 72.89],
+      [19.21, 72.89], [19.21, 72.88], [19.20, 72.88]]] }) - 11.13) < 0.2);
+  ck('a feature with no geometry is not given a distance',
+    !isFinite(at({ kind: 'point' })));
+
+  /* ---- and a timeout that is not the query's fault ------------------------ */
+
+  // TWO TYPES TICKED AND STILL TIMING OUT IS NOT A HEAVY QUERY. Saying so
+  // sends somebody to untick things that were never the problem — the real
+  // cause with few types is the previous attempt: an aborted fetch does not
+  // stop Overpass, so our own abandoned query still holds a slot and the new
+  // one queues behind it.
+  const few = M.ringFeatureMessage('timeout', { types: 2 });
+  const many = M.ringFeatureMessage('timeout', { types: 11 });
+  ck('a timeout with two types blames the last attempt, not the query',
+    /not the query being too big/.test(few) && /holds the slot/.test(few),
+    few.slice(0, 78));
+  ck('and does not tell anybody to untick two things',
+    !/[Uu]ntick/.test(few));
+  ck('while a timeout with eleven types still says the query is heavy',
+    /many types ticked/.test(many) && /[Uu]ntick/.test(many));
+  // The wait is the fix, not the app being slow: the abandoned query has to
+  // finish and give the slot back before the next attempt can succeed at all.
+  ck('and a timed-out scan buys a cool-off long enough for its ghost to clear',
+    M.OVERPASS_TIMEOUT_S >= 20, 'cools off for ' + M.OVERPASS_TIMEOUT_S + 's');
 
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
   process.exit(R.filter(Boolean).length === R.length ? 0 : 1);

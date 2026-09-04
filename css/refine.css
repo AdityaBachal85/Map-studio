@@ -3979,6 +3979,16 @@ input[type=checkbox]:disabled {
 .rs-scan-items .chk { font-size: 11.5px; }
 .rs-scan-items i { font-style: normal; color: var(--dim); font-family: var(--mono); font-size: 10.5px; }
 
+/* The distance from the site — the number the list is actually read for, so it
+   carries the ink the dimmed chips beside it do not. */
+.rs-scan-items .rs-away {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text);
+  margin-left: 2px;
+}
+
 .rs-scan-note {
   font-size: 11.5px;
   line-height: 1.55;

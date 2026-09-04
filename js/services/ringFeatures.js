@@ -68,6 +68,9 @@ const OVERPASS_TOTAL_MS = 95000;
  */
 const OVERPASS_MIN_ATTEMPT_MS = OVERPASS_TIMEOUT_S * 1000 + 3000;
 
+/** How long to stand back after being rate-limited, before asking anyone else. */
+const OVERPASS_BACKOFF_MS = 6000;
+
 /** Overpass's usage policy is a condition of use, not a suggestion. */
 const OVERPASS_MIN_GAP_MS = 1200;
 
@@ -247,12 +250,20 @@ const RING_FEATURE_CLASSES = [
 ];
 
 /** What a fresh install looks for. */
+/*
+ * PLANNED ROADS AND RAIL ARE NOT IN HERE ANY MORE, and it is worth saying why
+ * rather than just doing it. They went in because what is coming is half of
+ * what a site is worth. But `plannedRoad` alone is three query statements —
+ * OSM spells lifecycle three ways — so the default scan went from nine
+ * statements to thirteen, and Overpass is a shared service with a twenty-five
+ * second ceiling. A scan that times out finds nothing at all, which is a worse
+ * answer about the future than not asking.
+ *
+ * They are one tick away, and the classes are unchanged. This is about what a
+ * scan costs when nobody has chosen yet.
+ */
 const RING_FEATURE_DEFAULTS = ['expressway', 'highway', 'metro', 'rail', 'station',
-  'airport', 'river', 'powerLine',
-  // Looked for by default, because what is coming is half of what a site is
-  // worth and there are far fewer planned ways than built ones — this costs
-  // the scan almost nothing and is often the strongest line on the sheet.
-  'plannedRoad', 'plannedRail'];
+  'airport', 'river', 'powerLine'];
 
 /** @param {string} id @returns {object|null} */
 function ringFeatureClass(id) { return RING_FEATURE_CLASSES.find(c => c.id === id) || null; }
@@ -277,19 +288,121 @@ function ringFeatureClass(id) { return RING_FEATURE_CLASSES.find(c => c.id === i
 function overpassQL(ids, lat, lng, radiusM) {
   const km = radiusM / 1000;
   const used = [], skipped = [], parts = [];
-  const around = '(around:' + Math.round(radiusM) + ',' + lat.toFixed(6) + ',' + lng.toFixed(6) + ')';
 
   ids.forEach(id => {
     const c = ringFeatureClass(id);
     if (!c) return;
     if (km > c.max) { skipped.push({ id, label: c.label, max: c.max }); return; }
     used.push(id);
-    c.q.forEach(frag => parts.push('  ' + frag + around + ';'));
+    c.q.forEach(frag => parts.push('  ' + frag + ';'));
   });
 
-  const ql = '[out:json][timeout:' + OVERPASS_TIMEOUT_S + '];\n(\n'
+  /*
+   * A BOUNDING BOX IN THE HEADER, NOT AN `around` ON EVERY STATEMENT.
+   *
+   * `(around:5000,lat,lng)` makes Overpass compute a distance for every
+   * candidate element, and it did it once PER STATEMENT — thirteen times over
+   * for a full scan, each pass walking the same data again. `[bbox:...]` is
+   * applied once, up front, by the index rather than by arithmetic, and every
+   * statement inherits it. It is the standard way to ask this question and it
+   * is markedly cheaper on the server, which is the difference between a scan
+   * that returns and one that runs into the twenty-five second ceiling.
+   *
+   * The box is bigger than the ring — a square around a circle is 27% more
+   * ground — so the corners come back too. They are trimmed here rather than
+   * there: distance arithmetic is free on a few hundred features in a browser
+   * and expensive on the whole planet's index.
+   */
+  const dLat = radiusM / 111320;
+  const dLng = radiusM / (111320 * Math.cos(lat * Math.PI / 180));
+  const bbox = [lat - dLat, lng - dLng, lat + dLat, lng + dLng]
+    .map(v => v.toFixed(6)).join(',');
+
+  const ql = '[out:json][timeout:' + OVERPASS_TIMEOUT_S + '][bbox:' + bbox + '];\n(\n'
     + parts.join('\n') + '\n);\nout geom ' + OVERPASS_CAP + ';';
   return { ql, used, skipped };
+}
+
+/**
+ * How far this feature is from the middle of the ring, in km.
+ *
+ * NEAREST APPROACH, not distance to its middle. A highway that runs past the
+ * plot is two hundred metres away; the distance to the midpoint of the whole
+ * road is three kilometres and answers a question nobody asked — the same
+ * distinction the Key Distances card draws, for the same reason. An area the
+ * site stands inside is zero.
+ *
+ * @param {object} f @param {number} lat @param {number} lng @returns {number} km
+ */
+function ringDistanceKm(f, lat, lng) {
+  if (!f) return Infinity;
+  const kx = 111.32 * Math.cos(lat * Math.PI / 180);
+  const d2 = (a, b) => {
+    const dy = (a - lat) * 111.32, dx = (b - lng) * kx;
+    return dx * dx + dy * dy;
+  };
+  if (f.kind === 'point') {
+    return (isFinite(f.lat) && isFinite(f.lng)) ? Math.sqrt(d2(f.lat, f.lng)) : Infinity;
+  }
+  const rings = [];
+  if (f.polys) f.polys.forEach(poly => {
+    const outer = Array.isArray(poly[0]) && Array.isArray(poly[0][0]) ? poly[0] : poly;
+    if (outer && outer.length) rings.push(outer);
+  });
+  if (f.pts && f.pts.length) rings.push(f.pts);
+  // Standing inside a parcel is nought away from it, however far its edge is.
+  if (f.polys && typeof pointInRing === 'function') {
+    for (const r of rings) {
+      if (r.length > 2 && pointInRing([lat, lng], r.map(p =>
+        Array.isArray(p) ? p : [p.lat, p.lng]))) return 0;
+    }
+  }
+  let best = Infinity;
+  for (const r of rings) {
+    for (let i = 0; i < r.length; i++) {
+      const a = Array.isArray(r[i]) ? r[i][0] : r[i].lat;
+      const b = Array.isArray(r[i]) ? r[i][1] : r[i].lng;
+      if (!isFinite(a) || !isFinite(b)) continue;
+      const d = d2(a, b);
+      if (d < best) best = d;
+    }
+  }
+  return best === Infinity ? Infinity : Math.sqrt(best);
+}
+
+/**
+ * Is any part of this feature actually inside the ring?
+ *
+ * The query asks for a box and the panel promises a circle, so the corners
+ * have to go. A feature counts as inside if any of its coordinates is — a road
+ * that clips the edge of the ring is in the ring, and testing only its middle
+ * would drop the very roads a catchment is about.
+ *
+ * @param {object} f @param {number} lat @param {number} lng @param {number} radiusM
+ * @returns {boolean}
+ */
+function ringHoldsFeature(f, lat, lng, radiusM) {
+  if (!f) return false;
+  const kx = 111320 * Math.cos(lat * Math.PI / 180);
+  const near = (a, b) => {
+    const dy = (a - lat) * 111320, dx = (b - lng) * kx;
+    return dx * dx + dy * dy <= radiusM * radiusM;
+  };
+  if (f.kind === 'point') return isFinite(f.lat) && isFinite(f.lng) && near(f.lat, f.lng);
+  const rings = [];
+  if (f.polys) f.polys.forEach(poly => {
+    const outer = Array.isArray(poly[0]) && Array.isArray(poly[0][0]) ? poly[0] : poly;
+    if (outer) rings.push(outer);
+  });
+  if (f.pts) rings.push(f.pts);
+  for (const r of rings) {
+    for (let i = 0; i < r.length; i++) {
+      const a = Array.isArray(r[i]) ? r[i][0] : r[i].lat;
+      const b = Array.isArray(r[i]) ? r[i][1] : r[i].lng;
+      if (isFinite(a) && isFinite(b) && near(a, b)) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -1370,6 +1483,23 @@ let _overpassGate = Promise.resolve();
 let _overpassLast = 0;
 
 /**
+ * Not before this, because of what a timeout actually leaves behind.
+ *
+ * ABORTING A FETCH DOES NOT STOP OVERPASS. When a scan times out, the server
+ * carries on running that query for up to its own timeout, and it is still
+ * holding one of the two slots this address is allowed. Ask again immediately
+ * and the new request does not fail — it QUEUES behind our own abandoned one,
+ * waits, and times out too. Retry twice more and every slot is full of our own
+ * ghosts: the scan then fails no matter how few types are ticked, which is
+ * exactly what it looks like from the outside and exactly what it is not.
+ *
+ * So a timeout buys a cool-off long enough for the abandoned query to finish
+ * and give the slot back. Waiting is not the app being slow here; it is the
+ * only thing that makes the next attempt able to succeed at all.
+ */
+let _overpassCoolUntil = 0;
+
+/**
  * Wait until Overpass may be asked again.
  *
  * A MINIMUM GAP BETWEEN REQUESTS, WHICH IS NOT THE SAME AS A DELAY BEFORE
@@ -1382,7 +1512,8 @@ let _overpassLast = 0;
  */
 function overpassGate() {
   const wait = _overpassGate.then(() => {
-    const due = OVERPASS_MIN_GAP_MS - (Date.now() - _overpassLast);
+    const due = Math.max(OVERPASS_MIN_GAP_MS - (Date.now() - _overpassLast),
+      _overpassCoolUntil - Date.now());
     return due > 0 ? new Promise(r => setTimeout(r, due)) : undefined;
   }).then(() => { _overpassLast = Date.now(); });
   _overpassGate = wait;
@@ -1688,7 +1819,12 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   const all = overpassCacheRead();
   const hit = all[key];
   if (hit && Date.now() - hit.at < OVERPASS_CACHE_TTL_MS) {
-    return { ok: true, features: hit.f || [], skipped, truncated: !!hit.tr, cached: true };
+    const f = hit.f || [];
+    // Re-measured rather than trusted: the cache key rounds the centre to
+    // about a hundred metres, so a hit can be for a ring next door and every
+    // distance in it would be a hundred metres wrong in the same direction.
+    f.forEach(x => { x.fromKm = ringDistanceKm(x, lat, lng); });
+    return { ok: true, features: f, skipped, truncated: !!hit.tr, cached: true };
   }
   if (_overpassPending.has(key)) return _overpassPending.get(key);
 
@@ -1724,6 +1860,7 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
         // firewall was blocking Overpass — a confident, checkable, wrong
         // diagnosis, and one that sends somebody to their IT department over a
         // ring that was merely too wide.
+        if (timedOut) _overpassCoolUntil = Date.now() + OVERPASS_TIMEOUT_S * 1000;
         reasons.push(timedOut ? 'timeout' : 'network');
         continue;
       }
@@ -1731,7 +1868,21 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
       // A syntax error fails identically everywhere — cycling four mirrors on
       // it wastes five seconds and four slots of rate-limit budget.
       if (res.status === 400) { reasons.push('http-400'); break; }
-      if (!res.ok) { reasons.push(res.status === 429 ? 'http-429' : 'http-' + res.status); continue; }
+      if (res.status === 429) {
+        // A RATE LIMIT IS NOT A DEAD SERVER, and hopping to the next mirror
+        // 1.2 seconds later is what a client that cannot tell the difference
+        // does. Worse, it is usually OUR OWN earlier request being counted:
+        // aborting a fetch does not stop Overpass working on the query, so a
+        // scan that timed out is still holding its slot when we come back.
+        // Waiting is the only thing that actually helps.
+        reasons.push('http-429');
+        const left = deadline - Date.now();
+        if (left < OVERPASS_MIN_ATTEMPT_MS + OVERPASS_BACKOFF_MS) break;
+        if (onStep) onStep({ backoff: true });
+        await new Promise(r => setTimeout(r, OVERPASS_BACKOFF_MS));
+        continue;
+      }
+      if (!res.ok) { reasons.push('http-' + res.status); continue; }
 
       let json;
       try { json = await res.json(); } catch (e) { reasons.push('network'); continue; }
@@ -1742,10 +1893,15 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
         const cid = overpassClassOf(el, used);
         if (!cid) return;
         const f = overpassToFeature(el, cid);
-        if (f) features.push(f);
+        // The box's corners are outside the ring the panel promised.
+        if (f && ringHoldsFeature(f, lat, lng, radiusM)) features.push(f);
       });
 
       const joined = joinRingFeatures(features);
+      // AFTER the join, not before: a road chained from nine pieces is one
+      // thing at one distance, and the distance of the nearest piece is the
+      // answer for all of it.
+      joined.forEach(f => { f.fromKm = ringDistanceKm(f, lat, lng); });
       const truncated = els.length >= OVERPASS_CAP;
       const out = { ok: true, features: joined, skipped, truncated };
       // Cache a definite answer, including an empty one — "nothing is mapped
@@ -1801,9 +1957,27 @@ function ringFeatureMessage(reason, ctx) {
       return 'Overpass rejected the query. That is a bug in Map Studio, not in your ring —'
         + ' please report which types you had ticked.';
     case 'http-429':
-      return 'Overpass is rate-limiting. It is a donated service shared by everyone —'
-        + ' wait half a minute and try again.';
+      // "I am the only one using this" is true of Map Studio and irrelevant
+      // here: the limit belongs to a public server the whole OpenStreetMap
+      // world shares, and it also counts a query of ours that timed out and is
+      // still running on their side. Saying "shared by everyone" left the
+      // first half of that to be guessed at, and the second half unsaid.
+      return 'OpenStreetMap\'s public Overpass servers are rate-limiting. They are free and'
+        + ' shared by everyone using OSM worldwide, so this is not about how busy YOUR map is'
+        + ' — and a scan that timed out is still running on their side for a minute after,'
+        + ' still counting against you. Wait a minute, then try again with fewer types.';
     case 'timeout':
+      // TWO TYPES TICKED AND STILL TIMING OUT IS NOT A HEAVY QUERY, and saying
+      // so sends somebody to untick things that were never the problem. With
+      // few types the cause is almost always the previous attempt: an aborted
+      // fetch does not stop Overpass, so our own abandoned query is still
+      // holding a slot and the new one queues behind it.
+      if ((ctx.types || 99) <= 3) {
+        return 'Overpass did not answer in time, and with only ' + (ctx.types || 'a few')
+          + ' types ticked that is not the query being too big. A scan that timed out keeps'
+          + ' running on their side for up to half a minute and holds the slot, so the next'
+          + ' one waits behind it. Give it a minute without scanning, then try once.';
+      }
       return 'Overpass did not finish in time. That is the query being heavy rather than'
         + ' the network being down — a wide ring with many types ticked is a lot to ask of'
         + ' a donated service. Untick the types you do not need, or narrow the ring, and'
@@ -1833,9 +2007,11 @@ if (typeof module !== 'undefined' && module.exports) {
     collapseCarriageways, markSharedAlignments, ringSideOf, overpassLineClass,
     overpassClassOf, overpassToFeature,
     ringFollowFrac, ringSampleAlong, ringToLocalKm, ringPtSegKm, ringBox, ringBoxesNear,
-    ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint,
+    ringPathKm, simplifyLatLngs, pointInRing, ringInteriorPoint, ringHoldsFeature,
+    ringDistanceKm,
+    overpassQL,
     overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_FETCH_MS,
-    OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S,
+    OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S, OVERPASS_BACKOFF_MS,
     overpassWorstReason, ringFeatureMessage, ringFeatureRetryable,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,
     ringMergeGoogle, RING_SAME_PLACE_M,

@@ -183,9 +183,18 @@ function ringScanItemRow(it, on) {
     : it.source === 'osm+google' ? ' <u title="OpenStreetMap geometry, Google\'s name'
       + (it.googleName ? ': ' + esc(it.googleName) : '') + '">OSM + Google</u>'
     : '';
+  // HOW FAR IT IS FROM THE SITE, which is what the list is read for: the point
+  // of a ring scan is "what is near this plot", and the answer was a set of
+  // names with no distances against them. Said as "away" because the chip
+  // beside it is the line's own LENGTH, and two bare "4.2 km" chips on one row
+  // would be two different measurements wearing the same clothes.
+  const away = isFinite(it.fromKm)
+    ? ' <b class="rs-away">' + (it.fromKm < 1 ? it.fromKm.toFixed(2) : it.fromKm.toFixed(1))
+      + ' km away</b>'
+    : '';
   return '<label class="chk"' + tip + '><input type="checkbox" data-scan-i="' + it._i + '"'
-    + (on ? ' checked' : '') + '> ' + esc(label)
-    + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km</i>' : '')
+    + (on ? ' checked' : '') + '> ' + esc(label) + away
+    + (it.km > 0.05 ? ' <i>' + it.km.toFixed(1) + ' km long</i>' : '')
     + (it.areaKm2 > 0.005 ? ' <i>' + fmtScanArea(it.areaKm2) + '</i>' : '')
     + (it.parts > 1 ? ' <u>' + it.parts + ' joined</u>' : '') + soon + src + '</label>';
 }
@@ -212,7 +221,8 @@ function renderRingScan() {
   if (s.busy) {
     const secs = s.startedAt ? Math.round((Date.now() - s.startedAt) / 1000) : 0;
     const st = s.step || {};
-    const where = st.stage === 'google' ? 'Asking Google about the places found'
+    const where = st.backoff ? 'OpenStreetMap asked us to slow down — standing back a moment'
+      : st.stage === 'google' ? 'Asking Google about the places found'
       : (st.mirror > 1
         ? 'The first OpenStreetMap server did not answer — trying number '
           + st.mirror + ' of ' + st.of
@@ -225,7 +235,12 @@ function renderRingScan() {
       + (secs >= 20 ? '. A wide ring over a city takes this long; untick types'
         + ' you do not need to make it lighter.' : '…') + '</div>';
   } else if (s.error) {
-    html += '<div class="rs-scan-err">' + esc(ringFeatureMessage(s.error, { skipped: s.skipped })) + '</div>';
+    // How many types were actually asked for: with two ticked, "your query is
+    // too heavy" is a wrong diagnosis that sends somebody to untick things
+    // that were never the problem.
+    html += '<div class="rs-scan-err">'
+      + esc(ringFeatureMessage(s.error, { skipped: s.skipped, types: (s.ids || []).length }))
+      + '</div>';
   } else if (s.result) {
     const groups = ringScanGroups(s.result);
     if (!groups.size) {
