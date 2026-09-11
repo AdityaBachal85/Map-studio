@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Page not found · DBOT Map Studio</title>
+  <link rel="preload" href="/vendor/fonts/Geist-Variable.woff2?v=6.0229" as="font" type="font/woff2" crossorigin>
+  <!-- ROOT-ABSOLUTE, not "./", on this page alone.
+       Apache serves this one file for every missing address, and the browser
+       resolves a relative href against the address that failed — so from
+       /reports/old/x.html, "./css/themes.css" asks for
+       /reports/old/css/themes.css and the error page arrives unstyled.
+       Installing the site in a subfolder means adding that prefix here and to
+       the ErrorDocument line in .htaccess; docs/HOSTINGER-DEPLOY.md says so.
+
+       Tokens and base typography only — deliberately not shell.css or
+       refine.css. The rest of the appearance is in the block below, which
+       always arrives because it arrives with the HTML. -->
+  <link rel="stylesheet" href="/css/themes.css?v=6.0229">
+  <link rel="stylesheet" href="/css/style.css?v=6.0229">
+  <style>
+    /* Every value here is a token from themes.css, with a literal fallback for
+       the case above where even that sheet did not load. */
+    body {
+      margin: 0;
+      background: var(--bg0, #070C16);
+      color: var(--text, #EAF0F9);
+      font-family: var(--font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif);
+    }
+
+    .nf-wrap {
+      min-height: 100vh; min-height: 100dvh;
+      display: grid; place-items: center;
+      padding: var(--sp-6, 32px);
+      box-sizing: border-box;
+      background:
+        radial-gradient(1100px 620px at 50% -10%,
+          color-mix(in srgb, var(--orange, #FF7A1A) 9%, transparent), transparent 70%),
+        var(--bg0, #070C16);
+    }
+
+    .nf-card {
+      max-width: 520px; text-align: center;
+      display: flex; flex-direction: column; align-items: center;
+      gap: var(--sp-3, 12px);
+    }
+
+    .nf-logo { height: 34px; margin-bottom: var(--sp-2, 8px); }
+
+    .nf-code {
+      font-size: var(--fs-small, 11px); letter-spacing: var(--tracking-caps, .07em);
+      text-transform: uppercase; color: var(--dim, #8B99B0);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .nf-card h1 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -.01em; }
+    .nf-card p { margin: 0; color: var(--dim, #8B99B0); line-height: var(--lh-body, 1.5); }
+
+    .nf-path {
+      font-family: var(--mono, ui-monospace, Menlo, monospace);
+      font-size: var(--fs-small, 11px); color: var(--dim, #8B99B0);
+      background: rgba(var(--text-rgb, 234, 240, 249), .06);
+      border: 1px solid var(--stroke, rgba(255, 255, 255, .09));
+      border-radius: var(--r-sm, 7px); padding: 6px 10px;
+      max-width: 100%; overflow-wrap: anywhere;
+    }
+
+    .nf-actions {
+      display: flex; gap: var(--sp-2, 8px); flex-wrap: wrap;
+      justify-content: center; margin-top: var(--sp-2, 8px);
+    }
+
+    .nf-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 16px; border-radius: var(--r-md, 10px);
+      border: 1px solid var(--stroke2, rgba(255, 255, 255, .16));
+      background: rgba(var(--text-rgb, 234, 240, 249), .05);
+      color: var(--text, #EAF0F9); text-decoration: none;
+      font-size: var(--fs-body, 12.5px); font-weight: 600;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+    .nf-btn:hover { background: rgba(var(--text-rgb, 234, 240, 249), .1); }
+    .nf-btn:active { transform: translateY(1px); }
+
+    .nf-btn.primary {
+      background: var(--orange, #FF7A1A); border-color: transparent; color: #1A0E03;
+    }
+    .nf-btn.primary:hover { filter: brightness(1.06); background: var(--orange, #FF7A1A); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .nf-btn { transition: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="nf-wrap">
+    <div class="nf-card">
+      <img class="nf-logo" id="nfLogo" alt="DBOT" hidden>
+      <div class="nf-code">Error 404</div>
+      <h1>That page isn’t here</h1>
+      <p>The address was mistyped, or whatever used to be at it has moved.</p>
+      <div class="nf-path" id="nfPath" hidden></div>
+      <div class="nf-actions">
+        <a class="nf-btn primary" id="nfProjects" href="/projects.html">Go to your projects</a>
+        <a class="nf-btn" id="nfStudio" href="/index.html">Open the studio</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- prefs.js applies the saved theme at the bottom of its own file, before
+       first paint. constants.js carries LOGO_B64. Both are stamped, so both
+       come from cache on any visit that has already loaded the app. -->
+  <script src="/js/core/prefs.js?v=6.0229"></script>
+  <script src="/js/constants.js?v=6.0229"></script>
+  <script>
+    (function () {
+      // The logo is drawn only if its source actually arrived. A broken image
+      // icon on the error page would be a second error to explain.
+      try {
+        if (typeof LOGO_B64 === 'string' && LOGO_B64) {
+          var img = document.getElementById('nfLogo');
+          img.src = 'data:image/png;base64,' + LOGO_B64;
+          img.hidden = false;
+        }
+      } catch (e) { /* leave it hidden */ }
+
+      // Say which address failed. Apache serves this one file for every
+      // missing path, so without this the page cannot tell a typo from a dead
+      // link — and neither can the person reading it.
+      try {
+        var asked = location.pathname + location.search;
+        if (asked && !/\/404\.html$/.test(location.pathname)) {
+          var p = document.getElementById('nfPath');
+          p.textContent = asked;
+          p.hidden = false;
+        }
+      } catch (e) { /* leave it hidden */ }
+
+    })();
+  </script>
+</body>
+
+</html>

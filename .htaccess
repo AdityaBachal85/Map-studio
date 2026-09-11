@@ -1,0 +1,218 @@
+# DBOT Map Studio — Hostinger (LiteSpeed / Apache)
+#
+# Hostinger's shared, Premium, Business and Cloud plans run LiteSpeed, which
+# reads .htaccess with Apache's syntax. Everything here is also valid on a
+# stock Apache VPS, so the same file serves both.
+#
+# This file belongs at the top of the directory the domain points at —
+# normally public_html/, or public_html/<subfolder>/ if the site is in one.
+# It is inherited by every directory below it.
+#
+# Every block is wrapped in <IfModule>. A module Hostinger has not enabled
+# then costs a skipped block rather than a 500 on every page, which is the
+# failure mode that makes .htaccess frightening.
+
+# ---------------------------------------------------------------------------
+# The document served for a bare directory
+# ---------------------------------------------------------------------------
+DirectoryIndex login.html index.html
+
+# Sign-in is the front door, and it costs a signed-in visitor nothing:
+# login.html forwards an already-authenticated session straight on to
+# projects.html, so the people who use this daily land on their project list
+# and everyone else lands on the form they need.
+#
+# Swap the order to open the studio on a bare domain instead. index.html does
+# NOT require a session — it opens an empty map — so that choice is about which
+# page is the front door, not about access.
+
+# ---------------------------------------------------------------------------
+# No directory listings
+# ---------------------------------------------------------------------------
+Options -Indexes
+
+# Without this, a URL with no index file answers with a browsable listing of
+# it. /js/ would hand a visitor the file-by-file structure of the app.
+
+# ---------------------------------------------------------------------------
+# HTTPS, always
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Hostinger terminates TLS in front of the application, so %{HTTPS} is not
+  # reliably "on" even when the visitor arrived over HTTPS. X-Forwarded-Proto
+  # is what the proxy actually sets, and testing both is what makes this work
+  # on shared hosting and on a bare VPS without editing it.
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+</IfModule>
+
+# Geolocation ("use my location"), the clipboard, and the Web Share API are all
+# refused by browsers on plain HTTP. So is a Supabase session cookie marked
+# Secure. Without this redirect those features fail one at a time with
+# unrelated-looking errors rather than failing loudly together.
+
+# ---------------------------------------------------------------------------
+# Types the server would otherwise guess at
+# ---------------------------------------------------------------------------
+<IfModule mod_mime.c>
+  AddType text/javascript                 .js .mjs
+  AddType application/json                .json
+  AddType application/geo+json            .geojson
+  AddType application/manifest+json       .webmanifest
+  AddType image/svg+xml                   .svg
+  AddType font/woff2                      .woff2
+  AddType font/woff                       .woff
+  AddType font/ttf                        .ttf
+  AddType application/wasm                .wasm
+
+  # MapLibre's vector tiles and glyph ranges. Served as text/plain they are
+  # decoded as text and the vector basemap draws nothing.
+  AddType application/vnd.mapbox-vector-tile .pbf .mvt
+
+  AddCharset UTF-8 .html .css .js .json .svg .geojson
+</IfModule>
+
+# A .js sent as text/plain is refused by every current browser when it is
+# loaded as a module, and this app has 125 script tags — one wrong type is a
+# blank page. .woff2 sent as application/octet-stream makes the whole interface
+# fall back to a system font.
+
+# ---------------------------------------------------------------------------
+# Compression
+# ---------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript
+  AddOutputFilterByType DEFLATE application/javascript application/json
+  AddOutputFilterByType DEFLATE application/geo+json application/manifest+json
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Deliberately NOT compressing .woff2, .png, .jpg or .pbf: all four are already
+# compressed, and running them through deflate spends CPU to add bytes.
+#
+# The application source is ~6 MB of plain text and compresses to roughly a
+# fifth of that. On a first visit over a phone connection that is the single
+# largest difference this file makes.
+
+# ---------------------------------------------------------------------------
+# Caching — and the one rule that matters most
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+  # THE HTML MUST NOT BE CACHED.
+  #
+  # Every script and stylesheet is requested as `?v=6.0229`, so a release busts
+  # its own assets. Nothing busts the HTML that names them. A browser holding
+  # yesterday's index.html asks for yesterday's asset versions and gets them,
+  # from cache, consistently — a page that looks entirely correct and is simply
+  # missing whatever shipped last. "The feature isn't there" and "your copy is
+  # old" produce identical screenshots.
+  #
+  # This is the problem docs/DEPLOY-NOTES.md describes on GitHub Pages, where
+  # the header could not be set. Here it can be, so it is.
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # Everything else is addressed by a URL that changes when its content does,
+  # so it can be kept for a year and never revalidated.
+  <FilesMatch "\.(js|mjs|css|woff2?|ttf|png|jpe?g|gif|svg|webp|ico|wasm)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # Fonts and the app's own JSON are fetched cross-origin by the export
+  # pipeline when the site is embedded. Harmless to allow, and it removes a
+  # class of silent CORS failure in html2canvas.
+  <FilesMatch "\.(woff2?|ttf|geojson)$">
+    Header set Access-Control-Allow-Origin "*"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html                 "access plus 0 seconds"
+  ExpiresByType text/javascript           "access plus 1 year"
+  ExpiresByType application/javascript    "access plus 1 year"
+  ExpiresByType text/css                  "access plus 1 year"
+  ExpiresByType font/woff2                "access plus 1 year"
+  ExpiresByType image/svg+xml             "access plus 1 year"
+  ExpiresByType image/png                 "access plus 1 year"
+  ExpiresByType image/jpeg                "access plus 1 year"
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+  # Stop a browser from second-guessing a declared Content-Type. With the MIME
+  # block above correct, sniffing can only ever make things worse.
+  Header set X-Content-Type-Options "nosniff"
+
+  # Send the origin, not the full path, to the tile servers, Overpass, Google
+  # and Geoapify. They need the origin — that is what the referrer restrictions
+  # on the keys match against — and nothing more. A full URL would leak the
+  # search terms in a query string to every third party the map talks to.
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # The app asks for geolocation from a user gesture. Nothing here needs a
+  # camera, a microphone, or the payment API, so no embedded frame gets them.
+  Header set Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=()"
+
+  # Clickjacking. SAMEORIGIN rather than DENY so the app can still be put in an
+  # iframe on this same domain.
+  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Deliberately NOT set: Content-Security-Policy, Cross-Origin-Embedder-Policy
+  # and Cross-Origin-Opener-Policy.
+  #
+  # The map loads tiles, fonts, routing, Overpass, Supabase and Google from a
+  # list of origins that grows whenever a basemap is added, and a CSP that is
+  # one origin out of date is a blank map with an error only the console shows.
+  # COEP is worse: it would block every tile server that does not send CORP,
+  # which is most of them. Adding either needs a deliberate pass with the
+  # network panel open, not a line copied from a hardening checklist.
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# What must never be served
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Repository and tooling directories, if the site was deployed by cloning
+  # rather than by uploading the packaged dist/. Each of these is either source
+  # for something else, or a credential's neighbour.
+  RewriteRule ^(server|tools|diagnostics|sql|docs|test|legacy)/ - [F,L]
+
+  # .git/config holds the remote URL, and .git/ holds every version of every
+  # file ever committed. A cloned deploy leaves it inside the document root.
+  RewriteRule (^|/)\.(git|github|claude|agents|env) - [F,L]
+  RewriteRule \.(env|sql|log|lock|cjs|md)$ - [F,L]
+</IfModule>
+
+<IfModule mod_authz_core.c>
+  # A second lock on the same doors, for a server where mod_rewrite is off.
+  <FilesMatch "^\.">
+    Require all denied
+  </FilesMatch>
+  <FilesMatch "(package(-lock)?\.json|\.env.*|render\.yaml|skills-lock\.json)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+
+# The .cjs block above is what keeps diagnostics/ from being readable even if
+# the directory rule is skipped. The .md block hides docs/, which describe the
+# services this site talks to and which keys live where.
+
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
+ErrorDocument 404 /404.html
+
+# A 404 here means a mistyped URL, not a route that needs handling: this is a
+# set of real .html files, not a single-page app with client-side routing.
+# Rewriting every miss to index.html — the usual SPA recipe — would answer a
+# mistyped script path with HTML, and the browser would report a syntax error
+# in a file that does not exist rather than a missing file.

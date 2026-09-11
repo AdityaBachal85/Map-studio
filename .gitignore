@@ -2,6 +2,11 @@ node_modules/
 dist/
 *.log
 
+# The Hostinger upload package. Both are build output of
+# tools/build-hostinger.js and are rebuilt in one command; committing a
+# 2 MB zip per release would grow the repository for no one's benefit.
+map-studio-*-hostinger.zip
+
 # Backend secrets — never commit a live Gemini or database credential.
 # node_modules/ above already covers server/node_modules/.
 # Both paths are kept: `functions/` was this directory's name before the

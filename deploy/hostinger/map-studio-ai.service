@@ -1,0 +1,97 @@
+# DBOT Map Studio — AI reports backend as a systemd unit, on a Hostinger VPS.
+#
+# An ALTERNATIVE to supervisor-map-studio-ai.conf in this directory, not a
+# companion — running both means two copies of the server fighting over one
+# port. Pick one.
+#
+# Prefer this one on any current Hostinger VPS template (Ubuntu 22.04/24.04,
+# AlmaLinux, Debian 12): systemd is already running, so this is one file and no
+# extra package. Supervisor is the right choice if you already manage other
+# services with it, or if the panel you use drives supervisorctl.
+#
+# INSTALL
+#   sudo cp deploy/hostinger/map-studio-ai.service /etc/systemd/system/
+#   sudo install -m 600 -o root /dev/null /etc/map-studio.env
+#   sudo nano /etc/map-studio.env            # see the template below
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now map-studio-ai
+#   systemctl status map-studio-ai
+#   journalctl -u map-studio-ai -f           # the log
+#
+# /etc/map-studio.env — plain KEY=value, no `export`, no quotes needed:
+#   NODE_ENV=production
+#   PORT=8080
+#   DATABASE_URL=postgres://…
+#   GEMINI_API_KEY=…
+#   GOOGLE_MAPS_API_KEY=…
+#   ALLOWED_ORIGIN=https://your-domain.com
+#   PERPLEXITY_API_KEY=
+#   GOOGLE_SEARCH_API_KEY=
+#   GOOGLE_SEARCH_CX=
+#   OPENROUTER_API_KEY=
+#
+# THE SECRETS LIVE IN THAT FILE, NOT IN THIS ONE. This file is in a git
+# repository; /etc/map-studio.env is chmod 600 and owned by root, and is the
+# only place a live Gemini key or database URL should exist on the machine.
+
+[Unit]
+Description=DBOT Map Studio — AI reports backend
+Documentation=https://github.com/AdityaBachal85/Map-studio/blob/Map-Studio_Hostinger/docs/AI-REPORTS-SETUP.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mapstudio
+Group=mapstudio
+WorkingDirectory=/var/www/map-studio/server
+
+# node directly, not `npm start`: npm forks node as a child, so the stop signal
+# reaches npm and leaves node holding the port — which reads as a successful
+# restart followed by a service that will not start.
+ExecStart=/usr/bin/node src/server.js
+
+EnvironmentFile=/etc/map-studio.env
+
+# server.js handles SIGTERM by refusing new connections and letting in-flight
+# requests finish. 30s rather than the default 90 because nothing here legitimately
+# takes longer, and a stuck stop delays every deploy behind it.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=5
+
+# A unit that crash-loops should stop and stay stopped so `systemctl status`
+# shows the real first error instead of a hundred copies of a later one.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=map-studio-ai
+
+# --- Hardening -------------------------------------------------------------
+# This process talks to Postgres and to three HTTPS APIs. It has no reason to
+# write anywhere on disk except its own temp space, and no reason to read /home
+# at all. Each line below is one thing a compromised dependency cannot do.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+
+# NO ReadWritePaths, deliberately. A rendered PDF or DOCX is held as BYTEA on
+# the report's own Postgres row (lib/storage.js) and streamed from there, so
+# this service writes nothing to disk that PrivateTmp does not already cover.
+# ProtectSystem=strict with no exceptions is therefore the accurate setting,
+# not an aspirational one — if a future change does need a path, add it here
+# and say what writes to it.
+
+[Install]
+WantedBy=multi-user.target
