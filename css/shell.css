@@ -1105,7 +1105,9 @@ body.reduce-motion .pj-brand-glass::after { display: none; }
   .pj-new { margin-bottom: 0; white-space: nowrap; }
   .pj-nav { flex-direction: row; }
   .pj-account .who { display: none; }
-  .pj-table .col-owner, .pj-table .col-size { display: none; }
+  /* Created goes with Owner and Size on a narrow screen: the modified column
+     is the one somebody is scanning for, and it is the one that stays. */
+  .pj-table .col-owner, .pj-table .col-size, .pj-table .col-made { display: none; }
 }
 
 /* The list's source, stated rather than assumed — "This device" and "Cloud"

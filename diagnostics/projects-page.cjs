@@ -142,6 +142,84 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('and renaming without touching the location leaves it there',
     kept.name === 'Kalyan corridor v2' && /Thane/.test(kept.place), JSON.stringify(kept));
 
+
+  /* ---- when it was made, next to when it was touched --------------------- */
+
+  const cols = await p.evaluate(() =>
+    Array.from(document.querySelectorAll('.pj-table thead th')).map(h => h.textContent.trim()));
+  ck('the list says when a project was created, not only when it changed',
+    cols.includes('Created') && cols.includes('Last modified'), JSON.stringify(cols));
+  ck('and says it beside the modified column rather than somewhere else',
+    cols.indexOf('Created') === cols.indexOf('Last modified') - 1, JSON.stringify(cols));
+
+  // Back-date one record in the store. localProjectsSave() sets `created` from
+  // the previous record or from now, so there is no way through the public API
+  // to make a project that was made months ago — which is exactly the case the
+  // column exists for.
+  const aged = await p.evaluate(async () => {
+    const rows = await projectsList();
+    const one = rows.find(r => /Kalyan/.test(r.name));
+    const meta = await localProjectsMeta(one.id);
+    const made = new Date(); made.setFullYear(made.getFullYear() - 1); made.setMonth(2, 14);
+    meta.created = made.getTime();
+    meta.modified = Date.now();
+    await projectsTx(PROJECTS_META, 'readwrite', tx => tx.objectStore(PROJECTS_META).put(meta));
+    return { id: one.id, year: made.getFullYear() };
+  });
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1600);
+
+  const row = await p.evaluate(id => {
+    const tr = document.querySelector(`tr[data-id="${id}"]`);
+    const made = tr.querySelector('.col-made');
+    const mod = tr.querySelector('td.when:not(.col-made)');
+    return { made: made.textContent.trim(), title: made.getAttribute('title') || '',
+      mod: mod.textContent.trim() };
+  }, aged.id);
+  // A date, not "a year ago". The modified column is the relative one; saying
+  // both the same way would read as the same fact printed twice.
+  ck('a project made a year ago shows the date it was made',
+    row.made.includes(String(aged.year)) && !/ago|Just now|Yesterday/i.test(row.made), row.made);
+  ck('while the modified column still reads relatively, as it did',
+    /ago|Just now/i.test(row.mod), row.mod);
+  ck('and the exact moment is there on hover', /\d/.test(row.title), row.title);
+
+  // Projects saved before `created` was recorded, and cloud rows whose
+  // created_at is null, arrive with nothing in the field. Formatting that
+  // anyway prints 1 Jan 1970, which is worse than saying nothing.
+  const missing = await p.evaluate(async () => {
+    const rows = await projectsList();
+    const one = rows.find(r => /Powai/.test(r.name));
+    const meta = await localProjectsMeta(one.id);
+    delete meta.created;
+    await projectsTx(PROJECTS_META, 'readwrite', tx => tx.objectStore(PROJECTS_META).put(meta));
+    return one.id;
+  });
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1600);
+  const blank = await p.evaluate(id => {
+    const td = document.querySelector(`tr[data-id="${id}"] .col-made`);
+    return { text: td.textContent.trim(), title: td.getAttribute('title') };
+  }, missing);
+  ck('a project with no creation date on record says so, rather than 1970',
+    blank.text === '—' && !/1970/.test(blank.text), JSON.stringify(blank.text));
+  ck('and offers no hover time it does not have', blank.title === null, String(blank.title));
+
+  // The sort menu has offered "Date created" all along, against a column
+  // nobody could see. Now that it is visible, the order it produces has to
+  // match it.
+  // #pjSort cycles through SORTS; one click from the default lands on it.
+  await p.click('#pjSort');
+  await p.waitForTimeout(300);
+  const sorted = await p.evaluate(() => ({
+    label: document.getElementById('pjSortLabel').textContent.trim(),
+    made: Array.from(document.querySelectorAll('.pj-table tbody tr'))
+      .map(tr => tr.querySelector('.col-made').textContent.trim()),
+  }));
+  ck('sorting by date created orders the column it now shows',
+    sorted.label === 'Date created' && sorted.made.length === 2 && sorted.made[1] === '—',
+    JSON.stringify(sorted));
+
   ck('no page errors', errs.length === 0, errs.slice(0, 3).join(' | ') || 'none');
 
   await p.screenshot({ path: path.join(REPO, 'diagnostics', 'shot-projects-page.png') });

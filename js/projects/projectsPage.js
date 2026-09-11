@@ -75,6 +75,28 @@
     return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  /**
+   * When a project was made.
+   *
+   * A DATE, NOT "three days ago". `when()` is right for the modified column,
+   * where the useful thing is how stale the file is, and wrong for this one:
+   * "created 4 months ago" is a number the reader has to do arithmetic on to
+   * place, where a date is the answer. The two columns sit side by side, and
+   * saying them differently is what keeps them from reading as the same fact
+   * twice.
+   *
+   * A project saved before this was recorded, or a cloud row with no
+   * created_at, has nothing to show — and an em dash is the honest version of
+   * that, where a missing timestamp formatted anyway is January 1970.
+   *
+   * @param {number} ts @returns {string}
+   */
+  function madeOn(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   /** @param {object} c @returns {string} the subtitle under a project name */
   function summary(c) {
     if (!c) return 'Empty';
@@ -188,6 +210,7 @@
             <th>Name</th>
             <th class="col-owner">Owner</th>
             <th class="col-size num">Size</th>
+            <th class="col-made">Created</th>
             <th>Last modified</th>
             <th><span class="sr-only">Actions</span></th>
           </tr>
@@ -220,6 +243,9 @@
                 </span>
               </td>
               <td class="col-size num">${bytes(p.bytes)}</td>
+              <td class="when col-made"${p.created
+                ? ` title="${esc(new Date(p.created).toLocaleString())}"` : ''
+                }>${esc(madeOn(p.created))}</td>
               <td class="when" title="${esc(new Date(p.modified).toLocaleString())}">${esc(when(p.modified))}</td>
               <td class="pj-rowmenu">
                 <button class="pj-menubtn" type="button" data-menu="${esc(p.id)}"
