@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0230-blue)
+![Version](https://img.shields.io/badge/version-v6.0231-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,58 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0230 (latest)
+## 🆕 New in v6.0231 (latest)
+
+### A People page: accounts are given out, not signed up for
+
+Self sign-up is off. An administrator opens **People**, adds somebody, and is
+handed a password to pass on — shown **once**, stored only as a hash, and
+impossible to look up afterwards even by the person who issued it. The account
+is marked as needing a password of its own, so the first time that person signs
+in they choose one before the app opens. A credential that has been read by two
+people and has travelled through a chat app stops working as soon as it is used.
+
+Generated from an alphabet with `0/O`, `1/l/I` and `5/S` removed, because these
+are read off a screen and typed at the other end — sometimes read aloud over a
+phone — and a character pair nobody can tell apart turns a working password into
+"it says the password is wrong". *(The test caught the first version of that
+alphabet keeping `5` and `S` while the comment above it claimed otherwise.)*
+
+**Switching an account off** revokes access within the second — their sessions
+are deleted, not left to expire — and keeps everything they own. That is the
+control for somebody leaving. **Move maps** hands one person's work to a named
+colleague, which is the honest answer to "their maps must not go with them":
+there is no endpoint anywhere that lets an administrator open somebody else's
+map, and that is a decision rather than an omission.
+
+**Delete** is the only destructive one, and it makes you mean it: the page
+sends back the number of maps it believes will be destroyed and the server
+refuses if that number is wrong — so the confirmation cannot be satisfied by a
+client that never looked, and it fails safe if the list on screen is stale.
+
+**Nobody can lock everybody out.** You cannot demote, switch off or delete your
+own account, and none of the three may take the last remaining administrator —
+two separate rules, because two administrators removing each other in either
+order is not something a self-check would catch. The controls that would be
+refused are rendered disabled, with the reason in the tooltip, rather than
+offered and then reported as an error.
+
+The bootstrap is the part that had to be got right: the recommended config ships
+with sign-up **off**, which taken literally is unstartable — administrators
+create accounts, administrators are accounts. So the first account on an empty
+database is allowed through whatever the setting says, becomes the
+administrator, and the window shuts behind it.
+
+Also here: `php api/cli/migrate.php`, because `create table if not exists`
+finds an existing `users` table and skips it — so re-running the schema file
+reports success and adds none of the columns it grew later. `/api/health` now
+reports missing **columns**, not just missing tables, and names the one it is
+waiting for.
+
+57 assertions in `diagnostics/admin-panel.cjs`, against real PHP, including the
+sweep that signs in as an ordinary user and tries every admin route.
+
+## 🆕 New in v6.0230
 
 ### Accounts moved off Supabase and onto Hostinger
 

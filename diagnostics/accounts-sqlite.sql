@@ -8,6 +8,16 @@
 -- `insert … on duplicate key update`. The SQL the tests exercise is the SQL
 -- that runs in production.
 --
+--
+-- DELIBERATELY THE OLD SCHEMA. This is the shape the database had before the
+-- admin panel, and it stays that way: both harnesses create it and then run
+-- `php api/cli/migrate.php` over it, so every test run exercises the upgrade
+-- path a real deployment will take — which is the path most likely to be
+-- wrong, because a fresh install is written once and an upgrade has to meet a
+-- database somebody already has.
+--
+-- If you add a column here, you are testing the fresh install twice and the
+-- upgrade never. Add it to api/lib/schema.php instead.
 -- What this cannot check: that the MySQL file above parses, that its index
 -- lengths fit, and that InnoDB actually applied the foreign keys. Those are
 -- checked by running it — see docs/ACCOUNTS-SETUP.md, which has the query.

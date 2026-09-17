@@ -45,10 +45,19 @@ return [
     // door onto your database.
     'allowed_email_domain' => 'dbotrealty.com',
 
-    // Whether a visitor can create their own account. With the domain
-    // restriction above in place this is reasonable to leave on: only someone
-    // who already has a work address can use it.
-    'allow_signup' => true,
+    // Whether a visitor can create their own account.
+    //
+    // OFF, because accounts are meant to be issued from the People page: an
+    // administrator adds somebody, hands them a password, and they are asked
+    // to choose their own the first time they sign in. With this left on, that
+    // whole arrangement decides nothing — anybody holding a work address can
+    // simply make their own account instead.
+    //
+    // The very first account on an empty database is allowed through whatever
+    // this says, because otherwise nothing is startable: administrators create
+    // accounts, administrators are accounts, and there would be neither. That
+    // window is one account wide and closes as soon as it is used.
+    'allow_signup' => false,
 
     // How long someone stays signed in without using the app.
     'session_days' => 30,

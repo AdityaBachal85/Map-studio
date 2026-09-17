@@ -140,6 +140,13 @@ function setUp() {
     debug: true,
   }));
 
+  // Then migrate it, exactly as a real deployment does — see the note at the
+  // top of accounts-sqlite.sql on why the schema above is deliberately old.
+  execFileSync('php', [path.join(REPO, 'api', 'cli', 'migrate.php')], {
+    env: Object.assign({}, process.env, { MAPSTUDIO_CONFIG: config }),
+    stdio: 'pipe',
+  });
+
   return { dir, db, config, schemaLines: schema.split('\n').length };
 }
 

@@ -24,8 +24,10 @@ require __DIR__ . '/lib/http.php';
 require __DIR__ . '/lib/db.php';
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/mailer.php';
+require __DIR__ . '/lib/schema.php';
 require __DIR__ . '/routes/auth.php';
 require __DIR__ . '/routes/projects.php';
+require __DIR__ . '/routes/admin.php';
 
 ms_send_common_headers();
 
@@ -114,6 +116,9 @@ function ms_dispatch(): void
     if ($head === 'projects') {
         ms_route_projects($method, $rest);
     }
+    if ($head === 'admin') {
+        ms_route_admin($method, $rest);
+    }
     if ($head === 'health') {
         ms_route_health();
     }
@@ -135,19 +140,48 @@ function ms_route_health(): void
 {
     $tables = [];
     $ok = true;
-    foreach (['users', 'sessions', 'map_projects', 'password_resets', 'login_attempts'] as $t) {
-        try {
-            ms_exec('select 1 from ' . $t . ' limit 1');
-            $tables[$t] = true;
-        } catch (Throwable $e) {
-            $tables[$t] = false;
+    foreach (['users', 'sessions', 'map_projects', 'password_resets', 'login_attempts',
+              'admin_log'] as $t) {
+        $there = ms_table_exists($t);
+        $tables[$t] = $there;
+        if (!$there) {
             $ok = false;
         }
     }
+
+    /*
+     * Missing COLUMNS, not just missing tables.
+     *
+     * The trap this exists for: `create table if not exists` finds an existing
+     * `users` and skips it, so a database created before the admin panel has
+     * every table and none of the columns it needs — and a health check that
+     * only counted tables would call that fine, right up until somebody opened
+     * the admin page and got a 500 with nothing to explain it.
+     */
+    $gaps = [];
+    if ($ok || $tables['users']) {
+        try {
+            $gaps = ms_schema_gaps();
+        } catch (Throwable $e) {
+            $gaps = ['the schema could not be inspected: ' . $e->getMessage()];
+        }
+    }
+    if ($gaps) {
+        $ok = false;
+    }
+
+    $hint = '';
+    if (!$tables['users']) {
+        $hint = 'Run sql/hostinger-mysql.sql in phpMyAdmin against this database.';
+    } elseif ($gaps) {
+        $hint = 'The database is from an earlier version. Run: php api/cli/migrate.php';
+    }
+
     ms_send($ok ? 200 : 503, [
         'ok' => $ok,
         'tables' => $tables,
-        'hint' => $ok ? '' : 'Run sql/hostinger-mysql.sql in phpMyAdmin against this database.',
+        'schema' => $gaps ? $gaps : 'current',
+        'hint' => $hint,
     ]);
 }
 

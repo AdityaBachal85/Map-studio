@@ -70,10 +70,11 @@ It is safe to run more than once. Afterwards, run this on its own to confirm:
 ```sql
 select table_name, engine from information_schema.tables
  where table_schema = database()
-   and table_name in ('users','sessions','map_projects','password_resets','login_attempts');
+   and table_name in ('users','sessions','map_projects','password_resets',
+                      'login_attempts','admin_log');
 ```
 
-Five rows, and every `engine` must say **InnoDB**. A MyISAM table would have
+Six rows, and every `engine` must say **InnoDB**. A MyISAM table would have
 accepted the statement and silently dropped every foreign key, so deleting a
 user would leave their projects behind as rows nothing can reach.
 
@@ -101,7 +102,7 @@ While you are in there, set:
 | Setting | What it does |
 |---|---|
 | `allowed_email_domain` | Only addresses at this domain may sign up. `'dbotrealty.com'`. |
-| `allow_signup` | Whether colleagues can create their own accounts. Reasonable to leave on while the domain restriction is set — only someone who already has a work address can use it. |
+| `allow_signup` | **Leave this off.** Accounts are issued from the People page instead. With it on, anybody holding a work address can create their own and the People page decides nothing. The very first account is allowed through regardless — see below. |
 | `mail_from` | A real mailbox on this domain, for password resets. See step 5. |
 
 ## 4. Check it
@@ -110,15 +111,27 @@ Open **`https://your-domain.com/api/health`**. You want:
 
 ```json
 {"ok":true,"tables":{"users":true,"sessions":true,"map_projects":true,
- "password_resets":true,"login_attempts":true}}
+ "password_resets":true,"login_attempts":true,"admin_log":true},
+ "schema":"current"}
 ```
 
-This one request separates the two things that go wrong on a first install. If
-it says the database is unreachable, step 1 or 3 is wrong. If it says a table
-is missing, step 2 did not run. If it returns HTML rather than JSON, PHP is not
-running for that folder at all.
+This one request separates everything that goes wrong on a first install, and
+it tells you which:
 
-Then open the site, create an account with your work address, and save a map.
+| It says | What to fix |
+|---|---|
+| the database is unreachable | step 1 or 3 — the credentials do not match hPanel |
+| a table is `false` | step 2 did not run, or ran against another database |
+| `schema` lists missing columns | the database is from an earlier version — see [Upgrading](#upgrading-a-database-you-already-set-up) |
+| HTML instead of JSON | PHP is not running for that folder at all |
+
+Then open the site and **create an account with your work address**. The first
+account on an empty database becomes the administrator, whatever
+`allow_signup` says — otherwise nothing would be startable, since
+administrators create accounts and administrators are accounts. That window is
+one account wide and shuts the moment you use it.
+
+Save a map, then go to **People** in the left-hand rail.
 
 ## 5. Password resets need a mailbox
 
@@ -153,6 +166,87 @@ account on the machine while it runs.
 
 **Without SSH:** hPanel → Advanced → **Cron Jobs** runs the same command once.
 Set it a few minutes out, then delete the job.
+
+---
+
+## Adding people
+
+**People** in the left-hand rail, visible to administrators only.
+
+**Add someone** creates the account and shows you a password **once**. Pass it
+on however you normally would. It is stored the same way every other password
+is — as a hash nothing can read back — so nobody, including you, can look it up
+afterwards; if you lose it before passing it on, issue another.
+
+The account is marked as needing a password of its own, and the first time they
+sign in they are asked to choose one before the app opens. That is what makes
+it acceptable to send a password through a chat application: the credential two
+people have seen stops working as soon as it is used.
+
+### The rest of what the page does
+
+| | |
+|---|---|
+| **New password** | For somebody who has lost theirs, or whose reset email will not arrive. Their existing sessions end immediately. |
+| **Make admin** / **Make a user** | Administrators can add and remove people. That is the whole difference — see below for what it does *not* include. |
+| **Switch off** | Revokes access now: they are signed out within the second and cannot sign back in. Everything they own stays exactly where it is. This is what you want when somebody leaves. |
+| **Move maps** | Gives every map one person owns to a named colleague. The answer to "they have left and their work must not go with them". |
+| **Delete** | Permanent, and it takes their maps with it. The page makes you confirm the number of maps that will be destroyed, and the server refuses if that number is wrong — so the confirmation cannot be satisfied by clicking through. |
+
+### What an administrator cannot do
+
+**Open anybody else's maps.** There is no endpoint that returns another
+person's project, and that is a decision rather than an omission. The question
+administration actually has to answer is what happens to a leaver's work, and
+the honest answer is to move it to a named colleague — visibly, and in the log
+— rather than to give one account a quiet key to everyone's drawings.
+
+**Lock everybody out.** Nobody can demote, switch off or delete their own
+account, and none of the three may take the last remaining administrator. Both
+rules exist because they fail differently: the first stops a slip, the second
+stops two administrators removing each other in either order.
+
+### The first administrator, after a Supabase import
+
+The first-account rule never fires on an imported database, because the
+accounts are already there. Promote yourself from the command line:
+
+```
+cd public_html/api/cli
+php make-admin.php you@dbotrealty.com
+php make-admin.php --list
+```
+
+Same cron-job fallback as everything else here if the plan has no SSH.
+
+### The log
+
+At the bottom of the page: every account created, disabled, promoted,
+re-passworded, moved or deleted, with who did it. Both addresses are stored as
+text rather than as references, so the record survives either account being
+deleted later — which is exactly when somebody asks who granted access.
+
+---
+
+## Upgrading a database you already set up
+
+`sql/hostinger-mysql.sql` is written with `create table if not exists`, which
+is what makes it safe to paste twice — and is exactly why re-running it cannot
+upgrade anything. Against a database that already has a `users` table it finds
+one, skips it, reports success, and adds none of the columns that file grew
+later.
+
+So:
+
+```
+cd public_html/api/cli
+php migrate.php --dry-run     # say what is missing
+php migrate.php               # add it
+```
+
+It only ever adds; it never drops a column, narrows a type or deletes a row.
+And you do not have to guess whether it is needed — **/api/health** says so,
+and names the column it is waiting for.
 
 ---
 
@@ -289,7 +383,11 @@ would show up, and where it would not show up in a server-only test.
 ## What is not built yet
 
 - **Sharing a project with a colleague.** Every project belongs to one person.
-- **Any notion of an administrator.** There is no page that lists accounts or
-  resets somebody else's password; `api/cli/set-password.php` is the whole of it.
+  Moving all of somebody's maps at once, from the People page, is as close as
+  this gets.
 - **Two people editing one map at once.** Saving writes the whole project, so
   the last save wins and the other person's changes are gone without a warning.
+- **Emailed invitations.** An administrator is handed the password to pass on
+  rather than the person being emailed a link. Deliberate, for now: a fresh
+  install has no working mailbox on day one, and an administrator who cannot
+  add anybody until the mail is fixed is an administrator who cannot start.

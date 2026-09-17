@@ -94,7 +94,9 @@ function serve(root) {
   // The one file a File Manager upload silently drops, and the one whose
   // absence is invisible until people report seeing an old build for a week.
   ck('so is the error page', has('404.html'));
-  ck('and all three entry pages', has('index.html') && has('login.html') && has('projects.html'));
+  ck('and all four entry pages', has('index.html') && has('login.html')
+    && has('projects.html') && has('admin.html'));
+  ck('with the script the admin page is nothing without', has('js/admin/adminPage.js'));
 
   const forbidden = ['legacy', 'diagnostics', 'server', 'tools', 'sql', 'docs', '.git', 'node_modules'];
   const shipped = forbidden.filter(has);
@@ -163,8 +165,16 @@ function serve(root) {
   // test is for a <script> that still loads it, not for the word — login.html
   // explains in prose why the Microsoft button went away, and should.
   ck('and nothing still loads the Supabase client', !has('vendor/supabase.js')
-    && !['index.html', 'login.html', 'projects.html']
+    && !['index.html', 'login.html', 'projects.html', 'admin.html']
       .some(f => /<script[^>]+supabase/i.test(fs.readFileSync(path.join(DIST, f), 'utf8'))));
+
+  // The two command-line tools an upgrade depends on. They are refused over
+  // HTTP by three separate rules and are useless without a shell — and a
+  // package that left them out would strand an operator whose database is one
+  // version behind with no way to move it forward.
+  ck('the command-line tools ship with it',
+    has('api/cli/migrate.php') && has('api/cli/make-admin.php')
+    && has('api/cli/set-password.php') && has('api/cli/import.php'));
 
   /* -- serve it and load it ---------------------------------------------- */
 
@@ -186,7 +196,7 @@ function serve(root) {
   await p.route('**/js/config.js*', r =>
     r.fulfill({ status: 200, contentType: 'application/javascript', body: localAuthConfig() }));
 
-  for (const page of ['login.html', 'projects.html', 'index.html', '404.html']) {
+  for (const page of ['login.html', 'projects.html', 'admin.html', 'index.html', '404.html']) {
     missing.length = 0; errs.length = 0;
     await p.goto(BASE + '/' + page, { waitUntil: 'domcontentloaded' });
     await p.waitForTimeout(page === 'index.html' ? 3400 : 1800);

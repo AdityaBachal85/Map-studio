@@ -130,6 +130,12 @@ async function projectBridgeBoot() {
  */
 function projectBridgeGuard() {
   if (typeof authMode !== 'function' || authMode() !== 'server') return false;
+  // Signed in on an issued password: the sign-in page asks them to choose
+  // their own before the studio opens. See requireSession().
+  if (typeof mustChangePassword === 'function' && mustChangePassword()) {
+    location.replace(vlink('login.html'));
+    return true;
+  }
   if (typeof currentUser === 'function' && currentUser()) return false;
 
   // authSignInUrl() decides whether this page is worth coming back to. A bare

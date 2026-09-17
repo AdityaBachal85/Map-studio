@@ -58,6 +58,33 @@ create table if not exists users (
   password_hash  varchar(255)     null,
   full_name      varchar(190) not null default '',
   avatar_url     varchar(500) not null default '',
+
+  -- 'user' or 'admin'. A string rather than a boolean because the next role
+  -- somebody wants is always a third one, and widening a tinyint after the
+  -- fact means touching every query that reads it.
+  role           varchar(16)  not null default 'user',
+
+  -- 'active' or 'disabled'. Revoking access has to be separable from deleting
+  -- the account: someone who leaves the company must stop being able to sign
+  -- in TODAY, while their maps stay where they are until somebody decides what
+  -- to do with them. Deleting the row takes the maps with it.
+  status         varchar(16)  not null default 'active',
+
+  -- Set on an account an administrator created, cleared the moment its owner
+  -- chooses their own password. An issued password has been read by at least
+  -- two people and has travelled through a chat app; it is a way in, not a
+  -- secret, and it should stop working as soon as it has been used once.
+  must_change_password tinyint(1) not null default 0,
+
+  -- Who created this account, for the admin log. Nullable and not a foreign
+  -- key: the creator may be deleted later, and that must not cascade into the
+  -- accounts they set up.
+  created_by     char(36)         null,
+
+  -- Last successful sign-in. The one column that answers "is this account
+  -- still in use", which is the question asked before revoking anything.
+  last_seen_at   datetime         null,
+
   created_at     datetime     not null default current_timestamp,
   updated_at     datetime     not null default current_timestamp on update current_timestamp,
   primary key (id),
@@ -201,9 +228,40 @@ create table if not exists login_attempts (
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
--- 6. Confirm it worked
+-- 6. The administrator's log
 --
--- Run this on its own afterwards. Five rows, and users/map_projects must both
+-- Every account an administrator creates, disables, promotes, re-passwords or
+-- deletes, recorded with who did it.
+--
+-- BOTH EMAIL ADDRESSES ARE COPIED IN, and there are no foreign keys. That is
+-- the whole design. A log of administrative actions is worth having precisely
+-- when somebody asks "who gave that person access" — and by then the answer
+-- may involve two accounts that have since been deleted. Referencing users(id)
+-- with a cascade would mean deleting an account erases the record of it ever
+-- having been created, which is the opposite of what a log is for.
+--
+-- `detail` is a short human sentence, not structured data. Nothing reads this
+-- table programmatically; it is read by a person asking what happened.
+-- ---------------------------------------------------------------------------
+
+create table if not exists admin_log (
+  id           bigint unsigned not null auto_increment,
+  actor_id     char(36)         null,
+  actor_email  varchar(190) not null default '',
+  action       varchar(40)  not null,
+  target_id    char(36)         null,
+  target_email varchar(190) not null default '',
+  detail       varchar(255) not null default '',
+  at           datetime     not null default current_timestamp,
+  primary key (id),
+  key admin_log_at_idx (at),
+  key admin_log_target_idx (target_id)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 7. Confirm it worked
+--
+-- Run this on its own afterwards. Six rows, and users/map_projects must both
 -- report InnoDB — a MyISAM table would have accepted the CREATE and silently
 -- dropped every foreign key above, so deleting a user would leave their
 -- projects behind as unreachable rows.
@@ -212,4 +270,20 @@ create table if not exists login_attempts (
 -- select table_name, engine, table_rows
 --   from information_schema.tables
 --  where table_schema = database()
---    and table_name in ('users','sessions','map_projects','password_resets','login_attempts');
+--    and table_name in ('users','sessions','map_projects','password_resets',
+--                       'login_attempts','admin_log');
+
+-- ---------------------------------------------------------------------------
+-- ALREADY RAN AN EARLIER VERSION OF THIS FILE?
+--
+-- The `create table if not exists` above will find `users` already there and
+-- skip it — INCLUDING the role, status and must_change_password columns added
+-- later, which is exactly the trap that makes "just run it again" the wrong
+-- advice. Run this instead, from the command line:
+--
+--     php api/cli/migrate.php
+--
+-- It inspects what is actually in the database and adds only what is missing,
+-- and it is safe to run as many times as you like. /api/health reports whether
+-- it needs running, so you do not have to guess.
+-- ---------------------------------------------------------------------------

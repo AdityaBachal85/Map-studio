@@ -113,6 +113,12 @@ domain, against the MySQL database in hPanel, so there is nothing to keep in
 step. Setting that up is **docs/ACCOUNTS-SETUP.md**, and it is the one step
 here that has to happen after the upload rather than before.
 
+That document also covers the **People** page, where accounts are created:
+an administrator adds somebody and is handed a password to pass on, and self
+sign-up stays switched off. The first account on an empty database becomes the
+administrator whatever the config says, so the sequence is upload, create the
+database, sign yourself up, then add everyone else from the page.
+
 Replace `https://your-domain.com` with your real origin — scheme and host, no
 trailing slash, no path.
 

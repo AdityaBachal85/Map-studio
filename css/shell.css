@@ -1319,3 +1319,204 @@ body.reduce-motion .pj-brand-glass::after { display: none; }
 }
 .pj-name .p svg { opacity: .8; }
 .pj-name .dot { margin: 0 6px; opacity: .45; }
+
+/* ===========================================================================
+   admin.html — the People page
+   ---------------------------------------------------------------------------
+   Built on the project list's shell (.pj-app, .pj-rail, .pj-top, .pj-modal),
+   so only the table and the few things unique to administration live here.
+
+   A deliberately quiet page. It manages access rather than doing the work, and
+   a screen of coloured badges and heavy buttons would make routine account
+   admin feel more consequential than drawing the maps this exists to serve.
+   The one thing allowed to shout is a destructive confirmation.
+   ========================================================================= */
+
+.ad-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+.ad-table thead th {
+  padding: 0 12px 10px;
+  text-align: left;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ad-table tbody td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.ad-table tbody tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+
+/* A switched-off account stays legible rather than being greyed to the point
+   of illegibility: it is still a row somebody has to read and act on. */
+.ad-off td { opacity: .62; }
+
+.ad-nm { font-weight: 600; }
+.ad-em { color: var(--text-2); font-size: var(--fs-micro); margin-top: 2px; }
+.ad-sub { color: var(--text-2); font-size: var(--fs-micro); }
+
+.ad-you {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.ad-role { font-weight: 600; color: var(--accent); }
+
+.ad-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+
+.ad-flag {
+  padding: 1px 7px;
+  border-radius: var(--r-pill, 999px);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  cursor: help;
+}
+
+/* The one that means "this person cannot sign in and does not look like it". */
+.ad-flag-warn {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.ad-flag-off { border-style: dashed; }
+
+.ad-actions { text-align: right; white-space: nowrap; }
+.ad-actions-h { text-align: right; }
+
+.ad-btn {
+  margin-left: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.ad-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.ad-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+
+/* Disabled rather than hidden, with the reason in the title. A control that
+   vanishes leaves somebody looking for it; one that is visibly unavailable and
+   says why answers the question without being asked. */
+.ad-btn:disabled { opacity: .38; cursor: not-allowed; }
+
+.ad-btn-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.pj-mbtn.ad-danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.pj-mbtn.ad-danger:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+
+.ad-warn {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--orange) 45%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.ad-warn code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-family: var(--mono);
+  font-size: .92em;
+}
+
+.ad-warn-loud {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.ad-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+/* The issued password. Monospace and large, because it will be read off this
+   screen and typed somewhere else, and `user-select: all` so one click takes
+   the whole thing rather than a word of it. */
+.ad-pw {
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--field);
+  font-family: var(--mono);
+  font-size: 19px;
+  letter-spacing: .04em;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+
+.ad-pw-note strong { color: var(--text); }
+
+.ad-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 2px 0 16px;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.ad-check input { margin-top: 2px; accent-color: var(--accent); }
+
+.ad-log { margin-top: 26px; }
+
+.ad-log summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.ad-log-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.ad-log-row .t { color: var(--text); font-weight: 600; }
+.ad-log-row .a { color: var(--accent); }
+.ad-log-row .d { opacity: .8; }
+
+/* Narrow screens: the table is the one thing here that cannot reflow, so it
+   scrolls sideways inside its own box rather than pushing the page wide. */
+@media (max-width: 860px) {
+  #adListWrap { overflow-x: auto; }
+  .ad-table { min-width: 720px; }
+}

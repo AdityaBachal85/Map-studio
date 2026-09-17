@@ -5,10 +5,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Map projects · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0230" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./css/themes.css?v=6.0230">
-  <link rel="stylesheet" href="./css/style.css?v=6.0230">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0230">
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0231" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/themes.css?v=6.0231">
+  <link rel="stylesheet" href="./css/style.css?v=6.0231">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0231">
 </head>
 
 <body class="shell-body">
@@ -36,6 +36,19 @@
             <path d="M8 3v15M16 6v15" />
           </svg>
           Map projects
+        </a>
+        <!-- Administrators only, unhidden by projectsPage.js. Hiding it is
+             presentation and nothing more: api/routes/admin.php checks the role
+             on every request, which is what actually keeps the staff list away
+             from everyone else. -->
+        <a href="./admin.html" id="pjAdminLink" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          People
         </a>
         <a href="./index.html">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
@@ -167,15 +180,15 @@
     </div>
   </div>
 
-  <script src="./js/core/prefs.js?v=6.0230"></script>
-  <script src="./js/config.js?v=6.0230"></script>
-  <script src="./js/constants.js?v=6.0230"></script>
-  <script src="./js/core/freshness.js?v=6.0230"></script>
-  <script src="./js/auth/session.js?v=6.0230"></script>
-  <script src="./js/projects/projectStore.js?v=6.0230"></script>
-  <script src="./js/projects/cloudProjects.js?v=6.0230"></script>
-  <script src="./js/projects/importHandoff.js?v=6.0230"></script>
-  <script src="./js/projects/projectsPage.js?v=6.0230"></script>
+  <script src="./js/core/prefs.js?v=6.0231"></script>
+  <script src="./js/config.js?v=6.0231"></script>
+  <script src="./js/constants.js?v=6.0231"></script>
+  <script src="./js/core/freshness.js?v=6.0231"></script>
+  <script src="./js/auth/session.js?v=6.0231"></script>
+  <script src="./js/projects/projectStore.js?v=6.0231"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0231"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0231"></script>
+  <script src="./js/projects/projectsPage.js?v=6.0231"></script>
 </body>
 
 </html>

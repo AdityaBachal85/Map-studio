@@ -226,8 +226,36 @@ function fromApiUser(u) {
     color: sessionColorFor(seed),
     avatarUrl: u.avatarUrl || '',
     provider: u.provider || 'password',
+    role: u.role || 'user',
+    mustChangePassword: u.mustChangePassword === true,
     since: u.since || Date.now(),
   };
+}
+
+/**
+ * Is the signed-in person an administrator?
+ *
+ * For deciding what to SHOW. It decides nothing about what can be done: every
+ * admin endpoint checks the role again on the server, because hiding a link
+ * does not stop anybody calling what is behind it. A panel that relied on this
+ * would hand the staff list to whoever opened the network tab.
+ *
+ * @returns {boolean}
+ */
+function isAdmin() {
+  return !!(_user && _user.role === 'admin');
+}
+
+/**
+ * Has this person been given a password rather than chosen one?
+ *
+ * True until they set their own. An issued password has been read by two
+ * people and has travelled through a chat app; it is a way in, not a secret.
+ *
+ * @returns {boolean}
+ */
+function mustChangePassword() {
+  return !!(_user && _user.mustChangePassword);
 }
 
 /** @param {object|null} u */
@@ -556,7 +584,22 @@ function authSignInUrl(loginUrl, here, search) {
  * @param {string} [loginUrl] @returns {object|null} the session, or null if redirecting
  */
 function requireSession(loginUrl) {
-  if (_user) return _user;
+  if (_user && !mustChangePassword()) return _user;
+  if (_user) {
+    /*
+     * Signed in, on a password an administrator issued. Sent back to the
+     * sign-in page to choose their own — otherwise a credential that two
+     * people have read, and that travelled through a chat application,
+     * quietly becomes somebody's permanent password because they closed the
+     * tab at the wrong moment.
+     *
+     * login.html recognises this state and shows the "choose your own
+     * password" form rather than bouncing them straight back here, which is
+     * what would otherwise be a loop.
+     */
+    location.replace(vlink(loginUrl || 'login.html'));
+    return null;
+  }
   location.replace(vlink(authSignInUrl(loginUrl)));
   return null;
 }

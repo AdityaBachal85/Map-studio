@@ -40,6 +40,18 @@ declare(strict_types=1);
 /** The session cookie's name. */
 const MS_COOKIE = 'mapstudio_session';
 
+/**
+ * Every column ms_user_public() reads, in one place.
+ *
+ * `select *` would be shorter and would also hand password_hash to every
+ * caller that only wanted a name — including the ones that serialise what they
+ * were given straight into a response. Naming the columns means a hash cannot
+ * reach a route by accident, and adding a column to the table does not
+ * silently start returning it.
+ */
+const MS_USER_COLS = 'id, email, full_name, avatar_url, role, status, '
+    . 'must_change_password, created_at, last_seen_at';
+
 /* ---------------------------------------------------------------------------
  * Passwords
  * ------------------------------------------------------------------------ */
@@ -301,8 +313,7 @@ function ms_current_user(): ?array
     if ($session === null) {
         return null;
     }
-    $row = ms_row('select id, email, full_name, avatar_url, created_at from users where id = ?',
-        [$session['user_id']]);
+    $row = ms_row('select ' . MS_USER_COLS . ' from users where id = ?', [$session['user_id']]);
     if ($row === null) {
         // The account was deleted while a session was live. Clearing it here
         // means the next request is a clean signed-out one rather than a
@@ -310,6 +321,20 @@ function ms_current_user(): ?array
         ms_exec('delete from sessions where id = ?', [$session['id']]);
         return null;
     }
+
+    /*
+     * Disabled while signed in. Revoking access has to take effect on the next
+     * request rather than whenever a cookie happens to expire — an
+     * administrator who disables somebody at 4pm means 4pm, not "in up to
+     * thirty days". The sessions are deleted at the moment of disabling too;
+     * this is the belt to that braces, and it covers a session created in the
+     * same second by a request already in flight.
+     */
+    if ((string)($row['status'] ?? 'active') !== 'active') {
+        ms_exec('delete from sessions where user_id = ?', [$row['id']]);
+        return null;
+    }
+
     return ms_user_public($row);
 }
 
@@ -425,8 +450,140 @@ function ms_user_public(array $row): array
         'email'     => $email,
         'avatarUrl' => (string)($row['avatar_url'] ?? ''),
         'provider'  => 'password',
+        'role'      => (string)($row['role'] ?? 'user'),
+        'status'    => (string)($row['status'] ?? 'active'),
+        /*
+         * The client needs this to send somebody straight to "choose your own
+         * password" instead of into the app. It is not a permission — the
+         * server enforces nothing on it, because there is nothing to enforce:
+         * an issued password is a real password until it is changed. What it
+         * prevents is a temporary credential, already seen by two people and
+         * carried through a chat app, quietly becoming somebody's permanent
+         * one.
+         */
+        'mustChangePassword' => (int)($row['must_change_password'] ?? 0) === 1,
         // Milliseconds, so the client can Date.parse-free it straight into the
         // same field the Supabase shape used.
         'since'     => isset($row['created_at']) ? strtotime((string)$row['created_at']) * 1000 : null,
     ];
+}
+
+/* ---------------------------------------------------------------------------
+ * Administrators
+ * ------------------------------------------------------------------------ */
+
+/** @param array<string,mixed> $user */
+function ms_is_admin(array $user): bool
+{
+    return ($user['role'] ?? 'user') === 'admin';
+}
+
+/**
+ * The signed-in user, who must be an administrator.
+ *
+ * Checked here, on the server, on every single admin route. The admin page
+ * hides itself from everybody else, and that is presentation: hiding a button
+ * does not stop anyone calling the endpoint behind it, and a panel that relied
+ * on it would hand the whole staff list to whoever opened the network tab.
+ *
+ * @return array<string,mixed>
+ */
+function ms_require_admin(): array
+{
+    $user = ms_require_user();
+    if (!ms_is_admin($user)) {
+        // 404 rather than 403: somebody who is not an administrator has no
+        // business learning that these endpoints exist.
+        ms_fail(404, 'No such endpoint.', 'no_route');
+    }
+    return $user;
+}
+
+/**
+ * Characters a generated password is built from.
+ *
+ * Deliberately missing three confusable groups: 0/O, 1/l/I and 5/S. These
+ * passwords are not typed from a manager — they are read off a screen, pasted
+ * into a chat message, typed by hand at the other end, and sometimes read
+ * aloud over a phone. A character pair nobody can tell apart in a sans-serif
+ * font turns a working credential into "it says the password is wrong".
+ *
+ * Lowercase `s` stays: it is not mistakable for a 5. Only the uppercase is
+ * dropped, along with the digit.
+ *
+ * No punctuation, for the same reason: a symbol that has to be described
+ * ("underscore, not dash") costs more than the entropy it adds, and the length
+ * below buys that back several times over — 52 characters over 16 places is 91
+ * bits, against a sign-in throttle that allows ten guesses every quarter hour.
+ */
+const MS_PW_ALPHABET = 'abcdefghjkmnpqrstuvwxyz' . 'ABCDEFGHJKMNPQRTUVWXYZ' . '2346789';
+
+/**
+ * A password to issue to somebody.
+ *
+ * Sixteen characters from a 53-character alphabet is about 91 bits, which is
+ * far beyond anything the sign-in throttle would let through in any number of
+ * lifetimes. Grouped in fours with dashes purely so a human can read it across
+ * without losing their place; the dashes are part of the password.
+ *
+ * random_int() and not rand(): this is a credential, and a predictable
+ * generator would make every issued password guessable from any other.
+ */
+function ms_generate_password(): string
+{
+    $n = strlen(MS_PW_ALPHABET) - 1;
+    $out = '';
+    for ($i = 0; $i < 16; $i++) {
+        if ($i > 0 && $i % 4 === 0) {
+            $out .= '-';
+        }
+        $out .= MS_PW_ALPHABET[random_int(0, $n)];
+    }
+    return $out;
+}
+
+/**
+ * Record an administrative action.
+ *
+ * Both addresses are copied in rather than referenced, and the table has no
+ * foreign keys — see sql/hostinger-mysql.sql. A log of who was given access is
+ * worth having exactly when one of the two accounts involved has since been
+ * deleted.
+ *
+ * Never throws. A failure to write the log must not fail the action it is
+ * describing: an administrator pressing "Create" and getting an error, while
+ * the account was in fact created, is worse than a gap in the log.
+ *
+ * @param array<string,mixed> $actor
+ * @param array<string,mixed>|null $target
+ */
+function ms_admin_log(array $actor, string $action, ?array $target, string $detail = ''): void
+{
+    try {
+        ms_exec(
+            'insert into admin_log (actor_id, actor_email, action, target_id, target_email, detail, at)
+             values (?, ?, ?, ?, ?, ?, ?)',
+            [
+                (string)$actor['id'], (string)($actor['email'] ?? ''), $action,
+                $target === null ? null : (string)$target['id'],
+                $target === null ? '' : (string)($target['email'] ?? ''),
+                mb_substr($detail, 0, 255), ms_now(),
+            ]
+        );
+    } catch (Throwable $e) {
+        error_log('Map Studio: could not write the admin log — ' . $e->getMessage());
+    }
+}
+
+/**
+ * How many administrators are left.
+ *
+ * Asked before every demotion, disabling and deletion. An installation with no
+ * administrator has no way back in short of SSH, and the person who caused it
+ * is by definition the person who can no longer fix it.
+ */
+function ms_admin_count(): int
+{
+    $row = ms_row("select count(*) as n from users where role = 'admin' and status = 'active'");
+    return (int)($row['n'] ?? 0);
 }

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>People · DBOT Map Studio</title>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0230" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/themes.css?v=6.0230">
+  <link rel="stylesheet" href="./css/style.css?v=6.0230">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0230">
+</head>
+
+<!-- Built on the project list's own shell — the same rail, the same top bar,
+     the same modal. Administration is a room in this building, not a separate
+     one: a panel with its own look reads as a different application, and the
+     person using it is the same person who was looking at maps a moment ago. -->
+
+<body class="shell-body">
+  <div class="pj-app">
+
+    <aside class="pj-rail">
+      <div class="pj-rail-brand">
+        <span class="pj-brand-glass"><img class="dbotLogo" alt="DBOT"></span>
+        <span class="nm">Map Studio</span>
+      </div>
+
+      <button class="pj-new" id="adNew" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Add someone
+      </button>
+
+      <nav class="pj-nav">
+        <a href="./projects.html">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6" />
+            <path d="M8 3v15M16 6v15" />
+          </svg>
+          Map projects
+        </a>
+        <a href="./admin.html" aria-current="page">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          People
+        </a>
+        <a href="./index.html">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
+            <polyline points="2 15.5 12 22 22 15.5" />
+          </svg>
+          Open the studio
+        </a>
+      </nav>
+
+      <hr>
+
+      <div class="pj-storage">
+        <div class="hd">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+          </svg>
+          Accounts
+        </div>
+        <div class="cap" id="adTally" style="margin-top:8px">Reading…</div>
+      </div>
+
+      <div class="pj-rail-foot">
+        <div class="pj-ver" id="adVer"></div>
+      </div>
+    </aside>
+
+    <header class="pj-top">
+      <div class="pj-search">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round">
+          <circle cx="11" cy="11" r="7" />
+          <line x1="21" y1="21" x2="16.5" y2="16.5" />
+        </svg>
+        <input id="adSearch" type="search" placeholder="Search by name or address…" autocomplete="off">
+      </div>
+
+      <div class="pj-top-spacer"></div>
+
+      <button class="pj-iconbtn" id="adTheme" type="button" title="Switch theme" aria-label="Switch theme">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+        </svg>
+      </button>
+
+      <div class="pj-account">
+        <div class="who">
+          <div class="n" id="adWhoName">—</div>
+          <div class="e" id="adWhoEmail"></div>
+        </div>
+        <button class="pj-avatar" id="adAvatar" type="button" title="Sign out" aria-label="Sign out">?</button>
+      </div>
+    </header>
+
+    <main class="pj-main">
+      <div class="pj-head">
+        <h1>People</h1>
+      </div>
+
+      <!-- Shown when the sign-up form is still open, which quietly defeats the
+           whole point of this page: anyone with a work address can make their
+           own account without being given one. -->
+      <div class="ad-warn" id="adSignupWarn" hidden></div>
+      <div class="ad-warn" id="adError" hidden></div>
+
+      <div id="adListWrap"></div>
+
+      <details class="ad-log" id="adLogBox">
+        <summary>Recent administrative actions</summary>
+        <div id="adLog">Loading…</div>
+      </details>
+    </main>
+
+  </div>
+
+  <!-- Add someone ---------------------------------------------------------->
+  <div class="pj-modal" id="adAddModal" hidden>
+    <div class="pj-modal-card" role="dialog" aria-modal="true" aria-labelledby="adAddTitle">
+      <h2 id="adAddTitle">Add someone</h2>
+      <p class="pj-modal-note" id="adAddNote">They get a password you pass on, and are asked to
+        choose their own the first time they sign in.</p>
+      <label class="pj-field">
+        <span>Their name</span>
+        <input id="adAddName" type="text" autocomplete="off" spellcheck="false" placeholder="Aditya Bachal">
+      </label>
+      <label class="pj-field">
+        <span>Work email</span>
+        <input id="adAddEmail" type="email" autocomplete="off" spellcheck="false"
+          placeholder="name@dbotrealty.com">
+        <em id="adAddDomainHint"></em>
+      </label>
+      <label class="ad-check">
+        <input id="adAddAdmin" type="checkbox">
+        <span>Make them an administrator — they can add and remove people too</span>
+      </label>
+      <div class="pj-modal-btns">
+        <button class="pj-mbtn" id="adAddCancel" type="button">Cancel</button>
+        <button class="pj-mbtn go" id="adAddOk" type="button">Create the account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The password, shown once -------------------------------------------->
+  <div class="pj-modal" id="adPwModal" hidden>
+    <div class="pj-modal-card" role="dialog" aria-modal="true" aria-labelledby="adPwTitle">
+      <h2 id="adPwTitle">Their password</h2>
+      <p class="pj-modal-note" id="adPwWho"></p>
+      <div class="ad-pw" id="adPwValue"></div>
+      <p class="pj-modal-note ad-pw-note">
+        <strong>This is the only time it is shown.</strong> It is stored the same way every other
+        password is — as a hash nothing can read back — so nobody, including you, can look it up
+        later. If you lose it before passing it on, issue another.
+      </p>
+      <div class="pj-modal-btns">
+        <button class="pj-mbtn" id="adPwCopy" type="button">Copy</button>
+        <button class="pj-mbtn go" id="adPwDone" type="button">I have sent it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Move somebody's maps -------------------------------------------------->
+  <div class="pj-modal" id="adMoveModal" hidden>
+    <div class="pj-modal-card" role="dialog" aria-modal="true" aria-labelledby="adMoveTitle">
+      <h2 id="adMoveTitle">Move their maps</h2>
+      <p class="pj-modal-note" id="adMoveNote"></p>
+      <label class="pj-field">
+        <span>Move everything to</span>
+        <select id="adMoveTo"></select>
+        <em>Every map moves. Nobody can open somebody else's maps from this page, so the way to
+          rescue a leaver's work is to give it to a named colleague.</em>
+      </label>
+      <div class="pj-modal-btns">
+        <button class="pj-mbtn" id="adMoveCancel" type="button">Cancel</button>
+        <button class="pj-mbtn go" id="adMoveOk" type="button">Move them</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete ---------------------------------------------------------------->
+  <div class="pj-modal" id="adDelModal" hidden>
+    <div class="pj-modal-card" role="dialog" aria-modal="true" aria-labelledby="adDelTitle">
+      <h2 id="adDelTitle">Delete this account</h2>
+      <p class="pj-modal-note" id="adDelNote"></p>
+      <div class="ad-warn ad-warn-loud" id="adDelMaps" hidden></div>
+      <p class="pj-modal-note">Switching the account off keeps everything and stops them signing
+        in, which is what is usually wanted. Deleting cannot be undone.</p>
+      <div class="pj-modal-btns">
+        <button class="pj-mbtn" id="adDelCancel" type="button">Cancel</button>
+        <button class="pj-mbtn ad-danger" id="adDelOk" type="button">Delete permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/core/prefs.js?v=6.0230"></script>
+  <script src="./js/config.js?v=6.0230"></script>
+  <script src="./js/constants.js?v=6.0230"></script>
+  <script src="./js/core/freshness.js?v=6.0230"></script>
+  <script src="./js/auth/session.js?v=6.0230"></script>
+  <script src="./js/admin/adminPage.js?v=6.0230"></script>
+</body>
+
+</html>

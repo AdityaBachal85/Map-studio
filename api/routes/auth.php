@@ -77,7 +77,23 @@ function ms_auth_me(): void
 function ms_auth_signup(): void
 {
     $cfg = ms_config();
-    if (!$cfg['allow_signup']) {
+
+    /*
+     * THE FIRST ACCOUNT IS ALWAYS ALLOWED, even with sign-up switched off.
+     *
+     * Otherwise the recommended configuration is unstartable: accounts are
+     * created by administrators, administrators are accounts, and a database
+     * with no rows in it has neither. The way out would be SSH, which is
+     * exactly the thing a shared plan may not include.
+     *
+     * The window is one account wide and shuts the moment it is used, and it
+     * opens onto a form that already refuses every address outside the
+     * configured domain. Anybody who reaches this deployment before its owner
+     * does is a colleague.
+     */
+    $nobodyYet = (int)(ms_row('select count(*) as n from users')['n'] ?? 0) === 0;
+
+    if (!$cfg['allow_signup'] && !$nobodyYet) {
         ms_fail(403, 'New accounts are not open — ask an administrator to create one for you.',
             'signup_closed');
     }
@@ -101,13 +117,34 @@ function ms_auth_signup(): void
             'email_taken');
     }
 
+    /*
+     * THE FIRST ACCOUNT ON A NEW INSTALL IS THE ADMINISTRATOR.
+     *
+     * Somebody has to be, and every other way of arranging it is worse. An
+     * install with no administrator can only be fixed over SSH, which is the
+     * one thing a shared plan may not have; and a hard-coded address in the
+     * config is a value that gets copied between deployments and forgotten.
+     *
+     * The window this opens is exactly one account wide and closes the moment
+     * it is used, and it opens onto a sign-up form that already refuses every
+     * address outside the configured domain. The person who installs this is
+     * the person who signs up first.
+     *
+     * After a Supabase import there are already accounts, so this never fires
+     * — which is why api/cli/make-admin.php exists as well.
+     *
+     * `$nobodyYet` is the same check that let this sign-up through at all when
+     * sign-up is switched off, computed once above.
+     */
+    $role = $nobodyYet ? 'admin' : 'user';
+
     $id = ms_uuid();
     try {
         ms_exec(
-            'insert into users (id, email, password_hash, full_name, created_at, updated_at)
-             values (?, ?, ?, ?, ?, ?)',
+            'insert into users (id, email, password_hash, full_name, role, created_at, updated_at)
+             values (?, ?, ?, ?, ?, ?, ?)',
             [$id, $email, ms_password_hash($password),
-             $name !== '' ? $name : ms_name_from_email($email), ms_now(), ms_now()]
+             $name !== '' ? $name : ms_name_from_email($email), $role, ms_now(), ms_now()]
         );
     } catch (PDOException $e) {
         // Two people signing up with the same address at the same moment: the
@@ -137,8 +174,7 @@ function ms_auth_signin(): void
 
     ms_check_throttle($email, $ip);
 
-    $row = ms_row('select id, email, password_hash, full_name, avatar_url, created_at
-                     from users where email = ?', [$email]);
+    $row = ms_row('select ' . MS_USER_COLS . ', password_hash from users where email = ?', [$email]);
 
     $ok = $row !== null && ms_password_ok($password, $row['password_hash'] === null
         ? null : (string)$row['password_hash']);
@@ -163,8 +199,31 @@ function ms_auth_signin(): void
         ms_fail(401, 'That email and password do not match an account.', 'bad_credentials');
     }
 
+    /*
+     * The password was right and the account is switched off.
+     *
+     * Checked AFTER the password, deliberately. Refusing on the address alone
+     * would tell anybody who tried an address whether it belongs to a disabled
+     * account — which is to say, whether that person once worked here. Getting
+     * the password right first is the price of being told anything.
+     *
+     * And it is told, rather than answered with the generic refusal: the
+     * person is usually a colleague whose access was revoked, and sending them
+     * to hunt for a typo in a password that is perfectly correct wastes their
+     * afternoon and then somebody else's.
+     */
+    if ((string)($row['status'] ?? 'active') !== 'active') {
+        ms_record_attempt($email, $ip, false);
+        ms_fail(403, 'This account has been switched off. Ask an administrator to turn it back on.',
+            'disabled');
+    }
+
     ms_password_rehash((string)$row['id'], $password, (string)$row['password_hash']);
     ms_record_attempt($email, $ip, true);
+    // Not a login timestamp for its own sake: this is the column an
+    // administrator reads before revoking anything, and "never" is the most
+    // useful value in the column.
+    ms_exec('update users set last_seen_at = ? where id = ?', [ms_now(), $row['id']]);
 
     $session = ms_session_begin((string)$row['id']);
     ms_send(200, ['user' => ms_user_public($row), 'csrf' => $session['csrf']]);
@@ -210,7 +269,8 @@ function ms_auth_change_password(): void
         ms_fail(400, $complaint, 'weak_password');
     }
 
-    ms_exec('update users set password_hash = ?, updated_at = ? where id = ?',
+    ms_exec('update users set password_hash = ?, must_change_password = 0, updated_at = ?
+              where id = ?',
         [ms_password_hash($next), ms_now(), $user['id']]);
 
     /*
@@ -311,7 +371,8 @@ function ms_auth_reset_confirm(): void
         ms_fail(400, $complaint, 'weak_password');
     }
 
-    ms_exec('update users set password_hash = ?, updated_at = ? where id = ?',
+    ms_exec('update users set password_hash = ?, must_change_password = 0, updated_at = ?
+              where id = ?',
         [ms_password_hash($password), ms_now(), $row['user_id']]);
     ms_exec('update password_resets set used_at = ? where id = ?', [ms_now(), $row['id']]);
 

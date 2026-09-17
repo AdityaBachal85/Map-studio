@@ -30,6 +30,13 @@
   const ACTIVE_KEY = 'dbot.activeProject';
 
   const $ = id => document.getElementById(id);
+
+  // The People page, for administrators. Shown rather than enforced — the API
+  // checks the role on every admin request, so this decides what is worth
+  // offering and nothing about what is permitted.
+  if (typeof isAdmin === 'function' && isAdmin() && $('pjAdminLink')) {
+    $('pjAdminLink').hidden = false;
+  }
   const listWrap = $('pjListWrap');
 
   let rows = [];

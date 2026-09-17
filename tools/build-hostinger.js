@@ -45,7 +45,7 @@ const DIST = path.join(ROOT, 'dist');
  */
 const SHIP_DIRS = ['css', 'js', 'vendor', 'assets', 'api'];
 const SHIP_FILES = [
-  'index.html', 'login.html', 'projects.html', '404.html',
+  'index.html', 'login.html', 'projects.html', 'admin.html', '404.html',
   '.htaccess',
 ];
 
@@ -155,7 +155,7 @@ function copyDir(rel) {
  */
 function missingReferences() {
   const gone = [];
-  for (const page of ['index.html', 'login.html', 'projects.html', '404.html']) {
+  for (const page of ['index.html', 'login.html', 'projects.html', 'admin.html', '404.html']) {
     const src = fs.readFileSync(path.join(ROOT, page), 'utf8');
     const re = /(?:src|href)="([^"]+)"/g;
     let m;

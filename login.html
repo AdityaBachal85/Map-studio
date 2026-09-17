@@ -5,12 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0230" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0231" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0230">
-  <link rel="stylesheet" href="./css/style.css?v=6.0230">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0230">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0231">
+  <link rel="stylesheet" href="./css/style.css?v=6.0231">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0231">
 </head>
 
 <body class="shell-body auth-body">
@@ -73,6 +73,23 @@
                 </svg>
                 <input id="authEmail" name="email" type="email" autocomplete="username"
                   placeholder="you@dbotrealty.com" required>
+              </div>
+            </div>
+
+            <!-- Only when somebody arrives already signed in on an issued
+                 password — a reload, or a direct link to the project list.
+                 Straight after signing in we still have what they typed and do
+                 not ask for it twice. -->
+            <div class="auth-field" id="authCurrentField" hidden>
+              <label for="authCurrent">The password you were given</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                <input id="authCurrent" name="current" type="password"
+                  autocomplete="current-password" placeholder="As it was sent to you">
               </div>
             </div>
 
@@ -355,16 +372,16 @@
 
   </div>
 
-  <script src="./js/core/prefs.js?v=6.0230"></script>
-  <script src="./js/constants.js?v=6.0230"></script>
-  <script src="./js/core/freshness.js?v=6.0230"></script>
-  <script src="./js/config.js?v=6.0230"></script>
-  <script src="./js/auth/session.js?v=6.0230"></script>
+  <script src="./js/core/prefs.js?v=6.0231"></script>
+  <script src="./js/constants.js?v=6.0231"></script>
+  <script src="./js/core/freshness.js?v=6.0231"></script>
+  <script src="./js/config.js?v=6.0231"></script>
+  <script src="./js/auth/session.js?v=6.0231"></script>
   <!-- Decoration only. The form works identically without either of these.
        dotField.js first: loginFx.js calls startDotField() on DOMContentLoaded,
        and a function that is not defined yet is a function that is not there. -->
-  <script src="./js/ui/dotField.js?v=6.0230"></script>
-  <script src="./js/auth/loginFx.js?v=6.0230"></script>
+  <script src="./js/ui/dotField.js?v=6.0231"></script>
+  <script src="./js/auth/loginFx.js?v=6.0231"></script>
   <script>
     applyTheme();
     initFreshness();
@@ -464,10 +481,19 @@
 
       await sessionInit();
 
-      // Already signed in, and not here to set a new password. A live session
-      // plus a reset link means somebody is resetting a password they are
-      // currently signed in with, which is a thing people do.
-      if (currentUser() && !resetToken) { location.replace(safeNext()); return; }
+      /*
+       * Arrived already signed in on a password an administrator issued —
+       * a reload, or a link straight to the project list. The pages send
+       * people here rather than letting an issued credential quietly become
+       * somebody's permanent one.
+       */
+      const setPwOnArrival = !!currentUser()
+        && typeof mustChangePassword === 'function' && mustChangePassword();
+
+      // Already signed in, and not here to set a password. A live session plus
+      // a reset link means somebody is resetting a password they are currently
+      // signed in with, which is a thing people do.
+      if (currentUser() && !resetToken && !setPwOnArrival) { location.replace(safeNext()); return; }
 
       const real = authMode() === 'server';
       $('authReal').hidden = !real;
@@ -497,7 +523,15 @@
          * fields, and would give the three states three chances to drift apart
          * visually.
          */
-        let mode = resetToken ? 'reset' : 'signin';
+        /*
+         * 'first' is the mode somebody lands in when the password they just
+         * used was issued to them rather than chosen. `issuedPassword` holds
+         * what they typed a moment ago, so the form asks for one field and not
+         * two; when they arrived already signed in there is nothing in it, and
+         * the "password you were given" field appears instead.
+         */
+        let issuedPassword = '';
+        let mode = resetToken ? 'reset' : setPwOnArrival ? 'first' : 'signin';
 
         // Whether the server is accepting new accounts at all. Asked once at
         // start-up, so the "Create one" link is absent rather than present and
@@ -509,34 +543,45 @@
           mode = next;
           const up = mode === 'signup';
           const reset = mode === 'reset';
+          const first = mode === 'first';
+          // Both ask for a password and neither asks for an address: the token
+          // names the account in one case and the live session in the other.
+          const pick = reset || first;
 
           $('authNameField').hidden = !up;
-          // The reset token identifies the account, so asking for the address
-          // again would be asking for something that is not used.
-          $('authEmailField').hidden = reset;
+          $('authEmailField').hidden = pick;
+          // Only when we do not already have what they typed a moment ago.
+          $('authCurrentField').hidden = !(first && !issuedPassword);
           $('authSubmitLabel').textContent = reset ? 'Set password and sign in'
-            : up ? 'Create account' : 'Sign in';
+            : first ? 'Save my password'
+              : up ? 'Create account' : 'Sign in';
           $('authTitle').textContent = reset ? 'Choose a new password'
-            : up ? 'Create your account' : 'Welcome back';
-          $('authPwHint').hidden = up || reset;
+            : first ? 'Choose your own password'
+              : up ? 'Create your account' : 'Welcome back';
+          $('authPwHint').hidden = up || pick;
           $('authPassword').setAttribute('autocomplete',
-            (up || reset) ? 'new-password' : 'current-password');
+            (up || pick) ? 'new-password' : 'current-password');
           $('authPassword').setAttribute('placeholder',
-            (up || reset) ? 'At least 8 characters' : 'Enter your password');
+            (up || pick) ? 'At least 8 characters' : 'Enter your password');
           $('authSwitchText').textContent = up ? 'Already have an account?' : "Don't have an account?";
           $('authSwitchBtn').textContent = up ? 'Sign in' : 'Create one';
-          $('authSwitch').hidden = reset || (!up && !signupOpen);
+          $('authSwitch').hidden = pick || (!up && !signupOpen);
           $('authLede').textContent = reset
             ? 'Pick something you have not used elsewhere. This link works once.'
-            : up ? 'Accounts are limited to DBOT work addresses.'
-              : 'Sign in to continue to DBOT Map Studio';
+            : first
+              ? 'The password you were sent has been seen by more than one person. '
+                + 'Pick one only you know — it takes a moment and it is the last time you '
+                + 'will be asked.'
+              : up ? 'Accounts are limited to DBOT work addresses.'
+                : 'Sign in to continue to DBOT Map Studio';
           errEl.hidden = true;
           okEl.hidden = true;
-          (reset ? $('authPassword') : up ? $('authFullName') : $('authEmail')).focus();
+          (pick ? (first && !issuedPassword ? $('authCurrent') : $('authPassword'))
+            : up ? $('authFullName') : $('authEmail')).focus();
         }
 
         $('authSwitchBtn').addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
-        if (mode === 'reset' || !signupOpen) setMode(mode);
+        if (mode !== 'signin' || !signupOpen) setMode(mode);
 
         $('authForm').addEventListener('submit', async e => {
           e.preventDefault();
@@ -545,10 +590,16 @@
           const original = label.textContent;
           btn.disabled = true;
           label.textContent = mode === 'signup' ? 'Creating…'
-            : mode === 'reset' ? 'Setting…' : 'Signing in…';
+            : (mode === 'reset' || mode === 'first') ? 'Saving…' : 'Signing in…';
           try {
             if (mode === 'reset') {
               await completePasswordReset(resetToken, $('authPassword').value);
+              location.href = safeNext();
+              return;
+            }
+            if (mode === 'first') {
+              await changePassword(issuedPassword || $('authCurrent').value,
+                $('authPassword').value);
               location.href = safeNext();
               return;
             }
@@ -565,6 +616,22 @@
               return;
             }
             await signInWithPassword({ email: $('authEmail').value, password: $('authPassword').value });
+
+            /*
+             * Signed in on a password somebody else chose. Kept in memory
+             * rather than asked for again — they typed it two seconds ago, and
+             * the point of this screen is to be quick enough that nobody
+             * resents it.
+             */
+            if (typeof mustChangePassword === 'function' && mustChangePassword()) {
+              issuedPassword = $('authPassword').value;
+              $('authPassword').value = '';
+              setMode('first');
+              btn.disabled = false;
+              label.textContent = 'Save my password';
+              return;
+            }
+
             location.href = safeNext();
           } catch (ex) {
             // A reset token that has already been spent is the one failure
