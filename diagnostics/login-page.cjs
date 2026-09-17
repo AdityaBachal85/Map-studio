@@ -62,9 +62,15 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   /* -- every control the auth flows need ------------------------------------ */
 
   const controls = await p.evaluate(() => {
-    const need = ['authReal', 'authLocal', 'authMsBtn', 'authForm', 'authEmail', 'authPassword',
-      'authSubmit', 'authSwitchBtn', 'authForgot', 'authEye', 'authNameField', 'authFullName',
-      'authError', 'authOk', 'authTitle', 'authLede', 'authLocalForm', 'authName', 'authLocalEmail'];
+    // authMsBtn is deliberately absent. "Continue with Microsoft" was Supabase
+    // brokering Entra, and with Supabase gone there is no broker — everyone
+    // signs in with an address and a password. authEmailField and authSwitch
+    // are new: the reset-link flow hides both, since the token names the
+    // account and there is nothing to switch to.
+    const need = ['authReal', 'authLocal', 'authForm', 'authEmail', 'authEmailField',
+      'authPassword', 'authSubmit', 'authSwitch', 'authSwitchBtn', 'authForgot', 'authEye',
+      'authNameField', 'authFullName', 'authError', 'authOk', 'authTitle', 'authLede',
+      'authLocalForm', 'authName', 'authLocalEmail'];
     const missing = need.filter(id => !document.getElementById(id));
     const real = document.getElementById('authReal');
     return {

@@ -5,12 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sign in · DBOT Map Studio</title>
-  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0229" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0230" as="font" type="font/woff2" crossorigin>
   <!-- Same order rule as index.html: later sheets override earlier ones. This
        page needs the tokens and the base typography, then its own layout. -->
-  <link rel="stylesheet" href="./css/themes.css?v=6.0229">
-  <link rel="stylesheet" href="./css/style.css?v=6.0229">
-  <link rel="stylesheet" href="./css/shell.css?v=6.0229">
+  <link rel="stylesheet" href="./css/themes.css?v=6.0230">
+  <link rel="stylesheet" href="./css/style.css?v=6.0230">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0230">
 </head>
 
 <body class="shell-body auth-body">
@@ -40,20 +40,13 @@
         <div class="auth-error" id="authError" hidden></div>
         <div class="auth-ok" id="authOk" hidden></div>
 
-        <!-- Real accounts. Shown only when Supabase is configured. -->
+        <!-- Real accounts. Shown only when the accounts API is configured.
+             The "Continue with Microsoft" button that used to sit above this
+             form is gone with Supabase: it was Supabase brokering Entra, and
+             there is no broker now. Everyone signs in with an address and a
+             password, so there are no longer two ways in to divide with an
+             "or". -->
         <div id="authReal" hidden>
-          <button class="auth-ms" id="authMsBtn" type="button">
-            <svg viewBox="0 0 21 21" width="17" height="17" aria-hidden="true">
-              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-            </svg>
-            Continue with Microsoft
-          </button>
-
-          <div class="auth-or"><span id="authOrLabel">or</span></div>
-
           <form id="authForm" novalidate>
             <!-- Only for creating an account: the name is already on the
                  account by the time anyone signs in. -->
@@ -70,7 +63,7 @@
               </div>
             </div>
 
-            <div class="auth-field">
+            <div class="auth-field" id="authEmailField">
               <label for="authEmail">Work email</label>
               <div class="auth-input">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
@@ -118,7 +111,7 @@
             </button>
           </form>
 
-          <div class="auth-switch">
+          <div class="auth-switch" id="authSwitch">
             <span id="authSwitchText">Don't have an account?</span>
             <button type="button" id="authSwitchBtn">Create one</button>
           </div>
@@ -362,17 +355,16 @@
 
   </div>
 
-  <script src="./vendor/supabase.js?v=6.0229"></script>
-  <script src="./js/core/prefs.js?v=6.0229"></script>
-  <script src="./js/constants.js?v=6.0229"></script>
-  <script src="./js/core/freshness.js?v=6.0229"></script>
-  <script src="./js/config.js?v=6.0229"></script>
-  <script src="./js/auth/session.js?v=6.0229"></script>
+  <script src="./js/core/prefs.js?v=6.0230"></script>
+  <script src="./js/constants.js?v=6.0230"></script>
+  <script src="./js/core/freshness.js?v=6.0230"></script>
+  <script src="./js/config.js?v=6.0230"></script>
+  <script src="./js/auth/session.js?v=6.0230"></script>
   <!-- Decoration only. The form works identically without either of these.
        dotField.js first: loginFx.js calls startDotField() on DOMContentLoaded,
        and a function that is not defined yet is a function that is not there. -->
-  <script src="./js/ui/dotField.js?v=6.0229"></script>
-  <script src="./js/auth/loginFx.js?v=6.0229"></script>
+  <script src="./js/ui/dotField.js?v=6.0230"></script>
+  <script src="./js/auth/loginFx.js?v=6.0230"></script>
   <script>
     applyTheme();
     initFreshness();
@@ -397,44 +389,50 @@
     function tell(msg) { okEl.textContent = msg; okEl.hidden = false; errEl.hidden = true; }
 
     /**
-     * Explain an emailed link that did not work.
+     * The reset token from an emailed link, or ''.
      *
-     * Supabase reports these in the URL and nowhere else, and puts them in the
-     * query string, the hash fragment, or both — so both are read.
-     *
-     * `otp_expired` gets its own wording because the usual cause is not what
-     * the words say. The link is single-use, and corporate mail security
-     * (Microsoft Defender Safe Links in Outlook, and its equivalents) *opens
-     * every link in an incoming message* to scan it. That spends the token
-     * before the human has clicked anything, so a link can arrive already
-     * used and report itself as expired seconds after it was sent. Telling
-     * somebody "it expired" when they clicked it immediately reads as the app
-     * being broken; telling them what actually happened lets them act.
+     * The API writes links as login.html?reset=<token>. Read once, then wiped
+     * from the address bar by clearResetToken() — a live password-reset token
+     * sitting in a URL ends up in browser history, in a screenshot attached to
+     * a bug report, and in the Referer header of the next request this page
+     * makes.
      */
-    function showLinkError() {
+    function resetTokenInUrl() {
+      const t = new URLSearchParams(location.search).get('reset') || '';
+      return /^[a-f0-9]{64}$/.test(t) ? t : '';
+    }
+
+    /**
+     * Take the token out of the address bar, keeping ?next= if it was there.
+     *
+     * Called as soon as the token has been read into a variable rather than
+     * after it has been used, so somebody who abandons the page half way
+     * through still does not leave a working token in their history.
+     */
+    function clearResetToken() {
       const q = new URLSearchParams(location.search);
-      const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
-      const code = q.get('error_code') || h.get('error_code') || '';
-      const err = q.get('error') || h.get('error') || '';
-      if (!code && !err) return;
-
-      const described = (q.get('error_description') || h.get('error_description') || '')
-        .replace(/\+/g, ' ');
-
-      if (/otp_expired|access_denied/.test(code + ' ' + err)) {
-        fail('That link has already been used or has expired. Email security scanners often '
-          + 'open links automatically before you do, which uses them up — so this can happen '
-          + 'even seconds after the email arrives. Sign in below with the password you chose; '
-          + 'if that does not work, request a new link and open it from a different mail app.');
-      } else {
-        fail(described || 'That link could not be used. Please request a new one.');
-      }
-
-      // Clear it from the address bar so a refresh does not re-accuse a link
-      // the reader has already dealt with.
+      const next = q.get('next');
       try {
-        history.replaceState(null, '', location.pathname + (q.get('next') ? '?next=' + q.get('next') : ''));
+        history.replaceState(null, '', location.pathname + (next ? '?next=' + next : ''));
       } catch (e) { /* file:// — leave the URL alone */ }
+    }
+
+    /**
+     * Say why a single-use link was already spent.
+     *
+     * Worth its own wording, because the usual cause is not what the words
+     * say. Corporate mail security — Microsoft Defender Safe Links in Outlook,
+     * and its equivalents — opens every link in an incoming message in order
+     * to scan it. That spends the token before the human has clicked anything,
+     * so a link can arrive already used and report itself as spent seconds
+     * after it was sent. Telling somebody "that link has expired" when they
+     * clicked it immediately reads as the app being broken; telling them what
+     * actually happened lets them act.
+     */
+    function explainSpentLink(message) {
+      return message + ' Email security scanners often open links automatically before you do, '
+        + 'which uses them up — so this can happen even seconds after the email arrived. Ask for '
+        + 'a new one, and open it from a different mail app if it keeps happening.';
     }
 
     /** Only same-page targets — an open redirect is trivially avoidable here. */
@@ -458,21 +456,20 @@
     });
 
     (async function start() {
-      // Also completes the Microsoft round trip: arriving back here with tokens
-      // in the URL, this is what turns them into a session.
+      // A reset token is read and wiped from the address bar before anything
+      // else happens, including before the session is resolved — see
+      // clearResetToken() on why it does not wait until the token is used.
+      const resetToken = resetTokenInUrl();
+      if (resetToken) clearResetToken();
+
       await sessionInit();
 
-      // Already signed in — including the moment after Microsoft returns.
-      if (currentUser()) { location.replace(safeNext()); return; }
+      // Already signed in, and not here to set a new password. A live session
+      // plus a reset link means somebody is resetting a password they are
+      // currently signed in with, which is a thing people do.
+      if (currentUser() && !resetToken) { location.replace(safeNext()); return; }
 
-      // A confirmation or reset link that Supabase rejected. It says so only in
-      // the URL, in a query string, a hash fragment, or both — so without this
-      // the page renders a blank sign-in form and the reason is visible nowhere
-      // except the address bar, which is where nobody looks. Read before the
-      // form is shown, so the explanation is the first thing on the page.
-      showLinkError();
-
-      const real = authMode() === 'supabase';
+      const real = authMode() === 'server';
       $('authReal').hidden = !real;
       $('authLocal').hidden = real;
       $('authTitle').textContent = real ? 'Welcome back' : 'Welcome';
@@ -481,41 +478,65 @@
         : 'Your projects are kept in this browser, under the name you use here.';
 
       if (real) {
+        /*
+         * The accounts API did not answer at start-up. Said here, once, at the
+         * top of the page — because the alternative is a sign-in form that
+         * looks perfectly normal, refuses every password, and blames the
+         * person typing it.
+         */
+        if (typeof sessionStartupError === 'function' && sessionStartupError()) {
+          fail(sessionStartupError());
+        }
+
         $('authEmail').focus();
 
-        $('authMsBtn').addEventListener('click', async () => {
-          errEl.hidden = true;
-          try {
-            tell('Taking you to Microsoft…');
-            await signInWithMicrosoft(location.origin + location.pathname.replace(/[^/]*$/, '') + safeNext());
-          } catch (ex) { fail(ex.message); }
-        });
+        /*
+         * ONE FORM, THREE JOBS: sign in, create an account, and choose a new
+         * password after following a reset link. A separate page for each
+         * would triple the markup in order to change three labels and hide two
+         * fields, and would give the three states three chances to drift apart
+         * visually.
+         */
+        let mode = resetToken ? 'reset' : 'signin';
 
-        // One form, two jobs. A second page for sign-up would double the
-        // markup to change three labels and one field.
-        let mode = 'signin';
+        // Whether the server is accepting new accounts at all. Asked once at
+        // start-up, so the "Create one" link is absent rather than present and
+        // refusing — an invitation that cannot be accepted is worse than none.
+        const signupOpen = typeof authServerInfo === 'function'
+          ? authServerInfo().signupOpen !== false : true;
 
         function setMode(next) {
           mode = next;
           const up = mode === 'signup';
+          const reset = mode === 'reset';
+
           $('authNameField').hidden = !up;
-          $('authSubmitLabel').textContent = up ? 'Create account' : 'Sign in';
-          $('authTitle').textContent = up ? 'Create your account' : 'Welcome back';
-          $('authOrLabel').textContent = 'or';
-          $('authPwHint').hidden = up;
-          $('authPassword').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
-          $('authPassword').setAttribute('placeholder', up ? 'At least 8 characters' : 'Enter your password');
+          // The reset token identifies the account, so asking for the address
+          // again would be asking for something that is not used.
+          $('authEmailField').hidden = reset;
+          $('authSubmitLabel').textContent = reset ? 'Set password and sign in'
+            : up ? 'Create account' : 'Sign in';
+          $('authTitle').textContent = reset ? 'Choose a new password'
+            : up ? 'Create your account' : 'Welcome back';
+          $('authPwHint').hidden = up || reset;
+          $('authPassword').setAttribute('autocomplete',
+            (up || reset) ? 'new-password' : 'current-password');
+          $('authPassword').setAttribute('placeholder',
+            (up || reset) ? 'At least 8 characters' : 'Enter your password');
           $('authSwitchText').textContent = up ? 'Already have an account?' : "Don't have an account?";
           $('authSwitchBtn').textContent = up ? 'Sign in' : 'Create one';
-          $('authLede').textContent = up
-            ? 'Accounts are limited to DBOT work addresses.'
-            : 'Sign in to continue to DBOT Map Studio';
+          $('authSwitch').hidden = reset || (!up && !signupOpen);
+          $('authLede').textContent = reset
+            ? 'Pick something you have not used elsewhere. This link works once.'
+            : up ? 'Accounts are limited to DBOT work addresses.'
+              : 'Sign in to continue to DBOT Map Studio';
           errEl.hidden = true;
           okEl.hidden = true;
-          (up ? $('authFullName') : $('authEmail')).focus();
+          (reset ? $('authPassword') : up ? $('authFullName') : $('authEmail')).focus();
         }
 
         $('authSwitchBtn').addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
+        if (mode === 'reset' || !signupOpen) setMode(mode);
 
         $('authForm').addEventListener('submit', async e => {
           e.preventDefault();
@@ -523,31 +544,33 @@
           const label = $('authSubmitLabel');
           const original = label.textContent;
           btn.disabled = true;
-          label.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
+          label.textContent = mode === 'signup' ? 'Creating…'
+            : mode === 'reset' ? 'Setting…' : 'Signing in…';
           try {
+            if (mode === 'reset') {
+              await completePasswordReset(resetToken, $('authPassword').value);
+              location.href = safeNext();
+              return;
+            }
             if (mode === 'signup') {
-              const r = await signUpWithPassword({
+              await signUpWithPassword({
                 name: $('authFullName').value,
                 email: $('authEmail').value,
                 password: $('authPassword').value,
               });
-              if (r.needsConfirmation) {
-                // Not signed in yet, and saying "welcome" here would be a lie
-                // that ends with them staring at a sign-in page.
-                tell('Account created. Check ' + $('authEmail').value.trim()
-                  + ' for a confirmation link, then come back and sign in.');
-                setMode('signin');
-                btn.disabled = false;
-                label.textContent = 'Sign in';
-                return;
-              }
+              // Signed in by the same request that created the account. There
+              // is no confirmation email to wait for — see the note on
+              // signUpWithPassword() in js/auth/session.js for why not.
               location.href = safeNext();
               return;
             }
             await signInWithPassword({ email: $('authEmail').value, password: $('authPassword').value });
             location.href = safeNext();
           } catch (ex) {
-            fail(ex.message);
+            // A reset token that has already been spent is the one failure
+            // whose likeliest cause is not the reader's fault.
+            fail(ex && (ex.code === 'used_token' || ex.code === 'expired_token')
+              ? explainSpentLink(ex.message) : ex.message);
             btn.disabled = false;
             label.textContent = original;
             $('authPassword').select();
@@ -559,8 +582,7 @@
           const email = $('authEmail').value.trim();
           if (!email) { fail('Type your work email above first, then click this again.'); return; }
           try {
-            await sendPasswordReset(email);
-            tell('If that address has an account, a reset link is on its way to it.');
+            tell(await sendPasswordReset(email));
           } catch (ex) { fail(ex.message); }
         });
         return;

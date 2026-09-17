@@ -18,9 +18,9 @@
   initFreshness();
   document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
 
-  // Must settle before the guard: Supabase may need a network round trip to
-  // refresh an expired token, and asking too early would bounce a signed-in
-  // person back to the sign-in page.
+  // Must settle before the guard: resolving the session is a round trip to
+  // the accounts API, and asking who is here before that answers would bounce
+  // a signed-in person back to the sign-in page.
   await sessionInit();
 
   const user = requireSession('login.html');
@@ -318,8 +318,9 @@
       return;
     }
 
-    // Cloud mode has no per-user quota to divide by — Supabase's limit covers
-    // the whole database — so the bar would be inventing a denominator.
+    // Cloud mode has no per-user quota to divide by — a shared plan's disk
+    // allowance covers the whole site, this database among other things — so
+    // the bar would be inventing a denominator.
     $('pjStorageFill').style.width = '8%';
     cap.textContent = bytes(s.bytes) + ' in your account';
   }

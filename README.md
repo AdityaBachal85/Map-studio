@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0229-blue)
+![Version](https://img.shields.io/badge/version-v6.0230-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,52 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0204 (latest)
+## 🆕 New in v6.0230 (latest)
+
+### Accounts moved off Supabase and onto Hostinger
+
+Sign-in and cloud projects used to be Supabase: the browser held a public key,
+queried Supabase's Postgres directly, and Row Level Security policies inside
+the database decided what came back. It worked, and it put the accounts for a
+Hostinger-hosted site on somebody else's platform — a second dashboard, a
+second set of URL allow-lists to keep in step with the domain, and a free tier
+that pauses a project nobody has visited for a week.
+
+The same job is now done by **PHP in `api/`, against the MySQL database in
+hPanel**. The browser holds nothing: it sends a session cookie it cannot read,
+and the server decides.
+
+**The security model changed, and that is the part worth reading.** MySQL has
+no Row Level Security, so the ownership test moved out of the database and into
+`api/routes/projects.php`, where every query carries `where owner_id = :me` and
+`:me` comes from the session — never from the request. Under RLS a forgotten
+WHERE clause returned nothing; here it would return everybody's rows. So there
+is one gate every read and write goes through, and the test suite attacks it:
+two accounts, each trying to read, rename, duplicate, delete and overwrite the
+other's map by naming its id. All five answer "does not exist" rather than "not
+yours", which would confirm it is there.
+
+**Nobody has to reset a password.** Supabase stores standard bcrypt, which is
+what PHP's `password_verify()` reads, so the hashes transfer verbatim —
+verified end to end, including Supabase's `$2a$` prefix against PHP's `$2y$`.
+`tools/export-supabase.js` pulls everything out, `api/cli/import.php` puts it
+in through the same prepared statements the app uses, and the import is safe to
+run twice. The exception is anyone who only ever used Microsoft sign-in: there
+is no broker for that any more, so those accounts arrive without a password and
+are told so in those words, rather than having a correct password rejected as
+wrong.
+
+Also here: a sign-in throttle counted by address *and* by account, sessions
+stored as hashes so a copy of the table is not a set of keys, password resets
+by email with the single-use link explained properly when a mail scanner spends
+it first, and a `/api/health` endpoint that answers the only question a first
+install has — is it the config or the app?
+
+Setup is `docs/ACCOUNTS-SETUP.md`. Two suites cover it, both running real PHP:
+`diagnostics/accounts-api.cjs` (57 assertions, including the whole flow through
+a real browser) and `diagnostics/migration.cjs` (18).
+
+## 🆕 New in v6.0204
 
 ### A scanned station is a location, not a drawing
 
@@ -790,7 +835,7 @@ counted by the only thing spending against the key — see
 inside the free tier, and the 48-hour report expiry.
 
 The client side of this ships in every deploy; the backend is a **separate,
-manual setup** — Supabase (Postgres) + Render + a Gemini key, all free tiers
+manual setup** — a Postgres database + Render + a Gemini key, all free tiers
 with no credit card — documented end to end in `docs/AI-REPORTS-SETUP.md`.
 It's a plain Express app with no cloud-specific code, so any Postgres and any
 Node host work equally well. Until it's deployed and
@@ -1184,7 +1229,7 @@ Works on:
 - [Leaflet](https://leafletjs.com/), [Leaflet-Geoman](https://geoman.io/leaflet-geoman)
   (drawing/editing), [html2canvas](https://html2canvas.hertzen.com/),
   [pptxgenjs](https://gitbrent.github.io/PptxGenJS/), [JSZip](https://stuk.github.io/jszip/),
-  [anime.js](https://animejs.com/), [supabase-js](https://supabase.com/)
+  [anime.js](https://animejs.com/)
   — vendored directly under `vendor/`, loaded as plain `<script>` tags
 - [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) for the optional vector
   ground — also vendored, but fetched on first use rather than on every page
@@ -1215,7 +1260,7 @@ Map-studio/
   vendor/fonts/   — Geist + Geist Mono variable woff2 + OFL licence
   vendor/         — third-party libraries, vendored as plain files (leaflet.js/.css,
                        leaflet-geoman.js/.css, html2canvas.js, pptxgen.bundle.js,
-                       jszip.js, anime.min.js, supabase.js, maplibre-gl.js/.css)
+                       jszip.js, anime.min.js, maplibre-gl.js/.css)
   css/
     shell.css       — login.html + projects.html only (the pages outside the map)
     dashboard.css   — the board view
@@ -1231,10 +1276,10 @@ Map-studio/
   js/
     app.js          — runs last: wires everything together, prints the boot message
     constants.js    — APP_VERSION lives here; tools/stamp-assets.js reads it
-    config.js       — ROUTERS, provider API keys, Supabase URL + anon key
+    config.js       — ROUTERS, provider API keys, the accounts API's base path
     auth/session.js  — who is using this browser. Degrades to a local profile
-                         when Supabase is not configured; the rest of the app
-                         cannot tell which mode is running.
+                         when the accounts API is not configured; the rest of
+                         the app cannot tell which mode is running.
     auth/loginFx.js  — login.html's pointer decoration, built at runtime so the
                          page's markup stays about authentication
     projects/       — projectStore (many named projects in IndexedDB, metadata
@@ -1290,7 +1335,10 @@ Map-studio/
   diagnostics/      — standalone probe pages and check harnesses, incl.
                         vector-basemap/ (Playwright checks for the MapLibre ground)
   legacy/           — pristine single-file rollbacks of earlier versions
-  server/, sql/     — the optional accounts/cloud backend (Supabase schema + RLS)
+  api/              — the accounts backend: PHP + MySQL, sign-in and cloud
+                        projects, served from this site's own domain
+  server/, sql/     — the AI reports backend (Node), and the MySQL schema api/
+                        runs against
   docs/             — OPENFREEMAP-VECTOR-BASEMAP.md (the vector ground: spec,
                         what shipped, and where the spec was wrong),
                         PHASE0-PPTX-DIAGNOSIS.md (the export-corruption root

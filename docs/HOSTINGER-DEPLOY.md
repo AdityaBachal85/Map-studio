@@ -26,7 +26,7 @@ VPS has an hPanel section called **VPS** with an IP address and a root password.
 
 **The AI reports feature is the only thing the choice changes.** The map, the
 dashboard, sign-in, cloud projects, every export — all of it is static files
-and a browser talking to Supabase, and all of it works identically on both.
+plus the PHP accounts API in `api/`, and all of it works identically on both.
 The AI reports backend (`server/`) is Node and cannot run on a shared plan.
 Its buttons are already hidden in the interface, and `AI_FUNCTIONS_BASE_URL`
 already points at the existing Render deployment, so **on a shared plan there
@@ -101,19 +101,23 @@ hPanel → **Websites → your site → Dashboard**.
 "use my location", and the clipboard are all refused by browsers over plain
 HTTP, and they fail separately with unrelated-looking errors.
 
-### A5. Tell the four external services about the new domain
+### A5. Tell the external services about the new domain
 
 **This is the step that decides whether the site works.** Every one of these
 is keyed to the old GitHub Pages origin. Skip one and the failure is quiet:
-a search box that returns nothing, a map that will not load, a sign-in that
-bounces back to the login page.
+a search box that returns nothing, or a map that will not load.
+
+Sign-in is no longer on this list. It used to be — Supabase had to be told
+every origin the app would be served from — and it now runs in `api/` on this
+domain, against the MySQL database in hPanel, so there is nothing to keep in
+step. Setting that up is **docs/ACCOUNTS-SETUP.md**, and it is the one step
+here that has to happen after the upload rather than before.
 
 Replace `https://your-domain.com` with your real origin — scheme and host, no
 trailing slash, no path.
 
 | Service | Where | What to add |
 |---|---|---|
-| **Supabase** — sign-in and cloud projects | Authentication → **URL Configuration** | **Site URL**: `https://your-domain.com/projects.html`.<br>**Redirect URLs**: add `https://your-domain.com/**` (keep the existing entries — several origins are allowed). |
 | **Google Maps Platform** — search, nearby places, routing | Cloud console → APIs & Services → **Credentials** → the browser key in `MAP_PROVIDER_KEYS.google` → **Website restrictions** | Add `https://your-domain.com/*`. Keep the restriction: it is the only thing stopping a third party spending against the key. |
 | **Geoapify** — search and nearby places | Geoapify dashboard → the project → **Allowed referrers** | Add `https://your-domain.com/*`. |
 | **AI reports backend** (Render) | Render dashboard → the service → **Environment** | Set `ALLOWED_ORIGIN` to `https://your-domain.com`. Comma-separate to keep the old origin working during a cutover. |
@@ -145,7 +149,7 @@ Then, with the browser's **Network** tab open on a hard reload (Ctrl/Cmd+Shift+R
 | any `.js` response headers | `content-type: text/javascript`, `cache-control: …immutable` | A3 |
 | any `.js` response headers | `content-encoding: gzip` or `br` | A3 |
 | The version, bottom of the sign-in page | matches `APP_VERSION` in `js/constants.js` | you uploaded an older build |
-| Sign in | lands on the projects list | A5 — Supabase URL configuration |
+| Sign in | lands on the projects list | docs/ACCOUNTS-SETUP.md — the database and the API config |
 | Search for a place in the studio | results appear | A5 — Google / Geoapify referrers |
 | The map draws tiles | imagery, not grey | A5 — Google key restriction |
 
@@ -203,8 +207,13 @@ Then:
    proxies `/api/` to `127.0.0.1:8080`, so the browser makes same-origin
    requests and CORS never enters it. Set `ALLOWED_ORIGIN` on the backend
    anyway — it still checks the `Origin` header on requests that carry one.
-5. **A5 above still applies.** Supabase, Google and Geoapify do not care which
-   server you run; they care about the origin in the browser's address bar.
+5. **A5 above still applies.** Google and Geoapify do not care which server
+   you run; they care about the origin in the browser's address bar.
+
+   Note the collision if you take this route: the accounts API also lives at
+   `/api`. Proxy the reports backend somewhere else — `/ai/` — or the two will
+   fight over the same prefix, and the symptom is sign-in returning the AI
+   backend's 404 as HTML.
 
 Then the same A6 verification, plus:
 
@@ -268,9 +277,15 @@ the status line. **A blank page** is a missing file, which is A2/A3.
 
 ### Sign-in bounces back to the sign-in page
 
-Supabase does not recognise the new origin. Authentication → URL Configuration,
-and add `https://your-domain.com/**` to Redirect URLs. A URL that is not listed
-is rejected — silently, from the browser's point of view.
+The session cookie is not coming back. Two causes, in order of likelihood:
+
+1. **The site is being reached over plain HTTP somewhere.** The cookie is
+   marked Secure when it is set over HTTPS, so it will not be sent back over
+   HTTP, and the next page sees nobody signed in. A3 and A4 — the `.htaccess`
+   HTTPS redirect has to be in place.
+2. **The API is not answering.** Open `https://your-domain.com/api/health`. If
+   it is not JSON saying `"ok":true`, the problem is the accounts setup, not
+   the sign-in page — docs/ACCOUNTS-SETUP.md.
 
 ### AI reports say the backend is unreachable
 
@@ -310,8 +325,8 @@ blocks `.git` and the tooling directories, and that is a second lock rather
 than the first one. Uploading only what the site serves is the first one.
 
 **A Content-Security-Policy header.** The map loads tiles, fonts, routing,
-Overpass, Supabase and Google from a set of origins that grows whenever a
-basemap is added. A CSP one origin out of date is a blank map with an error
+Overpass and Google from a set of origins that grows whenever a basemap is
+added. A CSP one origin out of date is a blank map with an error
 only the console shows. It is worth adding — with the network panel open and a
 deliberate pass over every request the app makes — and it is not worth copying
 from a hardening checklist.
@@ -327,5 +342,7 @@ matter and you are on a shared plan, leave the backend on Render.
 - `.htaccess` — every rule in it says why it is there.
 - `docs/DEPLOY-NOTES.md` — the GitHub Pages deploy, and the caching problem
   this branch's `.htaccess` finally fixes.
-- `docs/ACCOUNTS-SETUP.md` — Supabase and Microsoft sign-in in full.
+- `docs/ACCOUNTS-SETUP.md` — the database, the accounts API, and moving the
+  Supabase data across. **Read it after A2**: the site will load without it,
+  and nobody will be able to sign in.
 - `docs/AI-REPORTS-SETUP.md` — the backend's environment variables.

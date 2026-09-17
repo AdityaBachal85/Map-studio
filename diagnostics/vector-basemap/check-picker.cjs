@@ -20,8 +20,9 @@ const STYLE = fs.readFileSync(path.join(HERE, 'style-fixture.json'), 'utf8');
 /** Read the repo's own config.js and blank Supabase, so auth stays local. */
 function localAuthConfig() {
   return fs.readFileSync(path.join(REPO, 'js', 'config.js'), 'utf8')
-    .replace(/const SUPABASE_URL = '[^']*';/, "const SUPABASE_URL = '';")
-    .replace(/const SUPABASE_ANON_KEY = '[^']*';/, "const SUPABASE_ANON_KEY = '';");
+    // Local mode: the app boots with no server behind it. Accounts have their
+    // own harness, running real PHP, in diagnostics/accounts-api.cjs.
+    .replace(/const ACCOUNTS_API_BASE = '[^']*';/, "const ACCOUNTS_API_BASE = '';");
 }
 
 const results = [];

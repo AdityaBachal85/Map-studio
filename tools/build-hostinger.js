@@ -43,7 +43,7 @@ const DIST = path.join(ROOT, 'dist');
  * of forgetting is a missing file, which the site reports loudly on the first
  * page load.
  */
-const SHIP_DIRS = ['css', 'js', 'vendor', 'assets'];
+const SHIP_DIRS = ['css', 'js', 'vendor', 'assets', 'api'];
 const SHIP_FILES = [
   'index.html', 'login.html', 'projects.html', '404.html',
   '.htaccess',
@@ -52,6 +52,20 @@ const SHIP_FILES = [
 /** Never copied, wherever they turn up inside a shipped directory. */
 const SKIP_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'node_modules', '.git']);
 const SKIP_EXT = new Set(['.md', '.log', '.cjs', '.sql', '.zip']);
+
+/**
+ * Never packaged, by exact path.
+ *
+ * api/config.php is the live database credential. On a developer's machine it
+ * may exist — that is how you run the API locally — and packaging it would put
+ * one deployment's password into an archive destined for another, or, worse,
+ * overwrite a working config on the server with a copy of somebody's local
+ * one. The sample beside it ships; the real one never does.
+ *
+ * Paths use forward slashes, which is what path.join produces on the platforms
+ * this runs on and what the comparison below normalises to anyway.
+ */
+const SKIP_PATHS = new Set(['api/config.php']);
 
 const args = process.argv.slice(2);
 const LIST_ONLY = args.includes('--list');
@@ -119,6 +133,7 @@ function copyDir(rel) {
     const st = fs.statSync(path.join(ROOT, childRel));
     if (st.isDirectory()) { copyDir(childRel); continue; }
     if (SKIP_EXT.has(path.extname(name).toLowerCase())) continue;
+    if (SKIP_PATHS.has(childRel.split(path.sep).join('/'))) continue;
     copyFile(childRel);
   }
 }

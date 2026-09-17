@@ -116,19 +116,20 @@ async function projectBridgeBoot() {
  * turn off JavaScript and see an empty map.
  *
  * That distinction is fine, because the map is not the asset — the projects
- * are. Those live in Postgres behind Row Level Security, and no amount of
- * disabling JavaScript produces a token that lets someone read them. Skipping
+ * are. Those live in MySQL behind the accounts API, which takes the owner from
+ * a session cookie this page cannot read or forge, so no amount of disabling
+ * JavaScript produces something that lets one person read another's. Skipping
  * this guard gets you a blank studio with an empty project list, not anyone's
  * work.
  *
- * Only applies when accounts are actually configured. With SUPABASE_ANON_KEY
+ * Only applies when accounts are actually configured. With ACCOUNTS_API_BASE
  * empty the app is a local tool with no accounts to check, and redirecting
  * would lock people out of their own browser.
  *
  * @returns {boolean} whether a redirect was issued
  */
 function projectBridgeGuard() {
-  if (typeof authMode !== 'function' || authMode() !== 'supabase') return false;
+  if (typeof authMode !== 'function' || authMode() !== 'server') return false;
   if (typeof currentUser === 'function' && currentUser()) return false;
 
   // authSignInUrl() decides whether this page is worth coming back to. A bare

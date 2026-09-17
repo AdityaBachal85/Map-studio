@@ -24,8 +24,9 @@ const STYLE = fs.readFileSync(path.join(HERE, 'style-fixture.json'), 'utf8');
 function localAuthConfig() {
   const src = fs.readFileSync(path.join(REPO, 'js', 'config.js'), 'utf8');
   return src
-    .replace(/const SUPABASE_URL = '[^']*';/, "const SUPABASE_URL = '';")
-    .replace(/const SUPABASE_ANON_KEY = '[^']*';/, "const SUPABASE_ANON_KEY = '';");
+    // Local mode: the app boots with no server behind it. Accounts have their
+    // own harness, running real PHP, in diagnostics/accounts-api.cjs.
+    .replace(/const ACCOUNTS_API_BASE = '[^']*';/, "const ACCOUNTS_API_BASE = '';");
 }
 
 const results = [];

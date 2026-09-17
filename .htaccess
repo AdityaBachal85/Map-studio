@@ -167,9 +167,9 @@ Options -Indexes
   # Deliberately NOT set: Content-Security-Policy, Cross-Origin-Embedder-Policy
   # and Cross-Origin-Opener-Policy.
   #
-  # The map loads tiles, fonts, routing, Overpass, Supabase and Google from a
-  # list of origins that grows whenever a basemap is added, and a CSP that is
-  # one origin out of date is a blank map with an error only the console shows.
+  # The map loads tiles, fonts, routing, Overpass and Google from a list of
+  # origins that grows whenever a basemap is added, and a CSP that is one
+  # origin out of date is a blank map with an error only the console shows.
   # COEP is worse: it would block every tile server that does not send CORP,
   # which is most of them. Adding either needs a deliberate pass with the
   # network panel open, not a line copied from a hardening checklist.
@@ -186,6 +186,16 @@ Options -Indexes
   # for something else, or a credential's neighbour.
   RewriteRule ^(server|tools|diagnostics|sql|docs|test|legacy)/ - [F,L]
 
+  # api/ is NOT in that list, deliberately: it is the accounts backend and it
+  # has to answer. It carries its own .htaccess, which routes every request
+  # under it to api/index.php and refuses the library, the routes, the CLI
+  # scripts and the config file. The rule below is the same refusal repeated
+  # here, so a deploy that drops the nested .htaccess — a File Manager that
+  # skips dotfiles, an unzip that ignores them — does not expose the database
+  # password while it is being noticed.
+  RewriteRule ^api/(lib|routes|cli)/ - [F,L]
+  RewriteRule ^api/config(\.sample)?\.php$ - [F,L]
+
   # .git/config holds the remote URL, and .git/ holds every version of every
   # file ever committed. A cloned deploy leaves it inside the document root.
   RewriteRule (^|/)\.(git|github|claude|agents|env) - [F,L]
@@ -198,6 +208,13 @@ Options -Indexes
     Require all denied
   </FilesMatch>
   <FilesMatch "(package(-lock)?\.json|\.env.*|render\.yaml|skills-lock\.json)$">
+    Require all denied
+  </FilesMatch>
+  # The API's configuration, by name, wherever it is found. A .php file is
+  # normally executed rather than served — and "normally" is doing a lot of
+  # work in that sentence, since a plan whose PHP handler is off during a
+  # version change serves it as text.
+  <FilesMatch "^config(\.sample)?\.php$">
     Require all denied
   </FilesMatch>
 </IfModule>

@@ -247,23 +247,23 @@ async function projectsRequestPersistence() {
  * The dispatcher
  *
  * One set of names for the page to call, routed to whichever store is in play.
- * Everything above this line is the IndexedDB implementation; the Supabase one
+ * Everything above this line is the IndexedDB implementation; the server one
  * lives in cloudProjects.js. Neither knows about the other.
  *
- * WHEN CLOUD MODE APPLIES: only when Supabase is configured *and* somebody is
- * actually signed in. A configured-but-signed-out page falls back to local
- * rather than issuing queries that RLS will correctly refuse — that way the
- * app still works while the account side is being set up, which is exactly the
- * state it is in today.
+ * WHEN CLOUD MODE APPLIES: only when the accounts API is configured *and*
+ * somebody is actually signed in. A configured-but-signed-out page falls back
+ * to local rather than issuing calls the API will correctly answer with 401 —
+ * that way the app still works while the account side is being set up, which
+ * is exactly the state a fresh install is in.
  *
  * FAILURES ARE NOT SWALLOWED HERE. A cloud read that fails throws, and the
  * page shows why. Silently serving local data in its place would look like
  * success and quietly fork someone's work across two stores.
  * ------------------------------------------------------------------------ */
 
-/** @returns {boolean} whether reads and writes should go to Supabase. */
+/** @returns {boolean} whether reads and writes should go to the server. */
 function projectsCloudMode() {
-  return typeof authMode === 'function' && authMode() === 'supabase'
+  return typeof authMode === 'function' && authMode() === 'server'
     && typeof currentUser === 'function' && !!currentUser()
     && typeof cloudProjectsList === 'function';
 }

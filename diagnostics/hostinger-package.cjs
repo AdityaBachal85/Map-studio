@@ -30,10 +30,22 @@ const BASE = 'http://127.0.0.1:' + PORT;
 const R = [];
 const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (d ? '  — ' + d : '')); };
 
-/** The stubbed config every suite here uses: no live Supabase from a test. */
+/**
+ * The stubbed config every suite here uses: no accounts backend from a test.
+ *
+ * This harness serves dist/ from Node and has no PHP, so api/ cannot answer —
+ * and with the accounts API configured but unreachable, the studio correctly
+ * refuses to load and sends the browser to the sign-in page. That is the right
+ * behaviour and the wrong thing to measure here: what this suite is asking is
+ * whether the 125 scripts in the package load in the right order, which is a
+ * different question from whether PHP is installed.
+ *
+ * Blanking ACCOUNTS_API_BASE puts the app in local mode, where it boots
+ * without a server. The accounts API gets tested properly, against real PHP,
+ * in diagnostics/accounts-api.cjs.
+ */
 const localAuthConfig = () => fs.readFileSync(path.join(DIST, 'js', 'config.js'), 'utf8')
-  .replace(/const SUPABASE_URL = '[^']*';/, "const SUPABASE_URL = '';")
-  .replace(/const SUPABASE_ANON_KEY = '[^']*';/, "const SUPABASE_ANON_KEY = '';");
+  .replace(/const ACCOUNTS_API_BASE = '[^']*';/, "const ACCOUNTS_API_BASE = '';");
 
 /* ---------------------------------------------------------------------------
  * A server for dist/, with no dependency on one already running
@@ -119,6 +131,40 @@ function serve(root) {
     /X-Forwarded-Proto/.test(ht) && /R=301/.test(ht));
   ck('and the directories that must never be served are blocked',
     /server\|tools\|diagnostics/.test(ht) && /\.\(git/.test(ht));
+
+  /* -- the accounts API is in the package, and its insides are not --------
+   *
+   * api/ is the one directory here that must be BOTH shipped and partly
+   * refused: index.php has to answer, and the three directories beside it have
+   * to not. Both halves are asserted, because the failure modes are opposite
+   * and equally quiet — a missing api/ is a site where nobody can sign in, and
+   * a reachable api/config.php is the database password on a public URL.
+   */
+  ck('the accounts API shipped', has('api/index.php') && has('api/lib/auth.php')
+    && has('api/routes/projects.php'));
+  ck('with the nested .htaccess files that refuse its insides',
+    has('api/.htaccess') && has('api/lib/.htaccess') && has('api/routes/.htaccess')
+    && has('api/cli/.htaccess'));
+  ck('and the root .htaccess refuses them a second time, in case those are lost',
+    /\^api\/\(lib\|routes\|cli\)\//.test(ht) && /\^config\(/.test(ht));
+
+  // The live credential file. It exists on a developer's machine, and if it
+  // were ever packaged it would carry one deployment's database password into
+  // an archive meant for another.
+  ck('but never the filled-in config', !has('api/config.php'),
+    has('api/config.php') ? 'api/config.php IS IN THE PACKAGE' : 'absent');
+  ck('while the sample it is copied from does ship', has('api/config.sample.php'));
+
+  // The Supabase client was 200 KB of vendored SDK for a service this no
+  // longer talks to. Asserted rather than assumed, because a stale script tag
+  // in one of three entry pages is easy to leave behind and costs a 404 on
+  // every page load.
+  // The vendored SDK was 200 KB for a service this no longer talks to. The
+  // test is for a <script> that still loads it, not for the word — login.html
+  // explains in prose why the Microsoft button went away, and should.
+  ck('and nothing still loads the Supabase client', !has('vendor/supabase.js')
+    && !['index.html', 'login.html', 'projects.html']
+      .some(f => /<script[^>]+supabase/i.test(fs.readFileSync(path.join(DIST, f), 'utf8'))));
 
   /* -- serve it and load it ---------------------------------------------- */
 

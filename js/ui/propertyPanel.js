@@ -821,7 +821,7 @@ function wireLocCard(card, loc) {
  * DOWNSCALED ON THE WAY IN. A phone photograph is four megabytes and eight
  * megapixels; the callout draws it at 168 CSS pixels. Stored as it arrived, ten
  * comparables would be a forty-megabyte project file that has to be held in
- * memory, written to IndexedDB, pushed to Supabase and read back — for pictures
+ * memory, written to IndexedDB, sent to the server and read back — for pictures
  * nothing will ever display above about 700px, which is what the hi-res export
  * asks for at 4×. So it is re-encoded to fit a 720px box before it is kept.
  *

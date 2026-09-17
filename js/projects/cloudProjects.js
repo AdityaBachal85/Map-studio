@@ -1,223 +1,212 @@
 /**
- * projects/cloudProjects.js — projects stored in Supabase.
+ * projects/cloudProjects.js — projects stored in this site's own database.
  *
- * The Supabase half of projectStore.js. Same function shapes, same returned
+ * The server half of projectStore.js. Same function shapes, same returned
  * record shape, so the page cannot tell which one answered — see the
  * dispatcher at the bottom of projectStore.js.
  *
- * NO OWNERSHIP CHECK APPEARS IN THIS FILE, deliberately. Every query below
- * omits `where owner_id = me`, because the Row Level Security policies in
- * sql/supabase-auth.sql already apply it inside Postgres, on every row, using
- * the id proven by the signed token. Repeating it here would suggest the
- * filter is the client's job. It is not, and could not be: this code runs on a
- * machine the user controls. If a query here ever returns someone else's row,
- * the bug is a missing policy, not a missing WHERE clause.
+ * ---------------------------------------------------------------------------
+ * THE OWNERSHIP CHECK MOVED, AND THIS FILE IS NOT WHERE IT LANDED
+ *
+ * The Supabase version of this file opened with a note saying that no
+ * ownership check appeared in it, deliberately: Row Level Security policies
+ * inside Postgres applied one to every row, and a query here that returned
+ * somebody else's project would have been a missing policy rather than a
+ * missing WHERE clause.
+ *
+ * Half of that is still true and the important half has reversed. The check is
+ * still not here — it could not be, since this code runs on a machine the user
+ * controls, and anything it enforced could be edited out with the developer
+ * tools. What changed is where it went: api/routes/projects.php now takes the
+ * owner from the session cookie and puts it in every query, and that file is
+ * the one to read, and the one diagnostics/accounts-api.cjs attacks, if the
+ * question is ever "could someone else see this".
+ *
+ * What this file does instead is speak to that API honestly: it sends the
+ * project id and nothing about whose it is, and it reports what comes back.
  *
  * `data` (the serialised map) is fetched only when a project is opened. The
- * list reads the summary columns instead — see the note in the SQL about why
- * they are denormalised.
+ * list reads the summary columns instead — see the note in
+ * sql/hostinger-mysql.sql about why they are denormalised.
  */
 
-/** Columns the list needs. Never includes `data`. */
-const CLOUD_META_COLS = 'id,name,owner_id,n_locations,n_sites,n_routes,n_shapes,bytes,created_at,updated_at';
-
 /**
- * THE LOCATION COLUMN MAY NOT BE THERE YET.
+ * Fill in the two fields the server has no business deciding.
  *
- * `place` was added to the project record after this table was created, and a
- * table lives in the operator's own Supabase project — this code cannot migrate
- * it. Asking for a column that does not exist fails the WHOLE query, so the
- * list would go blank for anybody who had not run the migration: a new field
- * would have broken the page rather than being quietly absent from it.
+ * `ownerName` is the signed-in person's own name: the server knows the owner's
+ * id, and there is exactly one account whose name this browser is entitled to
+ * display. `remote` tells the list page which store a row came from.
  *
- * So it is asked for once, and if the database says no the app carries on
- * without it and stops asking. Run this in the Supabase SQL editor to turn it
- * on — see docs/ACCOUNTS-SETUP.md:
- *
- *   alter table map_projects add column if not exists place text default '';
- */
-let _cloudHasPlace = true;
-const cloudCols = () => CLOUD_META_COLS + (_cloudHasPlace ? ',place' : '');
-
-/** @param {*} e @returns {boolean} is this "that column does not exist"? */
-function cloudMissingPlace(e) {
-  const m = ((e && (e.message || e.details || e.hint)) || '') + ' ' + ((e && e.code) || '');
-  return /place/i.test(m) && (/column/i.test(m) || /42703/.test(m) || /schema cache/i.test(m));
-}
-
-/**
- * Present a database row the way the local store presents its records, so the
- * page's formatting code has one shape to deal with.
- * @param {object} r @param {object} [user]
+ * @param {object} m @param {object} [user]
  * @returns {object}
  */
-function cloudRowToMeta(r, user) {
-  return {
-    id: r.id,
-    name: r.name,
-    ownerId: r.owner_id,
-    ownerName: (user && user.id === r.owner_id) ? user.name : '',
-    created: r.created_at ? Date.parse(r.created_at) : 0,
-    modified: r.updated_at ? Date.parse(r.updated_at) : 0,
-    place: r.place || '',
-    counts: {
-      locations: r.n_locations || 0,
-      sites: r.n_sites || 0,
-      routes: r.n_routes || 0,
-      shapes: r.n_shapes || 0,
-    },
-    bytes: r.bytes || 0,
+function cloudRowToMeta(m, user) {
+  return Object.assign({}, m, {
+    ownerName: (user && user.id === m.ownerId) ? user.name : '',
     remote: true,
-  };
+  });
 }
 
 /**
- * Turn a PostgREST error into something worth reading.
+ * Turn an API failure into something worth reading.
  *
- * The two that actually happen are worth naming: a violated RLS policy comes
- * back as 42501, which almost always means the SQL was never run; and a
- * missing table as 42P01, same cause. Both otherwise surface as jargon.
+ * The messages themselves come from PHP, which writes them for the person who
+ * will see them. Two cases are worth recognising by code rather than passing
+ * through, because both mean "the install is not finished" and neither is
+ * obvious from its wording alone.
  *
- * @param {object} error @returns {Error}
+ * @param {Error} e @returns {Error}
  */
-function cloudError(error) {
-  const code = error && error.code;
-  if (code === '42P01') {
-    return new Error('The map_projects table does not exist yet — run sql/supabase-auth.sql '
-      + 'in the Supabase SQL editor.');
+function cloudError(e) {
+  if (e && e.code === 'db_unreachable') {
+    return new Error('The database is not reachable. Check the credentials in the API config '
+      + 'against hPanel → Databases — see docs/ACCOUNTS-SETUP.md.');
   }
-  if (code === '42501') {
-    return new Error('The database refused that write. Its row-level security policies are '
-      + 'missing or wrong — re-run sql/supabase-auth.sql.');
+  if (e && e.status === 404 && /table/i.test(String(e.message))) {
+    return new Error('The project tables do not exist yet — run sql/hostinger-mysql.sql '
+      + 'in phpMyAdmin.');
   }
-  return new Error((error && error.message) || 'The database could not be reached.');
+  return e instanceof Error ? e : new Error(String((e && e.message) || e));
 }
 
 /**
- * @param {string} ownerId — unused; RLS scopes the query. Accepted so the
- *   signature matches the local store.
+ * @param {string} ownerId — unused; the session decides whose rows come back.
+ *   Accepted so the signature matches the local store.
  * @returns {Promise<object[]>}
  */
 async function cloudProjectsList(ownerId) {
-  const sb = sessionClient();
-  if (!sb) return [];
-  const ask = () => sb.from('map_projects').select(cloudCols())
-    .order('updated_at', { ascending: false });
-  let { data, error } = await ask();
-  // Asked for once. If the column is not there the query fails entirely, so it
-  // is retried without — a list that is missing one field beats no list at all.
-  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
-    _cloudHasPlace = false;
-    ({ data, error } = await ask());
+  if (!accountsConfigured()) return [];
+  try {
+    const data = await apiCall('GET', '/projects');
+    const user = currentUser();
+    return (data.projects || []).map(m => cloudRowToMeta(m, user));
+  } catch (e) {
+    throw cloudError(e);
   }
-  if (error) throw cloudError(error);
-  const user = currentUser();
-  return (data || []).map(r => cloudRowToMeta(r, user));
 }
 
 /** @param {string} id @returns {Promise<object|null>} */
 async function cloudProjectsMeta(id) {
-  const sb = sessionClient();
-  if (!sb) return null;
-  const { data, error } = await sb.from('map_projects').select(CLOUD_META_COLS).eq('id', id).maybeSingle();
-  if (error) throw cloudError(error);
-  return data ? cloudRowToMeta(data, currentUser()) : null;
+  if (!accountsConfigured()) return null;
+  try {
+    const data = await apiCall('GET', '/projects/' + encodeURIComponent(id) + '/meta');
+    return data.project ? cloudRowToMeta(data.project, currentUser()) : null;
+  } catch (e) {
+    // A project that is not there is an answer, not a failure — the caller
+    // decides what to do about it, exactly as the local store's null does.
+    if (e && e.status === 404) return null;
+    throw cloudError(e);
+  }
 }
 
 /** @param {string} id @returns {Promise<object|null>} the serialised map */
 async function cloudProjectsLoad(id) {
-  const sb = sessionClient();
-  if (!sb) return null;
-  const { data, error } = await sb.from('map_projects').select('data').eq('id', id).maybeSingle();
-  if (error) throw cloudError(error);
-  return data ? data.data : null;
+  if (!accountsConfigured()) return null;
+  try {
+    const data = await apiCall('GET', '/projects/' + encodeURIComponent(id));
+    return data.data == null ? null : data.data;
+  } catch (e) {
+    if (e && e.status === 404) return null;
+    throw cloudError(e);
+  }
 }
 
 /**
- * Create or update. `owner_id` is set from the signed-in user rather than
- * accepted from the caller — the insert policy would reject anything else, and
- * failing here with a clear message beats a policy violation.
+ * Create or update.
  *
- * @param {{id?:string, name:string, project:object}} rec
+ * The owner is not sent. It is taken from the session on the server, which is
+ * the only place it could be trusted from — a browser that could name the
+ * owner could name somebody else's.
+ *
+ * @param {{id?:string, name:string, place?:string, project:object}} rec
  * @returns {Promise<object|null>}
  */
 async function cloudProjectsSave(rec) {
-  const sb = sessionClient();
-  const user = currentUser();
-  if (!sb || !user) return null;
+  if (!accountsConfigured() || !currentUser()) return null;
 
   const project = rec.project || {};
-  const counts = projectsCounts(project);
-  const row = {
-    owner_id: user.id,
+  const body = {
     name: String(rec.name || 'Untitled map project').trim() || 'Untitled map project',
-    data: project,
-    n_locations: counts.locations,
-    n_sites: counts.sites,
-    n_routes: counts.routes,
-    n_shapes: counts.shapes,
-    bytes: JSON.stringify(project).length,
+    project,
+    // Display figures for the list row. The server clamps them and measures
+    // `bytes` itself — see the note in api/routes/projects.php on why that one
+    // is not accepted from here.
+    counts: projectsCounts(project),
   };
-  if (rec.id) row.id = rec.id;
-  if (_cloudHasPlace && rec.place != null) row.place = String(rec.place).trim();
+  if (rec.id) body.id = rec.id;
+  if (rec.place != null) body.place = String(rec.place).trim();
 
-  // upsert rather than insert-or-update: one round trip, and no window where a
-  // concurrent write could turn the update into a duplicate insert.
-  const put = () => sb.from('map_projects').upsert(row).select(cloudCols()).single();
-  let { data, error } = await put();
-  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
-    _cloudHasPlace = false;
-    delete row.place;
-    ({ data, error } = await put());
+  try {
+    const data = await apiCall('POST', '/projects', body);
+    return cloudRowToMeta(data.project, currentUser());
+  } catch (e) {
+    if (e && e.code === 'too_large') {
+      throw new Error(e.message + ' Remove some imported geometry, or split the map in two.');
+    }
+    throw cloudError(e);
   }
-  if (error) throw cloudError(error);
-  return cloudRowToMeta(data, user);
 }
 
 /** @param {string} id @param {string} name @param {string} [place] @returns {Promise<boolean>} */
 async function cloudProjectsRename(id, name, place) {
-  const sb = sessionClient();
-  if (!sb) return false;
+  if (!accountsConfigured()) return false;
   const clean = String(name || '').trim();
   if (!clean) return false;
-  const patch = { name: clean };
-  if (_cloudHasPlace && place !== undefined) patch.place = String(place || '').trim();
-  const put = () => sb.from('map_projects').update(patch).eq('id', id);
-  let { error } = await put();
-  if (error && _cloudHasPlace && cloudMissingPlace(error)) {
-    _cloudHasPlace = false;
-    delete patch.place;
-    ({ error } = await put());
+  const body = { name: clean };
+  if (place !== undefined) body.place = String(place || '').trim();
+  try {
+    await apiCall('PATCH', '/projects/' + encodeURIComponent(id), body);
+    return true;
+  } catch (e) {
+    throw cloudError(e);
   }
-  if (error) throw cloudError(error);
-  return true;
 }
 
 /** @param {string} id @returns {Promise<boolean>} */
 async function cloudProjectsDelete(id) {
-  const sb = sessionClient();
-  if (!sb) return false;
-  const { error } = await sb.from('map_projects').delete().eq('id', id);
-  if (error) throw cloudError(error);
-  return true;
+  if (!accountsConfigured()) return false;
+  try {
+    await apiCall('DELETE', '/projects/' + encodeURIComponent(id));
+    return true;
+  } catch (e) {
+    throw cloudError(e);
+  }
 }
 
-/** @param {string} id @returns {Promise<object|null>} */
+/**
+ * Copy a project.
+ *
+ * One request, and the map never leaves the server — the old version fetched
+ * the whole thing into the browser and posted it straight back, which for a
+ * large map meant several megabytes each way to produce a row the database
+ * could have copied in place.
+ *
+ * @param {string} id @returns {Promise<object|null>}
+ */
 async function cloudProjectsDuplicate(id) {
-  const meta = await cloudProjectsMeta(id);
-  const payload = await cloudProjectsLoad(id);
-  if (!meta || !payload) return null;
-  return await cloudProjectsSave({ name: meta.name + ' (copy)', project: payload });
+  if (!accountsConfigured()) return null;
+  try {
+    const data = await apiCall('POST', '/projects/' + encodeURIComponent(id) + '/duplicate');
+    return cloudRowToMeta(data.project, currentUser());
+  } catch (e) {
+    if (e && e.status === 404) return null;
+    throw cloudError(e);
+  }
 }
 
 /**
  * @returns {Promise<{bytes:number, count:number, quota:number|null}>}
- *   quota is null: Supabase's 500 MB free-tier limit covers the whole database
- *   including other tables, so a per-user figure would be invented.
+ *   quota is null: a shared plan's disk allowance covers the whole site, so a
+ *   per-account figure derived from it would be invented.
  */
 async function cloudProjectsStorage() {
-  const list = await cloudProjectsList();
-  return { bytes: list.reduce((n, p) => n + (p.bytes || 0), 0), count: list.length, quota: null };
+  if (!accountsConfigured()) return { bytes: 0, count: 0, quota: null };
+  try {
+    const data = await apiCall('GET', '/projects/storage');
+    return { bytes: data.bytes || 0, count: data.count || 0, quota: data.quota == null ? null : data.quota };
+  } catch (e) {
+    throw cloudError(e);
+  }
 }
 
 /**
@@ -226,8 +215,8 @@ async function cloudProjectsStorage() {
  *
  * WHY IT COPIES RATHER THAN MOVES. If the upload half-fails, or the account
  * turns out to be the wrong one, the originals are still there. Local projects
- * are left untouched and simply stop being listed once cloud mode is on; they
- * are recoverable by clearing SUPABASE_ANON_KEY, which is a far better
+ * are left untouched and simply stop being listed once server mode is on; they
+ * are recoverable by clearing ACCOUNTS_API_BASE, which is a far better
  * position than "your maps were on the way to the server when it failed".
  *
  * @returns {Promise<{migrated:number, failed:number, skipped:boolean}>}
@@ -241,8 +230,8 @@ async function cloudMigrateLocalProjects() {
   catch (e) { /* storage unavailable; attempt anyway */ }
 
   // Local records are keyed by the local-mode id, which no longer matches the
-  // Supabase one, so everything on this device is offered rather than only
-  // rows that happen to carry the new id.
+  // server one, so everything on this device is offered rather than only rows
+  // that happen to carry the new id.
   let local = [];
   try { local = await localProjectsList(null); }
   catch (e) { return { migrated: 0, failed: 0, skipped: true }; }
@@ -256,9 +245,9 @@ async function cloudMigrateLocalProjects() {
     try {
       const payload = await localProjectsLoad(meta.id);
       if (!payload) { failed++; continue; }
-      // No id passed: these get fresh cloud ids rather than colliding with a
-      // uuid column that would reject the local 'p_…' format anyway.
-      await cloudProjectsSave({ name: meta.name, project: payload });
+      // No id passed: these get fresh server ids rather than carrying a local
+      // 'p_…' key into a table whose other rows are uuids.
+      await cloudProjectsSave({ name: meta.name, place: meta.place, project: payload });
       migrated++;
     } catch (e) {
       failed++;

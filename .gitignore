@@ -7,6 +7,18 @@ dist/
 # 2 MB zip per release would grow the repository for no one's benefit.
 map-studio-*-hostinger.zip
 
+# The accounts API's live configuration: the MySQL user and password for the
+# deployment it belongs to. api/config.sample.php is the committed template;
+# the filled-in copy belongs either here (ignored) or, better, one directory
+# above public_html where no web server will serve it at all.
+api/config.php
+map-studio-config.php
+
+# The Supabase export produced by tools/export-supabase.js. It contains every
+# account's password hash and every map — it is a database backup, and it is
+# not going in the repository.
+map-studio-export.json
+
 # Backend secrets — never commit a live Gemini or database credential.
 # node_modules/ above already covers server/node_modules/.
 # Both paths are kept: `functions/` was this directory's name before the

@@ -20,8 +20,11 @@ const { elevPng } = require('./fake-tile-png.cjs');
 const BASE = 'http://127.0.0.1:8000';
 const REPO = path.join(__dirname, '..');
 const localAuthConfig = () => fs.readFileSync(path.join(REPO, 'js', 'config.js'), 'utf8')
-  .replace(/const SUPABASE_URL = '[^']*';/, "const SUPABASE_URL = '';")
-  .replace(/const SUPABASE_ANON_KEY = '[^']*';/, "const SUPABASE_ANON_KEY = '';");
+  // Blanking this puts the app in local mode, where it boots with no server
+  // behind it. These suites are about the map, not about accounts — the
+  // accounts API has a harness of its own, running real PHP, in
+  // diagnostics/accounts-api.cjs.
+  .replace(/const ACCOUNTS_API_BASE = '[^']*';/, "const ACCOUNTS_API_BASE = '';");
 
 const PEAK = { lat: 19.235, lng: 72.94 };
 function elevAt(lng, lat) {

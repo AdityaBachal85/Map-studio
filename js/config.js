@@ -207,53 +207,44 @@ const PLACES_PROVIDERS = Object.freeze({
 });
 
 /* ---------------------------------------------------------------------------
- * Supabase — accounts and cloud projects
+ * Accounts and cloud projects — this site's own API
  * -------------------------------------------------------------------------
  *
- * These two values are the whole client-side configuration for sign-in and
- * cloud project storage. The browser talks to Supabase directly; the Render
- * backend above is not involved in authentication at all.
+ * WHAT THIS REPLACED, AND WHY IT IS ONE LINE NOW. Sign-in and cloud storage
+ * used to be Supabase: the browser held a public key, talked to Supabase's
+ * Postgres directly, and Row Level Security policies inside the database
+ * decided what that key could see. That worked, and it put the accounts for a
+ * Hostinger-hosted site on somebody else's platform, with a second dashboard,
+ * a second set of URL allow-lists to keep in step with the domain, and a free
+ * tier that pauses a project nobody has visited for a week.
  *
- * THE ANON KEY IS MEANT TO BE PUBLIC. It identifies the project, not a person,
- * and it grants nothing on its own — every table is protected by Row Level
- * Security policies evaluated inside Postgres against the signed-in user's
- * token. That is what makes it safe to commit here, the same way the Google
- * browser key above is. See sql/supabase-auth.sql for the policies that do the
- * actual enforcing; without them this key WOULD be an open door, so do not
- * create tables without policies.
+ * Now the same job is done by PHP in api/, on this domain, against the MySQL
+ * database in hPanel. There is no key here because the browser no longer talks
+ * to a database — it talks to this site, over a session cookie it cannot read,
+ * and api/routes/projects.php decides what it is allowed to have.
  *
- * NEVER put the `service_role` key here. That one bypasses RLS entirely and
- * belongs only in server environment variables.
+ * SO THIS IS A PATH, NOT A HOST. Relative on purpose: the API is served from
+ * the same origin as the page, so the same package works at a domain root, in
+ * a subdirectory, on a staging domain, and on a local `php -S` without a value
+ * to change. An absolute URL here would also mean cross-origin requests, which
+ * would mean CORS, which would mean the session cookie stops being SameSite.
  *
- * Leave either value empty to run fully offline: sign-in falls back to the
- * local profile and projects stay in this browser (see js/auth/session.js).
+ * Leave it empty to run fully offline: sign-in falls back to the local profile
+ * and projects stay in this browser (see js/auth/session.js).
  */
-const SUPABASE_URL = 'https://sacyafztfticssuzkrze.supabase.co';
-
-/**
- * Supabase → Project Settings → API Keys. Either format works, verified
- * against the vendored client (2.112.1) by watching what it puts on the wire:
- * both are sent as the `apikey` header and as `Authorization: Bearer`.
- *
- *   - `sb_publishable_…` — the current format, and the one used here. It can
- *     be revoked on its own if it ever needs replacing.
- *   - `eyJ…` — the older anon JWT. Still accepted, but it is derived from the
- *     project's JWT secret, so rotating it disturbs more than just this.
- *
- * NEVER the `sb_secret_…` / `service_role` key. That one bypasses every Row
- * Level Security policy by design; in a browser it would hand every visitor
- * full read and write access to the whole database.
- */
-const SUPABASE_ANON_KEY = 'sb_publishable_TvDdOBCIhz2RI1Xv7pb4ow_YCt3nEtW';
+const ACCOUNTS_API_BASE = 'api';
 
 /**
  * Restrict sign-in to one email domain, or '' to allow any.
  *
  * Belt and braces only — this is a client-side check and a determined person
- * can skip it. The binding restriction is configured in Supabase (and, for
- * Microsoft sign-in, in the Entra tenant), which is where it cannot be
- * bypassed. This exists so someone with a personal address gets a clear
- * "use your work account" instead of a confusing permissions error later.
+ * can skip it. The binding restriction is `allowed_email_domain` in the API's
+ * config file, enforced in PHP where it cannot be bypassed. This exists so
+ * someone with a personal address gets a clear "use your work account" before
+ * the round trip rather than a refusal after it.
+ *
+ * The API reports its own setting through /auth/me, and the sign-in page
+ * prefers that over this value — so the two cannot disagree for long.
  */
 const AUTH_ALLOWED_EMAIL_DOMAIN = 'dbotrealty.com';
 

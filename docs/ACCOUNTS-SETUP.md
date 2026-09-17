@@ -1,237 +1,295 @@
-# Accounts — Microsoft sign-in and cloud projects
+# Accounts — sign-in and cloud projects on Hostinger
 
-Turns the sign-in page from a name label into real authentication, and moves
-projects out of the browser and into an account that follows you between
-devices.
+Everyone at DBOT gets an account on this site itself. Projects are saved to the
+MySQL database in hPanel, so a map started on one machine opens on another, and
+nobody sees anybody else's work.
 
-Nothing here needs the Render backend. The browser talks to Supabase directly.
+This replaced Supabase. If you are looking for the old setup — the anon key,
+the SQL editor, Microsoft sign-in through Entra — none of it applies any more;
+[Bringing the Supabase data across](#bringing-the-supabase-data-across) is the
+part of this document that still concerns it.
 
-**Until step 3 is done the app still works** — it falls back to a local
-profile and keeps projects in the browser, and the sign-in page says so.
+**What you need:** a Hostinger plan with PHP 8.1 or newer and one MySQL
+database. Both are on every Premium, Business and Cloud plan. Nothing else —
+no third-party account, no key, no monthly bill.
 
 ---
 
 ## What protects the data
 
-Worth being clear about, because it is not the JavaScript.
+Worth reading before the steps, because the answer changed and the change is
+the kind that matters.
 
-The browser holds a **publishable key** (`SUPABASE_ANON_KEY`). Anyone can read
-it — it is in the page source, exactly like the Google Maps key. It grants
-nothing on its own.
+Under Supabase the browser held a public key and queried Postgres directly, and
+the database defended itself: Row Level Security policies were evaluated inside
+Postgres, on every row of every query, against the user id proven by a signed
+token. A hostile client asking for every project got back only its own.
 
-What decides who can read which row is **Row Level Security**: policies stored
-in Postgres, evaluated on every row of every query, against the user id proven
-by a signed token. A modified client asking for `select * from projects` gets
-back only its own rows, because the database refuses the rest.
+There is no equivalent in MySQL, and there does not need to be, because **the
+browser no longer talks to the database at all**. It talks to `api/` on this
+domain over a session cookie it cannot read, and PHP decides what it may have.
+Every query in `api/routes/projects.php` carries `where owner_id = :me`, where
+`:me` comes from the session and never from the request.
 
-This is why step 2 is not optional. **A table without policies is readable by
-every anonymous visitor on the internet.** Create the tables and the policies
-together, before real work goes in.
+That is a real transfer of responsibility. Under RLS a forgotten WHERE clause
+returned nothing; here it would return everyone's rows. Three things hold it up:
 
-Never put the `service_role` key in the client. That one bypasses RLS by
-design and belongs only in server environment variables.
+- **One gate, not many.** Every read and write goes through
+  `ms_project_owned()`. Adding a route means calling it, not remembering a
+  clause.
+- **It is attacked in the test suite.** `diagnostics/accounts-api.cjs` signs in
+  as two people and has each try to read, rename, duplicate, delete and
+  overwrite the other's project by naming its id. All five must answer "does
+  not exist" — not "not yours", which would confirm it is there.
+- **The database credential is the whole perimeter.** It lives in a file the
+  web server will not serve, and it is the one secret in this system.
+
+Passwords are stored with PHP's `password_hash()` — bcrypt today, whatever PHP
+considers current tomorrow, upgraded on the owner's next sign-in. Sessions are
+random 32-byte tokens; the database stores only their SHA-256, so a copy of the
+`sessions` table does not let anybody sign in as anyone.
 
 ---
 
-## 1. Get the anon key
+## 1. Create the database
 
-Supabase → your project → **Project Settings → API Keys** → copy the
-`anon` / `public` value (a long `eyJ…` string).
+**hPanel → Databases → MySQL Databases.** Create a database and a user, and
+give the user access to the database.
 
-Paste it into `js/config.js`:
+Copy all three values as hPanel shows them. Both names carry your account
+prefix — `u123456789_mapstudio`, not `mapstudio` — and leaving it off is the
+single most common reason a first install cannot connect.
 
-```js
-const SUPABASE_ANON_KEY = 'eyJhbGciOi…';
-```
+## 2. Create the tables
 
-`SUPABASE_URL` is already filled in. Nothing else changes.
+**hPanel → Databases → phpMyAdmin**, pick the database, open the **SQL** tab,
+paste the whole of **`sql/hostinger-mysql.sql`**, and run it.
 
-## 2. Create the tables and policies
-
-Supabase → **SQL Editor → New query** → paste the entire contents of
-`sql/supabase-auth.sql` → **Run**.
-
-Paste the file's *contents*, not its name.
-
-It creates `profiles` and `projects`, enables RLS on both, adds the four
-per-operation policies, and installs a trigger that fills in a profile when
-someone signs up.
-
-**Then verify it, because "Success. No rows returned" does not mean protected.**
-That message appears both when statements ran fine and when a `SELECT`
-matched nothing. Run this on its own:
+It is safe to run more than once. Afterwards, run this on its own to confirm:
 
 ```sql
-select tablename,
-       rowsecurity as rls_enabled,
-       (select count(*) from pg_policies p
-         where p.schemaname = 'public' and p.tablename = t.tablename) as policies
-  from pg_tables t
- where schemaname = 'public' and tablename in ('profiles', 'map_projects');
+select table_name, engine from information_schema.tables
+ where table_schema = database()
+   and table_name in ('users','sessions','map_projects','password_resets','login_attempts');
 ```
 
-Expect two rows, both `rls_enabled = true`, with `map_projects` showing 4 policies
-and `profiles` showing 2. Anything else means the script did not finish — read
-the error rather than moving on.
+Five rows, and every `engine` must say **InnoDB**. A MyISAM table would have
+accepted the statement and silently dropped every foreign key, so deleting a
+user would leave their projects behind as rows nothing can reach.
 
-### 2a. The project location column
+## 3. Write the configuration
 
-A project carries a location as well as a name, and the list searches on both.
-The column was added after this table was created, so a database set up before
-then does not have it. Run this once:
+Copy **`api/config.sample.php`** and fill in the three database values.
 
-```sql
-alter table map_projects add column if not exists place text default '';
+**Put the copy one directory above `public_html`,** named
+`map-studio-config.php`:
+
+```
+/home/u123456789/map-studio-config.php      ← here
+/home/u123456789/public_html/               ← the site
 ```
 
-**The app works without it.** Asking for a column that does not exist fails the
-whole query, so the project list would have gone blank for anybody who had not
-run this — instead the app asks once, notices the refusal, and carries on
-without the field. Locations simply will not save or show until the column is
-there. Nothing else changes, and nothing needs restarting afterwards.
+Nothing the web server serves can reach it there, under any configuration —
+including the broken ones where a PHP handler is off and `.php` files are
+served as plain text. If your plan gives you no way to write outside
+`public_html`, the second-choice location is `public_html/api/config.php`,
+which `api/.htaccess` refuses; that refusal depends on `.htaccess` being
+honoured, which is why it is second choice.
 
-## 3. Microsoft sign-in
+While you are in there, set:
 
-Two registrations that have to agree: one in Azure, one in Supabase.
-
-### 3a. Azure — register the application
-
-**Entra admin centre** (`entra.microsoft.com`) → **Applications → App
-registrations → New registration**.
-
-| Field | Value |
+| Setting | What it does |
 |---|---|
-| Name | `DBOT Map Studio` |
-| Supported account types | **Accounts in this organizational directory only** — single tenant |
-| Redirect URI | **Web** → `https://sacyafztfticssuzkrze.supabase.co/auth/v1/callback` |
+| `allowed_email_domain` | Only addresses at this domain may sign up. `'dbotrealty.com'`. |
+| `allow_signup` | Whether colleagues can create their own accounts. Reasonable to leave on while the domain restriction is set — only someone who already has a work address can use it. |
+| `mail_from` | A real mailbox on this domain, for password resets. See step 5. |
 
-Single tenant is what actually restricts sign-in to dbotrealty.com. It rejects
-other organisations at Microsoft, before Supabase is ever reached — a far
-stronger gate than the email check in the app, which is only there to give a
-clear message.
+## 4. Check it
 
-The redirect URI is **Supabase's**, not your site's. Microsoft returns to
-Supabase, which then returns to your page. Getting this wrong produces
-`AADSTS50011: redirect URI does not match`, which is the most common failure
-here.
+Open **`https://your-domain.com/api/health`**. You want:
 
-Then, on the new registration:
+```json
+{"ok":true,"tables":{"users":true,"sessions":true,"map_projects":true,
+ "password_resets":true,"login_attempts":true}}
+```
 
-1. **Certificates & secrets → New client secret.** Copy the **Value**
-   immediately — it is shown once and cannot be retrieved later. Note the
-   expiry; sign-in breaks on that date and the symptom will not mention it.
-2. **API permissions** → confirm `openid`, `profile`, `email`,
-   `offline_access` under Microsoft Graph. Add any that are missing, then
-   **Grant admin consent** so nobody is prompted individually.
-3. **Overview** → copy the **Application (client) ID** and the
-   **Directory (tenant) ID**.
+This one request separates the two things that go wrong on a first install. If
+it says the database is unreachable, step 1 or 3 is wrong. If it says a table
+is missing, step 2 did not run. If it returns HTML rather than JSON, PHP is not
+running for that folder at all.
 
-### 3b. Supabase — enable the provider
+Then open the site, create an account with your work address, and save a map.
 
-**Authentication → Providers → Azure** → enable, then:
+## 5. Password resets need a mailbox
 
-| Field | Value |
-|---|---|
-| Client ID | Application (client) ID |
-| Secret | the secret **Value** from 3a |
-| Azure Tenant URL | `https://login.microsoftonline.com/<your-tenant-id>` |
+Resets are emailed, so outbound mail has to work.
 
-Then **Authentication → URL Configuration**:
+**hPanel → Emails → Email Accounts** — create something like
+`no-reply@your-domain.com`, and put that address in `mail_from`.
 
-- **Site URL** — where people land after signing in, e.g.
-  `https://adityabachal85.github.io/Map-studio/projects.html`
-- **Redirect URLs** — add every origin the app is served from. Local
-  development needs its own entry; a URL that is not listed is rejected:
-  ```
-  https://adityabachal85.github.io/Map-studio/**
-  http://localhost:8000/**
-  ```
+It must be a mailbox **on this site's own domain**. Hostinger's outbound mail
+signs for domains it hosts; sending as anything else is either refused outright
+or accepted and then filed as spam by the receiving end, and the second is
+worse because it looks like it worked.
 
-## 4. Add someone who signs in with a password
+If `mail_from` is empty, a reset request refuses with a message saying exactly
+that, rather than silently not arriving.
 
-Most people should use the Microsoft button. For an account that does not go
-through Entra:
+### Setting a password without email
 
-**Authentication → Users → Add user → Create new user.** Enter the email and
-password, and tick **Auto Confirm User** — otherwise they cannot sign in until
-they click a confirmation link.
+For the first day, before the mailbox exists — and for anyone who cannot
+receive mail:
 
-The domain trigger from step 2 rejects any address outside dbotrealty.com,
-here as well as through the app.
+**With SSH** (Business plans and above):
 
-To stop anyone creating their own account: **Authentication → Sign In / Providers**
-→ turn **Allow new users to sign up** off. Then accounts exist only when you
-add them.
+```
+cd public_html/api/cli
+php set-password.php someone@dbotrealty.com
+```
 
-## 5. Check it works
+It asks for the password rather than taking it as an argument, because an
+argument is written to shell history and is visible in `ps` to every other
+account on the machine while it runs.
 
-1. Open `login.html`. It should show **Continue with Microsoft** — if it still
-   shows a name field, `SUPABASE_ANON_KEY` has not been picked up. Hard-refresh;
-   the `?v=` on the script tag means a stale cache is unlikely but not
-   impossible.
-2. Sign in. You should return to `projects.html` with your name in the corner.
-3. The source toggle should show **Cloud** selected, not "This device".
-4. Create a project, then open the same URL in a different browser and sign in
-   again. The project should be there. That round trip is the real proof —
-   anything less could be served from local storage.
-5. Supabase → **Table Editor → map_projects**: one row, `owner_id` matching your
-   user in **Authentication → Users**.
+**Without SSH:** hPanel → Advanced → **Cron Jobs** runs the same command once.
+Set it a few minutes out, then delete the job.
 
-Projects already on the machine are copied into the account the first time you
-sign in, and you are told how many. They are **copied, not moved** — if the
-upload half-fails or you signed in to the wrong account, the originals are
-untouched.
+---
+
+## Bringing the Supabase data across
+
+Every account and every map moves, **and so does every password**. Supabase
+stores standard bcrypt hashes, which is exactly what PHP's `password_verify()`
+reads, so they transfer verbatim: nobody has to reset anything, and no
+plaintext password exists anywhere in this process.
+
+The exception is anyone who only ever signed in with Microsoft. They have no
+password to carry across — there is no Microsoft sign-in here — so their
+account arrives with none, and they set one through the reset link. Signing in
+tells them that in those words rather than rejecting their password as wrong.
+
+### 1. Export
+
+You need the Supabase database connection string: **Project Settings →
+Database → Connection string → Session pooler**. Use the pooler one — its host
+ends `.pooler.supabase.com`. The direct connection is IPv6-only and will simply
+time out from most networks.
+
+```
+cd server && npm install        # for the `pg` driver, once
+cd ..
+node tools/export-supabase.js --dsn "postgresql://postgres:PASSWORD@aws-0-….pooler.supabase.com:5432/postgres"
+```
+
+It writes `map-studio-export.json` and tells you how many accounts and maps it
+found, and how many of those accounts have a password that will carry over.
+
+**That file is a database backup.** It contains password hashes and every map
+you have. Do not commit it — `.gitignore` covers the name — and delete it from
+both machines once the import is confirmed.
+
+### 2. Import
+
+Upload the file somewhere outside `public_html` (the File Manager will do), then:
+
+```
+cd public_html/api/cli
+php import.php /home/u123456789/map-studio-export.json --dry-run
+php import.php /home/u123456789/map-studio-export.json
+```
+
+The dry run reports exactly what the real one would do and writes nothing.
+
+The import is **safe to run twice**: rows are matched on the id they had in
+Supabase, so a run interrupted half way is fixed by running it again. It never
+deletes, and it never overwrites a password that was set on this site after the
+export was taken — somebody who has already used a reset link is not sent back
+to a password they no longer know.
+
+Maps that already exist here are left alone. `--replace` overwrites their
+contents from the file.
+
+### 3. Check, then turn Supabase off
+
+Sign in with an account that existed before, with the password it had before.
+Open a map. Count the rows in the list against what the export reported.
+
+Only then pause the Supabase project. If the AI Reports backend on Render
+points its `DATABASE_URL` at that same Supabase Postgres — check Render's
+environment settings — pausing it will stop AI reports working. That database
+is a separate question from this one and is not moved by any of the above.
 
 ---
 
 ## When it does not work
 
-| Symptom | Cause |
-|---|---|
-| Sign-in page still asks for a name | `SUPABASE_ANON_KEY` is empty in `js/config.js` |
-| "Could not reach the sign-in service" | `SUPABASE_URL` wrong, project paused, or a network blocking it. Open the URL in a tab — a paused project says so |
-| `AADSTS50011: redirect URI mismatch` | Azure's redirect URI must be Supabase's `/auth/v1/callback`, not your site |
-| Returns to the app but still signed out | The return URL is not in Supabase's **Redirect URLs** list |
-| Confirmation link opens `localhost:3000` and "refused to connect" | **Site URL** is still Supabase's default. Set it as above. The app now sends its own `emailRedirectTo`, but Supabase ignores any value that is not covered by **Redirect URLs** and silently falls back to the Site URL — so both settings have to be right |
-| `error_code=otp_expired` — "Email link is invalid or has expired", clicked within minutes | Almost always **not** expiry. The link is single-use, and mail security that pre-scans messages — Microsoft Defender Safe Links in Outlook, and its equivalents — opens every link it finds, spending the token before the person clicks. See below |
-| "The map_projects table does not exist yet" | Step 2 was not run |
-| "The database refused that write" | Tables exist, policies do not. Re-run `sql/supabase-auth.sql` |
-| "Sign-up is limited to dbotrealty.com" | The domain trigger. Change the domain in the SQL, or drop the trigger |
-| Worked for weeks, then stopped | The Azure client secret expired. Issue a new one and update it in Supabase |
+**`/api/health` returns HTML, or a 404.** PHP is not running for that folder,
+or `api/` did not make it into the upload. Check the folder exists in the File
+Manager, with `index.php` inside it.
 
-## Email links that are dead on arrival
+**"The database is not reachable."** The three values in the config do not
+match hPanel. Check the account prefix on both the database name and the user
+name, and that the user is actually assigned to that database — creating both
+does not connect them.
 
-Worth its own section because the error message actively misleads.
+**"The project tables do not exist yet."** Step 2 did not run, or it ran
+against a different database.
 
-Supabase's confirmation and reset links are **single use**. Corporate mail
-security opens links in incoming messages to scan them before delivery —
-Microsoft Defender for Office 365 "Safe Links" is the one this organisation
-will meet, since the mail is Outlook. The scanner's fetch spends the token. By
-the time a person clicks, the link is used, and Supabase reports the only thing
-it can tell from its side: `otp_expired`, "Email link is invalid or has
-expired". A link can therefore be dead seconds after it was sent, which reads
-like a broken app rather than a security product doing its job.
+**Sign-in says the address and password do not match, and you are sure they
+do.** If the account came from Supabase and only ever used Microsoft, it has no
+password — the message will say so specifically. Otherwise use the reset link.
 
-`login.html` now explains this rather than showing an empty sign-in form, but
-the underlying fix is one of:
+**"Too many sign-in attempts."** The throttle: ten failures in fifteen minutes,
+counted by address and by account. It clears itself. `max_attempts` and
+`attempt_minutes` in the config change it.
 
-- **Sign in with the password instead.** A password sign-up creates the account
-  immediately; the email only confirms the address. If confirmation is not
-  required for your project, the account already works.
-- **Turn off "Confirm email"** (Authentication → Providers → Email) and rely on
-  the `@dbotrealty.com` domain trigger, which already restricts who may
-  register. This is the simplest option for a single-domain internal tool.
-- **Use the Microsoft button**, which has no emailed link to intercept.
-- **Exclude the Supabase auth domain from Safe Links** in the Microsoft 365
-  admin centre, if IT will do it.
+**Signing in works, then the next page says you are signed out.** The session
+cookie is not coming back. Almost always the site is being reached over plain
+HTTP on one page and HTTPS on another — the cookie is marked Secure when it is
+set over HTTPS and will not be sent over HTTP. The root `.htaccess` forces
+HTTPS; check it survived the upload.
+
+**A reset link says it has already been used, seconds after it arrived.**
+Not a bug here. Corporate mail security — Microsoft Defender Safe Links and its
+equivalents — opens every link in an incoming message to scan it, which spends
+a single-use token before the human clicks. The sign-in page explains this when
+it happens. Ask for a new link and open it from a different mail app.
+
+---
+
+## Running it locally
+
+```
+php -S 127.0.0.1:8000 -t . diagnostics/php-router.php
+```
+
+That serves the site and routes `/api` the way `api/.htaccess` does on the real
+server. Point the config at a throwaway database, or at SQLite:
+
+```php
+'db_driver' => 'sqlite',
+'db_sqlite_path' => '/tmp/mapstudio.sqlite',
+```
+
+and create the tables from `diagnostics/accounts-sqlite.sql`. SQLite is for
+tests and local work only — never for a deployment.
+
+## The tests
+
+```
+node diagnostics/accounts-api.cjs     # the API, and the browser client against it
+node diagnostics/migration.cjs        # the Supabase import, passwords included
+```
+
+Both run real PHP. `accounts-api.cjs` also drives `login.html` in a real
+browser, creates an account through the form, and round-trips a map through the
+app's own store — which is where a disagreement between the client and the API
+would show up, and where it would not show up in a server-only test.
 
 ## What is not built yet
 
-Stated so it is not discovered the hard way:
-
-- **No conflict handling.** Two browsers editing one project is last-write-wins.
-  Fine for one person on two machines; not safe for two people at once.
-- **No sharing.** Projects are private to their owner. There is no way to give
-  a colleague access.
-- **Deletion is immediate**, with no recycle bin. The confirm dialog is the
-  only safety net, which is why it names the project and offers a download.
+- **Sharing a project with a colleague.** Every project belongs to one person.
+- **Any notion of an administrator.** There is no page that lists accounts or
+  resets somebody else's password; `api/cli/set-password.php` is the whole of it.
+- **Two people editing one map at once.** Saving writes the whole project, so
+  the last save wins and the other person's changes are gone without a warning.
