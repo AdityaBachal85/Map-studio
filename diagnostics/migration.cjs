@@ -237,6 +237,13 @@ async function waitForServer() {
       /nothing was written/i.test(dry) && query(env, 'select count(*) as n from users')[0].n === 0,
       dry.split('\n').find(l => /^Accounts/.test(l)));
 
+    // The dry run used to skip the account inserts and then check each map's
+    // owner against a table it had not written to — so it reported the WHOLE
+    // export as ownerless. The rehearsal said the import would lose every map.
+    ck('and its report about the maps is the truth, not "everything is ownerless"',
+      /Maps: *2 added/.test(dry) && /1 map\(s\) name an owner/.test(dry),
+      dry.split('\n').find(l => /^Maps/.test(l)));
+
     /* --- the import --- */
 
     const out = runImport(env);
@@ -336,6 +343,53 @@ async function waitForServer() {
       /2 overwritten/.test(replaced)
       && query(env, 'select count(*) as n from map_projects')[0].n === 2,
       replaced.split('\n').find(l => /^Maps/.test(l)));
+
+    /* --- signed up first, imported second ------------------------------
+     *
+     * The order the go-live steps actually follow: on an empty install the
+     * first account becomes the administrator, so the person setting it up
+     * signs up BEFORE importing — and is given a new id. Their maps in the
+     * export still name the Supabase one. This is the case that used to skip
+     * every one of the administrator's own maps as having no owner.
+     */
+    const env2 = setUp();
+    try {
+      const NEW_ID = '77777777-7777-4777-8777-777777777777';
+      execFileSync('php', ['-r', `
+        require $argv[1] . '/lib/config.php';
+        require $argv[1] . '/lib/http.php';
+        require $argv[1] . '/lib/db.php';
+        require $argv[1] . '/lib/auth.php';
+        ms_exec("insert into users (id, email, password_hash, full_name, role, created_at, updated_at)
+                 values (?, ?, ?, 'Al Sharp', 'admin', ?, ?)",
+          [$argv[2], 'al@example.com', ms_password_hash('chosen-on-the-new-site'), ms_now(), ms_now()]);
+      `, path.join(REPO, 'api'), NEW_ID], {
+        env: Object.assign({}, process.env, { MAPSTUDIO_CONFIG: env2.config }), stdio: 'pipe' });
+
+      const out2 = runImport(env2);
+      ck('importing after signing up says which account it matched by address',
+        /already had an account on this site/.test(out2) && /al@example\.com/.test(out2),
+        out2.split('\n').find(l => /already had/.test(l)));
+
+      const alsMap = query(env2,
+        "select owner_id from map_projects where id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'");
+      ck("and the administrator's own maps arrive, attached to the account they just made",
+        alsMap.length === 1 && alsMap[0].owner_id === NEW_ID,
+        alsMap.length ? alsMap[0].owner_id : 'map not imported');
+
+      ck('without creating a second account for the same address',
+        query(env2, "select count(*) as n from users where email = 'al@example.com'")[0].n === 1);
+
+      const keptPassword = php(`
+        $p = new PDO('sqlite:' . $argv[1]);
+        $h = $p->query("select password_hash from users where email = 'al@example.com'")->fetchColumn();
+        echo password_verify($argv[2], $h) ? 'new' : (password_verify($argv[3], $h) ? 'old' : 'neither');
+      `, env2.db, 'chosen-on-the-new-site', AL_PASSWORD);
+      ck('and the password they chose on the new site is the one that still works',
+        keptPassword === 'new', keptPassword);
+    } finally {
+      try { fs.rmSync(env2.dir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    }
   } catch (e) {
     console.log('FAIL the suite threw  — ' + (e && e.message));
     if (e && e.stderr) console.log(String(e.stderr).slice(0, 800));

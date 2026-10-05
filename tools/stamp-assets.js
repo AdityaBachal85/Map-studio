@@ -40,12 +40,24 @@ const ROOT = path.join(__dirname, '..');
  * were hand-typed at. A release would ship, the studio would update, and the
  * projects page would go on serving the js/*.js it had cached at that frozen
  * stamp: an old constants.js, so an old version chip, so a page reporting a
- * release it was not running. Adding a page here is what makes it part of a
- * release; forgetting to is silent, which is why --check now walks all of them.
+ * release it was not running.
+ *
+ * SO THE LIST IS NO LONGER A LIST. It was, and the comment that used to end
+ * this note said "adding a page here is what makes it part of a release;
+ * forgetting to is silent" — and then admin.html was added and forgotten, and
+ * shipped asking for its scripts at the version it was first typed at, with
+ * --check reporting the tree clean because it only checked the pages it had
+ * been told about. Every .html file at the root is a page somebody can open, so
+ * every one is stamped; a new page joins the release by existing.
+ *
+ * Including 404.html, whose root-absolute asset paths the pattern below now
+ * recognises — it had been missed for the same reason, by the other half of
+ * the same mistake.
  */
-const HTML_FILES = ['index.html', 'login.html', 'projects.html']
-  .map(f => path.join(ROOT, f))
-  .filter(fs.existsSync);
+const HTML_FILES = fs.readdirSync(ROOT)
+  .filter(f => /\.html$/i.test(f))
+  .sort()
+  .map(f => path.join(ROOT, f));
 const CONSTANTS = path.join(ROOT, 'js', 'constants.js');
 /**
  * The README's version badge.
@@ -59,7 +71,11 @@ const README = path.join(ROOT, 'README.md');
 const README_BADGE = /(!\[Version\]\(https:\/\/img\.shields\.io\/badge\/version-v)([^-)]+)(-)/;
 
 /** Matches src/href for local js/css assets, capturing any existing ?v=. */
-const ASSET = /((?:src|href)=")(\.\/(?:js|css|vendor)\/[^"?]+)(\?v=[^"]*)?(")/g;
+// `./js/…` or `/js/…`. The second is 404.html's: its assets are root-absolute
+// so that it still renders when served for a deep address that does not exist,
+// and a pattern that only knew `./` left that page asking for whatever version
+// it was first typed at — invisibly, since --check used the same pattern.
+const ASSET = /((?:src|href)=")(\.?\/(?:js|css|vendor)\/[^"?]+)(\?v=[^"]*)?(")/g;
 /** The single declaration of APP_VERSION in js/constants.js. */
 const VERSION_DECL = /(const APP_VERSION = ')([^']+)(';)/;
 

@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0231-blue)
+![Version](https://img.shields.io/badge/version-v6.0232-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -28,7 +28,41 @@ Designed primarily for:
 
 # ✨ Features
 
-## 🆕 New in v6.0231 (latest)
+## 🆕 New in v6.0232 (latest)
+
+### Ready for map.dbotrealty.tech — and three fixes found by walking the real path
+
+`docs/GO-LIVE.md` is the move from Supabase to Hostinger as one numbered
+checklist, with a check after every step. Writing it meant following the steps
+against the code for this exact setup, and three of them would have failed:
+
+**The config file was looked for in a public place on a subdomain.** The API
+looked "one level above the site folder", assuming that folder was public_html.
+Hostinger serves a subdomain from a folder *inside* the main domain's
+public_html, so for `map.dbotrealty.tech` that meant `dbotrealty.tech`'s own web
+root. It now looks in the account's home folder first, never inside any
+public_html, and `/api/health` answers an unconfigured install with the exact
+path it wants rather than a riddle about directory levels.
+
+**Importing after signing up lost the administrator's own maps.** The setup
+order is: sign up first (the first account becomes the administrator), then
+import. The import recognised that account by email but then looked for its
+maps under the old Supabase id, found no owner, and skipped every one. It now
+maps each Supabase id to the account it actually lands on.
+
+**The dry run said every map would be lost.** It skipped the account inserts
+and then checked map owners against a table it had not written, so the one
+rehearsal meant to reassure reported the whole export as ownerless. It now does
+the real import inside a transaction and rolls it back, so what it prints is
+exactly what the real run will do.
+
+The export script itself, until now never run, is tested against a real
+Postgres 16 built in Supabase's shape — `auth.users` with `$2a$` bcrypt hashes,
+SSL on — through to the import and a password check on the far side
+(`diagnostics/export-supabase.cjs`, 15/15). Every new test was run against the
+old code first and failed there.
+
+## 🆕 New in v6.0231
 
 ### A People page: accounts are given out, not signed up for
 

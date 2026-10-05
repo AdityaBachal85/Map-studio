@@ -77,9 +77,32 @@ $stamp = static function ($iso): string {
 };
 
 $pdo = ms_db();
+
+/*
+ * THE DRY RUN IS A REAL RUN, ROLLED BACK.
+ *
+ * It used to skip every write and count what it would have done. That made it
+ * lie about the maps: no accounts were inserted, so every map's owner was
+ * missing when the maps were checked, and a dry run reported the entire
+ * export as ownerless — the one rehearsal meant to reassure somebody told them
+ * the import would lose everything. Doing the work inside the transaction and
+ * rolling it back makes the report exactly what the real run will do.
+ */
 $pdo->beginTransaction();
 
-$added = 0; $updated = 0; $skipped = 0;
+$added = 0; $updated = 0; $skipped = 0; $matchedByEmail = [];
+
+/*
+ * Supabase id → the id that account has HERE.
+ *
+ * Usually the same. Different when somebody already made an account on this
+ * site before the import — the administrator who signs up first on an empty
+ * install is the obvious case — because they were given a fresh id then. Their
+ * maps in the export still name the Supabase one, and without this they would
+ * be skipped as having no owner: the first person to set the site up would
+ * lose every map they had.
+ */
+$owners = [];
 
 try {
     /* ---- accounts --------------------------------------------------------
@@ -91,45 +114,57 @@ try {
      * An account with no hash — one that only ever used Microsoft sign-in —
      * lands with password_hash NULL. ms_password_ok() refuses every password
      * against a NULL hash, so the account exists, owns its maps, and is
-     * reached through the reset link. That is the correct outcome: there is no
-     * Microsoft sign-in here to carry across.
+     * reached through the reset link or a password issued from the People page.
      */
     foreach ($data['users'] as $u) {
         $id = (string)($u['id'] ?? '');
         $email = ms_normalise_email((string)($u['email'] ?? ''));
         if ($id === '' || $email === '') { $skipped++; continue; }
 
-        $existing = ms_row('select id from users where id = ? or email = ?', [$id, $email]);
+        // The same id first, then the same address — an exact match is the
+        // stronger claim, and the two can name different rows in principle.
+        $existing = ms_row('select id from users where id = ?', [$id])
+            ?? ms_row('select id from users where email = ?', [$email]);
+
         if ($existing !== null) {
-            if (!$dry) {
-                // Name and avatar only. A password already set on this site is
-                // newer than the one in the file and must not be rolled back
-                // to it — somebody who has already used the reset link would
-                // otherwise be returned to a password they no longer know.
-                ms_exec('update users set full_name = ?, avatar_url = ?, updated_at = ?
-                          where id = ?',
-                    [(string)($u['fullName'] ?? ''), (string)($u['avatarUrl'] ?? ''),
-                     ms_now(), $existing['id']]);
+            // Name and avatar only. A password already set on this site is
+            // newer than the one in the file and must not be rolled back to
+            // it — somebody who has already used the reset link, or chose
+            // their own after being issued one, would be returned to a
+            // password they no longer know.
+            ms_exec('update users set full_name = ?, avatar_url = ?, updated_at = ? where id = ?',
+                [(string)($u['fullName'] ?? ''), (string)($u['avatarUrl'] ?? ''),
+                 ms_now(), $existing['id']]);
+            $owners[$id] = (string)$existing['id'];
+            if ((string)$existing['id'] !== $id) {
+                $matchedByEmail[] = $email;
             }
             $updated++;
             continue;
         }
 
-        if (!$dry) {
-            ms_exec('insert into users (id, email, password_hash, full_name, avatar_url,
-                                        created_at, updated_at)
-                     values (?, ?, ?, ?, ?, ?, ?)',
-                [$id, $email,
-                 isset($u['passwordHash']) && $u['passwordHash'] !== null
-                     ? (string)$u['passwordHash'] : null,
-                 (string)($u['fullName'] ?? ''), (string)($u['avatarUrl'] ?? ''),
-                 $stamp($u['createdAt'] ?? null), ms_now()]);
-        }
+        ms_exec('insert into users (id, email, password_hash, full_name, avatar_url,
+                                    created_at, updated_at)
+                 values (?, ?, ?, ?, ?, ?, ?)',
+            [$id, $email,
+             isset($u['passwordHash']) && $u['passwordHash'] !== null
+                 ? (string)$u['passwordHash'] : null,
+             (string)($u['fullName'] ?? ''), (string)($u['avatarUrl'] ?? ''),
+             $stamp($u['createdAt'] ?? null), ms_now()]);
+        $owners[$id] = $id;
         $added++;
     }
 
     echo 'Accounts: ' . $added . ' added, ' . $updated . ' already here'
         . ($skipped ? ', ' . $skipped . ' skipped (no id or address)' : '') . "\n";
+
+    if ($matchedByEmail) {
+        echo '  ' . count($matchedByEmail) . ' already had an account on this site under the same '
+            . "address — their maps are attached to that account:\n";
+        foreach ($matchedByEmail as $e) {
+            echo '    ' . $e . "\n";
+        }
+    }
 
     /* ---- maps ---------------------------------------------------------- */
 
@@ -137,14 +172,22 @@ try {
 
     foreach ($data['projects'] as $p) {
         $id = (string)($p['id'] ?? '');
-        $owner = (string)($p['ownerId'] ?? '');
-        if ($id === '' || $owner === '') { $pSkipped++; continue; }
+        $sourceOwner = (string)($p['ownerId'] ?? '');
+        if ($id === '' || $sourceOwner === '') { $pSkipped++; continue; }
 
-        // A map whose owner is not in the file cannot be imported: owner_id is
-        // a foreign key, and inserting it would fail the whole transaction.
-        // Collected and reported rather than silently dropped, because it
-        // means the export missed an account.
-        if (ms_row('select id from users where id = ?', [$owner]) === null) {
+        /*
+         * Whose map this is here. Through the id map first; failing that, an
+         * account that already exists under the Supabase id itself.
+         *
+         * A map whose owner is in neither place cannot be imported — owner_id
+         * is a foreign key, and inserting it would fail the whole transaction
+         * — so it is collected and reported rather than silently dropped.
+         */
+        $owner = $owners[$sourceOwner] ?? null;
+        if ($owner === null && ms_row('select id from users where id = ?', [$sourceOwner]) !== null) {
+            $owner = $sourceOwner;
+        }
+        if ($owner === null) {
             $orphans[] = $id;
             $pSkipped++;
             continue;
@@ -166,26 +209,24 @@ try {
             continue;
         }
 
-        if (!$dry) {
-            if ($existing !== null) {
-                ms_exec('update map_projects
-                            set owner_id = ?, name = ?, place = ?, data = ?, n_locations = ?,
-                                n_sites = ?, n_routes = ?, n_shapes = ?, bytes = ?, updated_at = ?
-                          where id = ?',
-                    [$owner, (string)($p['name'] ?? 'Untitled map project'),
-                     (string)($p['place'] ?? ''), $json, $n('locations'), $n('sites'),
-                     $n('routes'), $n('shapes'), strlen($json),
-                     $stamp($p['updatedAt'] ?? null), $id]);
-            } else {
-                ms_exec('insert into map_projects
-                           (id, owner_id, name, place, data, n_locations, n_sites, n_routes,
-                            n_shapes, bytes, created_at, updated_at)
-                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [$id, $owner, (string)($p['name'] ?? 'Untitled map project'),
-                     (string)($p['place'] ?? ''), $json, $n('locations'), $n('sites'),
-                     $n('routes'), $n('shapes'), strlen($json),
-                     $stamp($p['createdAt'] ?? null), $stamp($p['updatedAt'] ?? null)]);
-            }
+        if ($existing !== null) {
+            ms_exec('update map_projects
+                        set owner_id = ?, name = ?, place = ?, data = ?, n_locations = ?,
+                            n_sites = ?, n_routes = ?, n_shapes = ?, bytes = ?, updated_at = ?
+                      where id = ?',
+                [$owner, (string)($p['name'] ?? 'Untitled map project'),
+                 (string)($p['place'] ?? ''), $json, $n('locations'), $n('sites'),
+                 $n('routes'), $n('shapes'), strlen($json),
+                 $stamp($p['updatedAt'] ?? null), $id]);
+        } else {
+            ms_exec('insert into map_projects
+                       (id, owner_id, name, place, data, n_locations, n_sites, n_routes,
+                        n_shapes, bytes, created_at, updated_at)
+                     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$id, $owner, (string)($p['name'] ?? 'Untitled map project'),
+                 (string)($p['place'] ?? ''), $json, $n('locations'), $n('sites'),
+                 $n('routes'), $n('shapes'), strlen($json),
+                 $stamp($p['createdAt'] ?? null), $stamp($p['updatedAt'] ?? null)]);
         }
         $existing !== null ? $pUpdated++ : $pAdded++;
     }
@@ -201,7 +242,7 @@ try {
 
     if ($dry) {
         $pdo->rollBack();
-        echo "\nDry run — nothing was written.\n";
+        echo "\nDry run — every line above is what the real run will do. Nothing was written.\n";
     } else {
         $pdo->commit();
         echo "\nDone. Sign in and check the list before deleting the export file.\n";

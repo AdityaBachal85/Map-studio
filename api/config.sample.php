@@ -6,15 +6,18 @@
  * WHERE TO PUT IT, in order of preference:
  *
  *   1. /home/uXXXXXXXXX/map-studio-config.php
- *      One level above public_html, so no URL can reach it under any server
- *      configuration — including the broken ones where .php is served as text.
- *      Use the File Manager or SSH to place it. This is the first path
- *      api/lib/config.php looks at.
+ *      Your hosting account's home folder — outside every web root on the
+ *      account, so no URL can reach it under any server configuration,
+ *      including the broken ones where .php is served as text. This is the
+ *      first path api/lib/config.php looks at.
  *
- *   2. public_html/api/config.php
- *      Works, and is refused by api/.htaccess, but the refusal now depends on
- *      .htaccess being honoured. Use this only if you cannot write outside
- *      public_html.
+ *      You do not have to work the path out: open https://your-site/api/health
+ *      before this file exists and it names the exact path it wants.
+ *
+ *   2. <the site's folder>/api/config.php
+ *      Works, and is refused by api/.htaccess, but the refusal depends on
+ *      .htaccess being honoured. Use this only if you cannot write to the home
+ *      folder.
  *
  * DO NOT commit the filled-in copy. .gitignore already covers both names.
  *

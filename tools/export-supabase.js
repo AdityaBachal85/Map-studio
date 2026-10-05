@@ -179,13 +179,18 @@ async function selectWithOptional(client, base, optional, tail) {
   console.log('Wrote ' + file);
   console.log('  ' + out.users.length + ' accounts (' + withPw + ' with a password that will carry over, '
     + (out.users.length - withPw) + ' who will need the reset link)');
+  if (out.users.length - withPw > 0) {
+    // Mail may not be set up on day one, so the reset link may not arrive —
+    // and the People page can issue a password without it.
+    console.log('    (or a password issued from the People page, if email is not set up yet)');
+  }
   console.log('  ' + out.projects.length + ' maps');
   console.log('  ' + (bytes / (1024 * 1024)).toFixed(1) + ' MB');
   console.log('');
   console.log('This file contains password hashes and every map. Treat it as a database backup:');
   console.log('upload it, import it, confirm the site works, then delete it from both machines.');
   console.log('');
-  console.log('Next: docs/ACCOUNTS-SETUP.md → "Bringing the Supabase data across".');
+  console.log('Next: upload it to your Hostinger home folder and run api/cli/import.php — see docs/GO-LIVE.md.');
 })().catch(e => {
   console.error('\nExport failed: ' + (e && e.message));
   if (/self.signed|certificate/i.test(String(e && e.message))) {

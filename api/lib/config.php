@@ -37,33 +37,29 @@ function ms_config(): array
         return $cfg;
     }
 
-    $candidates = array_values(array_filter([
-        /*
-         * An explicit path, when something set one. Used by the test harness
-         * so a test run never writes a config into the deployed tree, and
-         * available in production to anyone whose hosting lets them set an
-         * environment variable and who wants the file somewhere else again.
-         */
-        (string)(getenv('MAPSTUDIO_CONFIG') ?: ''),
-        // Preferred: beside public_html, not inside it.
-        dirname(__DIR__, 3) . '/map-studio-config.php',
-        // Accepted: alongside the API, for plans without shell access.
-        dirname(__DIR__) . '/config.php',
-    ], static fn(string $p): bool => $p !== ''));
+    $candidates = ms_config_candidates(__DIR__, ms_account_home(__DIR__));
 
     $found = null;
     foreach ($candidates as $path) {
-        if (is_file($path) && is_readable($path)) {
+        // Suppressed, not unguarded: a host with open_basedir set warns on a
+        // path outside it, and index.php turns every warning into an exception
+        // — which would make a harmless "not here" into a 500.
+        if (@is_file($path) && @is_readable($path)) {
             $found = $path;
             break;
         }
     }
 
     if ($found === null) {
+        // Names the exact paths, computed from where this file actually is.
+        // A sentence saying "one level above public_html" is a riddle on a
+        // host whose layout you have not seen; a full path is an instruction.
         ms_config_fail(
-            'No configuration file. Copy api/config.sample.php to '
-            . dirname(__DIR__, 3) . '/map-studio-config.php (preferred) or to '
-            . dirname(__DIR__) . '/config.php, and fill in the database details.'
+            'No configuration file yet. Copy api/config.sample.php, fill in the database '
+            . 'details, and save it as: ' . $candidates[0]
+            . (count($candidates) > 1
+                ? '   (also accepted: ' . implode(', ', array_slice($candidates, 1)) . ')'
+                : '')
         );
     }
 
@@ -75,6 +71,84 @@ function ms_config(): array
 
     $cfg = ms_config_normalise($raw, $found);
     return $cfg;
+}
+
+/**
+ * Where the configuration file may live, best first.
+ *
+ * WHY THE ACCOUNT'S HOME DIRECTORY COMES FIRST. This used to look one level
+ * above the site's document root, on the assumption that the document root
+ * was public_html and its parent was therefore private. That holds for a site
+ * at the root of a domain and fails for the way Hostinger lays out a
+ * subdomain: map.example.com is served from a folder INSIDE the main domain's
+ * public_html, so "one level up" is the main site's web root — a place every
+ * visitor to example.com can request files from. The safest location became
+ * the least safe one exactly when the app moved to a subdomain.
+ *
+ * The account's home directory is outside every web root on the account,
+ * whatever the domain layout, so it is checked first. The parent of the
+ * document root is still accepted, but only when it is not itself inside a
+ * public_html — which is precisely the subdomain case.
+ *
+ * Pure, and separate from ms_config(), so diagnostics/config-location.cjs can
+ * check it against invented paths for both layouts.
+ *
+ * @param string $libDir this file's directory (…/api/lib)
+ * @param string $home   the account's home directory, or ''
+ * @return list<string>
+ */
+function ms_config_candidates(string $libDir, string $home): array
+{
+    $apiDir = dirname($libDir);
+    $siteRoot = dirname($libDir, 2);
+    $aboveSite = dirname($libDir, 3);
+
+    $insideWebRoot = static fn(string $dir): bool =>
+        preg_match('#/(public_html|www|htdocs)(/|$)#', $dir) === 1;
+
+    $out = [];
+
+    /*
+     * An explicit path, when something set one. Used by the test harness so a
+     * test run never writes a config into the deployed tree, and available to
+     * anyone whose hosting lets them set an environment variable.
+     */
+    $env = (string)(getenv('MAPSTUDIO_CONFIG') ?: '');
+    if ($env !== '') {
+        $out[] = $env;
+    }
+
+    if ($home !== '') {
+        $out[] = rtrim($home, '/') . '/map-studio-config.php';
+    }
+
+    if (!$insideWebRoot($aboveSite)) {
+        $out[] = $aboveSite . '/map-studio-config.php';
+    }
+
+    // Last resort: beside the API, refused by api/.htaccess. Works on a plan
+    // with no way to write outside the site's folder; depends on .htaccess.
+    $out[] = $apiDir . '/config.php';
+
+    return array_values(array_unique($out));
+}
+
+/**
+ * The hosting account's home directory, or '' if it cannot be told.
+ *
+ * Read from the path rather than from $HOME, which a web server process
+ * frequently does not have. Hostinger, like most shared hosts, puts every
+ * account under /home/<user>/, and the site files are always somewhere beneath
+ * it — so the first two segments of this file's own path are the answer.
+ */
+function ms_account_home(string $dir): string
+{
+    $dir = str_replace('\\', '/', $dir);
+    if (preg_match('#^(/home/[^/]+)/#', $dir, $m) === 1) {
+        return $m[1];
+    }
+    $env = (string)(getenv('HOME') ?: '');
+    return ($env !== '' && str_starts_with($dir, rtrim($env, '/') . '/')) ? rtrim($env, '/') : '';
 }
 
 /**

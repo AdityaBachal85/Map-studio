@@ -1,5 +1,8 @@
 # Deploying Map Studio on Hostinger
 
+> **Setting up `map.dbotrealty.tech`?** Follow **[GO-LIVE.md](GO-LIVE.md)** — the same
+> material as one numbered checklist, in order, with a check after every step.
+
 This branch (`Map-Studio_Hostinger`) is `Map-Studio_V6` plus the files a
 Hostinger deploy needs: a `.htaccess`, a `404.html`, a packaging script, and
 the VPS service definitions in `deploy/hostinger/`. Nothing in the application

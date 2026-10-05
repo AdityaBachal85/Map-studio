@@ -1,5 +1,8 @@
 # Accounts — sign-in and cloud projects on Hostinger
 
+> **Setting up `map.dbotrealty.tech`?** Follow **[GO-LIVE.md](GO-LIVE.md)** — the same
+> material as one numbered checklist, in order, with a check after every step.
+
 Everyone at DBOT gets an account on this site itself. Projects are saved to the
 MySQL database in hPanel, so a map started on one machine opens on another, and
 nobody sees anybody else's work.
@@ -82,20 +85,24 @@ user would leave their projects behind as rows nothing can reach.
 
 Copy **`api/config.sample.php`** and fill in the three database values.
 
-**Put the copy one directory above `public_html`,** named
-`map-studio-config.php`:
+**Where to put it:** open `https://your-site/api/health` before the file
+exists. It answers with the exact path it wants, worked out from where the site
+actually is on the server — something like:
 
 ```
-/home/u123456789/map-studio-config.php      ← here
-/home/u123456789/public_html/               ← the site
+save it as: /home/u123456789/map-studio-config.php
 ```
 
-Nothing the web server serves can reach it there, under any configuration —
-including the broken ones where a PHP handler is off and `.php` files are
-served as plain text. If your plan gives you no way to write outside
-`public_html`, the second-choice location is `public_html/api/config.php`,
-which `api/.htaccess` refuses; that refusal depends on `.htaccess` being
-honoured, which is why it is second choice.
+That is your hosting account's home folder, which is outside every web root on
+the account. It is the right place whatever the domain layout — and it matters
+for a subdomain in particular: Hostinger serves `map.example.com` from a folder
+*inside* the main domain's `public_html`, so "one level above the site" would be
+`example.com`'s own web root, which anyone can request files from. The API no
+longer looks there.
+
+If your plan gives you no way to write to the home folder, the second choice is
+`api/config.php` inside the site, which `api/.htaccess` refuses to serve; that
+refusal depends on `.htaccess` being honoured, which is why it is second choice.
 
 While you are in there, set:
 
