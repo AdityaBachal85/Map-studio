@@ -1,0 +1,1522 @@
+/* shell.css — the pages outside the map: sign-in, and the projects list.
+ *
+ * These are full pages rather than panels, so they need a page-level layout
+ * the map app never did. Everything below is built from the tokens in
+ * themes.css, which is what keeps these screens looking like the same product
+ * as the studio rather than a bolted-on admin area — and means both themes and
+ * any future palette change reach them for free.
+ *
+ * Loaded only by login.html and projects.html. index.html does not need it. */
+
+/* ---------------------------------------------------------------------------
+   1. Page frame
+   --------------------------------------------------------------------------- */
+
+.shell-body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--sans, system-ui, sans-serif);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   2. Sign-in
+   A scene on the left, a floating card on the right.
+
+   THE CARD IS ITS OWN LIGHT ISLAND. It re-declares the colour tokens inside
+   itself rather than inheriting the page's, which is what lets a white card
+   sit on a dark page without every label, input and border inside it needing
+   a second rule. Change the theme and the page around it changes; the card
+   stays a card.
+   --------------------------------------------------------------------------- */
+
+.auth-body { background: var(--auth-bg); }
+
+/* The sign-in page's own palette. Deliberately not the app's tokens: this page
+   is one dark island with no map under it and no theme switch, and borrowing
+   the studio's surfaces made it read as a panel that had lost its map. */
+.auth-body {
+  --auth-bg: #101214;
+  --auth-surface: #161A1D;
+  --auth-border: #2C333A;
+  --auth-text: #C7D1DB;
+  --auth-heading: #DEE4EA;
+  --auth-dim: #7A8894;
+}
+
+/* One frame, never a page that scrolls. dvh rather than vh because mobile
+   browsers count their own collapsing chrome in vh, which makes a "full
+   height" layout overflow by exactly the height of the address bar. */
+.auth-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: clamp(12px, 3vh, 40px);
+  /* The PAGE scrolls when a window is genuinely too short, not a panel inside
+     the card. An inner scrollbar on one half of a card reads as something
+     broken, and it was appearing on any window under about 700px tall. */
+  overflow-x: hidden;
+}
+
+/* The card: form on the left, photograph on the right. Sized as a proportion
+   of the viewport rather than fixed, so it stays a card on a laptop and does
+   not become a stamp on a large monitor. */
+.auth-shell {
+  display: flex;
+  /* 100%, not 92vw. `vw` counts the scrollbar and ignores this wrapper's own
+     padding, so 92vw + 40px either side overflowed the viewport horizontally on
+     anything under ~1000px wide — which is where the sideways scrollbar came
+     from. A percentage is of the content box, so the padding is already out. */
+  width: min(1120px, 100%);
+  /* Grows if the content needs it rather than clipping it. */
+  height: auto;
+  min-height: min(640px, 82dvh);
+  border: 1px solid var(--auth-border);
+  border-radius: 20px;
+  background: var(--auth-surface);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
+  overflow: hidden;
+  /* Above the dot field behind it. Without this the card and the canvas are
+     both auto-z siblings in paint order, and the canvas is drawn first only
+     because it happens to come first in the markup — one reordering away from
+     a page of dots over the form. */
+  position: relative;
+  z-index: 1;
+}
+
+/* Below this the photograph is dropped rather than squeezed: it is
+   reassurance, and the form is the task. */
+@media (max-width: 1000px) {
+  .auth-shell { width: min(460px, 100%); min-height: 0; }
+  .auth-shell .auth-stage { display: none; }
+}
+
+/* ---- The dot field behind the card ----------------------------------------
+   A grid of dots across the whole window that pushes away from the pointer,
+   drawn by js/ui/dotField.js. The card is opaque, so what shows is the frame
+   around it: on a laptop that is a couple of hundred pixels each side, which is
+   exactly the amount of empty dark that made the page feel unfinished.
+
+   FIXED, NOT ABSOLUTE. The wrapper scrolls when a window is genuinely too short
+   for the card; a background that scrolls away with it stops being a background
+   and becomes a panel that ran out. Fixed also gives the canvas a rect whose
+   origin is the viewport's, which is the coordinate space the pointer events
+   already arrive in.
+
+   INERT. Nothing on this page reads it, it never takes the pointer, and the
+   whole element can be deleted with no effect on the form. */
+.dot-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dot-field-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* Centred on the pointer by a negative margin the size of its own radius, then
+   moved with a transform — so following the pointer never touches layout. Its
+   size, offset and colour are written inline by startDotField(), because they
+   are derived from the same options the dots are. */
+.dot-field-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* ---- Left: the scene ---- */
+
+.auth-stage {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
+  /* A flex item defaults to min-height:auto, which means "never shrink below my
+     content" — so this column and the form beside it were both refusing to fit
+     the card and being clipped by it. */
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--auth-border);
+}
+
+/* Held back so the photograph reads as ground rather than as the subject —
+   the same treatment the reference design uses on its own image. */
+.auth-stage .auth-photo,
+.auth-stage .auth-scene { opacity: .34; }
+
+.auth-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The scrim, and it has to be heavier than it looks like it should be.
+   Tuned first against the drawn scene — dark navy, low contrast — where a
+   light wash was plenty. A daylight photograph is a different problem: pale
+   rooftops and sunlit water sit directly behind 11px muted type, and the
+   subtitle and feature descriptions vanished into them entirely.
+   So: near-opaque to 32%, still substantial to 46%, and only then releasing
+   the photograph. The right half stays essentially untouched, which is where
+   the route and pins are and the only part anyone is really looking at. */
+.auth-stage::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(96deg,
+    rgba(6, 13, 24, .97) 0%, rgba(6, 13, 24, .95) 32%, rgba(6, 13, 24, .82) 46%,
+    rgba(6, 13, 24, .42) 62%, rgba(6, 13, 24, .10) 80%, rgba(6, 13, 24, .34) 100%);
+}
+
+.auth-stage-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: clamp(20px, 3.2vh, 48px) clamp(28px, 4vw, 52px);
+  color: #EAF0F9;
+  overflow: hidden;
+  text-shadow: 0 1px 3px rgba(2, 8, 18, .7);
+}
+
+.auth-brand,
+.auth-card-brand { display: flex; align-items: center; gap: 12px; }
+
+.auth-brand img { height: 34px; width: auto; }
+.auth-card-brand img { height: 30px; width: auto; }
+
+.auth-brand .kicker,
+.auth-card-brand .kicker {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+
+.auth-brand .wordmark,
+.auth-card-brand .wordmark { font-weight: 700; letter-spacing: -.01em; }
+
+.auth-copy { margin-top: auto; margin-bottom: auto; max-width: 30rem; padding-top: clamp(12px, 3vh, 48px); }
+
+/* The photograph is half a card now rather than most of a page, so the type
+   over it comes down to match. The brand block goes entirely: it is already on
+   the form side, and the same logo twice on one card reads as a mistake. */
+.auth-shell .auth-brand { display: none; }
+
+/* A frosted plate under the logo.
+   The DBOT mark is navy and green, drawn to sit on white — on this dark card it
+   went from a logo to a smudge. Rather than recolour somebody's brand mark, it
+   gets its own pane of glass to stand on: a bright, slightly translucent
+   surface with a lit top edge and a shadow under it, so it reads as a physical
+   plate lying on the card rather than as a white box behind the picture. */
+.auth-shell .auth-card-brand img {
+  /* content-box, because the reset makes everything border-box and the plate's
+     padding was therefore eaten OUT of the logo's 30px height — it came back
+     at sixteen pixels inside a full-size plate. The padding has to grow the
+     plate around the mark, not shrink the mark inside it. */
+  box-sizing: content-box;
+  height: 32px;
+  padding: 8px 12px;
+  border-radius: 13px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .99) 0%, rgba(243, 247, 252, .92) 46%,
+      rgba(255, 255, 255, .97) 100%);
+  border: 1px solid rgba(255, 255, 255, .5);
+  box-shadow:
+    /* the lit edge that makes it glass rather than paper */
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 -1px 0 rgba(120, 140, 165, .18),
+    0 8px 22px rgba(0, 0, 0, .5),
+    0 1px 3px rgba(0, 0, 0, .35);
+  /* Blurs whatever passes under it — the cursor glow does, which is what makes
+     it look like glass rather than a sticker. */
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+
+/* Lifts very slightly when the pointer is over the form, which is the moment
+   the glow is behind it and the glass has something to refract. */
+.auth-main.glowing .auth-card-brand img {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 -1px 0 rgba(120, 140, 165, .18),
+    0 12px 28px rgba(0, 0, 0, .55),
+    0 1px 3px rgba(0, 0, 0, .35);
+}
+.reduce-motion .auth-main.glowing .auth-card-brand img { transform: none; }
+.auth-shell .auth-copy h2 { font-size: clamp(22px, 3.4vh, 34px); }
+.auth-shell .auth-sub { font-size: var(--fs-micro); }
+.auth-shell .auth-stage-inner { padding: clamp(18px, 3vh, 34px); }
+.auth-shell .auth-point .ic { width: 30px; height: 30px; border-radius: 9px; }
+.auth-shell .auth-point .ic svg { width: 15px; height: 15px; }
+
+.auth-copy h2 {
+  margin: 0 0 clamp(12px, 2.2vh, 20px);
+  font-size: clamp(26px, min(3.6vw, 5.4vh), 46px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -.025em;
+}
+
+.auth-copy h2 em { font-style: normal; color: var(--orange); }
+
+.auth-sub { margin: 0 0 clamp(14px, 3.2vh, 36px); color: #C7D4E3; font-size: var(--fs-small); line-height: 1.6; }
+
+.auth-points { display: flex; flex-direction: column; gap: clamp(10px, 2vh, 18px); }
+
+.auth-point { display: flex; gap: 14px; align-items: flex-start; }
+
+/* Tinted tiles rather than bare glyphs: at this size a lone 19px stroke icon
+   reads as debris beside 15px type. */
+.auth-point .ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 122, 26, .28);
+  border-radius: 11px;
+  background: rgba(255, 122, 26, .13);
+  color: var(--orange);
+}
+
+.auth-point .ic-b {
+  border-color: rgba(46, 155, 255, .28);
+  background: rgba(46, 155, 255, .13);
+  color: #2E9BFF;
+}
+
+.auth-point .ic-c {
+  border-color: rgba(18, 184, 134, .28);
+  background: rgba(18, 184, 134, .13);
+  color: #12B886;
+}
+
+.auth-point b { display: block; margin-bottom: 2px; font-size: var(--fs-small); font-weight: 650; }
+.auth-point span { color: #B6C4D6; font-size: var(--fs-micro); line-height: 1.55; }
+
+/* ---- Right: the card ---- */
+
+/* The column scrolls, not the document. On a genuinely tiny viewport the card
+   can still be reached; on every normal one the rules below keep it from
+   needing to. */
+.auth-main {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 3vh, 44px) clamp(20px, 2.6vw, 44px);
+}
+
+/* The cursor glow. A single blurred blob translated to the pointer — behind
+   everything, and inert, so it cannot eat a click meant for a field. */
+.auth-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle,
+      rgba(168, 133, 255, .30) 0%,
+      rgba(93, 158, 255, .22) 42%,
+      rgba(255, 138, 199, .16) 68%,
+      transparent 72%);
+  filter: blur(46px);
+  transition: opacity 200ms var(--ease-out);
+}
+.auth-main.glowing .auth-glow { opacity: 1; }
+.reduce-motion .auth-glow { display: none; }
+
+.auth-card {
+  /* The island's own palette. Every rule below this reads these six names, so
+     the whole card went from light to dark by changing them and nothing else —
+     which is the entire reason they were local variables in the first place. */
+  --text: var(--auth-heading);
+  --text-2: var(--auth-dim);
+  --border: var(--auth-border);
+  --border-strong: #38414A;
+  --bg0: #12161A;
+  --bg1: #1B2026;
+
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  /* The card IS the shell's left half now, so it carries no frame of its own:
+     a bordered card inside a bordered card reads as a mistake. */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.auth-card-brand { margin-bottom: clamp(14px, 2.6vh, 30px); }
+
+.auth-card h1 {
+  margin: 0 0 5px;
+  font-size: clamp(21px, 2.9vh, 26px);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+
+.auth-card .lede { margin: 0 0 clamp(14px, 2.4vh, 22px); color: var(--text-2); font-size: var(--fs-small); }
+
+/* Provider button. Microsoft's mark stays on a neutral surface, per their
+   brand guidance — and it puts the accent where it belongs, on the one
+   primary action further down. */
+.auth-ms {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  /* var(--bg1), not a literal white. This rule and the focused-field rule
+     below were the only two in the card that named a colour instead of one of
+     its six local tokens, which is why they stayed light when everything else
+     went dark — white text on a white button. */
+  background: var(--bg1);
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.auth-ms:hover { background: #232A31; border-color: var(--border-strong); }
+
+/* The sweep from the reference design: a skewed highlight crossing the button
+   once on hover. Its own element rather than a pseudo-element so the button's
+   contents keep the stacking they already had. */
+.auth-ms .sheen,
+.auth-submit .sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.2rem;
+  height: 100%;
+  background: rgba(255, 255, 255, .18);
+  transform: skew(-13deg) translateX(-260%);
+  pointer-events: none;
+}
+/* Both buttons have to be positioned and clipped, or the strip resolves
+   against the nearest positioned ancestor — the card — and hangs across the
+   whole form as a grey diagonal that never moves. .auth-ms sets these in its
+   own rule; .auth-submit did not, which is exactly what happened. */
+.auth-submit { position: relative; overflow: hidden; }
+
+.auth-ms:hover .sheen,
+.auth-submit:hover .sheen { transition: transform 900ms var(--ease-out); transform: skew(-13deg) translateX(2600%); }
+.reduce-motion .auth-ms .sheen,
+.reduce-motion .auth-submit .sheen { display: none; }
+.auth-ms:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); }
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: clamp(10px, 1.8vh, 16px) 0;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.auth-or::before,
+.auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.auth-field { margin-bottom: clamp(10px, 1.8vh, 16px); }
+
+.auth-field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.auth-field label .opt { text-transform: none; letter-spacing: 0; font-weight: 600; }
+
+/* The icon and the reveal button sit inside the field's border, so the whole
+   thing is one control rather than an input with decorations beside it. */
+.auth-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--bg1);
+  color: var(--text-2);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.auth-input {
+  position: relative;
+}
+
+.auth-input:focus-within {
+  border-color: var(--orange);
+  background: var(--bg0);
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, .16);
+}
+
+/* The cursor-tracking edge light from the reference design: a bright point that
+   follows the pointer along the field's rule.
+
+   ONE RING, NOT TWO STRIPS. The first version was a pair of 2px bars pinned
+   left:0/right:0 across the top and bottom. A bar is a rectangle and the field
+   is not: at each corner the bar carried straight on while the field curved
+   away beneath it, so the light ended in a square tab hanging off the rounded
+   corner.
+
+   This is the gradient-border technique instead: one element the size of the
+   field's frame, painted with the gradient, and masked so only the ring is
+   kept — the border box minus the content box. The light then follows the
+   corner radius exactly, because it IS the shape. */
+.auth-input .edge {
+  position: absolute;
+  /* Over the 1px border, not inside it. */
+  inset: -1px;
+  border-radius: 12px;
+  /* The thickness of the ring. */
+  padding: 1.6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out);
+
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.auth-input.tracking .edge { opacity: 1; }
+.reduce-motion .auth-input .edge { display: none; }
+
+/* Without the mask this is a filled orange rectangle over the field rather
+   than a hairline around it — far worse than no effect, so on a browser that
+   cannot composite masks there is no effect. */
+@supports not ((mask-composite: exclude) or (-webkit-mask-composite: xor)) {
+  .auth-input .edge { display: none; }
+}
+
+.auth-input svg { flex: none; }
+
+.auth-input input {
+  flex: 1;
+  min-width: 0;
+  padding: clamp(9px, 1.5vh, 12px) 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-input input:focus { outline: none; }
+.auth-input input::placeholder { color: #9AA7B8; }
+
+/* Chrome paints its own background on autofilled fields, which would show as
+   a pale block with the wrong corners inside the rounded wrapper. */
+.auth-input input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  transition: background-color 100000s;
+}
+
+.auth-eye {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.auth-eye:hover { background: rgba(22, 35, 58, .06); color: var(--text); }
+.auth-eye.on { color: var(--orange); }
+.auth-eye:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(255, 122, 26, .4); }
+
+.auth-field .hint { margin-top: 7px; font-size: var(--fs-micro); color: var(--text-2); }
+.auth-field .hint a { color: var(--orange); text-decoration: none; font-weight: 600; }
+.auth-field .hint a:hover { text-decoration: underline; }
+
+.auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 6px;
+  padding: clamp(10px, 1.7vh, 13px) 18px;
+  border: 0;
+  border-radius: 11px;
+  /* Matches .btn-primary: the orange fill is identical in both themes, so its
+     ink is a fixed near-black rather than a themed token. */
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 122, 26, .3);
+  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.auth-submit:hover { filter: brightness(1.05); box-shadow: 0 8px 24px rgba(255, 122, 26, .38); }
+.auth-submit:active { transform: translateY(1px); }
+.auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 122, 26, .45); }
+.auth-submit:disabled { opacity: .65; cursor: default; box-shadow: none; }
+.auth-submit svg { transition: transform var(--dur-fast) var(--ease-out); }
+.auth-submit:hover svg { transform: translateX(2px); }
+
+/* Sign in ⇄ create account. Link weight, not a second button: there is one
+   primary action on this card and it is above. */
+.auth-switch {
+  margin-top: clamp(10px, 1.8vh, 16px);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.auth-switch button {
+  padding: 0 0 0 4px;
+  border: 0;
+  background: none;
+  color: var(--orange);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.auth-switch button:hover { text-decoration: underline; }
+.auth-switch button:focus-visible { outline: none; text-decoration: underline; box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); border-radius: 4px; }
+
+.auth-error,
+.auth-ok {
+  margin-bottom: var(--sp-4);
+  padding: 11px 14px;
+  border-radius: 11px;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.auth-error { border: 1px solid #F3C2BC; background: #FDF1EF; color: #8E2A19; }
+.auth-ok { border: 1px solid #B7E4CE; background: #EFFAF4; color: #14683F; }
+
+/* A fact about how the product works, not an error anyone just caused — so
+   it is not styled as a warning. */
+.auth-note {
+  margin-top: var(--sp-5);
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+}
+
+.auth-note code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(22, 35, 58, .07);
+  font-family: var(--mono);
+  font-size: .95em;
+}
+
+/* Narrow: the scene goes first — it is reassurance, and the form is the task.
+   The card stops floating and simply becomes the page. */
+@media (max-width: 1000px) {
+  .auth-wrap { grid-template-columns: minmax(0, 1fr); }
+  .auth-stage { display: none; }
+  .auth-main { padding: clamp(20px, 6vw, 40px) 18px; }
+  .auth-card { box-shadow: 0 20px 50px rgba(0, 0, 0, .5); }
+}
+
+/* ---------------------------------------------------------------------------
+   3. Projects — app frame
+   A fixed rail, a fixed top bar, and one scrolling region. Only the list
+   scrolls, so the rail and the account controls never travel away.
+   --------------------------------------------------------------------------- */
+
+.pj-app {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-areas: 'rail top' 'rail main';
+  height: 100vh;
+}
+
+.pj-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  overflow-y: auto;
+}
+
+.pj-rail-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-4);
+}
+
+.pj-rail-brand .nm { font-weight: 700; letter-spacing: -.01em; }
+
+/* --------------------------------------------------------------------------
+   The brand plate
+   --------------------------------------------------------------------------
+   The DBOT mark is navy artwork with a green-and-blue counter, drawn to sit on
+   white. On this rail it was sitting on near-black, where the wordmark all but
+   disappears and only the coloured 'o' survives — the mark was there and could
+   not be read.
+
+   So it gets something to stand on. Glass rather than the solid white pill used
+   on the map and in the dashboard nav, because that is what was asked for, and
+   because a rail is chrome: a plate that admits what is behind it belongs here
+   in a way an opaque chip does not.
+
+   HIGH-KEY IN BOTH THEMES, DELIBERATELY. Glass normally takes the tint of the
+   surface it sits on — that is what .frost does everywhere else in this app.
+   Tinted to a dark rail it would hide the very wordmark it exists to show, so
+   this one is lit from white in both themes. It reads as frosted glass over a
+   dark ground rather than as a dark pane.
+   ----------------------------------------------------------------------- */
+
+.pj-brand-glass {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 12px;
+  /* A stacking context of its own, so the sheen below cannot escape it. */
+  isolation: isolate;
+  overflow: hidden;
+  /* Three layers, front to back: a warm pool at the top-left corner, a cool one
+     at the bottom-right, and the white pane they sit inside. The two pools are
+     what stop this reading as a silver chip — a frosted pane over a flat dark
+     rail has nothing to bend, so the colour has to be in the pane itself.
+     The white beneath them is thin enough to let them through and solid enough
+     that a navy wordmark still has a light ground; either alone gives you a
+     white chip or an unreadable one. */
+  --plate-ground: linear-gradient(150deg, rgba(255, 255, 255, .88), rgba(255, 255, 255, .62));
+  background:
+    radial-gradient(75% 130% at 14% 8%, rgba(255, 122, 26, .30), transparent 62%),
+    radial-gradient(75% 130% at 88% 96%, rgba(46, 155, 255, .28), transparent 62%),
+    var(--plate-ground);
+  backdrop-filter: blur(16px) saturate(220%);
+  -webkit-backdrop-filter: blur(16px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, .58);
+  /* The lit top edge is what makes a rectangle read as glass rather than as a
+     flat card: it is the highlight where a real pane catches the light. The
+     inset shadow along the bottom is the thickness of the pane. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .98),
+    inset 0 -10px 16px -12px rgba(10, 30, 60, .35),
+    /* The same two colours escaping around the pane. Hugging the plate rather
+       than pooled behind it, so the light belongs to the mark and does not
+       drift out across the words beside it. */
+    0 0 20px -5px rgba(255, 122, 26, .55),
+    0 6px 24px -6px rgba(46, 155, 255, .40),
+    0 10px 26px rgba(4, 10, 22, .45),
+    0 1px 2px rgba(4, 10, 22, .30);
+}
+
+.pj-brand-glass img { height: 24px; width: auto; display: block; }
+
+/* The specular sweep — the 'liquid' half. Parked off to one side and run once
+   on hover, not looping: a logo that shimmers on its own is a logo that pulls
+   the eye away from the list the page is actually for. */
+.pj-brand-glass::after {
+  content: '';
+  position: absolute;
+  inset: -60% -70%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+    transparent 40%, rgba(255, 255, 255, .72) 50%, transparent 60%);
+  transform: translateX(-65%);
+}
+
+.pj-rail-brand:hover .pj-brand-glass::after {
+  animation: pj-sheen 900ms var(--ease-out, cubic-bezier(.22, .8, .3, 1)) 1;
+}
+
+@keyframes pj-sheen { to { transform: translateX(65%); } }
+
+/* Glass off (Preferences → Appearance) means the compositor stops re-sampling
+   what is behind every pane. The plate keeps its job — the mark still needs a
+   light ground — and gives up the part that costs something. */
+body.no-glass .pj-brand-glass {
+  /* Only the ground goes solid. The two pools are painted into the pane rather
+     than sampled from behind it, so they cost nothing with the filter off and
+     the plate keeps its character instead of falling back to a white chip. */
+  --plate-ground: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.no-glass .pj-brand-glass::after,
+body.reduce-motion .pj-brand-glass::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-rail-brand:hover .pj-brand-glass::after { animation: none; }
+}
+
+.pj-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 12px 16px;
+  margin-bottom: var(--sp-3);
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--accent-glow, var(--elev-2));
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.pj-new:hover { filter: brightness(1.06); }
+.pj-new:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.pj-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 14px;
+  border-radius: var(--r-pill, 999px);
+  color: var(--text-2);
+  text-decoration: none;
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-nav a:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+
+.pj-nav a[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.pj-rail hr { width: 100%; height: 1px; border: 0; margin: var(--sp-4) 0; background: var(--border); }
+
+/* Storage meter */
+.pj-storage { padding: 0 var(--sp-2); }
+.pj-storage .hd { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
+.pj-storage .bar { height: 4px; margin: var(--sp-3) 0 var(--sp-2); border-radius: 999px; background: color-mix(in srgb, var(--text) 12%, transparent); overflow: hidden; }
+.pj-storage .fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width var(--dur-base) var(--ease-out); }
+.pj-storage .cap { color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-rail-foot { margin-top: auto; padding-top: var(--sp-4); }
+
+/* Top bar */
+.pj-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+}
+
+.pj-search { position: relative; flex: 1; max-width: 520px; }
+
+.pj-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-2); pointer-events: none; }
+
+.pj-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px 10px 42px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  font: inherit;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.pj-search input::placeholder { color: var(--text-2); }
+.pj-search input:focus { outline: none; background: var(--bg0); border-color: var(--accent); }
+
+.pj-top-spacer { flex: 1; }
+
+.pj-iconbtn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-iconbtn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.pj-iconbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-account { display: flex; align-items: center; gap: 10px; padding-left: var(--sp-4); border-left: 1px solid var(--border); }
+.pj-account .who { text-align: right; line-height: 1.25; }
+.pj-account .who .n { font-weight: 650; font-size: var(--fs-small); }
+.pj-account .who .e { color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: .02em;
+}
+
+.pj-avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   4. Projects — the list
+   --------------------------------------------------------------------------- */
+
+.pj-main { grid-area: main; overflow-y: auto; padding: var(--sp-5) var(--sp-5) var(--sp-6); }
+
+.pj-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.pj-head h1 { margin: 0; font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.015em; }
+
+.pj-seg { display: flex; margin-left: auto; padding: 3px; border: 1px solid var(--border); border-radius: var(--r-pill, 999px); background: var(--bg1); }
+
+.pj-seg button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pj-seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.pj-seg button:disabled { opacity: .45; cursor: not-allowed; }
+.pj-seg button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-filters { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+
+.pj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.pj-chip:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.pj-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* The table. A real <table> — this is tabular data, it sorts by column, and a
+   screen reader should be told so rather than handed a pile of divs. */
+.pj-table { width: 100%; border-collapse: collapse; }
+
+.pj-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px var(--sp-3);
+  background: var(--bg0);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pj-table thead th.num { text-align: right; }
+
+.pj-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.pj-table tbody tr:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pj-table tbody tr:focus-visible { outline: none; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.pj-table td { padding: 12px var(--sp-3); vertical-align: middle; }
+.pj-table td.num { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pj-table td.when { color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Hidden from sight, kept for screen readers — the actions column has a
+   heading because the table has five columns, but the heading would be noise
+   on screen above a row of icon buttons. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pj-name { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.pj-name .ic { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--r-sm, 8px); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.pj-name .tx { min-width: 0; }
+/* Stacked, not side by side: the name is the identity and the counts are the
+   gloss under it. As inline spans they ran together on one line and the name
+   stopped being scannable. */
+.pj-name .t { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-name .s { display: block; margin-top: 1px; color: var(--text-2); font-size: var(--fs-micro); }
+
+.pj-owner { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); }
+.pj-owner .av { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700; }
+
+.pj-rowmenu { position: relative; width: 44px; text-align: right; }
+
+/* Row actions. Kept visible rather than hover-revealed: hover-only controls
+   are invisible on touch, and this table is a plausible thing to use on a
+   tablet in a site office. */
+.pj-menubtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.pj-menubtn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.pj-menubtn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.pj-menu {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  z-index: 30;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: var(--glass-solid, var(--bg1));
+  box-shadow: var(--elev-3, var(--elev-2));
+}
+
+.pj-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pj-menu button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.pj-menu button.danger { color: var(--danger); }
+.pj-menu button:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+.pj-empty {
+  padding: var(--sp-6) var(--sp-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  text-align: center;
+  color: var(--text-2);
+}
+
+.pj-empty b { display: block; margin-bottom: var(--sp-2); color: var(--text); font-size: var(--fs-lg); font-weight: 650; }
+
+/* Narrow screens: the rail becomes a top strip, and the columns that are
+   context rather than identity drop out. Name and date survive, because
+   those are what someone scans for. */
+@media (max-width: 860px) {
+  .pj-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 56px minmax(0, 1fr); grid-template-areas: 'rail' 'top' 'main'; height: auto; min-height: 100vh; }
+  .pj-rail { flex-direction: row; align-items: center; gap: var(--sp-3); overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .pj-rail hr, .pj-storage, .pj-rail-foot { display: none; }
+  .pj-new { margin-bottom: 0; white-space: nowrap; }
+  .pj-nav { flex-direction: row; }
+  .pj-account .who { display: none; }
+  /* Created goes with Owner and Size on a narrow screen: the modified column
+     is the one somebody is scanning for, and it is the one that stays. */
+  .pj-table .col-owner, .pj-table .col-size, .pj-table .col-made { display: none; }
+}
+
+/* The list's source, stated rather than assumed — "This device" and "Cloud"
+   must reflect where the rows actually came from. */
+.pj-seg button[aria-pressed="false"]:not(:disabled) { opacity: .75; }
+
+/* Account menu — anchored to the avatar in the top bar. */
+.pj-acct-menu { right: 0; top: 46px; min-width: 220px; }
+
+.pj-acct-head {
+  padding: 10px 12px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pj-acct-head .nm { font-weight: 650; }
+.pj-acct-head .em { margin-top: 1px; color: var(--text-2); font-size: var(--fs-micro); word-break: break-all; }
+.pj-acct-head .src { margin-top: 6px; color: var(--text-2); font-size: var(--fs-micro); }
+
+/* The account column is a positioning context so the menu hangs off it
+   rather than off the page. */
+.pj-account { position: relative; }
+
+/* Build markers. Quiet enough to ignore, present enough to answer "is this
+   page stale?" without opening devtools. */
+.auth-ver,
+.pj-ver {
+  margin-top: var(--sp-5);
+  color: var(--text-2);
+  opacity: .65;
+  font-size: var(--fs-micro);
+  font-family: var(--mono);
+  text-align: center;
+}
+
+.pj-ver { margin-top: var(--sp-3); }
+
+
+/* The stale-page notice. Fixed to the bottom so it cannot be missed and
+   cannot displace anything — the page under it is still usable, just old. */
+.fresh-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--border-strong, #2a3550);
+  border-radius: 999px;
+  background: var(--glass-solid, #101a2c);
+  color: var(--text, #EAF0F9);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+  font-size: var(--fs-micro, 11.5px);
+  line-height: 1.45;
+}
+
+.fresh-bar button {
+  flex: none;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--orange, #FF7A1A), var(--orange2, #FFA149));
+  color: #160B02;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fresh-bar button:hover { filter: brightness(1.06); }
+
+/* The optional hero photograph, layered over the drawn scene. object-fit
+   cover so any aspect ratio fills the column without distorting — a login
+   background that stretches faces or skews a skyline looks broken in a way
+   nobody can quite name. */
+.auth-photo {
+  position: absolute;
+  inset: 0;
+  /* Above the SVG, which follows it in the DOM and would otherwise paint on
+     top — two absolutely positioned siblings with no z-index stack in source
+     order, so the fallback was hiding the thing it is a fallback for. */
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* ---------------------------------------------------------------------------
+   The project dialog
+   ---------------------------------------------------------------------------
+   Naming a project used to be a browser prompt() — a grey Chrome strip at the
+   top of the window, in the browser's own type, with room for exactly one
+   field. That is why a project could be named and not placed.
+   --------------------------------------------------------------------------- */
+
+.pj-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 9, 18, .55);
+  backdrop-filter: blur(3px);
+  animation: pjFade .16s ease;
+}
+.pj-modal[hidden] { display: none; }
+@keyframes pjFade { from { opacity: 0; } }
+
+.pj-modal-card {
+  width: min(430px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--stroke2);
+  border-radius: 18px;
+  background: var(--surface-solid);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+  animation: pjRise .18s cubic-bezier(.22, .9, .3, 1);
+}
+@keyframes pjRise { from { transform: translateY(8px) scale(.985); opacity: 0; } }
+
+.pj-modal-card h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+.pj-modal-note { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); }
+
+.pj-field { display: block; margin-bottom: 13px; }
+.pj-field > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.pj-field > input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--field-edge, var(--stroke2));
+  border-radius: 10px;
+  background: var(--field, rgba(0, 0, 0, .28));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.pj-field > input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.pj-field > em {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-2);
+  opacity: .85;
+}
+
+.pj-modal-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* Its own classes rather than .btn/.btn-primary: those live in the studio's
+   stylesheets, which this page does not load — so the dialog opened with two
+   bare browser buttons in it, which is the very thing it exists to replace. */
+.pj-mbtn {
+  padding: 9px 15px;
+  border: 1px solid var(--stroke2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, transform .1s;
+}
+.pj-mbtn:hover { background: rgba(var(--text-rgb), .07); }
+.pj-mbtn:active { transform: translateY(1px); }
+.pj-mbtn.go {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: #160B02;
+  font-weight: 700;
+}
+.pj-mbtn.go:hover { filter: brightness(1.06); background: linear-gradient(135deg, var(--orange), var(--orange2)); }
+.pj-mbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The location under a project's name in the list. Its own line rather than
+   appended to the name: a name and a place are two facts, and running them
+   together makes a project called "Kalyan, Thane". */
+.pj-name .p {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+.pj-name .p svg { opacity: .8; }
+.pj-name .dot { margin: 0 6px; opacity: .45; }
+
+/* ===========================================================================
+   admin.html — the People page
+   ---------------------------------------------------------------------------
+   Built on the project list's shell (.pj-app, .pj-rail, .pj-top, .pj-modal),
+   so only the table and the few things unique to administration live here.
+
+   A deliberately quiet page. It manages access rather than doing the work, and
+   a screen of coloured badges and heavy buttons would make routine account
+   admin feel more consequential than drawing the maps this exists to serve.
+   The one thing allowed to shout is a destructive confirmation.
+   ========================================================================= */
+
+.ad-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+.ad-table thead th {
+  padding: 0 12px 10px;
+  text-align: left;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ad-table tbody td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.ad-table tbody tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+
+/* A switched-off account stays legible rather than being greyed to the point
+   of illegibility: it is still a row somebody has to read and act on. */
+.ad-off td { opacity: .62; }
+
+.ad-nm { font-weight: 600; }
+.ad-em { color: var(--text-2); font-size: var(--fs-micro); margin-top: 2px; }
+.ad-sub { color: var(--text-2); font-size: var(--fs-micro); }
+
+.ad-you {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.ad-role { font-weight: 600; color: var(--accent); }
+
+.ad-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+
+.ad-flag {
+  padding: 1px 7px;
+  border-radius: var(--r-pill, 999px);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  cursor: help;
+}
+
+/* The one that means "this person cannot sign in and does not look like it". */
+.ad-flag-warn {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.ad-flag-off { border-style: dashed; }
+
+.ad-actions { text-align: right; white-space: nowrap; }
+.ad-actions-h { text-align: right; }
+
+.ad-btn {
+  margin-left: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.ad-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.ad-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+
+/* Disabled rather than hidden, with the reason in the title. A control that
+   vanishes leaves somebody looking for it; one that is visibly unavailable and
+   says why answers the question without being asked. */
+.ad-btn:disabled { opacity: .38; cursor: not-allowed; }
+
+.ad-btn-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.pj-mbtn.ad-danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.pj-mbtn.ad-danger:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+
+.ad-warn {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--orange) 45%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.ad-warn code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-family: var(--mono);
+  font-size: .92em;
+}
+
+.ad-warn-loud {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.ad-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+/* The issued password. Monospace and large, because it will be read off this
+   screen and typed somewhere else, and `user-select: all` so one click takes
+   the whole thing rather than a word of it. */
+.ad-pw {
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--field);
+  font-family: var(--mono);
+  font-size: 19px;
+  letter-spacing: .04em;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+
+.ad-pw-note strong { color: var(--text); }
+
+.ad-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 2px 0 16px;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.ad-check input { margin-top: 2px; accent-color: var(--accent); }
+
+.ad-log { margin-top: 26px; }
+
+.ad-log summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.ad-log-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+}
+.ad-log-row .t { color: var(--text); font-weight: 600; }
+.ad-log-row .a { color: var(--accent); }
+.ad-log-row .d { opacity: .8; }
+
+/* Narrow screens: the table is the one thing here that cannot reflow, so it
+   scrolls sideways inside its own box rather than pushing the page wide. */
+@media (max-width: 860px) {
+  #adListWrap { overflow-x: auto; }
+  .ad-table { min-width: 720px; }
+}

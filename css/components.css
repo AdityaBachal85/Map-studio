@@ -1,0 +1,1166 @@
+/* components.css — Floating map UI: toolbar buttons, search, legend card, title card, north arrow, brand mark, status toast.
+   Extracted verbatim from index.html (v4.96) lines 1006–1381; order preserved via main.css. */
+    /* ---------- Floating map UI ---------- */
+    .search-box {
+      position: absolute;
+      top: 12px;
+      left: calc(var(--sbw) + 12px);
+      z-index: 1000;
+      width: 300px;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1), width .32s cubic-bezier(.32, .72, .28, 1);
+    }
+
+    .app.side-hidden .search-box {
+      left: 12px;
+    }
+
+    .search-box .inner {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 46px;
+      padding: 0 6px 0 4px;
+      border-radius: 23px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .42), 0 2px 8px rgba(0, 0, 0, .3);
+      transition: box-shadow .22s ease, transform .22s ease, border-radius .28s ease;
+    }
+
+    .search-box .inner:focus-within {
+      box-shadow: 0 0 0 3px rgba(255, 122, 26, .35), 0 16px 40px rgba(0, 0, 0, .5);
+      transform: translateY(-1px);
+    }
+
+    .search-box .sIconBtn {
+      flex: none;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+      transition: color .15s, background .15s;
+    }
+
+    .search-box .sIconBtn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, .06);
+    }
+
+    .search-box .inner:focus-within .sIconBtn {
+      color: var(--orange);
+    }
+
+    .search-box input {
+      border: none;
+      border-radius: 0;
+      padding: 11px 4px;
+      font-size: 13px;
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .search-box input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+
+    .search-box input::placeholder {
+      color: var(--dim);
+    }
+
+    #searchBtn {
+      flex: none;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(255, 122, 26, .4);
+      transition: transform .14s ease, box-shadow .18s ease;
+    }
+
+    #searchBtn:hover {
+      transform: scale(1.07);
+      box-shadow: 0 5px 15px rgba(255, 122, 26, .55);
+    }
+
+    #searchBtn:active {
+      transform: scale(.95);
+    }
+
+    /* Collapsed = a floating round magnifier button (default on small screens) */
+    .search-box.collapsed {
+      width: 46px;
+    }
+
+    .search-box.collapsed .inner {
+      border-radius: 50%;
+      padding: 0;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .search-box.collapsed input,
+    .search-box.collapsed #searchBtn,
+    .search-box.collapsed .sClear,
+    .search-box.collapsed .sSpin {
+      display: none;
+    }
+
+    .search-box.collapsed .sIconBtn {
+      width: 100%;
+      height: 46px;
+      color: var(--text);
+    }
+
+    .search-box.collapsed .search-results {
+      display: none !important;
+    }
+
+    .search-results {
+      border-radius: 13px;
+      margin-top: 6px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+      overflow: hidden;
+      max-height: 262px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .search-results .res {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--stroke);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .search-results .res:last-child {
+      border-bottom: none;
+    }
+
+    .search-results .res:hover,
+    .search-results .res.sel {
+      background: rgba(255, 122, 26, .14);
+    }
+
+    .search-results .res .ico {
+      flex: none;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--stroke);
+    }
+
+    .search-results .res .nm {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search-results .res .add {
+      border: none;
+      background: var(--orange);
+      color: #160B02;
+      border-radius: 7px;
+      width: 23px;
+      height: 23px;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      flex: none;
+      font-weight: 800;
+    }
+
+    .search-results .hint {
+      padding: 6px 11px;
+      font-size: 10px;
+      color: var(--dim);
+      border-top: 1px solid var(--stroke);
+    }
+
+    .search-results .res .meta {
+      font-size: 9.5px;
+      color: var(--dim);
+      margin-left: 6px;
+    }
+
+    .sSpin {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255, 255, 255, .2);
+      border-top-color: var(--orange);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex: none;
+      margin-right: 4px;
+    }
+
+    .sClear {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 4px;
+      flex: none;
+      line-height: 1;
+    }
+
+    .sClear:hover {
+      color: var(--text);
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes dropIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    #titleCard {
+      position: absolute;
+      top: 12px;
+      left: calc(50% + var(--sbw)/2);
+      transform: translateX(-50%);
+      z-index: 900;
+      background: rgba(10, 30, 60, .94);
+      color: #fff;
+      padding: 9px 24px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: .02em;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
+      border-bottom: 3px solid var(--orange);
+      white-space: nowrap;
+      outline: none;
+      max-width: 44%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
+    }
+
+    .app.side-hidden #titleCard {
+      left: 50%;
+    }
+
+    #titleCard:focus {
+      outline: 2px solid var(--orange);
+    }
+
+    #legendCard {
+      position: absolute;
+      top: 70px;
+      right: 12px;
+      z-index: 900;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+      min-width: 234px;
+      max-width: 304px;
+      overflow: hidden;
+    }
+
+    #legendCard .hd, #colorKeyCard .hd, #contourLegendCard .hd {
+      background: var(--navy);
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      padding: 9px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+
+    #legendCard .hd .grip, #colorKeyCard .hd .grip, #contourLegendCard .hd .grip {
+      cursor: move;
+      color: #8FA5C6;
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+
+    #legendCard .hd .ttl, #colorKeyCard .hd .ttl, #contourLegendCard .hd .ttl {
+      outline: none;
+      flex: 1;
+    }
+
+    #legendCard .hd .ttl:focus, #colorKeyCard .hd .ttl:focus, #contourLegendCard .hd .ttl:focus {
+      color: var(--orange2);
+    }
+
+    #legendCard table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      color: #17202B;
+    }
+
+    #legendCard td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #E5EAF1;
+    }
+
+    #legendCard tr:last-child td {
+      border-bottom: none;
+    }
+
+    #legendCard td.num {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+
+    #clickHint {
+      position: absolute;
+      bottom: 46px;
+      left: calc(50% + var(--sbw)/2);
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+      padding: 8px 18px;
+      border-radius: 24px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      display: none;
+      transition: left .34s;
+    }
+
+    .app.side-hidden #clickHint {
+      left: 50%;
+    }
+
+    .map-wrap.adding #clickHint {
+      display: block;
+    }
+
+    #fsBtn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 15px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #fsBtn:hover {
+      color: var(--orange);
+    }
+
+    /* ---------- Layer Manager (floating GIS-style panel) ---------- */
+    #layerBtn {
+      position: absolute;
+      top: 58px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #layerBtn:hover,
+    #layerBtn.toggled {
+      color: var(--orange);
+    }
+
+    /* ---------- AI Reports (floating panel, third in the map-control stack) ----------
+       Sits 46px below #layerBtn, the same gap #layerBtn keeps from #fsBtn.
+       This lives on the map rather than in the sidebar tab bar because six
+       tabs no longer fit that bar without truncating their labels — and a
+       report is about one place on the map, so a map control is where it
+       belongs anyway. */
+    #aiBtn {
+      position: absolute;
+      top: 104px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #aiBtn:hover,
+    #aiBtn.toggled {
+      color: var(--orange);
+    }
+
+    /* ---------- Recentre (fourth in the map-control stack) ----------
+       Positioned, like the three above it. Added without a rule at first,
+       which left it `position: static` at the top-left of .map-wrap —
+       underneath the sidebar's brand block, where it was invisible and
+       unclickable. Exactly what happened to the undo buttons. */
+    #centerBtn {
+      position: absolute;
+      top: 150px;
+      right: 12px;
+      z-index: 1000;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+      transition: color .15s;
+    }
+
+    #centerBtn:hover {
+      color: var(--orange);
+    }
+
+    #aiPanel {
+      position: absolute;
+      top: 104px;
+      right: 58px;
+      z-index: 1001;
+      width: 300px;
+      max-height: min(74vh, 560px);
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+    }
+
+    #aiPanel[hidden] {
+      display: none;
+    }
+
+    /* The panel's own scroll region. Report results and chat history both grow
+       without bound, so the header stays put and only this scrolls. */
+    #aiPanelBody {
+      padding: 12px 13px 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* These came from a sidebar pane, where .field carried the spacing. In a
+       compact floating panel that margin doubles up with the flex gap above. */
+    #aiPanelBody .field {
+      margin: 0;
+    }
+
+    #aiClose {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #aiClose:hover {
+      color: var(--text);
+    }
+
+    #layerPanel {
+      position: absolute;
+      top: 58px;
+      right: 58px;
+      z-index: 1001;
+      width: 256px;
+      max-height: min(74vh, 560px);
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+    }
+
+    #layerPanel[hidden] {
+      display: none;
+    }
+
+    .lp-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .lp-title {
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    #lpClose {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #lpClose:hover {
+      color: var(--text);
+    }
+
+    .lp-search-row {
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    #lpSearch {
+      width: 100%;
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--text);
+    }
+
+    #lpSearch:focus {
+      outline: none;
+      border-color: var(--orange);
+    }
+
+    #lpBody {
+      overflow-y: auto;
+      padding: 6px 6px 8px;
+    }
+
+    .lp-group {
+      margin-bottom: 2px;
+    }
+
+    .lp-group-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 7px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .lp-group-head:hover {
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .lp-collapse {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+      font-size: 11px;
+      width: 14px;
+      transition: transform .18s;
+    }
+
+    .lp-group.collapsed .lp-collapse {
+      transform: rotate(-90deg);
+    }
+
+    .lp-group-title {
+      flex: 1;
+      font-weight: 800;
+      font-size: 10.5px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .lp-count {
+      font-size: 10px;
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .lp-group.collapsed .lp-items {
+      display: none;
+    }
+
+    .lp-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 7px 5px 20px;
+      border-radius: 8px;
+      cursor: default;
+    }
+
+    .lp-item:hover {
+      background: rgba(255, 122, 26, .12);
+    }
+
+    .lp-eye,
+    .lp-group-eye {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      flex: none;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .lp-eye::before,
+    .lp-group-eye::before {
+      content: '👁';
+      font-size: 12px;
+    }
+
+    .lp-eye.off::before,
+    .lp-group-eye.off::before,
+    .lp-item.off .lp-eye::before {
+      content: '🚫';
+      opacity: .55;
+    }
+
+    .lp-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      flex: none;
+      border: 1px solid rgba(255, 255, 255, .35);
+    }
+
+    .lp-ico {
+      font-size: 12px;
+      flex: none;
+      cursor: pointer;
+      width: 15px;
+      text-align: center;
+    }
+
+    .lp-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11.5px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .lp-item.off .lp-name,
+    .lp-item.off .lp-dot,
+    .lp-item.off .lp-ico {
+      opacity: .42;
+    }
+
+    .lp-act {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      flex: none;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      font-size: 11px;
+      color: var(--dim);
+      opacity: 0;
+      transition: opacity .12s, color .12s;
+    }
+
+    .lp-item:hover .lp-act {
+      opacity: 1;
+    }
+
+    .lp-ren:hover {
+      color: var(--orange);
+    }
+
+    .lp-del:hover {
+      color: var(--danger);
+    }
+
+    .lp-rename {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--orange);
+      border-radius: 6px;
+      padding: 3px 6px;
+      font-size: 11.5px;
+      background: rgba(255, 255, 255, .07);
+      color: var(--text);
+    }
+
+    .lp-rename:focus {
+      outline: none;
+    }
+
+    .lp-empty {
+      padding: 16px 14px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--dim);
+      text-align: center;
+    }
+
+    /* ---------- Preferences dialog (gear) ---------- */
+    .brandbar {
+      position: relative;
+    }
+
+    .prefs-gear {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      z-index: 5;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--dim);
+      cursor: pointer;
+      transition: color .15s, border-color .15s, transform .3s ease;
+    }
+
+    .prefs-gear:hover {
+      color: var(--orange);
+      border-color: var(--orange);
+      transform: rotate(45deg);
+    }
+
+    .prefs-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      background: rgba(4, 8, 16, .5);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn .16s ease;
+    }
+
+    .prefs-overlay[hidden] {
+      display: none;
+    }
+
+    .prefs-modal {
+      width: min(94vw, 430px);
+      max-height: 88vh;
+      overflow-y: auto;
+      border-radius: 16px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+    }
+
+    .prefs-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .prefs-title {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: .02em;
+      color: var(--text);
+    }
+
+    #prefsClose {
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #prefsClose:hover {
+      color: var(--text);
+    }
+
+    .prefs-body {
+      padding: 8px 18px 18px;
+    }
+
+    .prefs-sec {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .prefs-lbl {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 11px;
+    }
+
+    .prefs-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 11px;
+    }
+
+    .prefs-row > span {
+      font-size: 12.5px;
+      color: var(--text);
+    }
+
+    .prefs-row select {
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--text);
+      min-width: 150px;
+    }
+
+    .prefs-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text);
+      cursor: pointer;
+      margin-bottom: 9px;
+    }
+
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--stroke2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .seg-btn {
+      border: none;
+      background: transparent;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--dim);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+
+    .seg-btn:hover {
+      color: var(--text);
+    }
+
+    .seg-btn.active {
+      background: linear-gradient(135deg, var(--orange), var(--orange2));
+      color: #160B02;
+    }
+
+    .prefs-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+    }
+
+    .prefs-note {
+      font-size: 10.5px;
+      color: var(--dim);
+    }
+
+    /* ---------- Basemap switcher (Google-Earth-style, bottom-left) ---------- */
+    #basemapSwitcher {
+      position: absolute;
+      left: calc(var(--sbw) + 12px);
+      bottom: 30px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
+    }
+
+    .app.side-hidden #basemapSwitcher {
+      left: 12px;
+    }
+
+    .bm-thumb {
+      width: 68px;
+      height: 68px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, .8);
+      overflow: hidden;
+      cursor: pointer;
+      padding: 0;
+      position: relative;
+      box-shadow: 0 5px 18px rgba(0, 0, 0, .5);
+      background: #223;
+      transition: transform .15s, border-color .15s;
+    }
+
+    .bm-thumb:hover {
+      transform: scale(1.04);
+      border-color: var(--orange);
+    }
+
+    .bm-thumb.open {
+      border-color: var(--orange);
+    }
+
+    .bm-thumb-img {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+    }
+
+    .bm-thumb-label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 3px 5px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      color: #fff;
+      text-align: center;
+      background: linear-gradient(0deg, rgba(0, 0, 0, .78), rgba(0, 0, 0, 0));
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #bmPanel {
+      width: 250px;
+      max-height: 60vh;
+      overflow-y: auto;
+      border-radius: 14px;
+      padding: 10px;
+      box-shadow: 0 12px 34px rgba(0, 0, 0, .5);
+    }
+
+    #bmPanel[hidden] {
+      display: none;
+    }
+
+    .bm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 7px;
+    }
+
+    .bm-tile {
+      border: 2px solid transparent;
+      border-radius: 9px;
+      overflow: hidden;
+      cursor: pointer;
+      padding: 0;
+      background: rgba(255, 255, 255, .05);
+      position: relative;
+      aspect-ratio: 1 / 1;
+      transition: border-color .15s, transform .12s;
+    }
+
+    .bm-tile:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, .4);
+    }
+
+    .bm-tile.active {
+      border-color: var(--orange);
+    }
+
+    .bm-tile-img {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      background-color: #2a2f3a;
+    }
+
+    .bm-tile-lbl {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 2px 3px;
+      font-size: 8px;
+      font-weight: 700;
+      color: #fff;
+      text-align: center;
+      background: linear-gradient(0deg, rgba(0, 0, 0, .82), rgba(0, 0, 0, 0));
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bm-hd {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    #mapCredit {
+      position: absolute;
+      bottom: 4px;
+      right: 10px;
+      z-index: 800;
+      font-size: 8.5px;
+      color: rgba(255, 255, 255, .8);
+      background: rgba(0, 0, 0, .42);
+      padding: 2px 9px;
+      border-radius: 9px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    body.no-credit #mapCredit {
+      display: none;
+    }
+
+    #brandMark {
+      position: absolute;
+      bottom: 42px;
+      left: 12px;
+      z-index: 800;
+      background: #fff;
+      padding: 6px 11px;
+      border-radius: 11px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+      pointer-events: none;
+    }
+
+    #brandMark img {
+      height: 21px;
+      display: block;
+    }
+
+    body.no-brand #brandMark {
+      display: none;
+    }
+
+    /* TOP LEFT OF THE MAP, not bottom right.
+       Bottom right is where every control rail on this app already lives — the
+       zoom buttons, the layer switch, the 2D/3D switch — so the one piece of
+       furniture that is not a control was sitting in the middle of them, and
+       read as another button. Top left is where a printed plan puts it.
+
+       Below the search button rather than beside it: that button owns the
+       corner and is 46px square.
+
+       THE SIDEBAR OFFSET BELONGS TO MAP MODE ALONE. In map mode #mapWrap spans
+       the whole window with the panel floating OVER it, so the map's own left
+       edge is behind the panel and a plain `left: 12px` hides the compass
+       under it. On the board and in the report the very same element is a TILE
+       — 761px wide, starting wherever the grid puts it, with no panel over it —
+       so the offset there pushed the compass to the middle of the map. The
+       default is the corner, and map mode is the exception that shifts it. */
+    #northArrow {
+      position: absolute;
+      top: 70px;
+      left: 12px;
+      transition: left .34s cubic-bezier(.32, .72, .28, 1);
+      z-index: 800;
+      width: 54px;
+      height: 54px;
+      pointer-events: none;
+      filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .45));
+    }
+
+    .app[data-mode="map"]:not(.side-hidden) #northArrow { left: calc(var(--sbw) + 12px); }
+
+    /* AND THE SAME FOR THE TOP. The 70px above clears the search button, which
+       owns the map's top-left corner in map mode. The board's map tile does not
+       carry that button — nothing at all sits there — so on the board and in
+       the report the offset is 70 pixels of empty gap between the compass and
+       the corner it is supposed to be in. */
+    .app[data-mode="dashboard"] #northArrow,
+    .app[data-mode="report"] #northArrow { top: 12px; }
+
+    /* Except while the board is being edited, when the map tile grows a drag
+       chip in that exact corner — .dc-maphead at 10px, 24px tall — and the
+       compass sat underneath it, half covered by the word MAP. Below the chip
+       while it is there, back in the corner when it goes. */
+    .app.dash-editing[data-mode="dashboard"] #northArrow { top: 42px; }
+
+    body.no-north #northArrow {
+      display: none;
+    }
+

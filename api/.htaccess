@@ -1,0 +1,78 @@
+# api/.htaccess — route everything to index.php, and refuse everything else.
+#
+# Two jobs, and the second matters more than the first.
+#
+# THE ROUTING. /api/auth/me has to reach index.php, which then works out what
+# was asked for. Without the rewrite the server looks for a directory called
+# auth, does not find one, and answers 404 — so every endpoint fails at once,
+# on a plan where mod_rewrite is simply not enabled. index.php recognises the
+# un-rewritten shape too (/api/index.php/auth/me), so that failure degrades to
+# "the URLs are uglier" rather than "nothing works".
+#
+# THE REFUSALS. Everything under this directory is inside public_html, which
+# means everything under it can be fetched by anyone who guesses the path. The
+# library files are not meant to be entered directly — several would run with
+# no configuration loaded — and config.php holds the database password. PHP
+# would normally execute rather than serve them, but "normally" is doing a lot
+# of work in that sentence: a plan whose PHP handler is off during a version
+# change serves .php as text, and an editor's config.php~ or a file manager's
+# config.php.bak has no handler at all and is served as text by definition.
+#
+# So they are refused at the server, where the refusal does not depend on PHP
+# working. Every block is wrapped in <IfModule> for the same reason the root
+# .htaccess is: a module the plan has not enabled should cost a skipped block,
+# not a 500 on every request.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /api/
+
+  # A real file or directory is served as itself. Nothing here is meant to be,
+  # after the denials below, but this keeps the rule honest and makes a
+  # mistyped deny rule fail visibly rather than silently routing to the API.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# The library, the routes, the CLI tools and the config: never served.
+<IfModule mod_authz_core.c>
+  <FilesMatch "^(config|config\.sample)\.php$">
+    Require all denied
+  </FilesMatch>
+  # Editor and backup leftovers, which have no PHP handler at all.
+  <FilesMatch "\.(bak|old|orig|save|swp|swo|dist|local|log|sql|ini|env)$|~$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+  <IfModule mod_access_compat.c>
+    <FilesMatch "^(config|config\.sample)\.php$">
+      Order allow,deny
+      Deny from all
+    </FilesMatch>
+    <FilesMatch "\.(bak|old|orig|save|swp|swo|dist|local|log|sql|ini|env)$|~$">
+      Order allow,deny
+      Deny from all
+    </FilesMatch>
+  </IfModule>
+</IfModule>
+
+# lib/, routes/ and cli/ carry their own .htaccess with the same denial, so a
+# server that ignores a <Directory>-style rule here still refuses them.
+
+# No directory listings, on any plan, whatever the server default is.
+<IfModule mod_autoindex.c>
+  Options -Indexes
+</IfModule>
+
+# The API's own responses must never be cached — they carry the project list
+# and the signed-in identity. index.php sends this header itself; it is
+# repeated here so it still holds if PHP is the thing that failed.
+<IfModule mod_headers.c>
+  Header always set Cache-Control "no-store, private"
+  Header always set X-Content-Type-Options "nosniff"
+</IfModule>

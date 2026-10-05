@@ -1,0 +1,297 @@
+/* layout.css — Leaflet control restyle, print stylesheet, capture states, mobile/responsive layout.
+   Extracted verbatim from index.html (v4.96) lines 1382–1562; order preserved via main.css. */
+    /* Leaflet control restyle */
+    .leaflet-bar {
+      border: none !important;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .45) !important;
+      border-radius: 11px !important;
+      overflow: hidden;
+    }
+
+    .leaflet-bar a {
+      background: rgba(12, 19, 35, .8) !important;
+      color: #EAF0F9 !important;
+      border-bottom: 1px solid rgba(255, 255, 255, .08) !important;
+      backdrop-filter: blur(12px);
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      transition: background .15s;
+    }
+
+    .leaflet-bar a:hover {
+      background: rgba(255, 122, 26, .3) !important;
+    }
+
+    .leaflet-control-scale-line {
+      background: rgba(0, 0, 0, .42) !important;
+      color: #fff !important;
+      border-color: rgba(255, 255, 255, .5) !important;
+      font-size: 9px !important;
+    }
+
+    .leaflet-marker-icon:focus {
+      outline: none;
+    }
+
+    .map-wrap.capturing .search-box,
+    .map-wrap.capturing #fsBtn,
+    .map-wrap.capturing #layerBtn,
+    .map-wrap.capturing #layerPanel,
+    .map-wrap.capturing #aiBtn,
+    .map-wrap.capturing #centerBtn,
+    .map-wrap.capturing #aiPanel,
+    .map-wrap.capturing #basemapSwitcher,
+    .map-wrap.capturing #clickHint,
+    .map-wrap.capturing .leaflet-control-zoom,
+    .map-wrap.capturing .pin-ghost,
+    /* The rest of the right-hand rail, and the undo pair. This list was written
+       when the rail ended at #centerBtn; everything added to the column since
+       — Identify, the 2D/3D switch, North-up — was never added here and has
+       been printing into every export as a result. A magnifier button and a
+       "2D / 3D" toggle in a client's PDF are controls the reader cannot press,
+       which reads as a screenshot rather than a document. */
+    .map-wrap.capturing #identifyBtn,
+    .map-wrap.capturing #dimSwitch,
+    .map-wrap.capturing #northUpBtn,
+    .map-wrap.capturing #mapHistory,
+    /* Transient UI, not map content: a popup or hover tooltip left open at the
+       moment someone hits Export does not belong in the deliverable. */
+    .map-wrap.capturing .leaflet-popup,
+    .map-wrap.capturing .leaflet-tooltip {
+      display: none !important;
+    }
+
+    .map-wrap.capturing #titleCard {
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      transition: none !important;
+    }
+
+    /* Furniture pass of the high-resolution exporter: the basemap tiles and the
+       vector paths are rendered separately at export resolution (see
+       js/export/hiResRender.js), so they must not appear in this pass or they
+       would be composited twice — the upscaled copy over the sharp one. */
+    /* The offscreen export map is captured in three passes, each isolating one
+       layer group so its own colour treatment can be applied at composite time
+       (html2canvas ignores CSS filters, so they cannot be baked in here). */
+    .hires-vectors-only .leaflet-tile-pane,
+    .hires-imagery-only .basemap-reference,
+    .hires-reference-only .basemap-imagery {
+      display: none !important;
+    }
+
+    /* Every pass after the imagery one is composited *over* the imagery, so it
+       must rasterise onto nothing. The offscreen host carries an inline dark
+       fill to back the imagery pass (it shows through gaps between tiles);
+       left in place for the later passes it became an opaque sheet drawn over
+       the map — at the road layer's 0.78 alpha, a 78% dark wash across the
+       whole export. `!important` because that fill is an inline style, and
+       Leaflet's own #ddd on .leaflet-container has to go with it. */
+    .hires-transparent-bg,
+    .hires-transparent-bg .leaflet-container,
+    .hires-transparent-bg .leaflet-pane {
+      background: transparent !important;
+    }
+
+    /* Captured unfiltered and at full opacity — the treatment is applied when
+       the pass is composited, not while it is being rasterised. */
+    .hires-reference-only .basemap-reference {
+      filter: none !important;
+      opacity: 1 !important;
+    }
+
+    .hires-imagery-only .basemap-imagery {
+      filter: none !important;
+    }
+
+    .map-wrap.hires-overlay-pass .leaflet-tile-pane,
+    .map-wrap.hires-overlay-pass .leaflet-overlay-pane,
+    /* The vector ground and the 3D relief view are grounds of their own and
+       neither of the two panes above, so each needs naming here or the
+       furniture pass photographs it into the transparent layer and composites
+       the whole basemap back over the high-resolution one underneath. */
+    .map-wrap.hires-overlay-pass .map-3d-host,
+    .map-wrap.hires-overlay-pass .vector-basemap-host {
+      display: none !important;
+    }
+
+    /* ...and every surface behind them has to become transparent, or the pass
+       comes back as an opaque sheet that hides the ground it is meant to sit on.
+       Two culprits: .map-wrap's own dark fill, and Leaflet's default #ddd
+       container background, which is normally invisible under the tiles. */
+    .map-wrap.hires-overlay-pass,
+    .map-wrap.hires-overlay-pass #tiltStage,
+    .map-wrap.hires-overlay-pass #map,
+    .map-wrap.hires-overlay-pass .leaflet-container {
+      background: transparent !important;
+    }
+
+    /* The cards' own controls, on every capture path.
+       `capturing` is set by hiResRender for PNG and PDF, where the cards ARE
+       photographed rather than redrawn — so the pencil, the drag grip and the
+       edit-mode row buttons went into the picture with them. A pencil icon in a
+       client's exported map is the app leaking its interface into the
+       deliverable. The pptx path hides the whole card instead, but listing both
+       classes here means a new export route cannot quietly reintroduce it. */
+    .map-wrap.capturing .legend-edit,
+    .map-wrap.capturing .grip,
+    .map-wrap.capturing .legend-x,
+    .map-wrap.capturing .ck-x,
+    .map-wrap.capturing #legendFoot,
+    .map-wrap.capturing #colorKeyFoot,
+    .map-wrap.pptx-capture .legend-edit,
+    .map-wrap.pptx-capture .grip {
+      display: none !important;
+    }
+
+    /* Editing furniture. Via-point handles and Geoman's vertex markers are
+       controls, not map content — they exist so you can drag a route about. They
+       were never in this list, so every export carried the little circles and
+       the drag dots straight into the client's deck, which is what a reader sees
+       as stray marks on the roads. */
+    .map-wrap.pptx-capture .via-dot,
+    .map-wrap.pptx-capture .leaflet-pm-draggable,
+    .map-wrap.pptx-capture .marker-icon,
+    .map-wrap.pptx-capture .leaflet-vertex-icon,
+    .map-wrap.pptx-capture .leaflet-middle-icon,
+    .map-wrap.pptx-capture .label-badge,
+    .map-wrap.pptx-capture .pin-icon,
+    .map-wrap.pptx-capture .hwy-shield,
+    .map-wrap.pptx-capture #legendCard,
+    .map-wrap.pptx-capture #colorKeyCard,
+    .map-wrap.pptx-capture #brandMark,
+    .map-wrap.pptx-capture #titleCard {
+      visibility: hidden !important;
+    }
+
+    @media print {
+
+      .sidebar,
+      #sideToggle {
+        display: none !important;
+      }
+
+      .search-box,
+      #fsBtn,
+      #layerBtn,
+      #layerPanel,
+      #aiBtn,
+      #centerBtn,
+      #aiPanel,
+      #basemapSwitcher,
+      #clickHint,
+      .leaflet-control-zoom {
+        display: none !important;
+      }
+
+      #titleCard {
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+      }
+    }
+
+    /* ---------- Mobile ---------- */
+    @media (max-width:860px) {
+      .sidebar {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        height: 58dvh;
+        border-right: none;
+        border-top: 1px solid var(--stroke2);
+        border-radius: 22px 22px 0 0;
+        transform: translateY(0);
+        transition: transform .34s cubic-bezier(.32, .72, .28, 1);
+        box-shadow: 0 -10px 36px rgba(0, 0, 0, .55);
+      }
+
+      .app.side-hidden .sidebar {
+        transform: translateY(106%);
+      }
+
+      #sideToggle {
+        left: 50% !important;
+        top: auto;
+        bottom: calc(58dvh + 10px);
+        transform: translateX(-50%);
+        width: 66px;
+        height: 27px;
+        border-radius: 14px;
+        border: 1px solid var(--stroke2);
+        transition: bottom .34s cubic-bezier(.32, .72, .28, 1);
+      }
+
+      .app.side-hidden #sideToggle {
+        bottom: calc(14px + env(safe-area-inset-bottom));
+      }
+
+      #sideToggle svg {
+        transform: rotate(-90deg);
+      }
+
+      .app.side-hidden #sideToggle svg {
+        transform: rotate(90deg);
+      }
+
+      .sidebar.frost,
+      .search-results.frost {
+        background: rgba(13, 19, 33, .975);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .brandbar {
+        padding: 9px 16px 8px;
+      }
+
+      .brandbar p {
+        display: none;
+      }
+
+      .logoPill img {
+        height: 18px;
+      }
+
+      .search-box {
+        left: 12px !important;
+        width: min(82vw, 340px);
+      }
+
+      #titleCard {
+        font-size: 11.5px;
+        padding: 6px 13px;
+        max-width: 60%;
+        top: 64px;
+        left: 12px !important;
+        transform: none !important;
+      }
+
+      #legendCard {
+        top: auto;
+        bottom: calc(58dvh + 46px);
+        right: 10px;
+        min-width: 190px;
+        max-width: 230px;
+      }
+
+      #clickHint {
+        bottom: auto;
+        top: 110px;
+        left: 50% !important;
+        font-size: 11px;
+      }
+
+      #brandMark {
+        bottom: auto;
+        top: 12px;
+        right: 60px;
+        left: auto;
+      }
+
+      .btn {
+        padding: 11px 13px;
+      }
+    }

@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>DBOT · Property Map Studio</title>
+  <!-- The sans is on the critical path: it sets every label in the sidebar, so
+       it is preloaded rather than discovered three stylesheets deep in an
+       @font-face. The mono is not — it only sets coordinate readouts, and
+       loading it eagerly would compete with the one that matters. -->
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0232" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./vendor/leaflet.css?v=6.0232">
+  <link rel="stylesheet" href="./vendor/leaflet-geoman.css?v=6.0232">
+  <!-- Listed individually rather than behind main.css's @import list, because
+       an @import carries its own ?v= that has to be bumped in a second place,
+       and when it isn't, index.html busts while the sheets it pulls in keep
+       being served from cache. That is not theoretical: it shipped a release's
+       worth of invisible CSS once as a popup button nobody could see, and it
+       happened again across all of v6 with the imports pinned at 5.0032. Here
+       there is one version per file and the release bump covers them.
+       Order is load-bearing — later sheets override earlier ones, and refine
+       must stay last. Do not reorder. -->
+  <link rel="stylesheet" href="./css/themes.css?v=6.0232">
+  <link rel="stylesheet" href="./css/style.css?v=6.0232">
+  <link rel="stylesheet" href="./css/map.css?v=6.0232">
+  <link rel="stylesheet" href="./css/sidebar.css?v=6.0232">
+  <link rel="stylesheet" href="./css/components.css?v=6.0232">
+  <link rel="stylesheet" href="./css/layout.css?v=6.0232">
+  <link rel="stylesheet" href="./css/dashboard.css?v=6.0232">
+  <link rel="stylesheet" href="./css/refine.css?v=6.0232">
+</head>
+
+<!-- no-brand matches the DBOT-logo toggle, which starts off. A saved project
+     that had it on turns it back on when it loads. -->
+<body class="no-brand">
+  <!-- data-mode drives the whole layout: 'map' (full-screen studio, the
+       default), 'dashboard' (the map becomes one resizable tile among the
+       cards) and 'report' (the map becomes the middle of an A4 sheet). The map
+       is never RE-CREATED between them, which is what keeps it the same live,
+       editable Map Studio with the same project, tools and undo history in
+       every mode. It does get moved in the DOM on the way into the dashboard,
+       where it is a tile on the canvas — that move is safe and was measured:
+       appendChild relocates the subtree intact, layers and all. -->
+  <div class="app" id="app" data-mode="map">
+
+    <!-- ===== Dashboard & report chrome. Siblings of .map-wrap rather than a
+         wrapper around it, so each mode is one grid and the map is just
+         another item in it — no nesting to unpick when the mode changes. ===== -->
+
+    <nav id="dashNav" aria-label="Views">
+      <div class="dn-brand">
+        <span class="dn-logo"><img class="dbotLogo" alt="DBOT"></span>
+        <span class="dn-sub">MAP STUDIO</span>
+      </div>
+      <button class="dn-item" data-mode-btn="map" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2Z"/><path d="M9 4v14M15 6v14"/></svg>
+        <span>Map studio</span></button>
+      <button class="dn-item" data-mode-btn="dashboard" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Dashboard</span></button>
+      <div class="dn-sep"></div>
+      <button class="dn-item" id="dnTools" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5"/></svg>
+        <span>Tools</span></button>
+      <a class="dn-item" id="dnProjects" href="./projects.html">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v12Z"/></svg>
+        <span>Projects</span></a>
+      <div class="dn-foot" id="dnFoot"></div>
+    </nav>
+
+    <header id="dashTop">
+      <!-- Where the nav's controls live on the board. The rail is gone there
+           (see css/dashboard.css) and these are re-parented in rather than
+           duplicated: a second Tools button would be a second thing to keep in
+           step with the first, which is the same reasoning the search box has
+           always used. -->
+      <div id="dashTopNav"></div>
+      <div id="dashTopSearch"></div>
+      <span class="dt-spacer"></span>
+      <span class="dt-div"></span>
+
+      <!-- The allowance doubles as the way in to the reports it counts: a
+           number with no way to open what it is counting is just a scold. -->
+      <div class="dt-wrap">
+        <button class="dt-meter" id="dtUsage" type="button" aria-haspopup="true" aria-expanded="false"
+          title="Reports generated today — click to open or download them">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 13.6 8 19 9.6 13.6 11.2 12 16.6 10.4 11.2 5 9.6 10.4 8Z"/></svg>
+          <b>AI reports</b><i id="dtUsageVal">—</i>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="dt-pop" id="dtReports" hidden role="menu" aria-label="AI reports"></div>
+      </div>
+
+      <div class="dt-wrap">
+        <button class="dt-btn" id="dashExportBtn" type="button" aria-haspopup="true" aria-expanded="false"
+          title="Export the board as an image or a PDF">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          Export
+        </button>
+        <div class="dt-pop" id="dashExportMenu" hidden role="menu" aria-label="Export the board"></div>
+      </div>
+
+      <button class="dt-btn" id="dashEditBtn" type="button" aria-pressed="false"
+        title="Edit the board: retype any value, move and resize any tile">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Edit board
+      </button>
+
+      <button class="dt-cta" id="dtNewReport" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        New research</button>
+
+      <span class="dt-div"></span>
+
+      <!-- Preferences and the account, which until now lived only in the map
+           sidebar's brandbar — and that panel is off-canvas on the board, so
+           changing the theme or signing out meant leaving the dashboard first.
+           The gear opens the same dialog; the avatar opens the same menu. -->
+      <button class="dt-icon" id="dashPrefsBtn" type="button"
+        title="Preferences (theme, units)" aria-label="Preferences">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>
+      </button>
+
+      <div class="dt-wrap" id="dashAcct"></div>
+    </header>
+
+    <!-- The board's canvas. Every tile on it — the map included — is placed
+         from grid units by js/ui/dashLayout.js, so it is deliberately an empty
+         positioned box here rather than a CSS grid. -->
+    <section id="dashGrid" aria-label="Dashboard canvas"></section>
+    <!-- The format pane. Only takes a column while the board is unlocked and a
+         visual is selected — otherwise the board gets the full width. -->
+    <aside id="dashFormat" aria-label="Format the selected visual"></aside>
+
+    <!-- ===== Report sheet panels ===== -->
+    <header id="rsHead">
+      <div class="rs-head-main">
+        <h1 id="rsTitle" contenteditable="true" spellcheck="false">CONNECTIVITY MAP</h1>
+        <p id="rsSubA" contenteditable="true" spellcheck="false">Project Location: 17.329367, 78.434669</p>
+        <p id="rsSubB" contenteditable="true" spellcheck="false">Rajendranagar / Budvel, Hyderabad</p>
+      </div>
+    </header>
+    <aside id="rsLegend"></aside>
+    <aside id="rsRight"></aside>
+    <footer id="rsFoot"></footer>
+
+    <div class="map-wrap" id="mapWrap">
+      <div id="tiltStage">
+        <div id="map"></div>
+      </div>
+      <div id="billboardLayer"></div>
+      <div class="search-box collapsed" id="searchBox">
+        <div class="inner frost">
+          <button class="sIconBtn" id="searchIconBtn" title="Search" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.5" y2="16.5" />
+            </svg>
+          </button>
+          <input id="searchInput" placeholder="Search a place, or paste lat, lng…" autocomplete="off">
+          <span class="sSpin" id="sSpin" hidden></span>
+          <button class="sClear" id="sClear" hidden title="Clear">×</button>
+          <button id="searchBtn" title="Search">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="18" y2="12" />
+              <polyline points="12 6 18 12 12 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="search-results frost" id="searchResults"></div>
+      </div>
+      <!-- Hidden to match its toggle, which now starts off. -->
+      <div id="titleCard" contenteditable="true" spellcheck="false" style="display:none;">PROPERTY LOCATION &amp; ACCESS</div>
+      <div id="legendCard" style="display:none;">
+        <div class="hd"><span class="grip" id="legendDrag">⠿</span><button id="legendEditBtn" type="button"
+            class="legend-edit" title="Edit the rows, icons and values" aria-label="Edit key distances" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button><span class="ttl" id="legendTitle"
+            contenteditable="true" spellcheck="false">KEY DISTANCES</span></div>
+        <table>
+          <tbody id="legendBody"></tbody>
+        </table>
+        <div id="legendFoot" style="display:none;">
+          <button id="legendAddRow" type="button">+ Add a row</button>
+          <label class="chk"><input type="checkbox" id="legendTimeTgl" checked> Time</label>
+          <span style="flex:1"></span>
+          <button id="legendResetAll" type="button" title="Drop every override and show the measured table again">Reset</button>
+        </div>
+      </div>
+      <!-- What the colours mean. Separate card from KEY DISTANCES: "how far is
+           it" and "what am I looking at" are two questions, and one table with
+           two half-filled columns answers neither. -->
+      <div id="contourLegendCard" style="display:none;">
+        <div class="hd"><span class="grip" id="contourLegendDrag">⠿</span><span class="ttl"
+            id="contourLegendTitle" contenteditable="true" spellcheck="false">ELEVATION</span></div>
+        <div id="contourLegendBody">
+          <div id="contourLegendBands" class="cl-bands"></div>
+        </div>
+        <div id="contourLegendFoot"></div>
+      </div>
+
+      <div id="colorKeyCard" style="display:none;">
+        <div class="hd"><span class="grip" id="colorKeyDrag">⠿</span><button id="colorKeyEditBtn" type="button"
+            class="legend-edit" title="Rename rows, change colours, add your own" aria-label="Edit the colour key" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button><span class="ttl" id="colorKeyTitle"
+            contenteditable="true" spellcheck="false">LEGEND</span></div>
+        <div id="colorKeyBody"></div>
+        <div id="colorKeyFoot" style="display:none;">
+          <button id="colorKeyAdd" type="button">+ Add a row</button>
+          <span style="flex:1"></span>
+          <button id="colorKeyReset" type="button" title="Drop every rename and show what is actually on the map">Reset</button>
+        </div>
+      </div>
+      <div id="clickHint">Click anywhere to drop a location · Esc to finish</div>
+      <!-- The way into the other two modes. It has to live on the map, because
+           in map mode the left nav is hidden and this is the only thing that
+           can reach the dashboard. Same data-mode-btn attribute as the nav's
+           items, so it needs no JS of its own. -->
+      <div id="modeSwitch" class="frost" role="group" aria-label="View">
+        <button class="ms-item" data-mode-btn="map" type="button" title="Map studio">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2Z"/><path d="M9 4v14M15 6v14"/></svg>
+          <span>Map</span></button>
+        <button class="ms-item" data-mode-btn="dashboard" type="button" title="Dashboard — the map plus editable cards">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          <span>Dashboard</span></button>
+      </div>
+      <div id="mapHistory">
+        <button id="mapUndoBtn" class="frost" type="button" title="Undo (Ctrl+Z) — covers everything: moves, styling, adds and deletes" aria-label="Undo" disabled>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>
+        </button>
+        <button id="mapRedoBtn" class="frost" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/></svg>
+        </button>
+      </div>
+      <button id="fsBtn" class="frost" title="Fullscreen">⛶</button>
+      <!-- Ask the map what something is. Off by default: a click already means
+           several other things depending on which tool is armed, so this is a
+           mode you turn on rather than a meaning stolen from the plain click. -->
+      <button id="identifyBtn" class="frost" title="Identify — click anything on the map to see what it is"
+        aria-label="Identify features on the map" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+          <path d="M11 8h.01M10.2 11h.9v3.2h.9" />
+        </svg>
+      </button>
+      <button id="layerBtn" class="frost" title="Layers — show / hide map objects">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
+          <polyline points="2 15.5 12 22 22 15.5" />
+        </svg>
+      </button>
+      <!-- Recentre. There is a Fit button in the sidebar, but on the board the
+           sidebar is off-canvas and the map is a small tile you nudge around
+           constantly — the one control you reach for most had no place to be
+           reached from. -->
+      <button id="centerBtn" class="frost" title="Centre on your locations" aria-label="Centre the map on your locations">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M12 2v3.4M12 18.6V22M2 12h3.4M18.6 12H22" />
+          <circle cx="12" cy="12" r="8.4" opacity=".55" />
+        </svg>
+      </button>
+      <!-- Flat or tilted. A segmented pair rather than one button that changes
+           its own label: with a toggle you have to read the label to work out
+           which state you are IN, and the answer is the opposite of what it
+           says. Two segments show the choice and the current answer at once. -->
+      <div id="dimSwitch" class="frost" role="group" aria-label="Map dimension">
+        <button class="dim-item on" id="dim2dBtn" type="button" aria-pressed="true"
+          title="Flat map">2D</button>
+        <button class="dim-item" id="dim3dBtn" type="button" aria-pressed="false"
+          title="3D terrain — drag to pan, right-drag or two fingers to orbit and tilt">3D</button>
+      </div>
+      <button id="northUpBtn" class="frost" type="button" hidden
+        title="Drag to orbit the camera · click to face north" aria-label="Orbit the camera. Click to face north.">
+        <!-- A compass rose, not a circle with a triangle in it. The north half
+             is filled in the brand orange and the south half is left hollow,
+             which is how every compass on every map has said which way is north
+             since long before this one — and it reads at 26px, which the old
+             outlined triangle inside an outlined circle did not. -->
+        <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+          <circle cx="16" cy="16" r="13.2" fill="none" stroke="currentColor"
+            stroke-width="1.1" opacity=".28" />
+          <!-- the cardinal ticks, so the rose has a horizon -->
+          <g stroke="currentColor" stroke-width="1.1" opacity=".45" stroke-linecap="round">
+            <path d="M16 2.4v2.6M16 27v2.6M2.4 16h2.6M27 16h2.6" />
+          </g>
+          <path d="M16 5.2 20 17.4 16 15.1 12 17.4Z" fill="var(--orange, #F26B21)" />
+          <path d="M16 26.8 12 14.6 16 16.9 20 14.6Z" fill="currentColor" opacity=".38" />
+          <circle cx="16" cy="16" r="1.5" fill="currentColor" opacity=".65" />
+        </svg>
+        <span class="nub-n" aria-hidden="true">N</span>
+      </button>
+
+      <!-- The tilt half of the navigator. MapLibre can already orbit and tilt,
+           but only from right-drag and ctrl-drag, which nobody finds — so the
+           camera read as being stuck at one fixed angle. This is the visible
+           way to do it, and the compass above is the other half. -->
+      <div id="m3dTiltWrap" class="frost" hidden>
+        <input id="m3dTilt" type="range" min="0" max="80" step="1" value="60"
+          title="Camera tilt" aria-label="Camera tilt in degrees" orient="vertical">
+        <span id="m3dTiltVal" aria-hidden="true">60°</span>
+      </div>
+      <button id="aiBtn" class="frost" title="AI Reports — research a site and generate a report">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.5 13.9 8 19.5 9.9 13.9 11.8 12 17.3 10.1 11.8 4.5 9.9 10.1 8 Z" />
+          <path d="M18.5 15.5 19.3 17.7 21.5 18.5 19.3 19.3 18.5 21.5 17.7 19.3 15.5 18.5 17.7 17.7 Z" />
+        </svg>
+      </button>
+      <div id="layerPanel" class="frost" hidden>
+        <div class="lp-head">
+          <span class="lp-title">Layers</span>
+          <button id="lpClose" title="Close">&times;</button>
+        </div>
+        <div class="lp-search-row">
+          <input id="lpSearch" placeholder="Search layers…" autocomplete="off">
+        </div>
+        <div id="lpBody"></div>
+        <div id="lpEmpty" class="lp-empty">Nothing on the map yet — add locations, routes or shapes and they'll appear
+          here.</div>
+      </div>
+      <div id="aiPanel" class="frost" hidden>
+        <div class="lp-head">
+          <span class="lp-title">AI Reports</span>
+          <button id="aiClose" title="Close">&times;</button>
+        </div>
+        <div id="aiPanelBody">
+        <div class="field">
+          <div class="lbl">Generate a report</div>
+          <div class="stack">
+            <select id="aiSitePicker" class="grow"></select>
+            <button class="btn btn-primary btn-block" id="aiGenerateBtn">Generate report</button>
+            <div class="sub" id="aiUsageLine" style="white-space:normal;line-height:1.5;"></div>
+            <div class="sub" style="line-height:1.5;">Researches connectivity, upcoming
+              infrastructure &amp; government projects, and local news around a location tagged
+              <b>Site ★</b> in the Locations tab, then delivers a PDF and Word report.</div>
+          </div>
+        </div>
+        <div class="field" id="aiResults" style="display:none;">
+          <div class="lbl">Report</div>
+          <div class="stack">
+            <div class="act-group act-1">
+              <!-- No target="_blank": the response is Content-Disposition:
+                   attachment, so the browser downloads it and stays put. A new
+                   tab would flash and close at best, and be swallowed by a
+                   popup blocker at worst — which is what "nothing downloads"
+                   looks like from the outside. -->
+              <a class="btn btn-block" id="aiPdfLink" rel="noopener">Download PDF</a>
+              <a class="btn btn-block btn-ghost" id="aiDocxLink" rel="noopener">Download Word (.docx)</a>
+            </div>
+            <div class="sub" id="aiExpiryLine" style="white-space:normal;line-height:1.5;"></div>
+          </div>
+        </div>
+        <div class="field" id="aiChatField" style="display:none;">
+          <div class="lbl">Ask about this report</div>
+          <div class="stack">
+            <div id="aiChatHistory" class="ai-chat-history"></div>
+            <div class="np-search">
+              <input type="text" id="aiChatInput" autocomplete="off" placeholder="e.g. how does this compare with Pune?">
+              <button class="btn" id="aiChatSendBtn" type="button">Ask</button>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+      <!-- A NAUTICAL COMPASS ROSE, not a circle with a triangle in it.
+           Every face of every point is split light/dark down its spine, which
+           is what makes a rose read as a rose rather than as a starburst — the
+           fold is the drawing. Cardinal points run past the graduated ring and
+           the intercardinals stop inside it, so which four directions are named
+           is legible before the letters are.
+
+           THE NORTH POINT IS ORANGE. The reference is monochrome, and on paper
+           that is fine because the reader has time to find the N. On a map you
+           are glancing, so the one point that matters is the one that is a
+           different colour. Everything else follows the reference.
+
+           Drawn on a dark disc because this sits over both a pale road map and
+           dark satellite imagery, and ink alone reads on neither.
+
+           INLINE SVG WITH LITERAL COLOURS, deliberately: html2canvas resolves
+           no CSS variables, and this element is captured into every PNG, PDF,
+           PowerPoint and Word export. A currentColor here exports as black. -->
+      <div id="northArrow"><svg viewBox="-7 -7 130 130" width="54" height="54">
+          <circle cx="58" cy="58" r="63" fill="rgba(12,19,35,.86)"
+            stroke="rgba(255,255,255,.20)" stroke-width="2.4" />
+          <!-- the graduated ring, and its ticks -->
+          <circle cx="58" cy="58" r="37.6" fill="none" stroke="#8FA6C8" stroke-width="1.5" opacity=".55" />
+          <circle cx="58" cy="58" r="32.4" fill="none" stroke="#8FA6C8" stroke-width="1.5" opacity=".55" />
+          <path stroke="#8FA6C8" stroke-width="1.4" opacity=".45" d="M70.5 27.9L72.3 23.4 M81.1 34.9L84.4 31.6 M88.1 45.5L92.6 43.7 M88.1 70.5L92.6 72.3 M81.1 81.1L84.4 84.4 M70.5 88.1L72.3 92.6 M45.5 88.1L43.7 92.6 M34.9 81.1L31.6 84.4 M27.9 70.5L23.4 72.3 M27.9 45.5L23.4 43.7 M34.9 34.9L31.6 31.6 M45.5 27.9L43.7 23.4" />
+          <!-- the eight-point rose: lit faces, then shadowed faces -->
+          <path fill="#E8EFFA" d="M58.0 15.0L48.5 48.5L58.0 58.0Z M79.9 36.1L58.0 44.5L58.0 58.0Z M101.0 58.0L67.5 48.5L58.0 58.0Z M79.9 79.9L71.5 58.0L58.0 58.0Z M58.0 101.0L67.5 67.5L58.0 58.0Z M36.1 79.9L58.0 71.5L58.0 58.0Z M15.0 58.0L48.5 67.5L58.0 58.0Z M36.1 36.1L44.5 58.0L58.0 58.0Z" />
+          <path fill="#7F97BC" d="M58.0 15.0L58.0 58.0L67.5 48.5Z M79.9 36.1L58.0 58.0L71.5 58.0Z M101.0 58.0L58.0 58.0L67.5 67.5Z M79.9 79.9L58.0 58.0L58.0 71.5Z M58.0 101.0L58.0 58.0L48.5 67.5Z M36.1 79.9L58.0 58.0L44.5 58.0Z M15.0 58.0L58.0 58.0L48.5 48.5Z M36.1 36.1L58.0 58.0L58.0 44.5Z" />
+          <!-- north, twice over: drawn again in the brand orange -->
+          <path fill="#FF9A4D" d="M58.0 15.0L48.5 48.5L58.0 58.0Z" />
+          <path fill="#F26B21" d="M58.0 15.0L58.0 58.0L67.5 48.5Z" />
+          <!-- the inner rose -->
+          <path fill="#E8EFFA" d="M58.0 37.0L54.5 54.5L58.0 58.0Z M67.9 48.1L58.0 53.0L58.0 58.0Z M79.0 58.0L61.5 54.5L58.0 58.0Z M67.9 67.9L63.0 58.0L58.0 58.0Z M58.0 79.0L61.5 61.5L58.0 58.0Z M48.1 67.9L58.0 63.0L58.0 58.0Z M37.0 58.0L54.5 61.5L58.0 58.0Z M48.1 48.1L53.0 58.0L58.0 58.0Z" />
+          <path fill="#6E86AB" d="M58.0 37.0L58.0 58.0L61.5 54.5Z M67.9 48.1L58.0 58.0L63.0 58.0Z M79.0 58.0L58.0 58.0L61.5 61.5Z M67.9 67.9L58.0 58.0L58.0 63.0Z M58.0 79.0L58.0 58.0L54.5 61.5Z M48.1 67.9L58.0 58.0L53.0 58.0Z M37.0 58.0L58.0 58.0L54.5 54.5Z M48.1 48.1L58.0 58.0L58.0 53.0Z" />
+          <!-- the hub -->
+          <circle cx="58" cy="58" r="9" fill="none" stroke="#8FA6C8" stroke-width="1.6" opacity=".7" />
+          <circle cx="58" cy="58" r="5.4" fill="#E8EFFA" />
+          <!-- The letters carry an explicit y rather than a dominant-baseline,
+               which html2canvas ignores — it would export them off-centre. -->
+          <g fill="#EAF0F9" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" text-anchor="middle">
+            <text x="58.0" y="13.6">N</text>
+            <text x="108.0" y="63.6">E</text>
+            <text x="58.0" y="113.6">S</text>
+            <text x="8.0" y="63.6">W</text>
+          </g>
+        </svg></div>
+      <div id="brandMark"><img class="dbotLogo" alt="DBOT"></div>
+      <div id="mapCredit"></div>
+      <div id="ctxMenu"></div>
+
+      <div id="basemapSwitcher">
+        <div id="bmPanel" class="frost" hidden>
+          <div class="bm-grid" id="bmGrid"></div>
+          <label class="bm-hd"><input type="checkbox" id="hdTgl" checked> HD imagery (deepest, sharpest tiles)</label>
+          <!-- What the ground shows, as separate transparent tile layers.
+               Lives in this panel because it is the same question as which
+               ground: names and roads are part of the ground, not objects
+               the app drew. -->
+          <div id="bmOverlays"></div>
+          <!-- The basemap manager lives in Settings → Basemap manager. It is
+               configuration you touch once, not part of choosing a basemap, so
+               it does not earn a permanent place in this panel. -->
+          <!-- Options are generated from map/basemapProviders.js by
+               ui/basemapSwitcher.js; this select stays as the value-holder that
+               project save/load reads. -->
+          <select id="basemapSel" hidden></select>
+        </div>
+        <button id="bmToggle" class="bm-thumb" title="Change basemap">
+          <span class="bm-thumb-img" id="bmThumbImg"></span>
+          <span class="bm-thumb-label" id="bmThumbLabel">Satellite</span>
+        </button>
+      </div>
+    </div>
+
+    <aside class="sidebar frost">
+      <div class="brandbar">
+        <button id="prefsBtn" class="prefs-gear" title="Preferences (theme, units)" aria-label="Preferences">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <div class="logoPill"><img class="dbotLogo" alt="DBOT"></div>
+        <div class="tag">MARKET RESEARCH </div>
+        <h1>Property <em>Map Studio</em></h1>
+        <p>real coordinates · real roads · real routing<span class="appVer" id="appVer"></span></p>
+      </div>
+      <nav class="tabs">
+        <button id="tabBtnLoc" class="active">Locations</button>
+        <button id="tabBtnRt">Routes</button>
+        <button id="tabBtnDraw">Draw</button>
+        <button id="tabBtnNearby">Nearby</button>
+        <button id="tabBtnMap">Settings</button>
+      </nav>
+      <div class="panes">
+
+        <section id="paneLoc" class="pane active">
+          <!-- Three ways to get a location onto the map. Two point-at-a-time
+               actions share the top row; the bulk one spans the width below
+               them, which is an honest read of the weight: one import can do
+               what twenty clicks of the others would. -->
+          <div class="act-group">
+            <button class="btn" id="addLocBtn">+ Add manually</button>
+            <button class="btn" id="clickAddBtn">Click map to add</button>
+            <!-- Same shape as click-to-add, one row down: arm a mode, click the
+                 map, get a thing. Deliberately not a modifier-key shortcut —
+                 nobody discovers those. -->
+            <button class="btn btn-span" id="boundaryPickBtn" title="Click anywhere on the map to outline the locality there">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 2.6 20.4 7.3v9.4L12 21.4 3.6 16.7V7.3Z" stroke-dasharray="4 3" />
+              </svg>
+              Click map for a boundary
+            </button>
+            <button class="btn btn-span" id="importOpenBtn">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 3v18" />
+              </svg>
+              Import from Excel / CSV
+            </button>
+          </div>
+          <div id="locGroups" class="geom-groups" style="display:none"></div>
+          <div id="locList"></div>
+          <div id="locEmpty" class="empty">
+            <b>No locations yet.</b><br>
+            Search a place on the map (live suggestions as you type), paste coordinates straight into the search
+            bar — decimal or DMS both work — use <b>Click map to add</b>, or add manually.
+          </div>
+        </section>
+
+        <section id="paneRt" class="pane">
+          <div class="act-group act-1">
+            <button class="btn btn-block" id="addRtBtn">+ Add route</button>
+          </div>
+          <!-- Draw a road by clicking its two ends. The old way — drop two
+               pins, tick "Hide marker" on both, route between them — left two
+               junk entries in Locations for every road on the map. -->
+          <div class="field">
+            <div class="lbl">Draw a road on the map</div>
+            <!-- Stacked, not side by side. `.row2 .btn` is flex:1 against an
+                 unconstrained <select>, and the class names here are long
+                 ("Expressway / National Highway"), so the select ate the row
+                 and squashed the button to three broken letters. -->
+            <select id="roadDrawClass" class="rd-class" title="What kind of line this is — it decides the colour"></select>
+            <button class="btn btn-block rd-go" id="roadDrawBtn" title="Click the two ends of a road and it is drawn between them, with nothing added to Locations">
+              ✏ <span class="rd-label">Draw a road</span></button>
+            <div class="sub" style="margin-top:6px;line-height:1.5;">
+              Click one end, then the other. Roads are routed along real roads;
+              metro, railway and water are drawn as straight lines, because they
+              are not driven.
+            </div>
+          </div>
+          <div id="rtList"></div>
+          <div id="rtEmpty" class="empty">
+            <b>No routes yet.</b><br>
+            A route connects any two locations along real roads — site to landmark, landmark to landmark, or two points
+            along a highway to trace the highway itself.
+          </div>
+        </section>
+
+        <section id="paneDraw" class="pane">
+          <div class="field">
+            <div class="lbl">Draw a shape</div>
+            <div class="draw-grid act-group act-3">
+              <button class="btn draw-shape-btn" id="drawMarkerBtn" data-shape="Marker" title="Marker">📍<span>Marker</span></button>
+              <button class="btn draw-shape-btn" id="drawLineBtn" data-shape="Line" title="Polyline">／<span>Line</span></button>
+              <button class="btn draw-shape-btn" id="drawPolygonBtn" data-shape="Polygon" title="Polygon">⬠<span>Polygon</span></button>
+              <button class="btn draw-shape-btn" id="drawRectBtn" data-shape="Rectangle" title="Rectangle">▭<span>Rectangle</span></button>
+              <button class="btn draw-shape-btn" id="drawCircleBtn" data-shape="Circle" title="Circle">◯<span>Circle</span></button>
+              <button class="btn draw-shape-btn" id="drawCircleMarkerBtn" data-shape="CircleMarker" title="Circle marker">•<span>Circle mkr</span></button>
+              <button class="btn draw-shape-btn" id="drawLabelBtn" data-shape="Label" title="Place free-standing text anywhere on the map — an area name, a phase, a note">T<span>Text</span></button>
+            </div>
+            <div class="row2" style="margin-top:6px;">
+              <button class="btn" id="drawFinishBtn" title="Finish the shape you're drawing (Polygon/Line: click the first point again, or use this button)">✓ Finish</button>
+              <button class="btn btn-ghost" id="drawCancelBtn" title="Cancel the shape you're drawing (Esc)">✕ Cancel</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Edit</div>
+            <div class="row2" style="margin-bottom:6px;">
+              <button class="btn draw-mode-btn" id="drawEditBtn" data-mode="edit">✎ Edit</button>
+              <button class="btn draw-mode-btn" id="drawDragBtn" data-mode="drag">✛ Drag</button>
+            </div>
+            <div class="row2" style="margin-bottom:6px;">
+              <button class="btn draw-mode-btn" id="drawRotateBtn" data-mode="rotate">↻ Rotate</button>
+              <button class="btn draw-mode-btn" id="drawRemoveBtn" data-mode="remove">🗑 Delete</button>
+            </div>
+            <div class="row2">
+              <button class="btn btn-ghost" id="drawUndoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+              <button class="btn btn-ghost" id="drawRedoBtn" title="Redo (Ctrl+Y)">↷ Redo</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Measure</div>
+            <div class="stack">
+              <button class="btn btn-block" id="aerialBtn">📏 Measure straight-line distance</button>
+              <button class="btn btn-ghost btn-block" id="aerialClearBtn" style="display:none;">Clear measurements</button>
+              <div class="sub" style="line-height:1.5;">Click two points for straight-line distance &amp;
+                bearing. Measurements stay on the map — drag either endpoint to adjust. Each one gets a card below to
+                rename, recolour, restyle and add notes.</div>
+              <div id="measureList"></div>
+              <div id="measureEmpty" class="sub" style="white-space:normal;">No measurements yet.</div>
+            </div>
+          </div>
+          <div id="drawLiveStats" class="draw-live-stats" style="display:none;"></div>
+          <div id="geomGroups" class="geom-groups" style="display:none"></div>
+          <div id="geomList"></div>
+          <div id="geomEmpty" class="empty">
+            <b>No shapes yet.</b><br>
+            Pick a shape above, then click on the map to draw. Land boundaries, site outlines, and route sketches all
+            support edit, drag, resize, rotate, undo/redo — plus live distance / perimeter / area as you draw.
+          </div>
+          <div class="field">
+            <div class="lbl">Contour map</div>
+            <div class="stack contour-panel">
+              <div id="contourMapList" class="contour-maps"></div>
+              <button class="btn btn-ghost btn-block" id="contourNewBtn"
+                title="Start another contour map — the one you are on stays where it is">+ New contour map</button>
+
+              <div class="inline-ctl">
+                <span class="sub">Area</span>
+                <select id="contourShape" title="The shape to draw for the study area"></select>
+                <button class="btn mini-btn" id="contourAreaDrawBtn" title="Draw the area to contour on the map">Draw</button>
+              </div>
+              <button class="btn btn-ghost btn-block" id="contourAreaViewBtn"
+                title="Use whatever the map is showing right now as the study area">Use current view</button>
+              <div class="sub" id="contourAreaInfo">No area chosen yet.</div>
+
+              <div class="inline-ctl">
+                <span class="sub">Every</span>
+                <select id="contourInterval" title="Vertical distance between contour lines"></select>
+                <select id="contourUnit" class="ctl-narrow" title="Metres or feet"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Colours</span>
+                <button type="button" id="contourRampBar" class="contour-ramp-bar"
+                  aria-haspopup="dialog" aria-expanded="false" title="Elevation colours"></button>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Bold</span>
+                <select id="contourBold" title="Which contours are drawn heavier as index lines"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Labels</span>
+                <select id="contourLabels" title="Which contours carry their height"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Smoothing</span>
+                <select id="contourSmoothing" title="Round off the staircase the sample grid leaves behind"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Detail</span>
+                <select id="contourDetail" title="How finely the elevation is sampled"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Roads</span>
+                <select id="contourRoads" title="Roads, water and buildings from OpenStreetMap, drawn over the contours"></select>
+              </div>
+              <div class="inline-ctl">
+                <span class="sub">Fill</span>
+                <input type="range" id="contourOpacity" min="0" max="100" step="5" value="78"
+                  title="How strongly the elevation colours cover the basemap">
+                <span class="val" id="contourOpacityVal">78%</span>
+              </div>
+
+              <label class="chk"><input type="checkbox" id="contourShade" checked> Relief shading</label>
+              <label class="chk"><input type="checkbox" id="contourOutline" checked> Outline the study area</label>
+              <div class="inline-ctl"><span class="sub">Relief</span><input type="range" id="contourExag" min="10"
+                  max="50" step="1" value="10"
+                  title="Vertical exaggeration of the terrain in the 3D view. 1x is the real shape of the ground; anything above it makes slopes look steeper than they are."><span
+                  class="val" id="contourExagVal">1.0×</span></div>
+
+              <button class="btn btn-block" id="contourGenBtn" disabled>Generate contour map</button>
+              <div class="row2">
+                <button class="btn btn-ghost" id="contourShapesBtn" disabled
+                  title="Turn the contours into editable shapes with cards, styling and GeoJSON export">To shapes</button>
+                <button class="btn btn-ghost" id="contourClearBtn" aria-haspopup="menu" aria-expanded="false"
+                  title="Remove a contour map — choose which">Clear…</button>
+              </div>
+              <div class="sub" id="contourStats" style="line-height:1.5;white-space:normal;"></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="lbl">Import / Export</div>
+            <div class="stack">
+              <button class="btn" id="geoExportBtn">Export shapes as GeoJSON</button>
+              <button class="btn btn-ghost" id="geoImportBtn">Import GeoJSON</button>
+              <input type="file" id="geoImportInput" accept=".geojson,.json,application/geo+json,application/json" style="display:none;">
+            </div>
+          </div>
+        </section>
+
+        <section id="paneNearby" class="pane">
+          <div class="field">
+            <div class="lbl">Find places near</div>
+            <div class="stack">
+              <div class="act-group act-1">
+                <!-- Centre the search on a real location rather than wherever
+                     the map happens to be panned. What you want to know is
+                     what's near *the site*, not what's near the middle of the
+                     screen. Falls back to the map centre when there are no
+                     locations yet. -->
+                <select id="nearbyCenterPicker" class="grow"></select>
+                <button class="btn btn-block" id="nearbyCenterBtn">📍 Search around map centre</button>
+              </div>
+              <!-- Up to 20 km: a 5 km ceiling is fine for schools and shops, but
+                   too tight for the things people actually check a site against —
+                   the nearest airport, a highway junction, an IT park. -->
+              <div class="inline-ctl"><span class="sub">Radius</span><input type="range" id="nearbyRadius" min="500"
+                  max="20000" step="500" value="2000"><span class="val" id="nearbyRadiusVal">2.0 km</span></div>
+              <div class="sub" style="line-height:1.5;">Pick a location to search around — or leave it
+                on the map centre and pan to your area — then toggle categories to drop nearby places. Each category
+                loads on first tap and can be switched off again.</div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Search for anything nearby</div>
+            <div class="stack">
+              <div class="np-search">
+                <input type="text" id="nearbySearchInput" autocomplete="off"
+                  placeholder="e.g. real estate agents, cake shops, gyms…">
+                <button class="btn" id="nearbySearchBtn" type="button">Search</button>
+              </div>
+              <div class="sub" style="line-height:1.5;">Not limited to the categories below — type
+                what you're looking for and it becomes its own chip you can toggle or remove.</div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">Categories</div>
+            <div class="nearby-grid" id="nearbyGrid"></div>
+            <div class="sub" style="line-height:1.5;margin-top:6px;">Click any place on the map to add
+              it to your locations list.</div>
+          </div>
+          <button class="btn btn-ghost btn-block" id="nearbyClearBtn" style="display:none;margin-top:4px;">Clear nearby
+            places</button>
+        </section>
+
+        <section id="paneMap" class="pane">
+
+          <!-- What kind of map this is. Connectivity is a line diagram and
+               wants a plain street ground and fixed colours; Satellite is a
+               photograph of a place with things marked on it. Picking one sets
+               the ground and the colour rules together, instead of leaving
+               eight settings to be remembered by hand. -->
+          <div class="field">
+            <div class="lbl">Map layout</div>
+            <div class="layout-seg" role="group" aria-label="Map layout">
+              <button type="button" data-layout-btn="satellite">
+                <b>Satellite</b><i>Imagery ground · free colours</i></button>
+              <button type="button" data-layout-btn="connectivity">
+                <b>Connectivity</b><i>OpenStreetMap · standard road colours</i></button>
+            </div>
+            <div class="sub" style="margin-top:6px;line-height:1.5;">
+              Connectivity gives every road class the same colour in every report, on the OpenStreetMap ground. The ground and the road colours are both fixed while it is on — that is what makes two people&rsquo;s maps of the same city match. Switch to Satellite for imagery and free colours.</div>
+          </div>
+
+          <div class="pane-actions act-group act-1">
+            <button class="btn btn-primary btn-block" id="exportCenterBtn">Export…</button>
+            <button class="btn btn-ghost btn-block" id="loadBtn">Open project or import KMZ / KML / GPX / GeoJSON / CSV</button>
+            <input type="file" id="loadInput" style="display:none;">
+          </div>
+
+          <!-- Autosave status and its escape hatch. Restore happens silently on
+               load, so the way *out* of a restored session has to be visible
+               somewhere obvious or silent restore becomes a trap. -->
+          <div class="field">
+            <div class="lbl">This session</div>
+            <div class="stack">
+              <div class="as-row">
+                <span class="as-dot" id="asDot"></span>
+                <span class="sub" id="asState">Autosave on — your work is kept if you refresh.</span>
+              </div>
+              <div class="act-group act-1">
+                <button class="btn btn-block" id="asSnapsBtn">Earlier versions…</button>
+                <button class="btn btn-block btn-ghost" id="asFreshBtn">Start a fresh map</button>
+              </div>
+              <div class="sub" id="asStorage" style="white-space:normal;line-height:1.5;"></div>
+            </div>
+          </div>
+
+          <div class="acc" data-acc="depth">
+            <button class="acc-hd" type="button">3D &amp; terrain<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <div class="inline-ctl"><span class="sub">3D tilt</span><input type="range" id="tiltRange" min="0"
+                    max="45" step="1" value="0"><span class="val" id="tiltVal">0°</span></div>
+                <label class="chk"><input type="checkbox" id="hillTgl"> Terrain relief shading</label>
+                <div class="sub" style="line-height:1.5;">Pins and labels stand upright like Google
+                  Earth while the ground tilts. Set tilt back to 0° while placing points for exact positions. PNG keeps
+                  the 3D perspective; PPTX exports flat for clean editing.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="acc" data-acc="overlays">
+            <button class="acc-hd" type="button">Overlays &amp; appearance<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <div class="stack">
+                <!-- The title card, the logo and the scale bar start OFF. They
+                     are for a finished exhibit, and most of the time this is a
+                     working map: three overlays nobody asked for, sitting on
+                     top of the thing you are trying to look at. Turn them on
+                     when the map is going into a document. -->
+                <label class="chk"><input type="checkbox" id="titleTgl"> Map title card (click the title to
+                  edit)</label>
+                <label class="chk"><input type="checkbox" id="legendTgl" checked> Key-distances panel (drag ⠿, click text
+                  to edit)</label>
+                <label class="chk"><input type="checkbox" id="colorKeyTgl" checked> Legend — what the colours mean (drag ⠿, click the pencil to rename rows)</label>
+                <label class="chk"><input type="checkbox" id="contourLegendTgl" checked> Elevation scale (shown while a contour map is on)</label>
+                <label class="chk"><input type="checkbox" id="brandTgl"> DBOT logo on map &amp; exports</label>
+                <label class="chk"><input type="checkbox" id="northTgl" checked> North arrow</label>
+                <label class="chk"><input type="checkbox" id="scaleTgl"> Scale bar</label>
+                <label class="chk"><input type="checkbox" id="creditTgl" checked> Imagery credit line</label>
+                <div class="inline-ctl"><span class="sub">Label size</span><input type="range" id="chipRange" min="50"
+                    max="200" step="5" value="100"><span class="val" id="chipVal">100%</span></div>
+              </div>
+            </div>
+          </div>
+
+
+          <button class="acc acc-launch" type="button" id="brandOpenBtn">
+            <span>Brand &amp; logo</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
+          <button class="acc acc-launch" type="button" id="basemapMgrBtn">
+            <span>Map providers &amp; keys<i class="acc-launch-sub">Google / Esri keys &middot; search, nearby, routing, basemaps</i></span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
+          <div class="acc" data-acc="view">
+            <button class="acc-hd" type="button">View<span class="acc-ch">▾</span></button>
+            <div class="acc-body">
+              <button class="btn btn-block" id="fitBtn">Fit view to everything</button>
+            </div>
+          </div>
+
+
+
+        </section>
+
+
+      </div>
+      <!-- The app's only feedback channel, and since v6.0021 it also carries
+           the Undo after a delete. Without a live region a screen-reader user
+           is never told the delete happened, let alone that it is reversible.
+           polite, not assertive: it must not cut across what is being read. -->
+      <div id="statusMsg" role="status" aria-live="polite"></div>
+    </aside>
+
+    <button id="sideToggle" class="frost" title="Hide / show panel">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
+
+  </div>
+
+  <div id="prefsOverlay" class="prefs-overlay" hidden>
+    <div class="prefs-modal frost">
+      <div class="prefs-head">
+        <span class="prefs-title">Preferences</span>
+        <button id="prefsClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="prefs-body">
+        <div class="prefs-sec">
+          <div class="prefs-lbl">Appearance</div>
+          <div class="prefs-row"><span>Theme</span>
+            <div class="seg" id="prefTheme">
+              <button type="button" class="seg-btn" data-v="system">System</button>
+              <button type="button" class="seg-btn" data-v="light">Light</button>
+              <button type="button" class="seg-btn" data-v="dark">Dark</button>
+            </div>
+          </div>
+          <label class="prefs-check"><input type="checkbox" id="prefGlass"> Frosted-glass effects</label>
+          <label class="prefs-check"><input type="checkbox" id="prefBoardLight"> Light dashboard (matches what you export)</label>
+          <label class="prefs-check"><input type="checkbox" id="prefMotion"> Reduce motion (fewer animations)</label>
+        </div>
+        <div class="prefs-sec">
+          <div class="prefs-lbl">Map rendering</div>
+          <!-- Wrapped in .prefs-field for its bottom margin: every other hint in
+               this dialog sits inside one, and a bare row + hint runs into the
+               next control with half the gap of its neighbours. -->
+          <div class="prefs-field">
+            <div class="prefs-row"><span>New maps open as</span>
+              <div class="seg" id="prefLayout">
+                <button type="button" class="seg-btn" data-v="connectivity">Connectivity</button>
+                <button type="button" class="seg-btn" data-v="satellite">Satellite</button>
+              </div>
+            </div>
+            <p class="prefs-hint">Connectivity puts the map on OpenStreetMap with the standard
+              road, rail and water colours. Switching layout while you work is a one-off — it
+              does not change what the next map opens as, and a saved project always reopens in
+              the layout it was saved with.</p>
+          </div>
+          <div class="prefs-field">
+            <span class="prefs-field-lbl">Imagery look</span>
+            <div class="seg seg-block" id="imageryLook"></div>
+            <p class="prefs-hint" id="imageryLookHint"></p>
+          </div>
+          <div class="prefs-field">
+            <span class="prefs-field-lbl">Roads &amp; labels</span>
+            <div class="seg seg-block" id="roadLook"></div>
+            <p class="prefs-hint" id="roadLookHint"></p>
+          </div>
+        </div>
+        <div class="prefs-sec">
+          <div class="prefs-lbl">Measurements</div>
+          <div class="prefs-row"><span>Distance units</span>
+            <select id="prefUnitDistance">
+              <option value="auto">Auto (m / km)</option>
+              <option value="km">Kilometres</option>
+              <option value="m">Metres</option>
+              <option value="mi">Miles</option>
+            </select>
+          </div>
+          <div class="prefs-row"><span>Area units</span>
+            <select id="prefUnitArea">
+              <option value="auto">Auto</option>
+              <option value="m2">Square metres</option>
+              <option value="sqft">Square feet</option>
+              <option value="acres">Acres</option>
+              <option value="hectares">Hectares</option>
+              <option value="km2">Square kilometres</option>
+            </select>
+          </div>
+        </div>
+        <div class="prefs-foot">
+          <button class="btn btn-ghost" id="prefReset">Reset to defaults</button>
+          <span class="prefs-note">Saved on this device</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------------
+       Export Centre — every output format in one place, so choosing a format
+       is one decision in one dialog rather than three buttons in an accordion.
+       The PPTX / print / save / GeoJSON controls keep their original ids, so
+       all existing wiring binds to them unchanged.
+       ------------------------------------------------------------------ -->
+  <div id="brandOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel modal-sm frost" role="dialog" aria-modal="true" aria-labelledby="brandTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="brandTitle">Brand &amp; logo</span>
+        <button class="modal-close" id="brandClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+              <div class="stack">
+                <div id="brandPreview"
+                  style="border:1px dashed var(--stroke2);border-radius:12px;padding:14px;text-align:center;background:rgba(255,255,255,.04);">
+                  <img id="projectLogoImg" style="max-width:120px;max-height:60px;display:none;">
+                  <div id="projectLogoEmpty" style="color:var(--dim);font-size:11.5px;">No project logo · defaults to
+                    DBOT</div>
+                </div>
+                <div class="row2" style="margin:0;">
+                  <button class="btn" id="uploadProjLogoBtn">Upload logo</button>
+                  <button class="btn btn-ghost" id="clearProjLogoBtn" title="Use the DBOT mark">Use DBOT</button>
+                </div>
+                <input type="file" id="projLogoInput" accept="image/*" style="display:none;">
+                <label class="chk wrap"><input type="checkbox" id="siteUsesProjLogo"> Use project logo as default icon
+                  for Site ★ locations</label>
+                <div class="lbl" style="margin-top:6px;">Project title (shown on map)</div>
+                <input type="text" id="brandTitleInput" placeholder="PROPERTY LOCATION &amp; ACCESS">
+              </div>
+            </div>
+          </div>
+      <div class="modal-foot"><span class="modal-note">Applies to the map and every export.</span></div>
+    </div>
+  </div>
+
+  <!-- What a ring found, and what to keep. Nothing lands on the map unasked:
+       a 5 km ring over a city holds hundreds of ways, and all of them would
+       bury the drawing they were meant to support. -->
+  <div id="ringScanOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="ringScanTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="ringScanTitle">What is inside this ring</span>
+        <button class="modal-close" id="ringScanClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="ringScanBody"></div>
+      <div class="modal-foot" id="ringScanFoot"></div>
+    </div>
+  </div>
+
+  <div id="iconPickerOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="iconPickerTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="iconPickerTitle">Choose an icon</span>
+        <button class="modal-close" id="iconPickerClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="ip-search-row">
+        <input id="iconPickerSearch" type="search" placeholder="Search icons — school, metro, plot…" autocomplete="off">
+      </div>
+      <div class="modal-body" id="iconPickerBody"></div>
+      <div class="modal-foot">
+        <span class="modal-note">Icons are tinted with this location's own colour.</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="exportOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="exportTitle">Export</span>
+        <button class="modal-close" id="exportClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Image</div>
+          <div class="xc-rows" id="xcPng"></div>
+        </div>
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Presentation &amp; print</div>
+          <div class="xc-rows">
+            <button class="xc-row" id="pptxBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" />
+                </svg></span>
+              <span class="xc-txt"><b>PowerPoint slide</b><i>Routes, shapes and labels stay editable</i></span>
+              <span class="xc-meta">.pptx</span>
+            </button>
+            <button class="xc-row" id="printBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9V3h12v6M6 18H4v-6h16v6h-2" /><rect x="8" y="14" width="8" height="7" rx="1" />
+                </svg></span>
+              <span class="xc-txt"><b>Print / Save as PDF</b><i>Uses the browser print dialog</i></span>
+              <span class="xc-meta">PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="xc-group">
+          <div class="xc-group-hd">Data</div>
+          <div class="xc-rows">
+            <button class="xc-row" id="saveBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <path d="M17 21v-8H7v8M7 3v5h8" />
+                </svg></span>
+              <span class="xc-txt"><b>Project file</b><i>Everything, reopenable in Map Studio</i></span>
+              <span class="xc-meta">.json</span>
+            </button>
+            <!-- Distinct from the Draw tab's #geoExportBtn: two elements sharing
+                 one id meant getElementById only ever found that one, leaving
+                 this row wired to nothing. -->
+            <button class="xc-row" id="xcGeoExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" /><polyline points="2 15.5 12 22 22 15.5" />
+                </svg></span>
+              <span class="xc-txt"><b>Shapes as GeoJSON</b><i>Drawn geometry for GIS tools</i></span>
+              <span class="xc-meta">.geojson</span>
+            </button>
+            <button class="xc-row" id="kmlExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z" />
+                </svg></span>
+              <span class="xc-txt"><b>Everything as KML</b><i>Locations, routes and shapes for Google Earth</i></span>
+              <span class="xc-meta">.kml</span>
+            </button>
+            <button class="xc-row" id="xlsxExportBtn">
+              <span class="xc-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18" />
+                </svg></span>
+              <span class="xc-txt"><b>Locations as a sheet</b><i>The import template, filled in &mdash; edit and
+                  import it back</i></span>
+              <span class="xc-meta">.xlsx</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <span class="modal-note" id="exportNote">Exports use the current map view.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------------
+       Basemap Manager — add and manage custom XYZ tile servers alongside the
+       built-in catalogue.
+       ------------------------------------------------------------------ -->
+  <div id="importOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel modal-wide frost" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="impTitle">Import locations</span>
+        <button class="modal-close" id="importClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="xc-group" id="impStep1">
+          <div class="xc-group-hd">1 · Choose a file</div>
+          <div class="imp-drop" id="impDrop">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <b>Drop your sheet here</b>
+            <i>.xlsx or .csv &middot; <span id="impFileName">No file chosen</span></i>
+            <div class="row2">
+              <button class="btn" id="impPick">Choose file</button>
+              <button class="btn" id="impTemplateBtn">Download template</button>
+            </div>
+            <input type="file" id="impInput" accept=".xlsx,.xlsm,.csv,text/csv"
+              style="display:none;">
+          </div>
+          <p class="imp-hint">The template has <b>Name</b>, <b>Lat, Long</b>, <b>Type</b>, <b>Route to</b> and
+            <b>Mode</b>, with dropdowns already set up &mdash; <b>Route to</b> lists the other rows, so a route is
+            picked rather than retyped. Nothing is added to your map until you have seen the check below.</p>
+        </div>
+
+        <div class="imp-error" id="impError" hidden></div>
+
+        <div id="impReport" hidden>
+          <div class="xc-group">
+            <div class="xc-group-hd">2 · Check</div>
+            <div class="imp-summary" id="impSummary"></div>
+            <div class="imp-extent" id="impExtent"></div>
+            <button class="btn btn-sm" id="impFixSwap" hidden></button>
+            <div class="imp-table-wrap">
+              <table class="imp-table">
+                <thead>
+                  <tr><th>Row</th><th></th><th>Name</th><th>Lat, Long</th><th>Route to</th><th>Notes</th></tr>
+                </thead>
+                <tbody id="impRows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="xc-group">
+            <div class="xc-group-hd">3 · How to add them</div>
+            <label class="chk wrap"><input type="radio" name="impMode" id="impAdd" checked> Add to the map, keeping
+              what is already there</label>
+            <label class="chk wrap"><input type="radio" name="impMode" id="impReplace"> Replace &mdash; remove the
+              current locations and routes first</label>
+          </div>
+        </div>
+      </div>
+      <!-- The primary action lives in the footer, outside the scrolling body:
+           a twenty-row report must never be able to push it off screen. -->
+      <div class="modal-foot modal-foot-act">
+        <span class="modal-note">Rows with a problem are skipped, never guessed at. Everything else still
+          imports.</span>
+        <button class="btn btn-primary" id="impGo" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bmMgrOverlay" class="modal-overlay" hidden>
+    <div class="modal-panel frost" role="dialog" aria-modal="true" aria-labelledby="bmMgrTitle">
+      <div class="modal-head">
+        <span class="modal-title" id="bmMgrTitle">Map providers &amp; keys</span>
+        <button class="modal-close" id="bmMgrClose" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="xc-group">
+          <div class="xc-group-hd">Provider keys</div>
+          <!-- Cards are generated from PROVIDER_KEY_INFO by ui/exportCenter.js,
+               so adding a provider is a data change rather than more markup. -->
+          <div id="bmKeys"></div>
+        </div>
+        <div class="xc-group">
+          <div class="xc-group-hd">Your tile servers</div>
+          <div id="bmMgrList"></div>
+          <div class="empty" id="bmMgrEmpty"><b>No custom basemaps yet.</b>Add any XYZ tile server below — it will
+            appear in the basemap picker alongside the built-in ones.</div>
+        </div>
+        <div class="xc-group">
+          <div class="xc-group-hd">Add a tile server</div>
+          <div class="bm-form">
+            <label class="bm-f"><span>Name</span><input type="text" id="bmName" placeholder="e.g. Company aerial 2026"></label>
+            <label class="bm-f"><span>Tile URL template</span><input type="text" id="bmUrl" spellcheck="false"
+                placeholder="https://tiles.example.com/{z}/{x}/{y}.png"></label>
+            <div class="bm-f-row">
+              <label class="bm-f bm-f-sm"><span>Max zoom</span><input type="number" id="bmMaxZoom" min="1" max="24" value="19"></label>
+              <label class="bm-f"><span>Attribution</span><input type="text" id="bmAttrib" placeholder="© Provider"></label>
+            </div>
+            <label class="chk wrap"><input type="checkbox" id="bmIsImagery"> Photographic imagery (enables colour
+              grading)</label>
+            <div class="bm-preview-row">
+              <span class="bm-preview" id="bmPreview"></span>
+              <div class="bm-preview-txt">
+                <b id="bmPreviewState">Preview</b>
+                <i>Paste a URL containing <code>{z}/{x}/{y}</code> to test one tile before adding it.</i>
+              </div>
+            </div>
+            <div class="row2">
+              <button class="btn" id="bmTestBtn">Test tile</button>
+              <button class="btn btn-primary" id="bmAddBtn">Add basemap</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-note">Provider keys and custom basemaps are stored on this device. They are never
+          written into a project file, so a map you share with a colleague carries no credentials.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PPTX export is handled by the bundled v5 engine (js/export/*), which pins
+       pptxgenjs 4.0.1 + jszip and repairs the duplicate-cNvPr-id / roundRect-adj
+       defects that make PowerPoint 365 refuse the file. Replaces the old CDN
+       pptxgenjs 3.12.0 exporter. Requires the Vite build (npm run dev|build). -->
+  <!-- Classic (non-module) scripts -- these run directly when this file is
+       opened via double-click (file://), which browsers block for ES modules.
+       Load order matters: each file below depends on globals declared by the
+       ones before it. Do not reorder. -->
+  <script src="./vendor/leaflet.js?v=6.0232"></script>
+  <script src="./vendor/leaflet-geoman.js?v=6.0232"></script>
+  <script src="./vendor/html2canvas.js?v=6.0232"></script>
+  <script src="./vendor/pptxgen.bundle.js?v=6.0232"></script>
+  <script src="./vendor/jszip.js?v=6.0232"></script>
+  <script src="./vendor/anime.min.js?v=6.0232"></script>
+
+  <script src="./js/core/prefs.js?v=6.0232"></script>
+  <script src="./js/constants.js?v=6.0232"></script>
+  <!-- The class→colour standard. Before routes.js, which asks it what colour
+       a new road is. -->
+  <script src="./js/map/connectivityStandard.js?v=6.0232"></script>
+  <script src="./js/core/freshness.js?v=6.0232"></script>
+  <script src="./js/utils/dom.js?v=6.0232"></script>
+  <script src="./js/utils/color.js?v=6.0232"></script>
+  <script src="./js/export/exportPDF.js?v=6.0232"></script>
+  <script src="./js/export/captureMap.js?v=6.0232"></script>
+  <script src="./js/core/state.js?v=6.0232"></script>
+  <script src="./js/map/icons.js?v=6.0232"></script>
+  <script src="./js/config.js?v=6.0232"></script>
+  <script src="./js/ui/notifications.js?v=6.0232"></script>
+  <script src="./js/utils/math.js?v=6.0232"></script>
+  <script src="./js/map/billboard.js?v=6.0232"></script>
+  <!-- Both define helpers propertyPanel.js calls when a card is built, so they
+       load ahead of it. -->
+  <script src="./js/ui/colorPresets.js?v=6.0232"></script>
+  <script src="./js/ui/iconPicker.js?v=6.0232"></script>
+  <script src="./js/ui/propertyPanel.js?v=6.0232"></script>
+  <script src="./js/ui/legendTable.js?v=6.0232"></script>
+  <script src="./js/ui/dashCharts.js?v=6.0232"></script>
+  <script src="./js/ui/dashLayout.js?v=6.0232"></script>
+  <script src="./js/ui/dashCards.js?v=6.0232"></script>
+  <script src="./js/ui/dashTable.js?v=6.0232"></script>
+  <script src="./js/ui/dashRichText.js?v=6.0232"></script>
+  <script src="./js/ui/dashFormat.js?v=6.0232"></script>
+  <script src="./js/export/dashExportModel.js?v=6.0232"></script>
+  <script src="./js/export/pdfWriter.js?v=6.0232"></script>
+  <script src="./js/export/dashPdf.js?v=6.0232"></script>
+  <script src="./js/export/dashPptx.js?v=6.0232"></script>
+  <script src="./js/export/dashDocx.js?v=6.0232"></script>
+  <script src="./js/export/dashExport.js?v=6.0232"></script>
+  <script src="./js/ui/reportSheet.js?v=6.0232"></script>
+  <script src="./js/ui/appMode.js?v=6.0232"></script>
+  <script src="./js/ui/dialogs.js?v=6.0232"></script>
+  <script src="./js/utils/colors.js?v=6.0232"></script>
+  <script src="./js/utils/animate.js?v=6.0232"></script>
+  <script src="./js/map/routes.js?v=6.0232"></script>
+  <script src="./js/map/markers.js?v=6.0232"></script>
+  <script src="./js/map/snapping.js?v=6.0232"></script>
+  <script src="./js/map/imageryEnhance.js?v=6.0232"></script>
+  <script src="./js/map/providerKeys.js?v=6.0232"></script>
+  <script src="./js/map/basemapProviders.js?v=6.0232"></script>
+  <script src="./js/map/googleTiles.js?v=6.0232"></script>
+  <script src="./js/map/customBasemaps.js?v=6.0232"></script>
+  <!-- Before mapEngine: the engine builds its first tile layers at boot, and
+       a scrub class that loads later leaves the first paint unscrubbed. -->
+  <script src="./js/map/tileScrub.js?v=6.0232"></script>
+  <!-- Also before mapEngine, and for the same reason: setBasemap() runs during
+       parse, and a remembered vector ground needs mountVectorGround() to exist
+       by then. The MapLibre renderer itself is NOT loaded here — it is 803 KB
+       for a feature that is off by default, so this file fetches it from
+       vendor/ the first time a vector ground is actually chosen. -->
+  <script src="./js/map/vectorBasemap.js?v=6.0232"></script>
+  <script src="./js/map/mapEngine.js?v=6.0232"></script>
+  <script src="./js/export/hiResRender.js?v=6.0232"></script>
+  <script src="./js/export/exportPNG.js?v=6.0232"></script>
+  <script src="./js/export/pptUtils.js?v=6.0232"></script>
+  <script src="./js/export/pptValidation.js?v=6.0232"></script>
+  <script src="./js/export/pptShapes.js?v=6.0232"></script>
+  <script src="./js/export/pptImages.js?v=6.0232"></script>
+  <script src="./js/export/pptLabels.js?v=6.0232"></script>
+  <script src="./js/export/pptTables.js?v=6.0232"></script>
+  <script src="./js/export/exportPPT.js?v=6.0232"></script>
+  <script src="./js/services/places.js?v=6.0232"></script>
+  <script src="./js/services/google.js?v=6.0232"></script>
+  <script src="./js/services/placeCache.js?v=6.0232"></script>
+  <script src="./js/services/geoapify.js?v=6.0232"></script>
+  <script src="./js/services/nearbyPlaces.js?v=6.0232"></script>
+  <script src="./js/services/geocoder.js?v=6.0232"></script>
+  <script src="./js/services/boundaries.js?v=6.0232"></script>
+  <!-- Line geometry for metro, rail and water — the only source that has it.
+       Built on boundaries.js's shape: mirrors, cache, rate gate, honest failure. -->
+  <script src="./js/services/ringFeatures.js?v=6.0232"></script>
+  <script src="./js/services/mapIdentify.js?v=6.0232"></script>
+  <script src="./js/services/aiReports.js?v=6.0232"></script>
+  <script src="./js/services/aiReportLog.js?v=6.0232"></script>
+  <script src="./js/ui/searchBox.js?v=6.0232"></script>
+  <script src="./js/ui/sliders.js?v=6.0232"></script>
+  <script src="./js/ui/tooltips.js?v=6.0232"></script>
+  <script src="./js/ui/toolbar.js?v=6.0232"></script>
+  <script src="./js/map/aerialDistance.js?v=6.0232"></script>
+  <!-- Two-click road tracing. After aerialDistance.js, whose mode-stand-down
+       pattern it follows and whose globals it calls. -->
+  <script src="./js/map/roadDraw.js?v=6.0232"></script>
+  <script src="./js/map/fillPatterns.js?v=6.0232"></script>
+  <script src="./js/ui/geometryPanel.js?v=6.0232"></script>
+  <script src="./js/ui/geomGroups.js?v=6.0232"></script>
+  <!-- The same idea for locations. A separate module rather than a shared
+       one: the two look alike on screen and share no fields underneath. -->
+  <script src="./js/ui/locGroups.js?v=6.0232"></script>
+  <script src="./js/map/drawing.js?v=6.0232"></script>
+  <script src="./js/map/textLabels.js?v=6.0232"></script>
+
+  <!-- The contour map. Order is load-bearing: contourGen defines the grid
+       sampling elevation.js reads back, osmDetail calls into the Overpass
+       client ringFeatures.js sets up, and contourMap needs registerGeom from
+       drawing.js above to convert contours into shapes. -->
+  <script src="./js/map/contourRamps.js?v=6.0232"></script>
+  <script src="./js/map/contourGen.js?v=6.0232"></script>
+  <script src="./js/services/elevation.js?v=6.0232"></script>
+  <script src="./js/services/osmDetail.js?v=6.0232"></script>
+  <script src="./js/map/contourLayer.js?v=6.0232"></script>
+  <script src="./js/map/contourMap.js?v=6.0232"></script>
+  <script src="./js/map/map3d.js?v=6.0232"></script>
+  <script src="./js/map/map3dContent.js?v=6.0232"></script>
+  <script src="./js/ui/contourPanel.js?v=6.0232"></script>
+  <script src="./js/ui/map3dControls.js?v=6.0232"></script>
+  <script src="./js/map/markerCluster.js?v=6.0232"></script>
+  <script src="./js/map/nearby.js?v=6.0232"></script>
+  <!-- Layouts last of the map modules: applying one calls setBasemap, which
+       needs the basemap registry built. Its own startup is deferred anyway. -->
+  <script src="./js/map/layouts.js?v=6.0232"></script>
+  <script src="./js/map/mapOverlays.js?v=6.0232"></script>
+  <script src="./js/ui/ringScanPanel.js?v=6.0232"></script>
+  <script src="./js/ui/colorKey.js?v=6.0232"></script>
+  <script src="./js/project/geojson.js?v=6.0232"></script>
+  <script src="./js/export/pptxHandler.js?v=6.0232"></script>
+  <script src="./js/project/xlsx.js?v=6.0232"></script>
+  <script src="./js/project/importSheet.js?v=6.0232"></script>
+  <script src="./js/project/kml.js?v=6.0232"></script>
+  <!-- projectState defines what a project *is*; everything that saves, restores
+       or autosaves depends on it, so it loads before all of them. -->
+  <script src="./js/project/projectState.js?v=6.0232"></script>
+  <script src="./js/project/history.js?v=6.0232"></script>
+  <script src="./js/project/autosave.js?v=6.0232"></script>
+  <script src="./js/projects/importHandoff.js?v=6.0232"></script>
+  <script src="./js/project/importFiles.js?v=6.0232"></script>
+  <script src="./js/project/openProject.js?v=6.0232"></script>
+  <!-- After autosave.js: the bridge wraps autosaveNow(), so that function has
+       to exist by the time this runs. -->
+  <script src="./js/auth/session.js?v=6.0232"></script>
+  <script src="./js/projects/projectStore.js?v=6.0232"></script>
+  <script src="./js/projects/cloudProjects.js?v=6.0232"></script>
+  <script src="./js/projects/projectBridge.js?v=6.0232"></script>
+  <script src="./js/project/saveProject.js?v=6.0232"></script>
+  <script src="./js/ui/sidebar.js?v=6.0232"></script>
+  <script src="./js/ui/aiTab.js?v=6.0232"></script>
+  <script src="./js/ui/layerManager.js?v=6.0232"></script>
+  <script src="./js/ui/settingsDialog.js?v=6.0232"></script>
+  <script src="./js/ui/exportCenter.js?v=6.0232"></script>
+  <script src="./js/ui/importDialog.js?v=6.0232"></script>
+  <script src="./js/ui/basemapSwitcher.js?v=6.0232"></script>
+  <script src="./js/app.js?v=6.0232"></script>
+</body>
+
+</html>

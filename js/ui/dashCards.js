@@ -1,0 +1,1236 @@
+/**
+ * ui/dashCards.js — the board's visuals: yours to fill in, size and arrange.
+ *
+ * WHY EVERY NUMBER IS TYPED, NOT COMPUTED. The board shows things this app has
+ * no way of knowing — price per square foot, rental yield, demand-supply,
+ * market sentiment. There is no source for them here, and a tool that prints a
+ * confident price per square foot it invented is worse than one that prints
+ * nothing: the number goes into a client document and nobody can tell it was
+ * never real. So the visuals are containers, and the figures are yours. Where
+ * the app *does* know something — the routes, their distances, the Key
+ * Distances table — the visual reads it live and says so.
+ *
+ * This is the part a spreadsheet-driven tool gets from its query engine. There
+ * is no Power Query here and no formula language: data is typed, or pasted as a
+ * comma list, or read from the map. Everything downstream of the data — the
+ * visual gallery, multiple series, the formatting, cross-filtering, the layout
+ * — is here.
+ *
+ * A fresh board arrives EMPTY, not seeded. Captions and axis labels are
+ * scaffolding that says what a visual is for; the values are em-dashes until
+ * somebody types them. A zero reads as measured.
+ *
+ * EDITING IS A MODE. Off, the board is a board — click anything and nothing
+ * happens to it, and the tiles have no handles. On, every value carries a caret,
+ * every tile can be moved and resized, and the selected one opens its format
+ * pane. A dashboard you can retype by mis-clicking is a document, not a board.
+ *
+ * Geometry lives in ui/dashLayout.js, drawing in ui/dashCharts.js, the format
+ * pane in ui/dashFormat.js.
+ */
+
+/** The board. Each visual carries its own `{x, y, w, h}` on the canvas. */
+let dashCards = [];
+
+/** Whether the board is being edited. A mode, not data — never serialised. */
+let dashEditing = false;
+
+/** The visual whose settings the format pane is showing. */
+let dashSelectedId = null;
+
+let dashCardSeq = 1;
+
+/**
+ * The gallery. `group` only sorts the picker; `make` is the fresh shape.
+ *
+ * Charts are all one card type with a `kind`, so switching a column chart to a
+ * line chart keeps its data — which is the whole reason Power BI's visual
+ * switcher is useful and a "delete it and add another" flow is not.
+ */
+/*
+ * Sizes are in grid units, and the grid is 96 columns of 8px rows. They were
+ * written for the old 12-column one and missed when it changed, so every card
+ * added from here arrived an eighth of its width and half its height — a
+ * thumbnail with an icon in it, which is what "whenever I add, it comes in
+ * this size" was. The default BOARD was scaled at the time; this list was not,
+ * and nothing tied the two together to notice.
+ */
+const DASH_GALLERY = [
+  ['column', 'Column', 'Compare', () => dashChartShape('column')],
+  ['bar', 'Bar', 'Compare', () => dashChartShape('bar')],
+  ['stackedColumn', 'Stacked column', 'Compare', () => dashChartShape('stackedColumn')],
+  ['stackedBar', 'Stacked bar', 'Compare', () => dashChartShape('stackedBar')],
+  ['line', 'Line', 'Trend', () => dashChartShape('line')],
+  ['area', 'Area', 'Trend', () => dashChartShape('area')],
+  ['combo', 'Combo', 'Trend', () => dashChartShape('combo')],
+  ['scatter', 'Scatter', 'Trend', () => dashChartShape('scatter')],
+  ['pie', 'Pie', 'Share', () => dashChartShape('pie')],
+  ['donut', 'Donut', 'Share', () => dashChartShape('donut')],
+  ['funnel', 'Funnel', 'Share', () => dashChartShape('funnel')],
+  ['treemap', 'Treemap', 'Share', () => dashChartShape('treemap')],
+  ['ring', 'Rings', 'Scores', () => dashChartShape('ring')],
+  ['gauge', 'Gauge', 'Scores', () => dashChartShape('gauge')],
+  ['radar', 'Radar', 'Scores', () => dashChartShape('radar')],
+  ['stat', 'KPI number', 'Figures', () => ({ type: 'stat', title: 'Metric', label: 'Metric', value: '', sub: '', w: 24, h: 10 })],
+  ['stats', 'Multi KPI', 'Figures', () => ({ type: 'stats', title: 'Scores', w: 32, h: 10, items: [
+    { label: 'Score', value: '' }, { label: 'Potential', value: '' }, { label: 'Risk', value: '' }] })],
+  ['gauges', 'Score rings', 'Figures', () => ({ type: 'gauges', title: 'Scores', w: 48, h: 14, items: [
+    { cap: 'Connectivity', value: '' },
+    { cap: 'Infrastructure', value: '' }] })],
+  ['table', 'Table', 'Text', () => ({ type: 'table', title: 'Table', w: 40, h: 16,
+    columns: ['Item', 'Value'], rows: [['', ''], ['', '']] })],
+  ['list', 'List', 'Text', () => ({ type: 'list', title: 'List', w: 32, h: 14, items: [{ name: 'Item', meta: '' }] })],
+  ['text', 'Text', 'Text', () => ({ type: 'text', title: 'Notes', body: 'Type here.', w: 32, h: 10 })],
+  ['slicer', 'Slicer', 'Filter', () => ({ type: 'slicer', title: 'Filter', w: 24, h: 14,
+    items: ['2021', '2022', '2023'], picked: [] })],
+  ['access', 'Key access (live)', 'From the map', () => ({ type: 'access', title: 'Key access points', w: 32, h: 14 })],
+  ['legend', 'Legend (live)', 'From the map', () => ({ type: 'legend', title: 'Legend', w: 32, h: 12 })],
+  ['comment', 'Location comment', 'Text', () => ({ type: 'comment', title: 'Location comment',
+    body: 'Type the closing read on the location.', w: 64, h: 10 })],
+  ['rating', 'Overall rating', 'Figures', () => ({ type: 'rating', title: 'Overall rating',
+    label: 'Villa funding (location perspective)', value: '', body: '', w: 32, h: 10 })],
+];
+
+/** @param {string} kind @returns {object} a fresh chart of that kind */
+function dashChartShape(kind) {
+  return {
+    type: 'chart',
+    kind,
+    title: 'Chart',
+    w: 48, h: 16,
+    labels: ['2021', '2022', '2023', '2024', '2025'],
+    seriesList: [{ name: 'Series 1', values: [], slot: 1 }],
+    fmt: { legend: 'auto', labels: false, grid: true, xAxis: true, yAxis: true, smooth: false },
+  };
+}
+
+/** @param {string} key a gallery key @returns {object} a new visual */
+/**
+ * How every card looks before anybody styles it.
+ *
+ * A navy header bar with the title centred in it. Two card kinds used to carry
+ * that as a private setting and the rest came up bare, so a board was a mix of
+ * headed and unheaded cards and the first thing anybody did was go round
+ * setting each one — which is a default doing the opposite of its job.
+ *
+ * A card kind may still override any of these; nothing here is a rule, it is
+ * where a card STARTS. Boards already saved keep exactly the styling they were
+ * given: this changes what a NEW card looks like, not what an old one does.
+ */
+const DASH_CARD_FMT = { head: 'bar', headTone: 'navy', align: 'center' };
+
+function dashNewCard(key) {
+  const def = DASH_GALLERY.find(t => t[0] === key) || DASH_GALLERY[0];
+  const shape = def[3]();
+  return Object.assign({
+    id: 'c' + (dashCardSeq++),
+    x: 0, y: 9999, w: 32, h: 10,   // y past the end: it lands at the bottom, then settles up
+  }, shape, {
+    // Merged, not replaced: a chart's own legend and grid settings live in the
+    // same object, and assigning the shape wholesale would drop them.
+    fmt: Object.assign({}, DASH_CARD_FMT, shape.fmt || {}),
+  });
+}
+
+/**
+ * The board a new project starts with — the mockup's shape, in tiles.
+ *
+ * A starting point, not a layout: every one of these is draggable and resizable
+ * from the moment it appears.
+ */
+function dashDefaultCards() {
+  // Geometry is in grid units, and the grid is 96 x 8px now — the same layout
+  // as before, said in the finer units. See DASH_COLS.
+  dashCardSeq = 1;
+  dashMapTile = { id: DASH_MAP_ID, x: 0, y: 0, w: 64, h: 28 };
+  const c = (key, over) => Object.assign(dashNewCard(key), over);
+  return [
+    c('text', { x: 64, y: 0, w: 32, h: 10, title: 'Property location & access',
+      body: 'Type the address, the coordinates and anything else worth saying up front.' }),
+    c('stats', { x: 64, y: 10, w: 32, h: 8, title: 'Scores', items: [
+      { label: 'Investment', value: '' }, { label: 'Growth', value: '' }, { label: 'Risk', value: '' }] }),
+    c('access', { x: 64, y: 18, w: 32, h: 10, title: 'Key access points' }),
+
+    // No colours here: each ring takes the next viz slot, which is what keeps
+    // the board readable in both themes. Four rings on two repeated hexes also
+    // made Connectivity and Livability look like the same measurement.
+    c('gauges', { x: 0, y: 28, w: 40, h: 14, title: 'Infrastructure score', items: [
+      { cap: 'Connectivity', value: '' },
+      { cap: 'Infrastructure', value: '' },
+      { cap: 'Development', value: '' },
+      { cap: 'Livability', value: '' }] }),
+    c('area', { x: 40, y: 28, w: 32, h: 14, title: 'Property price trend',
+      labels: ['2021', '2022', '2023', '2024', '2025'],
+      seriesList: [{ name: 'Rs / sq ft', values: [], slot: 1 }] }),
+    // The colour key the map tile no longer carries. Live, like Key access
+    // points — it fills itself the moment anything on the map has a colour,
+    // which is what earns it a place on a default board where most cards are
+    // waiting to be typed into.
+    c('legend', { x: 72, y: 28, w: 24, h: 14, title: 'Legend' }),
+    c('text', { x: 0, y: 42, w: 48, h: 12, title: 'Executive summary',
+      body: 'Type the summary that opens the report.' }),
+    c('list', { x: 48, y: 42, w: 48, h: 12, title: 'Timeline (development)', items: [
+      { name: 'Milestone', meta: 'Year' }] }),
+  ];
+}
+
+/**
+ * Bring a board saved by an older build up to date.
+ *
+ * Two generations to handle: boards laid out by `slot`/`span` before the canvas
+ * existed, and charts that stored one flat `values` array with `series` holding
+ * a colour number. Both are converted rather than dropped — somebody's board is
+ * not an acceptable casualty of a refactor.
+ *
+ * @param {object[]} cards
+ */
+function dashMigrateCards(cards) {
+  let sideY = 0, gridY = 0;
+  cards.forEach(c => {
+    /* ---- geometry ---- */
+    if (!(typeof c.w === 'number' && typeof c.h === 'number'
+      && typeof c.x === 'number' && typeof c.y === 'number')) {
+      const h = c.type === 'chart' ? 8 : c.type === 'gauges' ? 7 : c.type === 'stat' ? 5 : 6;
+      if (c.slot === 'side') { c.x = 8; c.w = 4; c.y = sideY; sideY += h; }
+      else {
+        const w = Math.max(2, Math.min(12, c.span || 4));
+        c.w = w; c.x = (gridY % 2) ? Math.max(0, 12 - w) : 0;
+        c.y = 14 + gridY * h; gridY++;
+      }
+      c.h = h;
+    }
+    delete c.slot; delete c.span;
+
+    /* ---- chart data ---- */
+    if (c.type === 'chart') {
+      if (!Array.isArray(c.seriesList) || !c.seriesList.length) {
+        c.seriesList = [{
+          name: c.seriesName || 'Series 1',
+          values: Array.isArray(c.values) ? c.values.map(Number).filter(isFinite) : [],
+          slot: typeof c.series === 'number' ? c.series : 1,
+        }];
+      }
+      delete c.values; delete c.series; delete c.seriesName;
+      if (!c.fmt) c.fmt = { legend: 'auto', labels: false, grid: true, xAxis: true, yAxis: true, smooth: false };
+      if (!c.kind) c.kind = 'column';
+    }
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Cross-filtering
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The categories every visual is currently limited to, or null.
+ *
+ * A slicer that narrowed some visuals and not others would mislead worse than
+ * no slicer at all, so this is board-wide and every chart consults it.
+ *
+ * @returns {Set<string>|null}
+ */
+function dashFilter() {
+  const picked = new Set();
+  dashCards.forEach(c => {
+    if (c.type !== 'slicer') return;
+    (c.picked || []).forEach(v => picked.add(String(v)));
+  });
+  return picked.size ? picked : null;
+}
+
+/* ---------------------------------------------------------------------------
+ * Rendering
+ * ------------------------------------------------------------------------ */
+
+/** @param {string} v @returns {string} escaped, with a visible placeholder for empties */
+function dashText(v) {
+  const s = String(v == null ? '' : v);
+  return s === '' ? '—' : esc(s);
+}
+
+/**
+ * @param {object} card @param {string} path @param {string} v @param {string} cls
+ *
+ * A prose field renders the marks it stores; a parsed one is escaped as it
+ * always was. `dc-input` is the marker, because that is already what the board
+ * calls a field whose text is read back and split rather than shown — a `<b>`
+ * in the middle of a comma list of numbers is not emphasis, it is a corrupted
+ * number. Everything stored has been through the sanitiser on the way in.
+ */
+function dashField(card, path, v, cls) {
+  const s = String(v == null ? '' : v);
+  const rich = typeof dashRichField === 'function' && dashRichField(cls);
+  const body = s === '' ? '—' : (rich ? dashRichClean(s) : esc(s));
+  return '<div class="' + cls + '" data-card="' + card.id + '" data-bind="' + path + '"'
+    + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>' + body + '</div>';
+}
+
+/**
+ * A chart: its legend, and the host its SVG is measured into.
+ *
+ * The SVG is not built here — it is drawn after layout, when the host has a
+ * real width and height. See ui/dashCharts.js.
+ *
+ * @param {object} card @returns {string} HTML
+ */
+function dashChartHtml(card) {
+  const fmt = vizFmt(card);
+  const kind = card.kind || 'column';
+  const series = vizSeries(card);
+  const share = VIZ_SHARE_KINDS.indexOf(kind) >= 0;
+  const byCategory = VIZ_CATEGORY_KEYED.indexOf(kind) >= 0;
+  const flat = series.reduce((a, s) => a.concat(s.values.filter(isFinite)), []);
+  const enough = vizEnough(kind, flat, vizCategories(card));
+
+  // A legend is the dependable identity channel — never make the reader
+  // match colours by eye. One series needs none: the title already names it.
+  //
+  // A funnel needs none either, and gets it wrong if it has one: its stages are
+  // already named down the left, and the only percentage that means anything on
+  // a funnel is the share of the *first* stage, which is what the bars carry. A
+  // legend showing share-of-total put two different percentages for the same
+  // stage on one card.
+  //
+  // A gauge needs none for the same reason: it is one number, and it is printed
+  // in the middle of its own dial at four times the legend's size.
+  let legend = '';
+  const wantLegend = fmt.legend !== 'off' && enough && kind !== 'funnel' && kind !== 'gauge'
+    && (byCategory ? true : series.length > 1);
+  if (wantLegend) {
+    // A series carries its own colour when one was chosen, so the swatch beside
+    // the name matches the line on the chart. Without this the legend went on
+    // showing the palette slot underneath a custom colour.
+    // A CATEGORY CARRIES ITS OWN COLOUR TOO, NOW. Keyed by position, this
+    // printed the palette slot beside a slice that had been recoloured — a key
+    // that disagrees with the picture it is the key to.
+    const keys = byCategory
+      ? vizCategories(card).map((c, i) => [c, vizCatColour(series[0], i)])
+      : series.map(s => [s.name, s.hex || s.slot]);
+    const vals = byCategory && series[0] ? series[0].values.map(Number) : null;
+    // Only a share kind may print a percentage: on a ring the arc is a fraction
+    // of the scale, not of the total, so share-of-total beside it would be a
+    // second, different percentage for the same category. Rings show the score
+    // itself, which is the number somebody typed.
+    const sum = share && vals ? vals.reduce((a, b) => a + (isFinite(b) && b > 0 ? b : 0), 0) : 0;
+    legend = '<div class="dc-legend dc-legend-' + (fmt.legend === 'auto' ? (byCategory ? 'right' : 'top') : fmt.legend) + '">'
+      + keys.map(([name, slot], i) =>
+        '<span class="dc-key"><i style="background:'
+        + (/^(#[0-9a-f]{6}|var\(--viz-\d\))$/i.test(String(slot)) ? esc(String(slot)) : vizSlot(slot))
+        + '"></i>' + esc(String(name || '—'))
+        + (sum ? '<b>' + Math.round(((vals[i] > 0 ? vals[i] : 0) / sum) * 100) + '%</b>'
+          : (kind === 'ring' && vals && isFinite(vals[i])
+            ? '<b>' + esc(vizNumFmt(card)(vals[i])) + '</b>' : ''))
+        + '</span>').join('')
+      + '</div>';
+  }
+
+  // Two halves, because they have two audiences. The state ("No data yet") is
+  // true for anybody; the instruction after it is addressed to whoever is
+  // building the board, and printing it into a client's PDF tells the reader
+  // to turn on a control they do not have. `.dc-hint` is dropped from every
+  // export by #dashGrid.exporting — see css/dashboard.css.
+  const empty = enough ? '' : '<div class="dc-empty">No data yet<span class="dc-hint"> — '
+    + (dashEditing
+      ? 'type values in the Format pane on the right.'
+      : 'turn on Edit board to type them.')
+    + '</span></div>';
+
+  return legend + '<div class="dc-plot" data-card="' + card.id + '"></div>' + empty;
+}
+
+/**
+ * @param {object} card @returns {string} HTML
+ *
+ * THE CEILING IS NOT 100 UNLESS SOMEBODY SAYS SO. This card used to divide
+ * every score by a hardcoded hundred, so a site rated 8, 9 and 10 — which is
+ * how these are rated — drew three rings each about a tenth full, under three
+ * large correct-looking numbers. The number said 10 and the ring said 10%.
+ *
+ * The ceiling now comes from vizScoreMax(), the same rule the ring, gauge and
+ * radar chart kinds are drawn by, so one card cannot disagree with another
+ * about what a score is out of.
+ */
+function dashGaugesHtml(card) {
+  const items = card.items || [];
+  const nums = items.map(g => Number(g.value)).filter(isFinite);
+  const max = (typeof vizScoreMax === 'function' ? vizScoreMax(card, nums) : 100) || 1;
+
+  return '<div class="dc-gauges">' + items.map((g, i) => {
+    // An unset gauge reads "—" with an empty ring, not "0". A zero is a score
+    // somebody chose; showing one nobody typed puts a number in a client's
+    // report that came from the app rather than from the analyst.
+    const raw = g.value;
+    const set = raw !== '' && raw != null && isFinite(Number(raw));
+    const v = set ? Number(raw) : 0;
+    // The arc is clamped; the number is not. A score typed above the ceiling is
+    // a full ring and the figure somebody actually typed — silently rewriting
+    // it to the ceiling would hide the mistake rather than show it.
+    const frac = set ? Math.max(0, Math.min(1, v / max)) : 0;
+    const r = 24, circ = 2 * Math.PI * r;
+    return '<div class="dc-gauge">'
+      + '<svg viewBox="0 0 60 60" width="62" height="62" role="img" aria-label="'
+        + esc(g.cap || '') + ' ' + (set ? v + ' out of ' + max : 'not set') + '">'
+      + '<circle class="track" cx="30" cy="30" r="' + r + '" stroke-width="5"/>'
+      + (set
+        // vizSlot() rather than a literal, so a ring drawn in one theme still
+        // reads in the other — the rule every other visual on this board
+        // already follows, and the reason a card stores a slot number and never
+        // a hex. A gauge that carries its own hex from an older board keeps it.
+        // --len is the full circumference, which is what the enter animation
+        // sweeps the arc in from. Emitted here because the geometry is here;
+        // the stylesheet has no way to know a ring's radius.
+        ? '<circle class="val" cx="30" cy="30" r="' + r + '" stroke-width="5" style="--len:'
+          + circ.toFixed(1) + ';--i:' + i + '" stroke="'
+          // A stored hex from an older board wins; then a slot the operator
+          // picked; then the slot this ring's position gives it.
+          + esc(g.color || (typeof vizSlot === 'function' ? vizSlot(g.slot || (i + 1)) : '#22C55E'))
+          + '" stroke-dasharray="' + (circ * frac).toFixed(1) + ' ' + circ.toFixed(1) + '"/>'
+        : '')
+      + '<text class="dc-gauge-num" x="30" y="35">' + (set ? vizNumFmt(card)(v) : '—') + '</text></svg>'
+      + dashField(card, 'items.' + i + '.cap', g.cap, 'dc-gauge-cap')
+      + (dashEditing ? dashField(card, 'items.' + i + '.value', set ? String(v) : '', 'dc-input') : '')
+      + '</div>';
+  }).join('') + '</div>';
+}
+
+/** A plain editable table. @param {object} card @returns {string} HTML */
+/**
+ * Ink that can be read on a given fill.
+ *
+ * A fill the operator chose is any colour at all, so the row's text cannot stay
+ * the theme's ink and hope. Relative luminance by the WCAG weights, and the
+ * threshold at 0.55 rather than 0.5 because the eye reads dark-on-light more
+ * easily than light-on-dark — a mid-tone is better served by the dark ink.
+ *
+ * @param {string} hex @returns {?string} a colour, or null for "leave it alone"
+ */
+function dashInkOn(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const v = [1, 2, 3].map(i => {
+    const c = parseInt(m[i], 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  return L > 0.55 ? '#14243d' : '#ffffff';
+}
+
+/**
+ * The style a filled row carries.
+ *
+ * `ink` is the operator's own choice where they made one — Excel's font colour
+ * — and the readable default from dashInkOn() where they did not. Choosing a
+ * text colour without a fill is a real thing to want too, so either alone is
+ * enough to produce a style.
+ *
+ * @param {?string} hex a fill @param {?string} ink an explicit text colour
+ * @returns {string} a style attribute, or nothing
+ */
+function dashFillStyle(hex, ink) {
+  const fill = /^#[0-9a-f]{6}$/i.test(String(hex || '')) ? String(hex) : null;
+  const col = /^#[0-9a-f]{6}$/i.test(String(ink || '')) ? String(ink) : dashInkOn(fill);
+  if (!fill && !col) return '';
+  return ' style="' + (fill ? 'background:' + esc(fill) + ';' : '')
+    + (col ? 'color:' + esc(col) : '') + '"';
+}
+
+/** Whether a row carries any styling of its own. @returns {boolean} */
+function dashRowStyled(fill, ink) {
+  return /^#[0-9a-f]{6}$/i.test(String(fill || '')) || /^#[0-9a-f]{6}$/i.test(String(ink || ''));
+}
+
+function dashTableHtml(card) {
+  const cols = card.columns || [];
+  const rows = card.rows || [];
+  const fills = card.rowFill || {};
+  const inks = card.rowInk || {};
+  const f = card.fmt || {};
+  const headOn = f.tableHead !== false;
+  const edit = !!dashEditing;
+  // The classes the stylesheet keys off: rules, banding and density are three
+  // separate decisions and a spreadsheet lets you make them separately.
+  const cls = ['dc-table',
+    'dc-rule-' + (f.tableRule || 'rows'),
+    f.tableBanded === false ? 'dc-band-off' : 'dc-band-on',
+    'dc-dense-' + (f.tableDensity || 'normal'),
+    edit ? 'dc-grid' : ''].join(' ').trim();
+
+  // Only while editing. Belt as well as braces: setDashEditing clears the
+  // selection on the way out, but an export renders with dashEditing forced off
+  // without going through that setter, and a selection ring in a client's PDF
+  // is not a small blemish.
+  const box = (edit && typeof dashSelBox === 'function') ? dashSelBox(card) : null;
+  const inSel = (r, c) => !!box && r >= box.top && r <= box.bottom && c >= box.left && c <= box.right;
+  const css = (r, c) => (typeof dashCellCss === 'function' ? dashCellCss(card, r, c) : '');
+  // A cell carries its own alignment, size, fill and borders; `dc-sel` is the
+  // selection highlight and is a class rather than a colour so it can sit over
+  // whatever fill the cell already has.
+  // `dc-ink` marks a cell whose text colour was decided here rather than by the
+  // theme. THE INK HAS TO REACH THE TEXT: the words live in a .dc-th/.dc-td div
+  // inside the cell, and those set a colour of their own — a rule, which beats
+  // an inherited value. So a cell given a dark fill and a light ink landed the
+  // fill and kept the theme's dark text on it, unreadable. Exactly the bug the
+  // row fill hit; this is the same one a level down.
+  const inked = (r, c) => (typeof dashCellStyle === 'function'
+    && (dashCellStyle(card, r, c, 'ink') || dashCellStyle(card, r, c, 'fill')));
+  // And the same for a chosen size, for the same reason: `.dc-th` sets a
+  // font-size of its own, so a header cell set to 18px stayed at 9.5px while
+  // the cell around it measured 18. The body escaped it only because `.dc-td`
+  // happens not to set one.
+  const sized = (r, c) => (typeof dashCellStyle === 'function'
+    && dashCellStyle(card, r, c, 'size') != null);
+  const cell = (tag, r, c, inner) => '<' + tag
+    + ' class="dc-cell' + (inSel(r, c) ? ' dc-sel' : '') + (inked(r, c) ? ' dc-ink' : '')
+    + (sized(r, c) ? ' dc-sized' : '') + '"'
+    + (css(r, c) ? ' style="' + css(r, c) + '"' : '')
+    + ' data-r="' + r + '" data-c="' + c + '">' + inner + '</' + tag + '>';
+
+  const wid = card.colW || {};
+  // A width is stated once, in a <col>, rather than on every cell in the
+  // column — which is how a browser wants to be told and means a table of two
+  // hundred rows carries one number rather than two hundred.
+  const cg = '<colgroup>' + (edit ? '<col class="dc-gutcol">' : '')
+    + cols.map((c, i) => '<col' + (wid[i] ? ' style="width:' + (+wid[i]) + 'px"' : '') + '>').join('')
+    + (edit ? '<col class="dc-gutcol">' : '') + '</colgroup>';
+
+  // THE SPREADSHEET FRAME, in edit mode only. Column tabs across the top and
+  // row numbers down the side: the place you click to select a whole column or
+  // row, and — at their trailing edge — the handle you drag to size it. A
+  // finished card and every export see none of it.
+  const colbar = edit
+    ? '<tr class="dc-colbar"><th class="dc-corner"><button type="button" class="dc-selall"'
+      + ' title="Select the whole table" aria-label="Select the whole table"></button></th>'
+      // A COLUMN NEEDS A WAY OUT TOO. Rows have carried an × at their end since
+      // the card was written; columns had nothing — no button, no menu, no
+      // gesture — so a column added by mistake was permanent. It lives on the
+      // tab because that is where the column's other controls already are.
+      + cols.map((c, i) => '<th class="dc-coltab' + (box && i >= box.left && i <= box.right ? ' on' : '')
+        + '" data-col="' + i + '" title="Select this column \u00b7 right-click for more">'
+        + '<span class="dc-coln">' + esc(dashColName(i)) + '</span>'
+        + (cols.length > 1
+          ? '<button type="button" class="dc-colx" data-drop-col="' + i
+            + '" title="Remove this column" aria-label="Remove column ' + esc(dashColName(i)) + '">&times;</button>'
+          : '')
+        + '<span class="dc-cgrip" data-wcol="' + i + '" title="Drag to set the width"></span></th>').join('')
+      + '<th class="dc-tw"></th></tr>'
+    : '';
+
+  const hgt = card.rowH || {};
+  const rh = i => (hgt[i] ? ' style="height:' + (+hgt[i]) + 'px"' : '');
+  const rowno = (i, label) => '<th class="dc-rowno' + (box && i >= box.top && i <= box.bottom ? ' on' : '')
+    + '" data-row="' + i + '" title="Select this row">' + label
+    + '<span class="dc-rgrip" data-hrow="' + i + '" title="Drag to set the height"></span></th>';
+
+  return '<div class="dc-tablewrap"><table class="' + cls + '">' + cg
+    + '<thead>' + colbar
+    + (headOn
+      ? '<tr class="dc-headrow'
+        + (dashRowStyled(card.headFill, card.headInk) ? ' dc-tr-fill' : '') + '"'
+        + dashFillStyle(card.headFill, card.headInk) + rh(-1) + '>'
+        + (edit ? rowno(-1, '') : '')
+        + cols.map((c, i) => cell('th', -1, i, dashField(card, 'columns.' + i, c, 'dc-th'))).join('')
+        + (edit ? '<th class="dc-tw"></th>' : '')
+        + '</tr>'
+      : '')
+    + '</thead>'
+    // A filled row carries its own ink, so a dark fill does not swallow the
+    // words in it — see dashInkOn(). Rows nobody filled are untouched and keep
+    // the card's zebra striping.
+    + '<tbody>'
+    + rows.map((r, ri) => '<tr'
+      + (dashRowStyled(fills[ri], inks[ri]) ? ' class="dc-tr-fill"' : '')
+      + dashFillStyle(fills[ri], inks[ri]) + rh(ri) + '>'
+      + (edit ? rowno(ri, String(ri + 1)) : '')
+      + cols.map((c, ci) => cell('td', ri, ci, dashField(card, 'rows.' + ri + '.' + ci, r[ci], 'dc-td'))).join('')
+      + (edit ? '<td class="dc-tw"><button class="dc-btn danger" data-drop-row="' + ri + '" title="Remove this row">&times;</button></td>' : '')
+      + '</tr>').join('')
+    + '</tbody></table>'
+    + (edit
+      ? '<div class="dc-tblbtns"><button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>'
+        + '<button class="dc-btn dc-addrow" data-add-col="1">+ Column</button>'
+        + '<span class="dc-hint dc-pastehint">Paste a block straight from a spreadsheet.</span></div>'
+      : '')
+    + '</div>';
+}
+
+/**
+ * A slicer: click values to limit every chart on the board to them.
+ *
+ * Works out of edit mode as well as in it — filtering is reading, not editing,
+ * and a filter you have to unlock the board to use would never get used.
+ */
+function dashSlicerHtml(card) {
+  const items = card.items || [];
+  const picked = new Set((card.picked || []).map(String));
+  return '<div class="dc-slicer">'
+    + items.map((v, i) =>
+      '<button type="button" class="dc-chip' + (picked.has(String(v)) ? ' on' : '')
+      + '" data-slice="' + esc(String(v)) + '">' + esc(String(v)) + '</button>').join('')
+    + '</div>'
+    + (picked.size
+      ? '<button type="button" class="dc-btn dc-addrow dc-clear" data-slice-clear="1">Clear filter</button>'
+      : '<div class="dc-empty"><span class="dc-hint">Click a value to filter every chart on the board.</span></div>');
+}
+
+/**
+ * Key access points, read live from the same rows the Key Distances card uses.
+ *
+ * This one visual is not typed in: it is the routes you have actually drawn, so
+ * it cannot drift from the map. Editing its values happens where they live —
+ * on the Key Distances card — rather than in a second copy here that would
+ * disagree with the first.
+ *
+ * @returns {string} HTML
+ */
+function dashAccessHtml(card) {
+  // Distance only, unless somebody asks for the time.
+  //
+  // A drive time is a measurement of traffic on the day the router was asked,
+  // and it goes stale in a way a distance does not — 17 min is true at 11am and
+  // wrong at 6pm, while 1.1 km is true for as long as the road exists. So the
+  // column that survives in a document handed to a client is the kilometre, and
+  // the minute is opt-in.
+  const showTime = !!(card && card.fmt && card.fmt.time);
+  const rows = (typeof legendRows === 'function') ? legendRows() : [];
+  if (!rows.length) {
+    // A drawn route with no distance yet is still measuring (or the routing
+    // service is unreachable), which is a different situation from having
+    // drawn nothing — and "No routes yet" under three visible routes reads as
+    // the card being broken.
+    const drawn = (typeof routes !== 'undefined' && routes) ? routes.length : 0;
+    return '<div class="dc-empty">' + (drawn
+      ? 'Measuring ' + drawn + ' route' + (drawn === 1 ? '' : 's') + '…<span class="dc-hint"> distances appear here once the routing service answers.</span>'
+      : 'No routes yet.<span class="dc-hint"> Draw one in the Routes tab and it appears here.</span>') + '</div>';
+  }
+  // Two readings of the same rows, and both are kept because they answer
+  // different questions. The list is scanned — "is the station near?" — and the
+  // table is compared, column against column, which is what a printed sheet of
+  // approximate distances is for. It is also the accessible reading: a real
+  // table has headers a screen reader can announce.
+  if (card && card.fmt && card.fmt.asTable) {
+    return '<div class="dc-tbl-wrap"><table class="dc-tbl"><thead><tr>'
+      + '<th scope="col">Place</th><th scope="col" class="num">Distance</th>'
+      + (showTime ? '<th scope="col" class="num">Time</th>' : '')
+      + '</tr></thead><tbody>'
+      + rows.map(r => '<tr>'
+        + '<th scope="row"><span class="dc-ico">'
+        + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
+        + esc(r.name) + '</th>'
+        + '<td class="num">' + esc(r.km) + '</td>'
+        + (showTime ? '<td class="num">' + esc(r.min && r.min !== '\u2014' ? r.min : '') + '</td>' : '')
+        + '</tr>').join('')
+      + '</tbody></table></div>';
+  }
+
+  return '<div class="dc-list">' + rows.map(r =>
+    '<div class="dc-row">'
+    + '<span class="dc-ico">' + (typeof legendMarkHtml === 'function' ? legendMarkHtml(r) : '') + '</span>'
+    + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.name) + '</div></div>'
+    + '<div class="dc-row-meta">' + esc(r.km)
+      + (showTime && r.min && r.min !== '\u2014' ? ' \u00b7 ' + esc(r.min) : '') + '</div>'
+    + '</div>').join('') + '</div>';
+}
+
+/**
+ * The colour key, read live from the same rows the on-map Legend card uses.
+ *
+ * Sibling of dashAccessHtml() above and typed in no more than that one is.
+ *
+ * WHY BOTH THIS AND KEY ACCESS POINTS. They answer different questions and
+ * overlap only on a map that has nothing but routes. Key access points is the
+ * measured list — what is near, how far, how long — and it only knows about
+ * routes. This is what the colours MEAN, which on a working map also covers
+ * drawn areas, marked points and contour bands, none of which legendRows()
+ * has ever seen. On a routes-only map the two do read similarly; that is the
+ * cost of having a legend at all, and it is the map that is simple, not the
+ * cards that are wrong.
+ *
+ * @returns {string} HTML
+ */
+function dashLegendHtml(card) {
+  // Placed on the map instead. The tile is dropped from the layout when the
+  // board is not being edited — see dashTiles() — so this is only ever read by
+  // whoever is building the board, and it exists so the switch back is where
+  // the switch away was.
+  if (card && card.onMap) {
+    return '<div class="dc-empty">On the map.'
+      + '<span class="dc-hint"> Move it back with Placement in the Format pane.</span></div>';
+  }
+  const rows = (typeof colorKeyRows === 'function') ? colorKeyRows() : [];
+  const shown = rows.filter(r => !r.hidden);
+  if (!shown.length) {
+    return '<div class="dc-empty">Nothing on the map has a colour yet.'
+      + '<span class="dc-hint"> Draw a route or a shape and its key appears here.</span></div>';
+  }
+  return '<div class="dc-list">' + shown.map(r =>
+    '<div class="dc-row">'
+    + '<span class="dc-ico">' + (typeof colorKeyMark === 'function' ? colorKeyMark(r) : '') + '</span>'
+    + '<div class="dc-row-main"><div class="dc-row-name">' + esc(r.label) + '</div></div>'
+    + '</div>').join('') + '</div>';
+}
+
+/** @param {object} card @returns {string} the visual's body HTML */
+function dashCardBody(card) {
+  switch (card.type) {
+    case 'stat':
+      return '<div class="dc-stat">'
+        + dashField(card, 'value', card.value, 'dc-stat-val')
+        + dashField(card, 'label', card.label, 'dc-stat-label')
+        + dashField(card, 'sub', card.sub, 'dc-stat-sub') + '</div>';
+
+    case 'stats':
+      return '<div class="dc-stats">'
+        + (card.items || []).map((it, i) =>
+          '<div class="dc-stats-cell">'
+          + dashField(card, 'items.' + i + '.value', it.value, 'dc-stat-val')
+          + dashField(card, 'items.' + i + '.label', it.label, 'dc-stat-label')
+          + '</div>').join('') + '</div>';
+
+    case 'chart': return dashChartHtml(card);
+    case 'gauges': return dashGaugesHtml(card);
+    case 'table': return dashTableHtml(card);
+    case 'slicer': return dashSlicerHtml(card);
+    case 'access': return dashAccessHtml(card);
+    case 'legend': return dashLegendHtml(card);
+
+    case 'list':
+      return '<div class="dc-list">' + (card.items || []).map((it, i) =>
+        '<div class="dc-row"><div class="dc-row-main">'
+        + dashField(card, 'items.' + i + '.name', it.name, 'dc-row-name')
+        + '</div>'
+        + dashField(card, 'items.' + i + '.meta', it.meta, 'dc-row-meta')
+        + (dashEditing ? '<button class="dc-btn danger" data-drop-row="' + i + '" title="Remove this row">&times;</button>' : '')
+        + '</div>').join('')
+        + (dashEditing ? '<button class="dc-btn dc-addrow" data-add-row="1">+ Row</button>' : '')
+        + '</div>';
+
+    case 'comment':
+      // Icon, label, paragraph — the block that closes a connectivity sheet.
+      // The label is fixed rather than editable: it is the thing that makes the
+      // block recognisable across every report, and a card whose label can say
+      // anything is just a text card.
+      return '<div class="dc-comment">'
+        + '<div class="dc-comment-mark" aria-hidden="true">'
+        + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"'
+        + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>'
+        + '</svg><span>Location comment</span></div>'
+        + dashField(card, 'body', card.body, 'dc-text') + '</div>';
+
+    case 'rating': {
+      // One number, large, against its ceiling — the "8/10" that closes the
+      // sheet. Read from the same vizScoreMax() every other score on the board
+      // uses, so the rating and the rings cannot disagree about what ten means.
+      const raw = card.value;
+      const set = raw !== '' && raw != null && isFinite(Number(raw));
+      const v = set ? Number(raw) : null;
+      const max = (typeof vizScoreMax === 'function'
+        ? vizScoreMax(card, set ? [v] : []) : 10) || 10;
+      return '<div class="dc-rating">'
+        + '<div class="dc-rating-main">'
+        + dashField(card, 'label', card.label, 'dc-rating-cap')
+        + dashField(card, 'body', card.body, 'dc-rating-note')
+        + '</div>'
+        + '<div class="dc-rating-badge' + (set ? '' : ' empty') + '">'
+        + '<b>' + (set ? esc(vizNumFmt(card)(v)) : '\u2014') + '</b>'
+        + '<span>/' + max + '</span>'
+        + '</div>'
+        + (dashEditing ? dashField(card, 'value', set ? String(v) : '', 'dc-input dc-rating-in') : '')
+        + '</div>';
+    }
+
+    case 'text':
+    default:
+      return dashField(card, 'body', card.body, 'dc-text');
+  }
+}
+
+/** @param {object} card @returns {HTMLElement} */
+function dashCardEl(card) {
+  const el = document.createElement('section');
+  el.className = 'dash-card dash-tile dc-type-' + card.type
+    + (card.id === dashSelectedId && dashEditing ? ' selected' : '');
+  el.dataset.card = card.id;
+  if (card.fmt && card.fmt.plain) el.classList.add('plain');
+  // A filled header bar rather than a quiet caption. On a printed sheet the
+  // bar is what separates one block from the next at arm's length, where a
+  // 9.5px uppercase label in muted ink is invisible. Two tones only, both of
+  // them white on dark and both clearing AA, so the bar can carry a title
+  // without the title carrying the meaning of the colour on its own.
+  // Title and body align independently. They were coupled at first — a centred
+  // heading over left-ragged text reads as a mistake rather than as two
+  // decisions — but a centred bar over a left-read paragraph is a real layout,
+  // and it is the operator's call to make, not one to make for them.
+  const ta = card.fmt && card.fmt.align;
+  if (ta === 'center' || ta === 'right') el.classList.add('talign-' + ta);
+  const ba = card.fmt && card.fmt.alignBody;
+  if (ba === 'center' || ba === 'right' || ba === 'justify') el.classList.add('balign-' + ba);
+
+  if (card.fmt && card.fmt.head === 'bar') {
+    el.classList.add('headed');
+    const tone = card.fmt.headTone == null ? 'navy' : String(card.fmt.headTone);
+    if (/^#[0-9a-f]{6}$/i.test(tone)) {
+      // A colour chosen outside the palette. Deepened the same way the slots
+      // are, in the same place, so one rule decides how dark a bar is.
+      el.classList.add('head-custom');
+      el.style.setProperty('--head-hue', tone);
+    } else {
+      el.classList.add(/^[1-8]$/.test(tone) ? 'head-slot-' + tone : 'head-navy');
+    }
+    // AND AS A LITERAL, because the stylesheet says this with color-mix().
+    //
+    // Chrome serialises a computed color-mix as `color(srgb r g b)`, and
+    // html2canvas throws "unsupported color function" on it — which does not
+    // dim one header, it aborts the whole capture. Every export of any board
+    // carrying a card with a header bar failed, and the failure surfaced only
+    // as "Dashboard export failed" with no file. The same mix, computed here
+    // and written inline, is what the capture reads; the color-mix rules stay
+    // underneath for anything this misses.
+    dashHeadBarLiteral(el, tone);
+  }
+
+  const titleOn = !card.fmt || card.fmt.title !== false;
+
+  el.innerHTML =
+    (titleOn
+      ? '<div class="dc-head">'
+        + (dashEditing ? '<span class="dc-grip" aria-hidden="true"></span>' : '')
+        // Through the sanitiser, not through esc(): a title is a field somebody
+        // types into like any other, and escaping it printed "<b>" at the top
+        // of the card instead of setting the word bold.
+        + '<div class="dc-title" data-card="' + card.id + '" data-bind="title"'
+          + (dashEditing ? ' contenteditable="true" spellcheck="false"' : '') + '>'
+          + (typeof dashRichClean === 'function' ? dashRichClean(card.title || '') : esc(card.title || ''))
+          + '</div>'
+        + '<div class="dc-tools">'
+          + '<button class="dc-btn" data-act="dup" title="Duplicate" aria-label="Duplicate this visual">'
+            + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>'
+          + '<button class="dc-btn danger" data-act="del" title="Remove" aria-label="Remove this visual">'
+            + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
+        + '</div></div>'
+      : (dashEditing ? '<span class="dc-grip dc-grip-float" aria-hidden="true"></span>' : ''))
+    + '<div class="dc-body">' + dashCardBody(card) + '</div>'
+    + (dashEditing ? dashHandlesHtml() : '');
+
+  // The bar exists now. Written after innerHTML because it is inside it.
+  if (el.dataset.headBar) {
+    const head = el.querySelector(':scope > .dc-head');
+    if (head) head.style.background = el.dataset.headBar;
+  }
+
+  return el;
+}
+
+/**
+ * The on-map legend's size, and the handle that changes it.
+ *
+ * A legend that cannot be resized is a legend that either crowds the map or
+ * cannot fit its own longest name. CSS `resize` gives a real grip for nothing,
+ * but the browser forgets the size the moment the element is rebuilt — so the
+ * result is written back onto the card, where it travels with the project.
+ *
+ * The observer is bound once and re-pointed, rather than one per render: a new
+ * ResizeObserver per rebuild is a leak, and this element is rebuilt on every
+ * board change.
+ *
+ * @param {?object} card the legend card that is on the map, or null
+ */
+let _dashLegendRo = null;
+function dashSizeMapLegend(card) {
+  const key = document.getElementById('colorKeyCard');
+  if (!key) return;
+
+  if (!card) {
+    if (_dashLegendRo) _dashLegendRo.disconnect();
+    key.style.width = '';
+    key.style.height = '';
+    return;
+  }
+
+  if (card.mapW) key.style.width = card.mapW + 'px';
+  if (card.mapH) key.style.height = card.mapH + 'px';
+
+  if (typeof ResizeObserver !== 'function') return;
+  if (!_dashLegendRo) {
+    _dashLegendRo = new ResizeObserver(entries => {
+      const e = entries[0];
+      if (!e || !_dashLegendRo._card) return;
+      // Only what the grip actually produced. Writing back a size the
+      // stylesheet chose would freeze the card at its own default the first
+      // time the board rendered.
+      if (!e.target.style.width && !e.target.style.height) return;
+      _dashLegendRo._card.mapW = Math.round(e.contentRect.width);
+      _dashLegendRo._card.mapH = Math.round(e.contentRect.height);
+    });
+  }
+  _dashLegendRo._card = card;
+  _dashLegendRo.disconnect();
+  _dashLegendRo.observe(key);
+}
+
+/** Redraw the canvas. */
+function renderDashboard() {
+  // The formatting bar belongs to an editable field. Turning editing off does
+  // not move the pointer or change the selection, so nothing else was going to
+  // tell it to go — it sat over a board nobody could type into.
+  if (!dashEditing && typeof dashRichHide === 'function') dashRichHide();
+  const grid = document.getElementById('dashGrid');
+  if (!grid) return;
+
+  if (!dashCards.length) dashCards = dashDefaultCards();
+  dashMigrateCards(dashCards);
+
+  // The on-map legend is #colorKeyCard, which board mode hides by default —
+  // the whole point of hiding it was that the same rows were printed twice, in
+  // a box over the map and in a card beside it. One class turns that off for
+  // the one case where it was asked for, and it is set from the cards rather
+  // than from a preference so a project carries its own answer.
+  const onMapLegend = dashCards.find(c => c.type === 'legend' && c.onMap);
+  const shell = document.querySelector('.app');
+  if (shell) shell.classList.toggle('legend-on-map', !!onMapLegend);
+  // The class alone is not enough: the card's visibility is written inline by
+  // rebuildColorKey(), so it has to be asked again now the answer has changed.
+  if (typeof rebuildColorKey === 'function') rebuildColorKey();
+  dashSizeMapLegend(onMapLegend || null);
+
+  // The map lives on the canvas and must survive the rebuild, so it is lifted
+  // out before the wipe rather than being innerHTML'd away.
+  const wrap = document.getElementById('mapWrap');
+  const mapWasHere = wrap && wrap.parentNode === grid;
+  if (mapWasHere) grid.removeChild(wrap);
+  grid.innerHTML = '';
+  if (mapWasHere) grid.appendChild(wrap);
+
+  // dashTiles(), not dashCards: a legend that has moved onto the map is not a
+  // tile any more, and rendering its box anyway left an empty card sitting
+  // where the layout engine had already stopped positioning one.
+  const placed = new Set(dashTiles().map(t => t.id));
+  dashCards.forEach(c => { if (placed.has(c.id)) grid.appendChild(dashCardEl(c)); });
+
+  if (dashEditing) {
+    const add = document.createElement('div');
+    add.id = 'dashAdd';
+    add.innerHTML = '<span class="da-cap">Add a visual</span>'
+      + DASH_GALLERY.map(t => '<button type="button" data-add="' + t[0] + '" title="'
+        + esc(t[2]) + '">' + esc(t[1]) + '</button>').join('');
+    grid.appendChild(add);
+  }
+
+  if (wrap) {
+    wrap.classList.toggle('tile-editing', dashEditing);
+    const old = wrap.querySelector('.dc-maphandles');
+    if (old) old.remove();
+    if (mapWasHere && dashEditing) {
+      const h = document.createElement('div');
+      h.className = 'dc-maphandles';
+      // Not also `.dc-grip`: that class is the 13px dotted square used inside a
+      // card header, and its fixed width squashed this chip to a blob.
+      h.innerHTML = '<span class="dc-maphead" title="Drag to move the map tile"></span>' + dashHandlesHtml();
+      wrap.appendChild(h);
+    }
+  }
+
+  const app = document.getElementById('app');
+  if (app) app.classList.toggle('dash-editing', dashEditing);
+  const btn = document.getElementById('dashEditBtn');
+  if (btn) {
+    btn.classList.toggle('on', dashEditing);
+    btn.setAttribute('aria-pressed', String(dashEditing));
+  }
+
+  dashSettle();
+  dashLayoutApply();
+  // Charts measure their host, so they are drawn after the layout has given
+  // every host a size — and once more next frame, because a card that has just
+  // been inserted has not had its transition settle yet.
+  dashDrawAllCharts();
+  requestAnimationFrame(dashDrawAllCharts);
+  if (typeof renderDashFormat === 'function') renderDashFormat();
+}
+
+/** @param {boolean} on */
+function setDashEditing(on) {
+  dashEditing = !!on;
+  // A cell selection is an editing gesture and belongs to editing. Left behind,
+  // its ring and tint went on painting the table for a client to read — and
+  // into the export, which renders out of edit mode.
+  if (!dashEditing) {
+    dashSelectedId = null;
+    if (typeof dashTableSel !== 'undefined') dashTableSel = null;
+  }
+  renderDashboard();
+  if (typeof status === 'function') {
+    status(dashEditing
+      ? 'Editing the board: click a visual to format it, drag to move, resize from any edge.'
+      : 'Board saved.');
+  }
+}
+
+/**
+ * Redraw only the visuals that read from the map.
+ *
+ * Called whenever the distances change — routes measure asynchronously, so a
+ * board opened straight after drawing one shows "measuring…" and has to catch
+ * up on its own. Rebuilding the whole board would do it in one line and would
+ * also blow away whatever was being typed into another visual at that moment,
+ * which is why this touches only the live ones. They contain no editable
+ * fields, so there is nothing here to lose.
+ */
+function dashRefreshLive() {
+  dashCards.forEach(c => {
+    const html = c.type === 'access' ? dashAccessHtml(c)
+      : c.type === 'legend' ? dashLegendHtml(c)
+        : null;
+    if (html === null) return;
+    const body = document.querySelector('#dashGrid .dash-card[data-card="' + c.id + '"] .dc-body');
+    if (body) body.innerHTML = html;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Editing
+ * ------------------------------------------------------------------------ */
+
+/** @param {string} id @returns {object|undefined} */
+function dashCardById(id) { return dashCards.find(c => c.id === id); }
+
+/**
+ * Blend two hexes, as `color-mix(in srgb, a P%, b)` does.
+ * @param {string} a @param {number} pct @param {string} b @returns {string} hex
+ */
+function dashMixHex(a, pct, b) {
+  const rgb = h => {
+    const m = String(h).trim().replace('#', '');
+    const t = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+    return [0, 2, 4].map(i => parseInt(t.slice(i, i + 2), 16));
+  };
+  const x = rgb(a), y = rgb(b), k = Math.max(0, Math.min(1, pct / 100));
+  if (x.some(isNaN) || y.some(isNaN)) return null;
+  return '#' + x.map((v, i) => {
+    const n = Math.round(v * k + y[i] * (1 - k));
+    return (n < 16 ? '0' : '') + n.toString(16);
+  }).join('');
+}
+
+/**
+ * Write the header bar's colour onto the element as a literal hex.
+ *
+ * See the call site for why: the stylesheet expresses this as color-mix(), and
+ * the export's screenshotter cannot parse what Chrome computes that into.
+ *
+ * @param {HTMLElement} el the card @param {string} tone a slot number, a hex, or 'navy'
+ */
+function dashHeadBarLiteral(el, tone) {
+  const head = el.querySelector(':scope > .dc-head');
+  const cs = getComputedStyle(document.documentElement);
+  const navy = (cs.getPropertyValue('--navy') || '#0b1f3a').trim();
+  const hue = /^#[0-9a-f]{6}$/i.test(tone)
+    ? tone
+    : (/^[1-8]$/.test(tone) ? (cs.getPropertyValue('--viz-' + tone) || '').trim() : navy);
+  const mixed = /^#[0-9a-f]{3,6}$/i.test(hue) && /^#[0-9a-f]{3,6}$/i.test(navy)
+    ? dashMixHex(hue, 60, navy) : null;
+  // The bar does not exist yet — this runs before innerHTML is written — so the
+  // answer is parked on the card and applied by dashCardEl once it does.
+  if (mixed) {
+    el.dataset.headBar = mixed;
+    if (head) head.style.background = mixed;
+  }
+}
+
+/** @param {string|null} id */
+function dashSelect(id) {
+  if (dashSelectedId === id) return;
+  dashSelectedId = id;
+  document.querySelectorAll('#dashGrid .dash-card').forEach(el =>
+    el.classList.toggle('selected', dashEditing && el.dataset.card === id));
+  if (typeof renderDashFormat === 'function') renderDashFormat();
+}
+
+/**
+ * Write an edited field back into its visual.
+ *
+ * `labels` and series values are comma lists rather than a row of inputs: a
+ * chart with eight points would otherwise be sixteen tiny fields, and pasting
+ * a series from a spreadsheet is the fast path people actually want.
+ *
+ * @param {HTMLElement} el a [data-bind] element
+ * @returns {boolean} true if the visual actually changed
+ */
+function dashCommit(el) {
+  const card = dashCardById(el.dataset.card);
+  if (!card) return false;
+  const text = el.textContent.trim();
+  const path = el.dataset.bind;
+  // A prose field stores what it looks like; a parsed one stores its words. The
+  // placeholder is a rendering of empty, not a value — committing it would turn
+  // every untouched field into a card that literally says "—".
+  const rich = typeof dashRichField === 'function' && dashRichField(el.className)
+    && path !== 'labels' && path !== 'slicerItems';
+  const val = rich
+    ? (text === '' || text === '\u2014' ? '' : dashRichClean(el.innerHTML).trim())
+    : text;
+
+  if (path === 'labels' || path === 'slicerItems') {
+    const parts = text.split(',').map(s => s.trim()).filter(s => s !== '');
+    const was = (path === 'labels' ? card.labels : card.items) || [];
+    if (path === 'labels') card.labels = parts;
+    else { card.items = parts; card.picked = (card.picked || []).filter(v => parts.indexOf(String(v)) >= 0); }
+    return was.join('\u0000') !== parts.join('\u0000');
+  }
+  // seriesList.<i>.values — a comma list of numbers. A non-number is dropped
+  // rather than coerced to zero: a typo should not become a data point.
+  const sv = path.match(/^seriesList\.(\d+)\.values$/);
+  if (sv) {
+    const s = card.seriesList && card.seriesList[+sv[1]];
+    if (!s) return false;
+    const was = (s.values || []).join(',');
+    s.values = text.split(',').map(x => Number(x.trim())).filter(isFinite);
+    return was !== s.values.join(',');
+  }
+
+  const keys = path.split('.');
+  let node = card;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (node[keys[i]] == null) node[keys[i]] = {};
+    node = node[keys[i]];
+  }
+  const last = keys[keys.length - 1];
+  // An em-dash is what an empty field is *shown* as; storing it back would turn
+  // the placeholder into content, and the next edit would start by deleting a
+  // character nobody typed.
+  const next = text === '—' ? '' : val;
+  const changed = String(node[last] == null ? '' : node[last]) !== String(next);
+  node[last] = next;
+  return changed;
+}
+
+(function wireDashboard() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  // One delegated set of listeners for the whole board: visuals are rebuilt on
+  // every change, and per-card handlers would be re-attached each time.
+  const inBoard = e => e.target.closest && e.target.closest('#dashGrid');
+
+  app.addEventListener('click', e => {
+    if (!inBoard(e)) return;
+
+    const add = e.target.closest('[data-add]');
+    if (add) {
+      const card = dashNewCard(add.dataset.add);
+      dashCards.push(card);
+      dashSelectedId = card.id;
+      renderDashboard();
+      return;
+    }
+
+    const cardEl = e.target.closest('.dash-card');
+    if (!cardEl) return;
+    const card = dashCardById(cardEl.dataset.card);
+    if (!card) return;
+
+    // Slicers work whether or not the board is unlocked: filtering is reading.
+    const slice = e.target.closest('[data-slice]');
+    if (slice) {
+      const v = slice.dataset.slice;
+      const set = new Set((card.picked || []).map(String));
+      if (set.has(v)) set.delete(v); else set.add(v);
+      card.picked = [...set];
+      renderDashboard();
+      return;
+    }
+    if (e.target.closest('[data-slice-clear]')) { card.picked = []; renderDashboard(); return; }
+
+    if (!dashEditing) return;
+    dashSelect(card.id);
+
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      if (act.dataset.act === 'del') {
+        dashCards = dashCards.filter(c => c !== card);
+        if (dashSelectedId === card.id) dashSelectedId = null;
+      }
+      if (act.dataset.act === 'dup') {
+        const copy = JSON.parse(JSON.stringify(card));
+        copy.id = 'c' + (dashCardSeq++);
+        copy.y = card.y + card.h;
+        dashCards.push(copy);
+        dashSelectedId = copy.id;
+      }
+      renderDashboard();
+      return;
+    }
+
+    const addRow = e.target.closest('[data-add-row]');
+    if (addRow) {
+      if (card.type === 'table') (card.rows = card.rows || []).push((card.columns || []).map(() => ''));
+      else (card.items = card.items || []).push({ name: 'Item', meta: '' });
+      renderDashboard();
+      return;
+    }
+    const addCol = e.target.closest('[data-add-col]');
+    if (addCol) {
+      (card.columns = card.columns || []).push('Column');
+      (card.rows || []).forEach(r => r.push(''));
+      renderDashboard();
+      return;
+    }
+    const dropRow = e.target.closest('[data-drop-row]');
+    if (dropRow) {
+      const i = +dropRow.dataset.dropRow;
+      if (card.type === 'table') card.rows.splice(i, 1); else card.items.splice(i, 1);
+      if (typeof dashDropRowStyles === 'function') dashDropRowStyles(card, i);
+      renderDashboard();
+      return;
+    }
+    const dropCol = e.target.closest('[data-drop-col]');
+    if (dropCol) {
+      const i = +dropCol.dataset.dropCol;
+      // The last column is the table. Removing it would leave a card that is
+      // neither empty nor a table, and no way back to either.
+      if ((card.columns || []).length < 2) return;
+      card.columns.splice(i, 1);
+      (card.rows || []).forEach(r => r.splice(i, 1));
+      if (typeof dashDropColStyles === 'function') dashDropColStyles(card, i);
+      renderDashboard();
+      return;
+    }
+  });
+
+  app.addEventListener('blur', e => {
+    const el = e.target.closest && e.target.closest('[data-bind]');
+    if (!el || !dashEditing) return;
+    if (!inBoard(e) && !e.target.closest('#dashFormat')) return;
+    const changed = dashCommit(el);
+
+    // A BLUR-DRIVEN REBUILD EATS THE CLICK THAT CAUSED IT.
+    //
+    // This used to call renderDashboard() unconditionally — "one code path
+    // instead of a list of exceptions". The exception it did not anticipate is
+    // that leaving a cell to press a button in the format pane blurs the cell
+    // FIRST: the board is torn down and rebuilt between the pointer going down
+    // on that button and coming up, the button moves out from under the
+    // pointer, and no click event is ever delivered. The Align buttons simply
+    // did nothing after you had clicked in a cell, and worked on the second
+    // press — which is what "the left align button is not working" was.
+    //
+    // Two guards. Nothing changed, nothing to redraw. And a card that shows
+    // what you typed — a table, a list, a paragraph — is already showing it;
+    // only the ones that DRAW from their values need the pass.
+    if (!changed) return;
+    const card = dashCardById(el.dataset.card);
+    const drawn = card && (card.type === 'chart' || card.type === 'gauges'
+      || card.type === 'rating' || card.type === 'slicer');
+    if (drawn) renderDashboard();
+  }, true);
+
+  app.addEventListener('keydown', e => {
+    // Enter commits in a single-line field. The text card is the exception —
+    // a summary paragraph wants its line breaks.
+    const el = e.target.closest && e.target.closest('[data-bind]');
+    if (e.key === 'Enter' && el && !el.classList.contains('dc-text') && !e.shiftKey) {
+      e.preventDefault();
+      el.blur();
+    }
+  });
+})();

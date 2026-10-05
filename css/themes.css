@@ -1,0 +1,242 @@
+/* themes.css — Design tokens: the :root custom-property palette shared by every component.
+   Extracted verbatim from index.html (v4.96) lines 10–28; order preserved via main.css. */
+    :root {
+      /* TELL THE BROWSER WHICH WAY UP THE PAGE IS. Without this the engine
+         renders every native control — option lists, scrollbars, checkboxes,
+         date pickers — for its own default scheme rather than for ours, which
+         is how a light-theme dropdown came up as a black panel. One line here
+         does what per-control CSS cannot. */
+      color-scheme: dark;
+      --bg0: #070C16;
+      --bg1: #0B1322;
+      --glass: rgba(12, 19, 35, .66);
+      --glass2: rgba(17, 26, 46, .55);
+      --stroke: rgba(255, 255, 255, .09);
+      --stroke2: rgba(255, 255, 255, .16);
+      --text: #EAF0F9;
+      /* THE SAME COLOUR AS A TRIPLE, so a tint can be written rgba(...).
+         `color-mix(in srgb, var(--text) 4%, transparent)` is the natural way to
+         say "4% of the ink" and Chrome computes it to `color(srgb …)` — which
+         html2canvas cannot parse, and it does not skip the element, it throws
+         and aborts the whole capture. One banded table on the board and every
+         PNG, PDF, deck and Word file failed with "Dashboard export failed".
+         rgba() serialises as rgba() and survives. Keep these in step with the
+         hex above. */
+      --text-rgb: 234, 240, 249;
+      --dim: #8B99B0;
+      --navy: #0A1E3C;
+      --orange: #FF7A1A;
+      --accent-rgb: 255, 122, 26;
+      --orange2: #FFA149;
+      --danger: #FF6B81;
+      /* Geist Mono, so the coordinate and distance readouts belong to the same
+         family as the rest of the interface instead of reading as a borrowed
+         terminal font. */
+      /* The interface family, as a token.
+         38 rules across this project write `font: 700 11px/1 var(--font, inherit)`
+         and every one of them was invalid, because --font was never defined and
+         the fallback `inherit` is not a font-family a shorthand accepts. An
+         invalid shorthand is dropped whole, so those rules were setting no
+         weight, no size and no line-height — they inherited, silently, and
+         looked like a design decision. Gauge captions, treemap labels, chart
+         labels, the visual gallery's caption and the score numbers were all in
+         that set. Defining it makes them mean what they say. */
+      --font: 'Geist', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      --mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      --sbw: 396px;
+      --r: 13px;
+      --chipFont: 11.5px;
+      --untiltY: 1;
+
+      /* ------------------------------------------------------------------
+         Design system tokens.
+         The palette above is the original brand layer and is left untouched so
+         every existing rule keeps working. What follows is the systematic layer
+         that new and refined components draw from: one scale per dimension,
+         so spacing, corner radius, elevation and motion stay consistent instead
+         of being re-invented per component.
+         ------------------------------------------------------------------ */
+
+      /* Type — a 1.2 modular scale anchored on the 13px body size. */
+      --fs-micro: 9.5px;
+      --fs-small: 11px;
+      --fs-body: 12.5px;
+      --fs-lg: 15px;
+      --fs-xl: 19px;
+      --lh-tight: 1.25;
+      --lh-body: 1.5;
+      --tracking-caps: .07em;
+
+      /* Space — 4px base, so every gap is a multiple and edges align. */
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 22px;
+      --sp-6: 32px;
+
+      /* Radius */
+      --r-sm: 7px;
+      --r-md: 10px;
+      --r-lg: 14px;
+      --r-xl: 18px;
+      --r-pill: 999px;
+
+      /* Elevation — three steps only. More than three and nothing reads as
+         "raised" any more; each level pairs a tight contact shadow with a
+         soft ambient one, which is what keeps panels from looking like
+         flat rectangles with a blur behind them. */
+      --elev-1: 0 1px 2px rgba(5, 10, 20, .16), 0 2px 8px rgba(5, 10, 20, .10);
+      --elev-2: 0 2px 4px rgba(5, 10, 20, .20), 0 8px 24px rgba(5, 10, 20, .18);
+      --elev-3: 0 4px 8px rgba(5, 10, 20, .24), 0 20px 48px rgba(5, 10, 20, .30);
+
+      /* Motion — short and decelerating. Animation is used to show where
+         something came from, never for decoration. */
+      --dur-fast: 110ms;
+      --dur-base: 190ms;
+      --dur-slow: 320ms;
+      --ease-out: cubic-bezier(.22, .8, .3, 1);
+      --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+
+      /* ------------------------------------------------------------------
+         Glass system.
+         Real glass is not "a translucent panel" — it is three things at once:
+         it *blurs* what is behind it, it *saturates* those colours (which is
+         what stops a blurred backdrop looking like grey sludge), and it catches
+         a highlight along its top edge where light enters. Doing only the first
+         is what makes most "glassmorphism" look cheap.
+         Blur radius and opacity are tokens because they are the two values that
+         have to move together: more blur needs less opacity to still read as
+         glass, and vice versa.
+         ------------------------------------------------------------------ */
+      --glass-blur: 20px;
+      --glass-saturate: 1.7;
+      --glass-tint: rgba(20, 30, 52, .70);
+      --glass-tint-2: rgba(14, 22, 40, .82);
+      --glass-edge: rgba(255, 255, 255, .11);
+      /* The top-edge catch-light and the inner floor shadow, as one inset pair. */
+      --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .13),
+        inset 0 -1px 0 rgba(0, 0, 0, .22);
+      --glass-solid: #0E1626;
+
+      /* Accent glow — used only on the primary action, never decoratively. */
+      --accent-glow: 0 0 0 1px rgba(255, 122, 26, .35), 0 6px 22px rgba(255, 122, 26, .28);
+
+      /* Semantic surfaces, derived from the brand palette. */
+      --surface: var(--glass);
+      --surface-2: var(--glass2);
+      --surface-solid: #0E1728;
+      /* THE GROUND UNDER A FORM FIELD, as a token rather than a hardcoded
+         rgba(0,0,0,.28). That literal was written for the dark theme and stayed
+         put in the light one, where it is a charcoal box on a white panel — and
+         worse, a browser paints a <select>'s native option list out of the
+         select's OWN background and colour, so the whole dropdown came up
+         near-black with dark navy text on it. */
+      --field: rgba(0, 0, 0, .28);
+      --field-edge: var(--stroke2);
+      --border: var(--stroke);
+      --border-strong: var(--stroke2);
+      --text-2: var(--dim);
+      --accent: var(--orange);
+      --accent-soft: rgba(255, 122, 26, .14);
+      /* Success ink. Split per theme because one green cannot clear 4.5:1
+         against both a near-black and a near-white surface: the mint that reads
+         well on dark drops to ~1.8:1 on white. */
+      --ok: #34D399;
+      --ok-soft: rgba(52, 211, 153, .12);
+      --ok-edge: rgba(52, 211, 153, .45);
+      /* The accent used as *ink* rather than as a fill. On dark it is the brand
+         orange unchanged; on light that orange only reaches 2.6:1 against the
+         panel, so text takes a darkened cast of it instead. Same hue, same
+         meaning, readable in both. */
+      --accent-ink: var(--orange);
+      --focus-ring: rgba(255, 122, 26, .55);
+      --scroll-thumb: rgba(255, 255, 255, .16);
+      --scroll-thumb-hover: rgba(255, 255, 255, .28);
+    }
+
+    /* ---------- Light theme (applied via <html data-theme="light">) ---------- */
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg0: #EDF1F7;
+      --bg1: #E3E9F2;
+      --glass: rgba(255, 255, 255, .85);
+      --glass2: rgba(255, 255, 255, .72);
+      --stroke: rgba(16, 32, 60, .12);
+      --stroke2: rgba(16, 32, 60, .22);
+      --text: #17233B;
+      --text-rgb: 23, 35, 59;
+      --dim: #55627A;
+      --surface-solid: #FFFFFF;
+      --field: #FFFFFF;
+      --field-edge: rgba(16, 32, 60, .22);
+      --ok: #0F7A55;
+      --ok-soft: rgba(15, 122, 85, .10);
+      --ok-edge: rgba(15, 122, 85, .38);
+      --accent-ink: #B4530A;
+      --elev-1: 0 1px 2px rgba(16, 32, 60, .07), 0 2px 8px rgba(16, 32, 60, .05);
+      --elev-2: 0 2px 4px rgba(16, 32, 60, .08), 0 8px 24px rgba(16, 32, 60, .09);
+      --elev-3: 0 4px 8px rgba(16, 32, 60, .10), 0 20px 48px rgba(16, 32, 60, .14);
+      --scroll-thumb: rgba(16, 32, 60, .18);
+      --scroll-thumb-hover: rgba(16, 32, 60, .32);
+      /* Light glass is thinner and brighter: a white veil rather than a tinted
+         pane, with the catch-light on top and a soft grey floor. */
+      --glass-tint: rgba(255, 255, 255, .88);
+      --glass-tint-2: rgba(255, 255, 255, .82);
+      --glass-edge: rgba(16, 32, 60, .10);
+      --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .9),
+        inset 0 -1px 0 rgba(16, 32, 60, .06);
+      --glass-solid: #F4F7FB;
+      --accent-glow: 0 0 0 1px rgba(255, 122, 26, .3), 0 6px 20px rgba(255, 122, 26, .22);
+    }
+
+    /* Surfaces that hardcode white-alpha fills need a dark-alpha equivalent in
+       light mode. Map overlays (search box, title card, legend) stay dark glass
+       on purpose — they read well over any basemap, like Google Maps. */
+    :root[data-theme="light"] body.no-glass .sidebar.frost,
+    :root[data-theme="light"] body.no-glass .search-results.frost {
+      background: #F4F7FB;
+    }
+    :root[data-theme="light"] .btn {
+      background: rgba(16, 32, 60, .05);
+    }
+    :root[data-theme="light"] .btn:hover {
+      border-color: rgba(16, 32, 60, .28);
+    }
+    :root[data-theme="light"] input,
+    :root[data-theme="light"] select,
+    :root[data-theme="light"] textarea {
+      background: rgba(16, 32, 60, .04);
+      color: var(--text);
+    }
+    :root[data-theme="light"] .item-card {
+      background: rgba(255, 255, 255, .55);
+    }
+    :root[data-theme="light"] .acc {
+      background: rgba(16, 32, 60, .02);
+    }
+    :root[data-theme="light"] .acc-hd:hover,
+    :root[data-theme="light"] .tabs button:hover,
+    :root[data-theme="light"] .lp-group-head:hover {
+      background: rgba(16, 32, 60, .05);
+    }
+    :root[data-theme="light"] .nearby-chip,
+    :root[data-theme="light"] .draw-shape-btn,
+    :root[data-theme="light"] .search-results .res .ico {
+      background: rgba(16, 32, 60, .04);
+    }
+    :root[data-theme="light"] .brandbar h1,
+    :root[data-theme="light"] .lp-title,
+    :root[data-theme="light"] .prefs-title {
+      color: var(--text);
+    }
+
+    /* ---------- Reduce motion ---------- */
+    body.reduce-motion *,
+    body.reduce-motion *::before,
+    body.reduce-motion *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }

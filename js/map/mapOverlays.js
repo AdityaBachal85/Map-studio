@@ -1,0 +1,344 @@
+/**
+ * map/mapOverlays.js — decide what the ground shows, not just which ground.
+ *
+ * THE PROBLEM. On a raster basemap the place names, the road casings and the
+ * little POI icons are *painted into the tile*. By the time a PNG reaches the
+ * browser they are pixels, so there is no way to hide the names on an OSM tile
+ * or to show only the railway: the tile that has the railway also has
+ * everything else. Asking for "just roads" of a baked tile is asking it to
+ * un-bake.
+ *
+ * WHAT WORKS INSTEAD. Start from a ground with nothing on it and add the
+ * detail back as separate transparent layers, each of which can be turned off
+ * because it arrived as its own request. Positron and Light Gray Canvas are
+ * already in the catalogue and are exactly that: land, water and nothing else.
+ *
+ * THE HONEST LIMIT, stated here because it is the first thing anyone will run
+ * into: granularity stops at whatever overlay tiles exist. "Names off" and
+ * "railway only" are achievable. "Hide the pharmacy icons but keep the hospital
+ * ones" is not — that needs a vector basemap, where the client holds the
+ * features and the styling instead of a picture of them. This is the useful
+ * three-quarters of that job at a fraction of the cost, and it does not pretend
+ * to be the rest.
+ *
+ * THE REST NOW EXISTS, on one ground only. map/vectorBasemap.js renders the
+ * OpenFreeMap style in the browser, so on that ground this panel grows a second
+ * section — vectorOverlaySection() below — where each toggle is a filter on a
+ * style layer rather than a swap of one picture for another. It is opt-in and
+ * off by default, so everything above remains the answer for every other
+ * ground, which is all of them.
+ *
+ * TILE PANE, NOT OVERLAY PANE. These are `L.tileLayer`s, so Leaflet puts them
+ * in the tile pane, underneath every vector the app draws. Nothing here can
+ * ever cover a route, a shape or a marker.
+ */
+
+/**
+ * The layers that can be added back on top of a plain ground.
+ *
+ * `needsPlain` marks the ones that only make sense over a label-free ground:
+ * adding place names over a basemap that already has them baked in produces
+ * every name twice, slightly offset, which looks like a rendering fault.
+ */
+const MAP_OVERLAYS = [
+  {
+    id: 'labels',
+    label: 'Place names',
+    hint: 'Cities, suburbs and localities',
+    needsPlain: true,
+    url: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+    subdomains: 'abcd', maxNative: 19, zIndex: 6,
+    credit: '© OpenStreetMap contributors © CARTO',
+  },
+  {
+    id: 'roads',
+    label: 'Roads & transport',
+    hint: 'Road network with route numbers',
+    needsPlain: true,
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+    maxNative: 19, zIndex: 5,
+    credit: 'Roads © Esri · TomTom · Garmin',
+  },
+  {
+    id: 'railway',
+    label: 'Railways',
+    hint: 'Lines, sidings and stations from OpenRailwayMap',
+    needsPlain: false,
+    url: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
+    subdomains: 'abc', maxNative: 19, zIndex: 7,
+    credit: '© OpenRailwayMap contributors',
+  },
+  {
+    id: 'hillshade',
+    label: 'Terrain shading',
+    hint: 'Relief, for reading valleys and ridges',
+    needsPlain: false,
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
+    maxNative: 16, zIndex: 2, opacity: 0.5,
+    credit: 'Hillshade © Esri',
+  },
+];
+
+/** The label-free grounds this feature is designed around. */
+const PLAIN_GROUNDS = ['positron', 'lightgray', 'darkgray'];
+
+/**
+ * The plain twin of each detailed ground — used only by the overlay panel's
+ * "use a plain ground" offer. It briefly also powered a forced swap that
+ * answered "hide the icons" by changing the whole cartography; that was wrong
+ * (the user wants THIS map without the red, not another map) and the swap now
+ * lives in map/tileScrub.js as a pixel clean of the genuine OSM tiles.
+ */
+const CLEAN_GROUND_TWIN = {
+  osm: 'positron',
+  voyager: 'positron',
+  esristreet: 'lightgray',
+  topo: 'lightgray',
+  natgeo: 'lightgray',
+  opentopo: 'lightgray',
+  dark: 'darkgray',
+};
+
+/** Whether the ground is allowed to paint shop and clinic icons. Off by default. */
+function placeIconsOn() {
+  try { return getPref('placeIcons') === true; } catch (e) { return false; }
+}
+
+/**
+ * Enforce the place-icon setting on whatever ground is active.
+ *
+ * Called after anything that can change the ground — startup, a basemap swap, a
+ * layout switch, a project load. A project saves its own basemap, so opening an
+ * older file is one of the ways an icon-heavy ground comes back; without this,
+ * the setting held until the first time you opened your own work.
+ *
+ * @returns {boolean} whether the ground was changed
+ */
+function enforcePlaceIcons() {
+  // Retained for its call sites; the swap it used to do is gone. The scrub is
+  // decided where the tile layers are built, so any path that rebuilds the
+  // basemap — startup, swap, layout, project load — applies it by construction.
+  return false;
+}
+
+/** Turn place icons on or off. @param {boolean} on */
+function setPlaceIcons(on) {
+  try { setPref('placeIcons', !!on); } catch (e) { /* ignore */ }
+  // Not a ground swap. 6.0075 answered "hide the icons" by moving to a
+  // different cartography, and the user's objection was exact: they want THIS
+  // map without the red, not another map. The scrub happens at tile-layer
+  // construction, so flipping the pref just needs the same ground rebuilt.
+  if (typeof setBasemap === 'function' && typeof activeKey !== 'undefined') {
+    try { setBasemap(activeKey); } catch (e) { /* keep what is up */ }
+    if (typeof reapplyMapOverlays === 'function') reapplyMapOverlays();
+  }
+  renderOverlayPanel();
+  if (typeof markDirty === 'function') markDirty();
+}
+
+/** Live layers, by overlay id. */
+const _overlayLayers = {};
+
+/** @param {string} id @returns {object|null} */
+function mapOverlay(id) { return MAP_OVERLAYS.find(o => o.id === id) || null; }
+
+/** @returns {string[]} the overlay ids currently on */
+function activeOverlays() {
+  let saved = null;
+  try { saved = getPref('mapOverlays'); } catch (e) { /* ignore */ }
+  return Array.isArray(saved) ? saved.slice() : [];
+}
+
+/** Is the current ground free of baked-in labels and icons? */
+function groundIsPlain() {
+  return typeof activeKey !== 'undefined' && PLAIN_GROUNDS.indexOf(activeKey) >= 0;
+}
+
+/**
+ * Add or remove one overlay.
+ * @param {string} id @param {boolean} on
+ */
+function setMapOverlay(id, on) {
+  const spec = mapOverlay(id);
+  if (!spec || typeof map === 'undefined') return;
+
+  // A needsPlain overlay over a ground that already bakes that detail in
+  // paints every name twice, slightly offset. Kept ticked but not added; it
+  // resumes the moment the ground is plain. This also un-breaks installs that
+  // 6.0074 seeded with labels+roads before Connectivity moved back to osm.
+  if (on && spec.needsPlain && !groundIsPlain()) { renderOverlayPanel(); return; }
+  if (on && !_overlayLayers[id]) {
+    _overlayLayers[id] = L.tileLayer(spec.url, {
+      subdomains: spec.subdomains || 'abc',
+      maxNativeZoom: spec.maxNative,
+      maxZoom: 22,
+      opacity: spec.opacity == null ? 1 : spec.opacity,
+      zIndex: spec.zIndex,
+      // Overlays are decoration, not the ground. A failed overlay tile must
+      // leave the map usable rather than triggering the basemap fallback that
+      // mapEngine runs when the *ground* cannot draw.
+      errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+      attribution: spec.credit,
+    }).addTo(map);
+  } else if (!on && _overlayLayers[id]) {
+    map.removeLayer(_overlayLayers[id]);
+    delete _overlayLayers[id];
+  }
+
+  const next = MAP_OVERLAYS.map(o => o.id).filter(x => !!_overlayLayers[x]);
+  try { setPref('mapOverlays', next); } catch (e) { /* ignore */ }
+  renderOverlayPanel();
+  if (typeof markDirty === 'function') markDirty();
+}
+
+/** Re-add every active overlay — after a basemap swap tears the tile pane down. */
+function reapplyMapOverlays() {
+  const want = activeOverlays();
+  MAP_OVERLAYS.forEach(o => {
+    const on = want.indexOf(o.id) >= 0;
+    if (on && o.needsPlain && !groundIsPlain()) return;
+    if (on && !_overlayLayers[o.id]) {
+      _overlayLayers[o.id] = L.tileLayer(o.url, {
+        subdomains: o.subdomains || 'abc',
+        maxNativeZoom: o.maxNative, maxZoom: 22,
+        opacity: o.opacity == null ? 1 : o.opacity,
+        zIndex: o.zIndex,
+        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+        attribution: o.credit,
+      }).addTo(map);
+    } else if (on && _overlayLayers[o.id] && !map.hasLayer(_overlayLayers[o.id])) {
+      _overlayLayers[o.id].addTo(map);
+    }
+  });
+  renderOverlayPanel();
+}
+
+/**
+ * Switch to a plain ground so the overlays are the only detail on the map.
+ *
+ * Offered rather than done automatically. Turning on "Roads" should not silently
+ * replace somebody's satellite imagery — but leaving them with names printed
+ * twice and no explanation is worse, so the panel says what is wrong and this
+ * is the one click that fixes it.
+ */
+function useGroundForOverlays() {
+  if (typeof chooseBasemap !== 'function') return;
+  if (typeof basemapLocked === 'function' && basemapLocked()) {
+    if (typeof status === 'function') {
+      status('Connectivity pins the ground to OpenStreetMap. Switch to the Satellite layout'
+        + ' to use a plain ground with overlays.');
+    }
+    return;
+  }
+  chooseBasemap('positron');
+}
+
+/**
+ * The part of the panel that only a vector ground can offer.
+ *
+ * Built from the layers the loaded style actually has — vectorStyleGroups()
+ * classifies the live style rather than reciting names from memory — so a group
+ * with nothing in it never appears, and the panel cannot promise a toggle that
+ * does nothing.
+ *
+ * @returns {string} HTML, or '' when the ground is not vector.
+ */
+function vectorOverlaySection() {
+  if (typeof vectorGroundActive !== 'function' || !vectorGroundActive()) return '';
+  const groups = (typeof vectorStyleGroups === 'function') ? vectorStyleGroups() : [];
+  if (!groups.length) {
+    return '<div class="bm-ov-note">The vector style has not finished loading.</div>';
+  }
+
+  const hasPoi = groups.some(g => g.id === 'poi');
+
+  return '<div class="bm-ov-hd">Hide from this ground</div>'
+    + groups.map(g =>
+      '<label class="chk bm-ov" title="' + esc(g.hint) + '">'
+      + '<input type="checkbox" data-vector-group="' + esc(g.id) + '"'
+      + (vectorGroupOn(g.id) ? ' checked' : '') + '> '
+      + esc(g.label) + '</label>').join('')
+    // Each of these is one class of POI rather than a whole layer, which is the
+    // thing a scrubbed raster tile cannot offer: on OSM's own cartography a
+    // pharmacy and a hospital are the same red, so removing one removes both.
+    + (hasPoi
+      ? VECTOR_POI_CLASS_TOGGLES.map(t =>
+        '<label class="chk bm-ov bm-ov-sub" title="' + esc(t.hint) + '">'
+        + '<input type="checkbox" data-vector-poi="' + esc(t.id) + '"'
+        + (vectorPoiClassOn(t.id) ? ' checked' : '') + '> '
+        + esc(t.label) + '</label>').join('')
+      : '')
+    + '<div class="bm-ov-note bm-ov-limit">This ground is drawn in your browser from the'
+      + ' features themselves, so each of these is switched off exactly rather than painted'
+      + ' over.</div>';
+}
+
+/** Draw the overlay checklist inside the basemap panel. */
+function renderOverlayPanel() {
+  const box = document.getElementById('bmOverlays');
+  if (!box) return;
+  const on = activeOverlays();
+  const plain = groundIsPlain();
+  const clash = !plain && on.some(id => (mapOverlay(id) || {}).needsPlain);
+  // On a vector ground the scrub is not in play at all — it is a raster tile
+  // cleaner and there are no raster tiles — so offering its toggle would be
+  // offering a control that does nothing.
+  const vector = typeof vectorGroundActive === 'function' && vectorGroundActive();
+
+  box.innerHTML = '<div class="bm-ov-hd">Show on the ground</div>'
+    + (vector ? '' :
+      '<label class="chk bm-ov" title="The red hospital, clinic and pharmacy symbols the'
+      + ' OpenStreetMap style paints into its tiles. Left off they are cleaned out of the tile'
+      + ' pixels while you are zoomed out, and come back on their own once you are closer than'
+      + ' about a 300 m scale. Tick to show them at every zoom.">'
+      + '<input type="checkbox" data-place-icons' + (placeIconsOn() ? ' checked' : '') + '> '
+      + 'Place icons at every zoom</label>')
+    + MAP_OVERLAYS.map(o =>
+      '<label class="chk bm-ov" title="' + esc(o.hint) + '">'
+      + '<input type="checkbox" data-overlay="' + o.id + '"' + (on.indexOf(o.id) >= 0 ? ' checked' : '') + '> '
+      + esc(o.label) + '</label>').join('')
+    + (clash
+      ? '<div class="bm-ov-note">This ground already has names and icons painted into it, so they'
+        + ' appear twice. <button type="button" id="bmPlainGround">Use a plain ground</button></div>'
+      : '')
+    + (vector ? '' :
+      '<div class="bm-ov-note bm-ov-limit">Names and icons are part of the basemap image, so they'
+      + ' can be swapped for these layers but not filtered one by one.</div>')
+    + vectorOverlaySection();
+}
+
+(function wireMapOverlays() {
+  document.addEventListener('change', e => {
+    const cb = e.target.closest && e.target.closest('[data-overlay]');
+    if (cb) { setMapOverlay(cb.dataset.overlay, cb.checked); return; }
+    const pi = e.target.closest && e.target.closest('[data-place-icons]');
+    if (pi) { setPlaceIcons(pi.checked); return; }
+    const vg = e.target.closest && e.target.closest('[data-vector-group]');
+    if (vg) { setVectorLayerGroup(vg.dataset.vectorGroup, vg.checked); return; }
+    const vp = e.target.closest && e.target.closest('[data-vector-poi]');
+    if (vp) setVectorPoiClass(vp.dataset.vectorPoi, vp.checked);
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest && e.target.closest('#bmPlainGround')) useGroundForOverlays();
+  });
+
+  // Deferred: the basemap registry and the map are both built after this file's
+  // top level runs, and an overlay added before the ground exists is an overlay
+  // Leaflet stacks underneath it.
+  setTimeout(() => {
+    // Boot-order belt and braces. The scrub is decided when the tile layers are
+    // built, and the engine builds its first ones during parse — so if the
+    // pref and the DOM disagree (a scrub-ground showing the wrong tile kind),
+    // one rebuild squares them. Tile *elements* exist synchronously on layer
+    // add, so the check does not race the network.
+    try {
+      const entry = typeof BASEMAPS !== 'undefined' && BASEMAPS[activeKey];
+      const scrubbable = entry && entry.spec.layers.some(l => l.scrub);
+      if (scrubbable) {
+        const showingScrubbed = !!document.querySelector('.leaflet-tile-pane canvas.leaflet-tile');
+        if (showingScrubbed === placeIconsOn()) setBasemap(activeKey);
+      }
+    } catch (e) { /* no map yet */ }
+    try { reapplyMapOverlays(); } catch (e) { /* no map yet */ }
+  }, 700);
+})();

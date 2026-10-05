@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sign in · DBOT Map Studio</title>
+  <link rel="preload" href="./vendor/fonts/Geist-Variable.woff2?v=6.0232" as="font" type="font/woff2" crossorigin>
+  <!-- Same order rule as index.html: later sheets override earlier ones. This
+       page needs the tokens and the base typography, then its own layout. -->
+  <link rel="stylesheet" href="./css/themes.css?v=6.0232">
+  <link rel="stylesheet" href="./css/style.css?v=6.0232">
+  <link rel="stylesheet" href="./css/shell.css?v=6.0232">
+</head>
+
+<body class="shell-body auth-body">
+  <div class="auth-wrap">
+
+    <!-- One card, split. The form is the task, so it takes the left half and
+         the photograph takes the right — image-led rather than text-led, and
+         the photograph is dropped entirely below 1000px where the form needs
+         the whole width. -->
+    <div class="auth-shell" id="authShell">
+
+
+    <!-- ===== Right: the task ============================================== -->
+    <main class="auth-main">
+      <div class="auth-card">
+        <div class="auth-card-brand">
+          <img class="dbotLogo" alt="DBOT">
+          <div>
+            <div class="kicker">Market Research</div>
+            <div class="wordmark">Map Studio</div>
+          </div>
+        </div>
+
+        <h1 id="authTitle">Welcome back</h1>
+        <p class="lede" id="authLede">Sign in to continue to DBOT Map Studio</p>
+
+        <div class="auth-error" id="authError" hidden></div>
+        <div class="auth-ok" id="authOk" hidden></div>
+
+        <!-- Real accounts. Shown only when the accounts API is configured.
+             The "Continue with Microsoft" button that used to sit above this
+             form is gone with Supabase: it was Supabase brokering Entra, and
+             there is no broker now. Everyone signs in with an address and a
+             password, so there are no longer two ways in to divide with an
+             "or". -->
+        <div id="authReal" hidden>
+          <form id="authForm" novalidate>
+            <!-- Only for creating an account: the name is already on the
+                 account by the time anyone signs in. -->
+            <div class="auth-field" id="authNameField" hidden>
+              <label for="authFullName">Your name</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authFullName" name="fullName" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal">
+              </div>
+            </div>
+
+            <div class="auth-field" id="authEmailField">
+              <label for="authEmail">Work email</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authEmail" name="email" type="email" autocomplete="username"
+                  placeholder="you@dbotrealty.com" required>
+              </div>
+            </div>
+
+            <!-- Only when somebody arrives already signed in on an issued
+                 password — a reload, or a direct link to the project list.
+                 Straight after signing in we still have what they typed and do
+                 not ask for it twice. -->
+            <div class="auth-field" id="authCurrentField" hidden>
+              <label for="authCurrent">The password you were given</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                <input id="authCurrent" name="current" type="password"
+                  autocomplete="current-password" placeholder="As it was sent to you">
+              </div>
+            </div>
+
+            <div class="auth-field">
+              <label for="authPassword">Password</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                <input id="authPassword" name="password" type="password"
+                  autocomplete="current-password" placeholder="Enter your password" required>
+                <!-- Typing a password you cannot see, into a field that may
+                     reject it, is the most common way to get locked out of
+                     an account you know the password to. -->
+                <button class="auth-eye" id="authEye" type="button" aria-label="Show password"
+                  aria-pressed="false">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="hint" id="authPwHint"><a href="#" id="authForgot">Forgot your password?</a></div>
+            </div>
+
+            <button class="auth-submit" type="submit" id="authSubmit">
+              <span id="authSubmitLabel">Sign in</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
+          </form>
+
+          <div class="auth-switch" id="authSwitch">
+            <span id="authSwitchText">Don't have an account?</span>
+            <button type="button" id="authSwitchBtn">Create one</button>
+          </div>
+        </div>
+
+        <!-- No accounts configured yet: name yourself, and be told plainly
+             that is all this does. -->
+        <div id="authLocal" hidden>
+          <form id="authLocalForm" novalidate>
+            <div class="auth-field">
+              <label for="authName">Your name</label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <input id="authName" name="name" type="text" autocomplete="name"
+                  placeholder="Aditya Bachal" required>
+              </div>
+            </div>
+
+            <div class="auth-field">
+              <label for="authLocalEmail">Email <span class="opt">(optional)</span></label>
+              <div class="auth-input">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m2 7 10 6 10-6" />
+                </svg>
+                <input id="authLocalEmail" name="email" type="email" autocomplete="email"
+                  placeholder="you@dbotrealty.com">
+              </div>
+              <div class="hint">Used only to recognise you again on this machine. It is not sent anywhere.</div>
+            </div>
+
+            <button class="auth-submit" type="submit">
+              <span>Continue</span>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="18" y2="12" />
+                <polyline points="12 6 18 12 12 18" />
+              </svg>
+            </button>
+          </form>
+
+          <div class="auth-note">
+            <b>Accounts are not switched on yet.</b> This names you and keeps separate people's projects apart on
+            a shared machine — it does not lock anything, because a site with no server cannot. Anyone with access
+            to this computer can open the app directly. Treat a project here as a file on this disk, because that
+            is what it is.
+          </div>
+        </div>
+
+        <!-- Which build this is. Without it, a feature that has not arrived
+             yet is indistinguishable from one that is broken — see
+             js/core/freshness.js. -->
+        <div class="auth-ver">DBOT Map Studio <span id="authVer"></span></div>
+      </div>
+    </main>
+
+    <!-- ===== Right: the product, shown rather than described ================
+         Two layers. The photograph on top when there is one; the inline SVG
+         beneath as a fallback that needs no file, no request and no licence,
+         and draws the same thing the photo shows — a measured route between
+         named places. Delete the image and the page still looks deliberate.
+         Hidden below 1000px: it is reassurance, and the form is the task. -->
+    <aside class="auth-stage" aria-hidden="true">
+      <!-- A real photograph if one has been added, the drawn scene if not.
+           Layered rather than swapped so a missing or corrupt file costs
+           nothing: onerror removes the img and the SVG beneath is simply
+           revealed. Drop a JPG or PNG at this path and it takes over with no
+           code change; delete it and the illustration comes back. -->
+      <img class="auth-photo" id="authPhoto" src="./assets/images/login-hero.jpg" alt="">
+      <svg class="auth-scene" viewBox="0 0 1000 900" preserveAspectRatio="xMidYMid slice"
+        xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0%" stop-color="#0B1A2E" />
+            <stop offset="45%" stop-color="#0A2438" />
+            <stop offset="100%" stop-color="#061421" />
+          </linearGradient>
+          <linearGradient id="water" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#123A52" />
+            <stop offset="100%" stop-color="#0C2437" />
+          </linearGradient>
+          <linearGradient id="routeGrad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stop-color="#FFA149" />
+            <stop offset="100%" stop-color="#FF7A1A" />
+          </linearGradient>
+          <filter id="routeGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="9" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <radialGradient id="vignette" cx="0.45" cy="0.4" r="0.85">
+            <stop offset="55%" stop-color="#000" stop-opacity="0" />
+            <stop offset="100%" stop-color="#000" stop-opacity="0.62" />
+          </radialGradient>
+          <!-- City blocks, as a tile rather than a few hundred rectangles. -->
+          <pattern id="blocks" width="86" height="74" patternUnits="userSpaceOnUse"
+            patternTransform="rotate(-14)">
+            <rect x="4" y="4" width="30" height="22" rx="2" fill="#7FA6C4" opacity=".075" />
+            <rect x="42" y="6" width="36" height="16" rx="2" fill="#7FA6C4" opacity=".055" />
+            <rect x="6" y="34" width="22" height="30" rx="2" fill="#7FA6C4" opacity=".065" />
+            <rect x="36" y="32" width="42" height="34" rx="2" fill="#7FA6C4" opacity=".045" />
+          </pattern>
+        </defs>
+
+        <rect width="1000" height="900" fill="url(#sky)" />
+        <rect width="1000" height="900" fill="url(#blocks)" />
+
+        <!-- Water, cutting across the lower right. -->
+        <path d="M1000 470 C 880 500, 830 590, 760 640 C 690 690, 610 700, 540 760
+                 C 490 800, 470 860, 460 900 L1000 900 Z" fill="url(#water)" />
+        <path d="M1000 470 C 880 500, 830 590, 760 640 C 690 690, 610 700, 540 760
+                 C 490 800, 470 860, 460 900" fill="none" stroke="#2E6E92" stroke-width="2"
+          opacity=".5" />
+
+        <!-- Arterial roads. Thin, low contrast: context, not subject. -->
+        <g fill="none" stroke="#9FC2DC" stroke-linecap="round">
+          <path d="M-40 250 C 200 210, 420 300, 700 240 S 980 170, 1060 190" stroke-width="7" opacity=".13" />
+          <path d="M-40 560 C 180 540, 340 470, 560 470 S 860 420, 1060 360" stroke-width="6" opacity=".11" />
+          <path d="M150 -40 C 190 220, 250 430, 300 700 S 340 860, 350 940" stroke-width="6" opacity=".1" />
+          <path d="M620 -40 C 640 180, 700 340, 780 520" stroke-width="5" opacity=".09" />
+          <path d="M-40 400 C 220 380, 460 360, 1060 300" stroke-width="3" opacity=".07" />
+          <path d="M-40 700 C 260 690, 420 640, 640 600" stroke-width="3" opacity=".07" />
+        </g>
+
+        <!-- The measured route, and its stops.
+             Confined to x > 430 and y 250-730. The horizontal bound keeps the
+             glowing line off a 46px display face, which made both unreadable.
+             The vertical one survives cropping: the scene is drawn with
+             `slice`, so a wide, short window trims top and bottom, and a label
+             sitting near the edge gets sliced in half. -->
+        <g filter="url(#routeGlow)">
+          <path d="M446 730 C 516 664, 540 622, 574 580 C 612 522, 620 478, 664 430
+                   C 712 372, 758 312, 812 250"
+            fill="none" stroke="url(#routeGrad)" stroke-width="7"
+            stroke-linecap="round" stroke-linejoin="round" />
+        </g>
+
+        <g class="scene-pin" font-family="Geist, system-ui, sans-serif" font-size="19" font-weight="600">
+          <!-- Project Site -->
+          <line x1="812" y1="250" x2="812" y2="210" stroke="#FF7A1A" stroke-width="2" opacity=".85" />
+          <rect x="700" y="170" width="224" height="40" rx="9" fill="#0A1524" opacity=".94" />
+          <rect x="700" y="170" width="224" height="40" rx="9" fill="none" stroke="#FF7A1A" opacity=".55" />
+          <text x="812" y="196" fill="#FFF" text-anchor="middle">Project Site</text>
+          <circle cx="812" cy="250" r="13" fill="#FF7A1A" />
+          <circle cx="812" cy="250" r="5" fill="#0A1524" />
+
+          <!-- MG Road -->
+          <line x1="664" y1="430" x2="716" y2="410" stroke="#EAF0F9" stroke-width="1.6" opacity=".5" />
+          <rect x="716" y="390" width="150" height="36" rx="9" fill="#0A1524" opacity=".9" />
+          <text x="791" y="414" fill="#EAF0F9" text-anchor="middle">MG Road</text>
+          <circle cx="664" cy="430" r="8" fill="#EAF0F9" opacity=".92" />
+
+          <!-- Railway Station -->
+          <line x1="574" y1="580" x2="632" y2="564" stroke="#2E9BFF" stroke-width="1.6" opacity=".6" />
+          <rect x="632" y="545" width="232" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="657" cy="564" r="7" fill="#2E9BFF" />
+          <text x="676" y="571" fill="#EAF0F9">Railway Station</text>
+          <circle cx="574" cy="580" r="8" fill="#2E9BFF" />
+
+          <!-- Airport -->
+          <line x1="446" y1="730" x2="512" y2="720" stroke="#12B886" stroke-width="1.6" opacity=".6" />
+          <rect x="512" y="700" width="146" height="38" rx="9" fill="#0A1524" opacity=".9" />
+          <circle cx="537" cy="719" r="7" fill="#12B886" />
+          <text x="556" y="726" fill="#EAF0F9">Airport</text>
+          <circle cx="446" cy="730" r="8" fill="#12B886" />
+        </g>
+
+        <rect width="1000" height="900" fill="url(#vignette)" />
+      </svg>
+
+      <div class="auth-stage-inner">
+        <div class="auth-brand">
+          <img class="dbotLogo" alt="DBOT">
+          <div>
+            <div class="kicker">Market Research</div>
+            <div class="wordmark">Map Studio</div>
+          </div>
+        </div>
+
+        <div class="auth-copy">
+          <h2>Property maps<br>that carry their <em>evidence.</em></h2>
+          <p class="auth-sub">Map with precision. Measure with confidence.<br>
+            Make decisions backed by real-world evidence.</p>
+
+          <div class="auth-points">
+            <div class="auth-point">
+              <span class="ic">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6" />
+                  <path d="M8 3v15M16 6v15" />
+                </svg>
+              </span>
+              <div>
+                <b>All your projects, one place</b>
+                <span>Create, organise and reopen every property map from one workspace.</span>
+              </div>
+            </div>
+
+            <div class="auth-point">
+              <span class="ic ic-b">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </span>
+              <div>
+                <b>Measure. Analyse. Decide.</b>
+                <span>Real coordinates, real roads and real routing behind every number.</span>
+              </div>
+            </div>
+
+            <div class="auth-point">
+              <span class="ic ic-c">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </span>
+              <div>
+                <b>Export what you need</b>
+                <span>PDF, PowerPoint, Word, Excel, KML and GeoJSON from the same map.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    </div>
+
+  </div>
+
+  <script src="./js/core/prefs.js?v=6.0232"></script>
+  <script src="./js/constants.js?v=6.0232"></script>
+  <script src="./js/core/freshness.js?v=6.0232"></script>
+  <script src="./js/config.js?v=6.0232"></script>
+  <script src="./js/auth/session.js?v=6.0232"></script>
+  <!-- Decoration only. The form works identically without either of these.
+       dotField.js first: loginFx.js calls startDotField() on DOMContentLoaded,
+       and a function that is not defined yet is a function that is not there. -->
+  <script src="./js/ui/dotField.js?v=6.0232"></script>
+  <script src="./js/auth/loginFx.js?v=6.0232"></script>
+  <script>
+    applyTheme();
+    initFreshness();
+
+    // No photo, or an unreadable one: fall back to the drawn scene rather than
+    // showing a broken-image glyph over it.
+    (function () {
+      const photo = document.getElementById('authPhoto');
+      if (!photo) return;
+      photo.addEventListener('error', () => photo.remove());
+      // A cached 404 can resolve before this listener attaches.
+      if (photo.complete && photo.naturalWidth === 0) photo.remove();
+    })();
+    document.querySelectorAll('.dbotLogo').forEach(i => { i.src = 'data:image/png;base64,' + LOGO_B64; });
+    document.getElementById('authVer').textContent = 'v' + APP_VERSION;
+
+    const $ = id => document.getElementById(id);
+    const errEl = $('authError');
+    const okEl = $('authOk');
+
+    function fail(msg) { errEl.textContent = msg; errEl.hidden = false; okEl.hidden = true; }
+    function tell(msg) { okEl.textContent = msg; okEl.hidden = false; errEl.hidden = true; }
+
+    /**
+     * The reset token from an emailed link, or ''.
+     *
+     * The API writes links as login.html?reset=<token>. Read once, then wiped
+     * from the address bar by clearResetToken() — a live password-reset token
+     * sitting in a URL ends up in browser history, in a screenshot attached to
+     * a bug report, and in the Referer header of the next request this page
+     * makes.
+     */
+    function resetTokenInUrl() {
+      const t = new URLSearchParams(location.search).get('reset') || '';
+      return /^[a-f0-9]{64}$/.test(t) ? t : '';
+    }
+
+    /**
+     * Take the token out of the address bar, keeping ?next= if it was there.
+     *
+     * Called as soon as the token has been read into a variable rather than
+     * after it has been used, so somebody who abandons the page half way
+     * through still does not leave a working token in their history.
+     */
+    function clearResetToken() {
+      const q = new URLSearchParams(location.search);
+      const next = q.get('next');
+      try {
+        history.replaceState(null, '', location.pathname + (next ? '?next=' + next : ''));
+      } catch (e) { /* file:// — leave the URL alone */ }
+    }
+
+    /**
+     * Say why a single-use link was already spent.
+     *
+     * Worth its own wording, because the usual cause is not what the words
+     * say. Corporate mail security — Microsoft Defender Safe Links in Outlook,
+     * and its equivalents — opens every link in an incoming message in order
+     * to scan it. That spends the token before the human has clicked anything,
+     * so a link can arrive already used and report itself as spent seconds
+     * after it was sent. Telling somebody "that link has expired" when they
+     * clicked it immediately reads as the app being broken; telling them what
+     * actually happened lets them act.
+     */
+    function explainSpentLink(message) {
+      return message + ' Email security scanners often open links automatically before you do, '
+        + 'which uses them up — so this can happen even seconds after the email arrived. Ask for '
+        + 'a new one, and open it from a different mail app if it keeps happening.';
+    }
+
+    /** Only same-page targets — an open redirect is trivially avoidable here. */
+    function safeNext() {
+      const raw = new URLSearchParams(location.search).get('next') || 'projects.html';
+      const decoded = decodeURIComponent(raw);
+      return /^[\w.-]+\.html(\?[^#]*)?$/.test(decoded) ? decoded : 'projects.html';
+    }
+
+    // Reveal the password. aria-pressed rather than swapping the icon for a
+    // crossed-out eye, because both icons are read as "eye" and the state is
+    // what matters to anyone not looking at it.
+    $('authEye').addEventListener('click', () => {
+      const input = $('authPassword');
+      const shown = input.type === 'text';
+      input.type = shown ? 'password' : 'text';
+      $('authEye').setAttribute('aria-pressed', String(!shown));
+      $('authEye').setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+      $('authEye').classList.toggle('on', !shown);
+      input.focus();
+    });
+
+    (async function start() {
+      // A reset token is read and wiped from the address bar before anything
+      // else happens, including before the session is resolved — see
+      // clearResetToken() on why it does not wait until the token is used.
+      const resetToken = resetTokenInUrl();
+      if (resetToken) clearResetToken();
+
+      await sessionInit();
+
+      /*
+       * Arrived already signed in on a password an administrator issued —
+       * a reload, or a link straight to the project list. The pages send
+       * people here rather than letting an issued credential quietly become
+       * somebody's permanent one.
+       */
+      const setPwOnArrival = !!currentUser()
+        && typeof mustChangePassword === 'function' && mustChangePassword();
+
+      // Already signed in, and not here to set a password. A live session plus
+      // a reset link means somebody is resetting a password they are currently
+      // signed in with, which is a thing people do.
+      if (currentUser() && !resetToken && !setPwOnArrival) { location.replace(safeNext()); return; }
+
+      const real = authMode() === 'server';
+      $('authReal').hidden = !real;
+      $('authLocal').hidden = real;
+      $('authTitle').textContent = real ? 'Welcome back' : 'Welcome';
+      $('authLede').textContent = real
+        ? 'Sign in to continue to DBOT Map Studio'
+        : 'Your projects are kept in this browser, under the name you use here.';
+
+      if (real) {
+        /*
+         * The accounts API did not answer at start-up. Said here, once, at the
+         * top of the page — because the alternative is a sign-in form that
+         * looks perfectly normal, refuses every password, and blames the
+         * person typing it.
+         */
+        if (typeof sessionStartupError === 'function' && sessionStartupError()) {
+          fail(sessionStartupError());
+        }
+
+        $('authEmail').focus();
+
+        /*
+         * ONE FORM, THREE JOBS: sign in, create an account, and choose a new
+         * password after following a reset link. A separate page for each
+         * would triple the markup in order to change three labels and hide two
+         * fields, and would give the three states three chances to drift apart
+         * visually.
+         */
+        /*
+         * 'first' is the mode somebody lands in when the password they just
+         * used was issued to them rather than chosen. `issuedPassword` holds
+         * what they typed a moment ago, so the form asks for one field and not
+         * two; when they arrived already signed in there is nothing in it, and
+         * the "password you were given" field appears instead.
+         */
+        let issuedPassword = '';
+        let mode = resetToken ? 'reset' : setPwOnArrival ? 'first' : 'signin';
+
+        // Whether the server is accepting new accounts at all. Asked once at
+        // start-up, so the "Create one" link is absent rather than present and
+        // refusing — an invitation that cannot be accepted is worse than none.
+        const signupOpen = typeof authServerInfo === 'function'
+          ? authServerInfo().signupOpen !== false : true;
+
+        function setMode(next) {
+          mode = next;
+          const up = mode === 'signup';
+          const reset = mode === 'reset';
+          const first = mode === 'first';
+          // Both ask for a password and neither asks for an address: the token
+          // names the account in one case and the live session in the other.
+          const pick = reset || first;
+
+          $('authNameField').hidden = !up;
+          $('authEmailField').hidden = pick;
+          // Only when we do not already have what they typed a moment ago.
+          $('authCurrentField').hidden = !(first && !issuedPassword);
+          $('authSubmitLabel').textContent = reset ? 'Set password and sign in'
+            : first ? 'Save my password'
+              : up ? 'Create account' : 'Sign in';
+          $('authTitle').textContent = reset ? 'Choose a new password'
+            : first ? 'Choose your own password'
+              : up ? 'Create your account' : 'Welcome back';
+          $('authPwHint').hidden = up || pick;
+          $('authPassword').setAttribute('autocomplete',
+            (up || pick) ? 'new-password' : 'current-password');
+          $('authPassword').setAttribute('placeholder',
+            (up || pick) ? 'At least 8 characters' : 'Enter your password');
+          $('authSwitchText').textContent = up ? 'Already have an account?' : "Don't have an account?";
+          $('authSwitchBtn').textContent = up ? 'Sign in' : 'Create one';
+          $('authSwitch').hidden = pick || (!up && !signupOpen);
+          $('authLede').textContent = reset
+            ? 'Pick something you have not used elsewhere. This link works once.'
+            : first
+              ? 'The password you were sent has been seen by more than one person. '
+                + 'Pick one only you know — it takes a moment and it is the last time you '
+                + 'will be asked.'
+              : up ? 'Accounts are limited to DBOT work addresses.'
+                : 'Sign in to continue to DBOT Map Studio';
+          errEl.hidden = true;
+          okEl.hidden = true;
+          (pick ? (first && !issuedPassword ? $('authCurrent') : $('authPassword'))
+            : up ? $('authFullName') : $('authEmail')).focus();
+        }
+
+        $('authSwitchBtn').addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
+        if (mode !== 'signin' || !signupOpen) setMode(mode);
+
+        $('authForm').addEventListener('submit', async e => {
+          e.preventDefault();
+          const btn = $('authSubmit');
+          const label = $('authSubmitLabel');
+          const original = label.textContent;
+          btn.disabled = true;
+          label.textContent = mode === 'signup' ? 'Creating…'
+            : (mode === 'reset' || mode === 'first') ? 'Saving…' : 'Signing in…';
+          try {
+            if (mode === 'reset') {
+              await completePasswordReset(resetToken, $('authPassword').value);
+              location.href = safeNext();
+              return;
+            }
+            if (mode === 'first') {
+              await changePassword(issuedPassword || $('authCurrent').value,
+                $('authPassword').value);
+              location.href = safeNext();
+              return;
+            }
+            if (mode === 'signup') {
+              await signUpWithPassword({
+                name: $('authFullName').value,
+                email: $('authEmail').value,
+                password: $('authPassword').value,
+              });
+              // Signed in by the same request that created the account. There
+              // is no confirmation email to wait for — see the note on
+              // signUpWithPassword() in js/auth/session.js for why not.
+              location.href = safeNext();
+              return;
+            }
+            await signInWithPassword({ email: $('authEmail').value, password: $('authPassword').value });
+
+            /*
+             * Signed in on a password somebody else chose. Kept in memory
+             * rather than asked for again — they typed it two seconds ago, and
+             * the point of this screen is to be quick enough that nobody
+             * resents it.
+             */
+            if (typeof mustChangePassword === 'function' && mustChangePassword()) {
+              issuedPassword = $('authPassword').value;
+              $('authPassword').value = '';
+              setMode('first');
+              btn.disabled = false;
+              label.textContent = 'Save my password';
+              return;
+            }
+
+            location.href = safeNext();
+          } catch (ex) {
+            // A reset token that has already been spent is the one failure
+            // whose likeliest cause is not the reader's fault.
+            fail(ex && (ex.code === 'used_token' || ex.code === 'expired_token')
+              ? explainSpentLink(ex.message) : ex.message);
+            btn.disabled = false;
+            label.textContent = original;
+            $('authPassword').select();
+          }
+        });
+
+        $('authForgot').addEventListener('click', async e => {
+          e.preventDefault();
+          const email = $('authEmail').value.trim();
+          if (!email) { fail('Type your work email above first, then click this again.'); return; }
+          try {
+            tell(await sendPasswordReset(email));
+          } catch (ex) { fail(ex.message); }
+        });
+        return;
+      }
+
+      // Local mode. Pre-fill from the last session so returning does not mean
+      // retyping your own name.
+      const prior = currentUser();
+      if (prior) { $('authName').value = prior.name; $('authLocalEmail').value = prior.email || ''; }
+      $('authName').focus();
+      $('authName').select();
+
+      $('authLocalForm').addEventListener('submit', e => {
+        e.preventDefault();
+        try {
+          signInLocally({ name: $('authName').value, email: $('authLocalEmail').value });
+          location.href = safeNext();
+        } catch (ex) { fail(ex.message || 'Could not continue.'); }
+      });
+    })();
+  </script>
+</body>
+
+</html>

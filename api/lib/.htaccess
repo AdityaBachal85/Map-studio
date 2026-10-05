@@ -1,0 +1,21 @@
+# Nothing in this directory is meant to be fetched.
+#
+# These files are included by ../index.php, which loads the configuration and
+# opens the database before any of them runs. Entered directly they would run
+# with none of that in place — and one of them is the file that reads the
+# database password.
+#
+# Both syntaxes are present because a shared plan may be running either
+# Apache 2.2 or 2.4, and the wrong one alone is a directory that is not
+# actually protected.
+
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+  <IfModule mod_access_compat.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</IfModule>

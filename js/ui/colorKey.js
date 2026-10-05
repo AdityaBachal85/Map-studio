@@ -1,0 +1,612 @@
+/**
+ * ui/colorKey.js — the map's colour key: what each colour on this map means.
+ *
+ * DIFFERENT FROM THE KEY-DISTANCES TABLE. `ui/legendTable.js` answers "how far
+ * is it" — a table of places and distances. This answers "what am I looking
+ * at" — purple is industrial land, red is residential. They are two different
+ * questions and they belong on two cards; merging them produces a table with
+ * two columns that are never both filled in.
+ *
+ * GENERATED, THEN EDITABLE. The rows come from the classes actually on the map,
+ * so the key cannot contradict the drawing — which is exactly what the report
+ * sheet's hand-written `lines` array did before it was removed: it shipped four
+ * colours that appear nowhere in the app, so a route would never match its own
+ * swatch except by accident.
+ *
+ * But a generated label is not always the right label. "Industrial /
+ * warehousing" is what the class is; "MIDC Phase II" is what this particular
+ * purple means on this particular map, and only the person making the map
+ * knows that. So every row can be renamed, hidden, or added by hand, and the
+ * edits are stored against the class id rather than the row's position — a
+ * rename must survive the moment you draw one more road and the row order
+ * changes underneath it.
+ *
+ * Renaming here does NOT rename the class. The class is shared by every map in
+ * the company; the label is this map's caption for it.
+ */
+
+/** Per-class overrides: `{ [classId]: {label, hidden} }`. Saved with the project. */
+let colorKeyEdits = {};
+
+/** Rows that exist only in the key — a colour used outside the class system. */
+let colorKeyExtras = [];
+
+/** Whether the card is in edit mode. */
+let colorKeyEditing = false;
+
+/** Guards the contenteditable listeners while innerHTML is being replaced. */
+let colorKeyRebuilding = false;
+
+/** @returns {HTMLElement|null} */
+function colorKeyCard() { return document.getElementById('colorKeyCard'); }
+
+/**
+ * The rows to show: generated ones with their edits applied, then custom ones.
+ *
+ * @returns {Array<{key:string, color:string, label:string, kind:string, extra:boolean}>}
+ */
+function colorKeyRows() {
+  const auto = (typeof connLegendRows === 'function' ? connLegendRows() : []).map(r => {
+    const e = colorKeyEdits[r.cls] || {};
+    return {
+      key: r.cls,
+      color: e.color || r.color,
+      label: e.label != null ? e.label : r.label,
+      kind: r.kind,
+      shape: e.shape || null,
+      hidden: !!e.hidden,
+      extra: false,
+    };
+  });
+  const extra = colorKeyExtras.map((x, i) => ({
+    key: 'x' + i, color: x.color, label: x.label, kind: x.kind || 'area',
+    shape: x.shape || null, hidden: false, extra: true,
+  }));
+  return auto.concat(colorKeyUnclassedRows(), extra)
+    .filter(r => colorKeyEditing || !r.hidden);
+}
+
+/**
+ * Rows for everything drawn that never went through a class.
+ *
+ * Without these the key describes only *classed* objects — so a project made
+ * before the standard existed, or anything drawn under the Satellite layout
+ * where colours are free, produces zero rows and the card hides itself. The
+ * map is covered in meaningful colour and the legend says nothing, which reads
+ * as the legend being broken rather than as it having nothing to say.
+ *
+ * Grouped by colour, because that is the question a legend answers: not "what
+ * objects exist" but "what does this colour mean". Ten roads sharing an orange
+ * are one row, and the row is editable like any other.
+ *
+ * @returns {Array<object>}
+ */
+/**
+ * What to call a route in the key.
+ *
+ * This used to read `r.labelText || ''`, which is empty on almost every route
+ * — a label only exists once somebody types one. An empty name left the colour
+ * with nothing to be named after, so every one of them fell through to the
+ * generic fallback below and the card printed "Road / line" five times over
+ * five different colours: a legend that names nothing is worse than no legend,
+ * because the reader stops to look at it first.
+ *
+ * The app already knows the answer. legendDerivedRow() in ui/legendTable.js
+ * names the same routes for the Key Distances card — the destination's name
+ * when one end is the site, both ends otherwise — which is why that card reads
+ * "SVPN Police Academy" while the key beside it read "Road / line". Same
+ * derivation here, so the two cards agree.
+ *
+ * @param {object} rt @returns {string}
+ */
+function colorKeyRouteName(rt) {
+  if (rt.labelText && rt.labelText.trim()) return rt.labelText.trim();
+  if (typeof locById !== 'function') return '';
+  const A = locById(rt.fromId), B = locById(rt.toId);
+  if (!A || !B) return '';
+  return A.type === 'site' ? B.name
+    : (B.type === 'site' ? A.name : A.name + ' → ' + B.name);
+}
+
+function colorKeyUnclassedRows() {
+  const byColor = new Map();
+
+  const note = (color, kind, name) => {
+    if (!color) return;
+    const k = String(color).toUpperCase();
+    if (!byColor.has(k)) byColor.set(k, { color, kind, names: [] });
+    const e = byColor.get(k);
+    if (name && e.names.indexOf(name) < 0) e.names.push(name);
+    // A colour used by both a line and an area is shown as a line: the stroke
+    // is what carries the colour in that pairing.
+    if (kind === 'line') e.kind = 'line';
+  };
+
+  if (typeof routes !== 'undefined') {
+    routes.forEach(r => { if (!r.cls) note(r.color, 'line', colorKeyRouteName(r)); });
+  }
+  // A PIN IS DRAWN COLOUR TOO. Locations were read nowhere here: a map of
+  // twelve pins in six colours produced six rows' worth of meaning and zero
+  // rows. Only the ones whose type has no class in the standard — the rest are
+  // named properly by connLegendRows() above, and noting them twice would put
+  // "Railway station" on the card beside an unnamed grey swatch for the same
+  // pins.
+  if (typeof locations !== 'undefined') {
+    locations.forEach(l => {
+      if (typeof connClass === 'function' && connClass(l.type)) return;
+      note(l.color, 'mark', l.name || '');
+    });
+  }
+  if (typeof geometries !== 'undefined') {
+    geometries.forEach(g => {
+      if (g.cls || g._hidden) return;
+      const area = g.shape === 'Polygon' || g.shape === 'Rectangle' || g.shape === 'Circle';
+      const point = g.shape === 'Marker' || g.shape === 'CircleMarker' || g.shape === 'Label';
+      note(area ? (g.fillColor || g.borderColor) : g.borderColor,
+        point ? 'mark' : (area ? 'area' : 'line'), g.name || '');
+    });
+  }
+
+  return [...byColor.entries()].map(([k, e]) => {
+    const edit = colorKeyEdits[k] || {};
+    // Named after what carries it. One name is the name; two share the row and
+    // both are worth printing; beyond that the list is longer than the card and
+    // a count says more than three names and an ellipsis would.
+    //
+    // The bare shape word is the LAST resort, not the second. It used to be
+    // reached whenever a colour had no single name, which — since routes handed
+    // over empty names — was every time.
+    const auto = e.names.length === 1 ? e.names[0]
+      : e.names.length === 2 ? e.names.join(' · ')
+      : e.names.length > 2
+        ? e.names.length + (e.kind === 'line' ? ' roads' : e.kind === 'mark' ? ' points' : ' areas')
+        : (e.kind === 'line' ? 'Road / line' : e.kind === 'mark' ? 'Marked point' : 'Area');
+    return {
+      key: k, color: e.color, kind: e.kind, shape: edit.shape || null,
+      label: edit.label != null ? edit.label : auto,
+      hidden: !!edit.hidden, extra: false,
+    };
+  });
+}
+
+/**
+ * The swatch. A line class gets a line, an area gets a filled block, a point
+ * gets a dot — because the shape is half the information. Two classes that
+ * differ only in being a line or an area are indistinguishable on a colour-only
+ * key, and "the red line" and "the red block" are different things on the map.
+ *
+ * @param {object} r @returns {string}
+ */
+/**
+ * The symbols a legend row may be drawn with.
+ *
+ * `[id, glyph, name]`. The glyph is what the PowerPoint and Word writers put in
+ * the cell — they cannot draw a CSS shape, and pptTables.js was already using
+ * these three characters for the three fixed kinds, so this is that idea with
+ * the choice opened up rather than a second scheme beside it.
+ *
+ * Deliberately a small set, and deliberately these ones: a legend mark is read
+ * at 11 pixels over aerial imagery, and shapes that differ only in a corner
+ * radius are not telling anybody anything at that size.
+ */
+const CK_SHAPES = [
+  ['line', '\u25ac', 'Line'],
+  ['dash', '\u25ac', 'Dashed line'],
+  ['area', '\u25ac', 'Area'],
+  ['dot', '\u25cf', 'Dot'],
+  ['ring', '\u25cb', 'Ring'],
+  ['square', '\u25a0', 'Square'],
+  ['triangle', '\u25b2', 'Triangle'],
+  ['diamond', '\u25c6', 'Diamond'],
+  ['star', '\u2605', 'Star'],
+];
+
+/** The bar shapes — drawn as a strip, not as a character. */
+const CK_BAR_SHAPES = ['line', 'dash', 'area'];
+
+/**
+ * Which symbol this row is drawn with.
+ *
+ * A row that was never given one falls back to what its kind implies, so a map
+ * that predates this choice looks exactly as it did.
+ *
+ * @param {object} r a row from colorKeyRows() @returns {string} a shape id
+ */
+function colorKeyShapeOf(r) {
+  const s = r && r.shape;
+  if (s && CK_SHAPES.some(x => x[0] === s)) return s;
+  return r && r.kind === 'line' ? 'line' : (r && r.kind === 'mark' ? 'dot' : 'area');
+}
+
+/**
+ * One legend mark.
+ *
+ * The point shapes are characters rather than CSS, because the same mark has to
+ * survive four renderers: the screen, html2canvas for the picture exports, and
+ * the PowerPoint and Word writers, which can only place text in a cell. A
+ * clip-path triangle looks right in exactly one of those four.
+ *
+ * The dash is three spans rather than a repeating gradient for the same reason
+ * — html2canvas draws a repeating gradient as a solid bar, which is to say as a
+ * DIFFERENT legend entry from the one on screen.
+ *
+ * @param {object} r @returns {string} HTML
+ */
+function colorKeyMark(r) {
+  const c = esc(r.color);
+  const s = colorKeyShapeOf(r);
+  if (s === 'dash') {
+    return '<span class="ck-mark ck-dash">'
+      + '<i style="background:' + c + '"></i><i style="background:' + c + '"></i>'
+      + '<i style="background:' + c + '"></i></span>';
+  }
+  if (CK_BAR_SHAPES.indexOf(s) >= 0) {
+    return '<span class="ck-mark ck-' + s + '" style="background:' + c + '"></span>';
+  }
+  const g = (CK_SHAPES.find(x => x[0] === s) || CK_SHAPES[3])[1];
+  return '<span class="ck-mark ck-glyph ck-' + s + '" style="color:' + c + '">' + g + '</span>';
+}
+
+/** The character shown ON the shape button — what this row is set to now. */
+function colorKeySymbolGlyph(r) {
+  const s = colorKeyShapeOf(r);
+  if (s === 'line') return '\u2500';
+  if (s === 'dash') return '\u254c';
+  if (s === 'area') return '\u25ac';
+  return (CK_SHAPES.find(x => x[0] === s) || CK_SHAPES[3])[1];
+}
+
+/** The open symbol popover, so a second click closes it rather than stacking. */
+let ckShapePop = null;
+
+/** @returns {void} take the symbol popover down */
+function closeColorKeyShapes() {
+  if (ckShapePop) { ckShapePop.remove(); ckShapePop = null; }
+}
+
+/**
+ * Offer the symbols, anchored to the button that asked.
+ *
+ * Drawn in the row's own colour, because the question is "which of these do I
+ * want THIS row to be" — a grid of grey shapes makes you imagine the answer
+ * instead of showing it.
+ *
+ * @param {HTMLElement} btn @param {object} row @param {function(string):void} onPick
+ */
+function openColorKeyShapes(btn, row, onPick) {
+  closeColorKeyShapes();
+  const now = colorKeyShapeOf(row);
+  const pop = document.createElement('div');
+  pop.className = 'ck-shapes';
+  pop.setAttribute('role', 'listbox');
+  pop.setAttribute('aria-label', 'Legend symbol');
+  pop.innerHTML = CK_SHAPES.map(([id, , name]) =>
+    '<button type="button" role="option" data-shape="' + id + '"'
+    + (id === now ? ' class="on" aria-selected="true"' : ' aria-selected="false"')
+    + ' title="' + esc(name) + '" aria-label="' + esc(name) + '">'
+    + colorKeyMark({ color: row.color, kind: row.kind, shape: id })
+    + '</button>').join('');
+  document.body.appendChild(pop);
+
+  const r = btn.getBoundingClientRect();
+  const w = pop.offsetWidth || 150, h = pop.offsetHeight || 120;
+  // Clamped, and flipped above the button when there is no room below it: this
+  // card lives at the bottom of the map as often as not.
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+  pop.style.top = (r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : r.top - h - 6) + 'px';
+
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('button[data-shape]');
+    if (!b) return;
+    e.stopPropagation();
+    onPick(b.dataset.shape);
+    closeColorKeyShapes();
+  });
+  // Next click anywhere else closes it. Deferred, or the click that opened it
+  // would close it again on the way back up.
+  setTimeout(() => {
+    document.addEventListener('pointerdown', function off(ev) {
+      if (pop.contains(ev.target)) return;
+      document.removeEventListener('pointerdown', off);
+      closeColorKeyShapes();
+    });
+  }, 0);
+  ckShapePop = pop;
+}
+
+/** Draw the card from the current rows. */
+function rebuildColorKey() {
+  const body = document.getElementById('colorKeyBody');
+  const card = colorKeyCard();
+  if (!body || !card) return;
+
+  // Commit whatever is being typed before the element holding it is destroyed —
+  // a rebuild can be triggered by a route finishing its measurement while
+  // somebody is halfway through renaming a row.
+  const active = document.activeElement;
+  if (active && active.isContentEditable && body.contains(active)) colorKeyCommit(active);
+
+  colorKeyRebuilding = true;
+  const rows = colorKeyRows();
+  body.innerHTML = rows.map(r =>
+    '<div class="ck-row' + (r.hidden ? ' ck-off' : '') + '" data-ck-key="' + esc(r.key) + '">'
+    + '<button class="ck-sw" ' + (colorKeyEditing ? '' : 'disabled ')
+      + 'title="' + (colorKeyEditing ? 'Change this colour' : '') + '">' + colorKeyMark(r) + '</button>'
+    // Its own button rather than a second thing on the swatch: changing a
+    // colour is the everyday action and stays one click, and choosing a symbol
+    // — which most rows never do — does not get to slow it down.
+    + (colorKeyEditing
+      ? '<button class="ck-shape" title="Choose this symbol" aria-label="Choose this symbol">'
+        + colorKeySymbolGlyph(r) + '</button>'
+      : '')
+    + '<span class="ck-label"' + (colorKeyEditing ? ' contenteditable="true" spellcheck="false"' : '')
+      + '>' + esc(r.label) + '</span>'
+    + (colorKeyEditing
+      ? '<button class="ck-x" title="' + (r.extra ? 'Delete this row' : (r.hidden ? 'Show this row' : 'Hide this row'))
+        + '">' + (r.hidden ? '👁' : '&times;') + '</button>'
+      : '')
+    + '</div>').join('');
+  colorKeyRebuilding = false;
+
+  const tgl = document.getElementById('colorKeyTgl');
+  // THE BOARD CAN ASK FOR THIS CARD TOO.
+  //
+  // A Legend card set to "On the map" un-hides #colorKeyCard from the
+  // stylesheet — but this line writes an INLINE display, and an inline style
+  // beats any rule. So with the map's own colour-key switch off, which is its
+  // default, the board asked for the legend and nothing appeared. The switch is
+  // one way of wanting it; the board is another.
+  const wanted = ((!tgl || tgl.checked) && (rows.length || colorKeyEditing))
+    || (colorKeyWantedByBoard() && rows.length > 0);
+  card.style.display = wanted ? '' : 'none';
+  card.classList.toggle('editing', colorKeyEditing);
+
+  if (wanted) positionColorKey();
+
+  const foot = document.getElementById('colorKeyFoot');
+  if (foot) foot.style.display = colorKeyEditing ? '' : 'none';
+  const btn = document.getElementById('colorKeyEditBtn');
+  if (btn) {
+    btn.classList.toggle('on', colorKeyEditing);
+    btn.setAttribute('aria-pressed', String(colorKeyEditing));
+    btn.title = colorKeyEditing ? 'Done editing' : 'Rename rows, change colours, add your own';
+  }
+
+  // The board's Legend card reads the same rows. rebuildLegend() already
+  // refreshes the board, but it is not the only way here — recolouring a shape
+  // or renaming a key row rebuilds this card alone, and without this the board
+  // keeps showing the previous colours until something else happens to redraw
+  // it. Guarded, because this file loads before the board's.
+  if (typeof dashRefreshLive === 'function' && typeof appMode === 'function'
+    && appMode() === 'dashboard') dashRefreshLive();
+}
+
+/**
+ * Sit the key below the key-distances card instead of at a fixed offset.
+ *
+ * Both cards are top-right and the distances card grows a row at a time, so any
+ * constant top lands underneath it on exactly the maps that have enough content
+ * to need a legend. Recomputed on every rebuild, and abandoned the moment the
+ * card is dragged — once somebody has placed it, moving it is the app being
+ * wrong, not helpful.
+ */
+/**
+ * Has the board asked for the colour key to be on the map?
+ *
+ * Read off the class renderDashboard() sets rather than from dashCards, so this
+ * file keeps knowing nothing about the board's data — it only needs the answer,
+ * and the answer is already on the document.
+ *
+ * @returns {boolean}
+ */
+function colorKeyWantedByBoard() {
+  const shell = document.querySelector('.app');
+  return !!(shell && shell.classList.contains('legend-on-map')
+    && shell.dataset.mode === 'dashboard');
+}
+
+function positionColorKey() {
+  const card = colorKeyCard();
+  if (!card || card._moved) return;
+  const wrap = document.getElementById('mapWrap');
+  if (!wrap) return;
+
+  // Hand the card back to the stylesheet first, and only override if stacking
+  // genuinely improves on it. Setting `top`/`right` inline unconditionally beat
+  // the responsive rules, which bottom-anchor the distances card on short
+  // viewports — so "10px below it" was 10px below the bottom of the map and the
+  // legend left the screen entirely.
+  card.style.left = '';
+  card.style.top = '';
+  card.style.right = '';
+  card.style.bottom = '';
+
+  const above = document.getElementById('legendCard');
+  if (!above || above.style.display === 'none' || !above.offsetHeight) return;
+
+  const wr = wrap.getBoundingClientRect();
+  const ar = above.getBoundingClientRect();
+  const top = (ar.bottom - wr.top) + 10;
+
+  // Only stack when the whole card fits below with room to spare. Otherwise the
+  // stylesheet's own placement is the better answer, and it is already applied.
+  if (top < 0 || top + card.offsetHeight + 12 > wr.height) return;
+
+  card.style.left = 'auto';
+  card.style.bottom = 'auto';
+  card.style.top = top + 'px';
+  card.style.right = Math.max(0, Math.round(wr.right - ar.right)) + 'px';
+}
+
+/**
+ * Write a renamed label back to wherever it came from.
+ * @param {HTMLElement} el the contenteditable
+ */
+function colorKeyCommit(el) {
+  if (colorKeyRebuilding) return;
+  const row = el.closest('.ck-row');
+  if (!row) return;
+  const key = row.dataset.ckKey;
+  const text = el.textContent.trim();
+  if (key.charAt(0) === 'x' && /^x\d+$/.test(key)) {
+    const i = +key.slice(1);
+    if (colorKeyExtras[i]) colorKeyExtras[i].label = text;
+  } else {
+    colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key], { label: text });
+    // An edit back to the generated label is a *removal* of the override, not
+    // an override that happens to match. Otherwise the row is frozen: change
+    // the class label in the standard and every map that ever touched this row
+    // keeps showing the old one.
+    const auto = (typeof connLegendRows === 'function' ? connLegendRows() : [])
+      .find(r => r.cls === key);
+    if (auto && auto.label === text) delete colorKeyEdits[key].label;
+  }
+  if (typeof markDirty === 'function') markDirty();
+}
+
+/** Toggle edit mode. */
+function setColorKeyEditing(on) {
+  colorKeyEditing = !!on;
+  rebuildColorKey();
+}
+
+/** Put every row back to what the map says it is. */
+function resetColorKey() {
+  colorKeyEdits = {};
+  colorKeyExtras = [];
+  rebuildColorKey();
+  if (typeof markDirty === 'function') markDirty();
+  if (typeof status === 'function') status('Colour key back to what is on the map.');
+}
+
+(function wireColorKey() {
+  const card = colorKeyCard();
+  if (!card) return;
+
+  card.addEventListener('click', e => {
+    if (e.target.closest('#colorKeyEditBtn')) { setColorKeyEditing(!colorKeyEditing); return; }
+    if (e.target.closest('#colorKeyReset')) { resetColorKey(); return; }
+    if (e.target.closest('#colorKeyAdd')) {
+      colorKeyExtras.push({ color: '#7E57C2', label: 'New row', kind: 'area' });
+      rebuildColorKey();
+      // Straight into renaming it: a row called "New row" is not a row anybody
+      // wanted, it is a row waiting to be told what it is.
+      const last = card.querySelector('.ck-row:last-child .ck-label');
+      if (last) { last.focus(); document.execCommand && document.execCommand('selectAll', false, null); }
+      return;
+    }
+
+    const row = e.target.closest('.ck-row');
+    if (!row) return;
+    const key = row.dataset.ckKey;
+    const isExtra = /^x\d+$/.test(key);
+
+    if (e.target.closest('.ck-x')) {
+      if (isExtra) colorKeyExtras.splice(+key.slice(1), 1);
+      else colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key],
+        { hidden: !(colorKeyEdits[key] || {}).hidden });
+      rebuildColorKey();
+      if (typeof markDirty === 'function') markDirty();
+      return;
+    }
+
+    if (e.target.closest('.ck-shape') && colorKeyEditing) {
+      const row = colorKeyRows().find(x => x.key === key);
+      if (!row) return;
+      openColorKeyShapes(e.target.closest('.ck-shape'), row, shape => {
+        if (isExtra) colorKeyExtras[+key.slice(1)].shape = shape;
+        else colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key], { shape: shape });
+        rebuildColorKey();
+        if (typeof markDirty === 'function') markDirty();
+      });
+      return;
+    }
+
+    if (e.target.closest('.ck-sw') && colorKeyEditing) {
+      // Reuses the app's own colour popover rather than a native <input
+      // type=color>, so it looks like every other colour control here.
+      const cur = isExtra ? colorKeyExtras[+key.slice(1)].color
+        : (colorKeyRows().find(r => r.key === key) || {}).color;
+      if (typeof openColorPresets === 'function') {
+        const swBtn = e.target.closest('.ck-sw');
+        openColorPresets(swBtn, cur, hex => {
+          if (isExtra) colorKeyExtras[+key.slice(1)].color = hex;
+          else colorKeyEdits[key] = Object.assign({}, colorKeyEdits[key], { color: hex });
+          // Repaint this one mark, do NOT rebuild the card. The picker commits
+          // live as you drag, and rebuilding replaces body.innerHTML — which
+          // destroys the very button the popover is anchored to. The popover
+          // then loses its anchor mid-drag and the colour appears to snap back
+          // to what it was, which is exactly what "cannot change the colour of
+          // an added row" looks like from the outside.
+          const mk = swBtn.querySelector('.ck-mark');
+          if (mk) mk.style.background = hex;
+          if (typeof markDirty === 'function') markDirty();
+        });
+      }
+    }
+  });
+
+  card.addEventListener('input', e => {
+    if (e.target.classList && e.target.classList.contains('ck-label')) colorKeyCommit(e.target);
+  });
+  card.addEventListener('blur', e => {
+    if (e.target.classList && e.target.classList.contains('ck-label')) colorKeyCommit(e.target);
+  }, true);
+
+  const tgl = document.getElementById('colorKeyTgl');
+  if (tgl) tgl.addEventListener('change', rebuildColorKey);
+
+  // The stacking decision depends on the viewport, and the breakpoint that
+  // bottom-anchors the card above can be crossed by a resize alone.
+  window.addEventListener('resize', () => { if (!card._moved) positionColorKey(); });
+
+  /* The drag handle, same behaviour as the key-distances card. */
+  // The whole header, not just the ⠿ glyph. The grip is a 12px target, and the
+  // map's search button floats at the top-left with a higher z-index — park the
+  // card anywhere near it and the button swallows the pointerdown, so the card
+  // becomes unmovable with no sign of why. Dragging from the bar sidesteps the
+  // problem entirely and is a bigger target besides.
+  const hd = document.querySelector('#colorKeyCard .hd');
+  const wrap = document.getElementById('mapWrap');
+  // Raised while dragging so the card comes out from under the map controls it
+  // may have been parked beneath.
+  if (hd && wrap) {
+    hd.style.cursor = 'move';
+    let sx = 0, sy = 0, ox = 0, oy = 0, armed = false, dragging = false;
+
+    // A movement threshold rather than a reserved handle. The title fills most
+    // of the header, so excluding it — as the first version did — left only a
+    // 12px grip to aim at, and the map's search button floats over that corner
+    // and swallows the pointerdown. Arming on press and only starting the drag
+    // after 4px means a click still places the caret in the title, while any
+    // actual drag from anywhere on the bar moves the card.
+    hd.addEventListener('pointerdown', e => {
+      if (e.target.closest('#colorKeyEditBtn')) return;   // a button, not a bar
+      const r = card.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+      ox = r.left - w.left; oy = r.top - w.top; sx = e.clientX; sy = e.clientY;
+      armed = true; dragging = false;
+    });
+
+    hd.addEventListener('pointermove', e => {
+      if (!armed) return;
+      if (!dragging) {
+        if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 4) return;
+        dragging = true;
+        card._moved = true;              // stop auto-placing it from here on
+        card.style.right = 'auto';
+        card.style.bottom = 'auto';
+        // Let go of the caret, or the browser selects the title text as the
+        // pointer travels across it.
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        try { hd.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+      }
+      card.style.left = (ox + e.clientX - sx) + 'px';
+      card.style.top = (oy + e.clientY - sy) + 'px';
+      e.preventDefault();
+    });
+
+    const stop = () => { armed = false; dragging = false; };
+    hd.addEventListener('pointerup', stop);
+    hd.addEventListener('pointercancel', stop);
+  }
+})();

@@ -1,0 +1,920 @@
+/* map.css — Map surface: tilt stage, billboard overlay, pins, location/route label badges, via-point dots, route context menu.
+   Extracted verbatim from index.html (v4.96) lines 93–467; order preserved via main.css. */
+    /* Basemap tile treatments (map/imageryEnhance.js).
+       Imagery and the roads/labels overlay are styled independently: grading
+       the photograph should not also saturate the road paint sitting on top of
+       it, and toning the roads down must not wash out the ground. Layers carry
+       a `basemap-imagery` / `basemap-reference` class from their catalogue role.
+       Untagged layers (street and canvas basemaps, which are a single designed
+       raster) are left entirely alone. */
+    .leaflet-tile-pane .basemap-imagery {
+      filter: var(--imageryFilter, none);
+    }
+
+    /* Esri paints roads as broad saturated salmon bands that overpower the
+       imagery beneath. Desaturating and softening them is what makes the
+       overlay read as annotation rather than as paint. */
+    .leaflet-tile-pane .basemap-reference {
+      /* Colour treatment only. Opacity is applied through Leaflet's own
+         setOpacity(), because GridLayer writes style.opacity inline on the
+         layer container and an inline declaration beats a normal CSS rule. */
+      filter: var(--roadFilter, none);
+    }
+
+    /* Billboard overlay — sits above the tilt stage, never rotates. */
+    #billboardLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 410;
+      overflow: hidden;
+    }
+
+    #billboardLayer .bb {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: auto;
+      will-change: transform;
+      transition: none;
+    }
+
+    #billboardLayer .bb.grabbable {
+      cursor: grab;
+    }
+
+    #billboardLayer .bb.grabbable:active {
+      cursor: grabbing;
+    }
+
+    #billboardLayer .leader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    .map-wrap.adding #billboardLayer .bb {
+      pointer-events: none;
+    }
+
+    .map-wrap.adding #billboardLayer {
+      pointer-events: none;
+    }
+
+    /* ---------- Premium floating badges (Apple/Google Maps-style) ---------- */
+    .pin-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FFFFFF;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 1px 2px rgba(0, 0, 0, .18);
+      overflow: hidden;
+      position: relative;
+      transition: transform .18s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    /* Direct children only. As a descendant selector this also hit the glyph
+       nested inside the teardrop's SVG, overriding its x/y/width/height and
+       stretching the symbol across the whole pin instead of seating it in the
+       head. Every other frame has a single top-level svg, so `>` is equivalent
+       for them. */
+    .pin-icon>svg,
+    .pin-icon>img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .pin-icon.circle {
+      border-radius: 50%;
+    }
+
+    .pin-icon.rounded {
+      border-radius: 22%;
+    }
+
+    .pin-icon.square {
+      border-radius: 6%;
+    }
+
+    /* A real teardrop, drawn as an SVG path, not a rotated square.
+
+       The rotated-square trick renders a shape but gets three things wrong that
+       only show up on a real map: the visual point ends up below the box, so the
+       pin no longer sits on its own coordinate; the border and the drop shadow
+       rotate with the box, so the outline thickens on two sides and the shadow
+       falls sideways; and the rotated bounding box is sqrt(2) times wider, so
+       zoomed out the pins collide and overlap their labels. A path has its point
+       exactly where the geometry says, and its stroke and shadow stay upright.
+
+       No transform is needed to place the tip. The billboard wrapper already
+       puts the bottom edge of the icon box on the coordinate, so a teardrop
+       whose point is at the bottom of its viewBox lands correctly with no
+       nudging — measured, after an assumed translateY(-50%) put every pin
+       exactly half a box-height too high. */
+    .pin-icon.pin {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      overflow: visible;
+    }
+
+    .pin-icon.pin>svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .pin-icon.none {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+
+    .pin-icon.none.glow {
+      filter: drop-shadow(0 0 8px var(--glowCol, #FF7A1A));
+    }
+
+    .pin-icon.glow {
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 3px var(--glowCol, #FF7A1A55), 0 0 22px var(--glowCol, #FF7A1AAA);
+    }
+
+    /* Hidden-marker locations: a faint dot for editing only — a "routing anchor"
+       with no marker in the final map. Never appears in PNG/PPTX/print. */
+    .ghost-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      opacity: .4;
+      border: 2px dashed rgba(255, 255, 255, .8);
+      transition: opacity .15s;
+    }
+
+    .bb.pin-ghost:hover .ghost-dot {
+      opacity: .85;
+    }
+
+    .bb.selected .pin-icon {
+      animation: pulseRing 1.4s ease-out infinite;
+    }
+
+    @keyframes pulseRing {
+      0% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, .55);
+      }
+
+      70% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 14px rgba(255, 122, 26, 0);
+      }
+
+      100% {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, 0);
+      }
+    }
+
+    .bb.hover .pin-icon {
+      transform: scale(1.08);
+    }
+
+    @keyframes markerDrop {
+      0% {
+        transform: translate(-50%, -140%) scale(.4);
+        opacity: 0;
+      }
+
+      60% {
+        transform: translate(-50%, -108%) scale(1.08);
+        opacity: 1;
+      }
+
+      80% {
+        transform: translate(-50%, -98%) scale(.96);
+      }
+
+      100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+    }
+
+    .bb.drop-anchor .pin-icon,
+    .bb.drop-anchor .badge-shape {
+      animation: markerDrop .55s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    @keyframes labelFade {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .bb.drop-label {
+      animation: labelFade .35s .15s both ease-out;
+    }
+
+    /* Location label badge — premium, minimal */
+    .label-badge {
+      /* Block-level flex + max-content, NOT inline-flex. Visually identical (the
+         .bb wrapper is absolutely positioned, so it shrink-wraps either way),
+         but html2canvas 1.4.1 silently drops every child of an *inline*-level
+         flex or grid container when it renders it as part of a larger tree —
+         which is why exported labels used to come out as empty pills. The old
+         workaround was to force `foreignObjectRendering`, and that in turn made
+         html2canvas refuse to draw cross-origin map tiles. Fixing the layout
+         mode removes the need for both. Verified against block flex, inline
+         flex, inline grid and block grid: only the inline-level variants fail. */
+      display: flex;
+      width: max-content;
+      align-items: center;
+      gap: 7px;
+      background: #FFFFFF;
+      color: #17202B;
+      /* --label-scale multiplies the global chip size for THIS label only, so
+         the Settings slider still moves everything and each label keeps its own
+         size relative to it. An absolute px per label would have severed that
+         link: the global slider would stop reaching anything ever resized. */
+      padding: calc(6px * var(--label-scale, 1)) calc(11px * var(--label-scale, 1))
+               calc(6px * var(--label-scale, 1)) calc(8px * var(--label-scale, 1));
+      border-radius: 999px;
+      font-size: calc(var(--chipFont) * var(--label-scale, 1));
+      font-size: round(calc(var(--chipFont) * var(--label-scale, 1)), 1px);
+      font-weight: 600;
+      letter-spacing: -.005em;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .22), 0 1px 3px rgba(0, 0, 0, .14);
+      white-space: nowrap;
+      line-height: 1.15;
+      font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+      /* SUBPIXEL ANTIALIASING BACK ON, FOR THE LABELS ONLY.
+         `body` sets -webkit-font-smoothing: antialiased, which on macOS turns
+         OFF subpixel (LCD) rendering and draws every glyph in greyscale. On a
+         paragraph of interface text that is a deliberate look — lighter, less
+         bloated. On an 11px chip over aerial imagery it is the difference
+         between sharp and soft, which is the whole complaint.
+
+         These two properties do nothing on Windows or Linux, which is exactly
+         why this could not be measured here: every reading taken on this
+         machine already showed subpixel antialiasing active, because there was
+         nothing switching it off. Reasoned from the CSS rather than from a
+         screenshot, and left scoped to the chips so the rest of the app's
+         typography is unchanged. */
+      -webkit-font-smoothing: auto;
+      -moz-osx-font-smoothing: auto;
+    }
+
+    .label-badge .lb-ico {
+      width: calc(16px * var(--label-scale, 1));
+      height: calc(16px * var(--label-scale, 1));
+      border-radius: 50%;
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: var(--accent, #2563EB);
+    }
+
+    .label-badge .lb-ico svg,
+    .label-badge .lb-ico img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .label-badge .lb-ico.plain {
+      background: none;
+    }
+
+    .label-badge.site {
+      background: #0A1E3C;
+      color: #fff;
+      padding: calc(7px * var(--label-scale, 1)) calc(13px * var(--label-scale, 1))
+               calc(7px * var(--label-scale, 1)) calc(9px * var(--label-scale, 1));
+      font-size: calc((var(--chipFont) + 1px) * var(--label-scale, 1));
+      font-size: round(calc((var(--chipFont) + 1px) * var(--label-scale, 1)), 1px);
+      font-weight: 700;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .09);
+    }
+
+    .label-badge.site .lb-ico {
+      background: #FF7A1A;
+    }
+
+    .label-badge.route {
+      font-family: var(--mono);
+      font-size: calc((var(--chipFont) - 1px) * var(--label-scale, 1));
+      font-size: round(calc((var(--chipFont) - 1px) * var(--label-scale, 1)), 1px);
+      font-weight: 700;
+      padding: calc(5px * var(--label-scale, 1)) calc(10px * var(--label-scale, 1));
+    }
+
+    /* A shape's name. Sized between a route chip and a ring caption: it names
+       a thing on the map rather than measuring one, so it reads as type and
+       not as a readout — which is why it is not the mono face the two
+       number-carrying labels use. */
+    .label-badge.geom {
+      font-size: calc((var(--chipFont) - 1.5px) * var(--label-scale, 1));
+      font-size: round(calc((var(--chipFont) - 1.5px) * var(--label-scale, 1)), 1px);
+      font-weight: 700;
+      padding: calc(4px * var(--label-scale, 1)) calc(9px * var(--label-scale, 1));
+    }
+
+    .label-badge.ring {
+      font-family: var(--mono);
+      font-size: calc((var(--chipFont) - 2.5px) * var(--label-scale, 1));
+      font-size: round(calc((var(--chipFont) - 2.5px) * var(--label-scale, 1)), 1px);
+      padding: calc(3px * var(--label-scale, 1)) calc(8px * var(--label-scale, 1));
+      color: #17202B;
+      background: rgba(255, 255, 255, .96);
+    }
+
+    .label-badge .swatch-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex: none;
+    }
+
+    .hwy-shield {
+      transform: translate(-50%, -50%);
+      display: inline-block;
+      background: #F7C948;
+      color: #111;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      border: 2px solid #fff;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .45);
+      white-space: nowrap;
+      letter-spacing: .02em;
+      font-family: "Geist", -apple-system, Arial, sans-serif;
+    }
+
+    /* Via-point marker: a draggable orange dot on the route */
+    .via-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #FF7A1A;
+      border: 2.5px solid #fff;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, .5), 0 0 0 2px rgba(255, 122, 26, .35);
+      cursor: grab;
+      position: relative;
+      transition: transform .15s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    .via-dot:hover {
+      transform: scale(1.25);
+    }
+
+    .via-dot:active {
+      cursor: grabbing;
+      transform: scale(1.15);
+    }
+
+    .via-dot::after {
+      content: attr(data-idx);
+      position: absolute;
+      top: -3px;
+      left: 16px;
+      font-size: 9px;
+      font-weight: 800;
+      color: #FF7A1A;
+      background: #fff;
+      padding: 1px 4px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    }
+
+    .map-wrap.via-arming #map {
+      cursor: crosshair;
+    }
+
+    .map-wrap.via-arming .bb {
+      pointer-events: none;
+    }
+
+    /* Context menu for right-click on a route */
+    #ctxMenu {
+      position: absolute;
+      z-index: 1400;
+      background: rgba(13, 20, 35, .95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 11px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+      padding: 5px;
+      min-width: 196px;
+      font-size: 12px;
+      color: var(--text);
+      display: none;
+      overflow: hidden;
+    }
+
+    #ctxMenu.on {
+      display: block;
+      animation: dropIn .16s ease;
+    }
+
+    #ctxMenu .mi {
+      padding: 8px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    #ctxMenu .mi:hover {
+      background: rgba(255, 122, 26, .18);
+      color: #fff;
+    }
+
+    #ctxMenu .mi .ico {
+      width: 14px;
+      text-align: center;
+      color: var(--orange);
+    }
+
+    #ctxMenu .sep {
+      height: 1px;
+      background: rgba(255, 255, 255, .08);
+      margin: 4px 6px;
+    }
+
+    #ctxMenu .lbl {
+      padding: 6px 12px 3px;
+      font-size: 9.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      font-weight: 800;
+    }
+
+    .map-wrap.adding #map {
+      cursor: crosshair;
+    }
+
+    /* Glass surface. See the token block in themes.css for why blur alone is
+       not enough — the saturation boost and the top-edge catch-light are what
+       separate real glass from a grey translucent rectangle.
+       The background is a gradient rather than a flat fill so the pane is
+       fractionally lighter where light enters, which is what gives it the sense
+       of being a physical sheet rather than a hole in the page. */
+    .frost {
+      background: linear-gradient(180deg, var(--glass-tint), var(--glass-tint-2));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border: 1px solid var(--glass-edge);
+      box-shadow: var(--glass-highlight);
+    }
+
+    /* Glass off (Preferences → Appearance): backdrop-filter is the expensive
+       part — it forces the compositor to re-sample everything behind the pane
+       on every frame. Falling back to a solid fill keeps the identical layout
+       and contrast, so nothing shifts when it is switched. */
+    body.no-glass .frost {
+      background: var(--glass-solid);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      box-shadow: none;
+    }
+
+
+    /* ---------- Aerial (straight-line) distance tool ---------- */
+    .map-wrap.aerial-measuring #map {
+      cursor: crosshair;
+    }
+    .aerial-dot-wrap {
+      background: none;
+      border: none;
+    }
+    .aerial-dot {
+      display: block;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #FF7A1A;
+      border: 2.5px solid #fff;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, .55);
+      cursor: move;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .aerial-dot-wrap:hover .aerial-dot {
+      transform: scale(1.22);
+      box-shadow: 0 2px 9px rgba(255, 122, 26, .75);
+    }
+
+    /* Frosted measurement pill with an inline delete (×), matching the app's
+       glass overlays (search box / title card). */
+    .aerial-label-wrap {
+      background: none;
+      border: none;
+      overflow: visible;
+    }
+    .aerial-label {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -125%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 5px 4px 11px;
+      border-radius: 999px;
+      background: rgba(12, 22, 44, .74);
+      backdrop-filter: blur(9px) saturate(1.25);
+      -webkit-backdrop-filter: blur(9px) saturate(1.25);
+      border: 1px solid rgba(255, 255, 255, .18);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .38);
+      color: #EAF0F9;
+      font: 800 11px/1 Arial, sans-serif;
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+    .aerial-label .aerial-txt {
+      letter-spacing: .01em;
+    }
+    .aerial-label .aerial-del {
+      width: 17px;
+      height: 17px;
+      flex: none;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      background: rgba(255, 255, 255, .14);
+      color: #EAF0F9;
+      font: 700 14px/1 Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .14s ease, color .14s ease;
+    }
+    .aerial-label .aerial-del:hover {
+      background: #FF7A1A;
+      color: #160B02;
+    }
+    body.no-glass .aerial-label {
+      background: rgba(12, 22, 44, .93);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    /* ---------- Drawing tools (Draw tab) ---------- */
+    .draw-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+    .draw-shape-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 11px 4px;
+      font-size: 19px;
+      line-height: 1;
+      border-radius: 13px;
+    }
+    .draw-shape-btn span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--dim);
+    }
+    .draw-shape-btn.toggled span {
+      color: #160B02;
+    }
+    .draw-shape-btn:hover {
+      border-color: var(--orange);
+    }
+    .draw-mode-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .draw-live-stats {
+      background: linear-gradient(135deg, rgba(255, 122, 26, .16), rgba(255, 122, 26, .07));
+      border: 1px solid rgba(255, 122, 26, .45);
+      border-radius: 11px;
+      padding: 9px 12px;
+      font: 800 12px/1.45 Arial, sans-serif;
+      color: var(--text);
+      margin-bottom: 10px;
+      box-shadow: 0 3px 12px rgba(255, 122, 26, .14);
+    }
+    .geom-marker-dot {
+      background: transparent;
+      border: none;
+    }
+    /* Teardrop pin for point shapes that mark a place. Leaflet's default
+       .leaflet-div-icon paints a white box with a blue border behind whatever
+       you give it, which frames the pin in a rectangle. */
+    .geom-marker-pin,
+    .geom-marker-square {
+      background: transparent;
+      border: none;
+    }
+    /* On-map shape name label (frosted chip centered on the shape) */
+    /* .geom-label / .geom-label-wrap were the Leaflet divIcon a shape's name
+       used to be drawn as: pinned to the shape's centre and `interactive:
+       false`, so it could not be moved. It is a .label-badge.geom on the
+       billboard now, like a location's and a route's — see ensureGeomLabel in
+       map/drawing.js. */
+    .item-card.geom-card.flash {
+      animation: geomFlash .6s ease;
+    }
+    @keyframes geomFlash {
+      0%, 100% { box-shadow: none; }
+      30% { box-shadow: 0 0 0 2px var(--orange); }
+    }
+    /* ---------- Nearby places (Nearby tab) ---------- */
+    .nearby-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .nearby-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 9px;
+      border: 1px solid var(--stroke2);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, .04);
+      color: var(--text);
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .15s, background .15s, transform .12s;
+    }
+    .nearby-chip:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, .3);
+    }
+    .nearby-chip .nc-ico {
+      font-size: 15px;
+      flex: none;
+      line-height: 1;
+    }
+    .nearby-chip .nc-lbl {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .nearby-chip .nc-count {
+      flex: none;
+      font-size: 10px;
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+    }
+    .nearby-chip.active {
+      border-color: var(--orange);
+      background: rgba(255, 122, 26, .16);
+      box-shadow: inset 0 0 0 1px rgba(255, 122, 26, .35);
+    }
+    .nearby-chip.active .nc-count {
+      color: var(--orange);
+    }
+    .nearby-chip.loading {
+      opacity: .6;
+      pointer-events: none;
+    }
+    .nearby-chip.loading .nc-count::after {
+      content: '…';
+    }
+    /* Nearby place-of-interest markers.
+       A small category-coloured dot with the name alongside, in the manner of
+       Google's POIs — the label is the thing you read, the dot only says what
+       kind of place it is and where exactly it sits. The label overflows the
+       marker box to the right, so the wrapper must not clip or hit-test it. */
+    .nearby-poi-wrap {
+      background: none;
+      border: none;
+      overflow: visible;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .np-dot {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9.5px;
+      line-height: 1;
+      /* Only the dot is interactive — the label must never swallow map clicks. */
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .np-dot > b {
+      font-weight: normal;
+      font-style: normal;
+      line-height: 1;
+    }
+
+    /* White text with a dark halo: the pairing that stays readable over both
+       bright rooftops and dark vegetation, which a flat colour cannot do. Four
+       offset shadows approximate a stroke; a single blurred shadow greys out
+       against light imagery. */
+    .np-name {
+      /* Never shrink: the marker box is only as wide as the dot, and a
+         shrinkable flex child would collapse to zero width inside it. */
+      flex: 0 0 auto;
+      font: 700 11px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #fff;
+      letter-spacing: .005em;
+      max-width: 132px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow:
+        0 0 3px rgba(0, 0, 0, .95),
+        1px 1px 0 rgba(0, 0, 0, .8),
+        -1px 1px 0 rgba(0, 0, 0, .8),
+        1px -1px 0 rgba(0, 0, 0, .8),
+        -1px -1px 0 rgba(0, 0, 0, .8);
+    }
+
+    /* Dropped by the declutter pass when this label would overlap one already
+       placed, or when the view is zoomed out past legibility. */
+    .np-name.np-hidden {
+      display: none;
+    }
+
+    /* Light basemaps invert the relationship: dark ink, light halo. */
+    .np-light .np-name {
+      color: #17233B;
+      text-shadow:
+        0 0 3px rgba(255, 255, 255, .95),
+        1px 1px 0 rgba(255, 255, 255, .9),
+        -1px 1px 0 rgba(255, 255, 255, .9),
+        1px -1px 0 rgba(255, 255, 255, .9),
+        -1px -1px 0 rgba(255, 255, 255, .9);
+    }
+    .leaflet-tooltip.nearby-tip {
+      background: #0A1E3C;
+      color: #EAF0F9;
+      border: 1px solid var(--stroke2);
+      border-radius: 7px;
+      font: 600 11px/1.3 Arial, sans-serif;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+    }
+    .leaflet-tooltip.nearby-tip::before {
+      border-top-color: var(--stroke2);
+    }
+
+    /* Card whose shape is currently in per-shape edit mode */
+    .item-card.geom-card.editing {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 1px var(--orange), 0 8px 24px rgba(255, 122, 26, .18);
+    }
+    .geom-card textarea,
+    .measure-card textarea {
+      resize: vertical;
+      min-height: 34px;
+      font: 400 12px/1.4 inherit;
+      color: var(--text);
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid var(--stroke2);
+      border-radius: 9px;
+      padding: 6px 9px;
+      width: 100%;
+    }
+    .geom-card textarea:focus,
+    .measure-card textarea:focus {
+      outline: none;
+      border-color: var(--orange);
+    }
+    .geom-card .geom-measure,
+    .measure-card .measure-readout {
+      color: var(--orange);
+      font-weight: 700;
+    }
+    #measureList {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    /* Brand Geoman's edit/draw vertex handles to the app palette (its defaults
+       are a generic blue). Only appearance is overridden -- size/anchoring
+       (14px, centered via margin) stays exactly as Geoman ships it, so vertices
+       still sit precisely on the geometry. */
+    .leaflet-container .marker-icon {
+      border: 2px solid #FF7A1A;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+    }
+    .leaflet-container .marker-icon-middle {
+      border: 1.5px dashed #FF7A1A;
+      background-color: rgba(255, 255, 255, .9);
+    }
+    .leaflet-container .marker-icon.rotate-marker {
+      border-color: #0A1E3C;
+      background-color: #FF7A1A;
+    }
+
+    /* Nearby tooltip: the name is already on the map, so the tooltip carries
+       the address and distance instead of repeating it. */
+    .leaflet-tooltip.nearby-tip .nt-sub {
+      display: block;
+      margin-top: 2px;
+      font-weight: 500;
+      font-size: 10px;
+      opacity: .78;
+    }
+
+/* ---------------------------------------------------------------------------
+   Photo callouts
+   ---------------------------------------------------------------------------
+   The layout of a comparables sheet: the building's name on a coloured bar, a
+   photograph of it, and the rate on a bar underneath — joined to its pin by the
+   same leader line every label already draws.
+
+   BLOCK FLEX, NOT INLINE — the reason is the long note on .label-badge above:
+   html2canvas silently drops every child of an inline-level flex container, so
+   an inline callout would export as an empty box. Every rule here that could
+   have been inline-anything is block on purpose.
+
+   No box-shadow on the card: html2canvas renders one as a flat grey slab, and
+   this element is captured into every PNG, PDF, deck and Word file. The border
+   does the lifting instead, which is also what the reference sheet does. */
+.label-badge.photo-card {
+  display: block;
+  width: calc(var(--photo-w, 168px) * var(--label-scale, 1));
+  padding: 0;
+  overflow: hidden;
+  border: calc(2px * var(--label-scale, 1)) solid var(--accent, #F26B21);
+  border-radius: calc(5px * var(--label-scale, 1));
+  background: #FFFFFF;
+  gap: 0;
+  /* Overriding .label-badge's own drop shadow, which html2canvas renders as a
+     flat grey slab behind the element — a soft shadow under a name pill is one
+     thing, a hard rectangle behind a 200px card in a client's PDF is another. */
+  box-shadow: none;
+}
+
+.photo-card .pc-head,
+.photo-card .pc-cap {
+  display: block;
+  padding: calc(4px * var(--label-scale, 1)) calc(7px * var(--label-scale, 1));
+  background: var(--accent, #F26B21);
+  color: #FFFFFF;
+  font-size: calc(10px * var(--label-scale, 1));
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: .01em;
+  text-align: center;
+  /* Two lines, then cut. A building with a long name must not push the picture
+     off the bottom of a card sized to the picture. */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* SQUARE, and the picture fills it. A photograph of a building arrives at
+   whatever shape the camera was held; a row of callouts in three different
+   aspect ratios reads as an accident. `cover` crops rather than letterboxes,
+   which is right here — the middle of a photograph of a building is the
+   building. */
+.photo-card .pc-shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #EEF1F6;
+  overflow: hidden;
+}
+.photo-card .pc-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A callout is a bigger thing to move than a name badge, so it says so. */
+.bb .label-badge.photo-card { cursor: grab; }
+.bb:active .label-badge.photo-card { cursor: grabbing; }

@@ -1,0 +1,418 @@
+/**
+ * ui/appMode.js — one app, three layouts.
+ *
+ * `map` is the studio as it has always been: full-screen map, tools in the
+ * sidebar. It stays the default, because that is what this tool is for and
+ * nobody should have to travel through a dashboard to move a pin.
+ *
+ * `dashboard` shrinks the map into a panel and fills the rest with cards you
+ * fill in yourself — the board you build a report on top of.
+ *
+ * There was a third, `report` — a fixed A4 sheet with the map in the middle of
+ * it — and it is gone; see APP_MODES for why and for what was deliberately
+ * left alone.
+ *
+ * THE MAP IS NEVER MOVED OR REBUILT. Every mode is the same CSS grid with the
+ * map as one of its items, so switching changes which cell it occupies and
+ * nothing else. The alternative — a wrapper element per mode, with the map
+ * relocated into it — means `appendChild` on the Leaflet container, which tears
+ * down and rebuilds its DOM: every pin, shape, label and boundary would have to
+ * be re-created, and anything that failed to would be silently gone. A layout
+ * switch that can lose work is not worth having.
+ *
+ * The two things that DO need saying after a switch are size and position:
+ * Leaflet caches the container's dimensions, and the billboard layer positions
+ * pins from them, so both are told the box changed.
+ */
+
+/*
+ * REPORT SHEET IS GONE FROM THE UI. It was a third mode — a fixed A4 page of
+ * editable panels — and the board does the same job without the fixed page: it
+ * exports landscape, paginates, and its cards are the same cards. Two ways to
+ * make one document is one more than anybody needs to learn.
+ *
+ * Removed from the modes rather than hidden, so nothing can route to a screen
+ * with no way back to it. What is NOT removed is `reportSheet` in the saved
+ * project: a file written before this still carries its panels, and dropping
+ * them on open would quietly destroy work that is not this feature's to
+ * destroy. js/ui/reportSheet.js is likewise left loading and unreferenced —
+ * see the AI-reports removal for the same reasoning.
+ */
+const APP_MODES = ['map', 'dashboard'];
+
+/** Where the search box lives in map mode, so it can be put back. */
+let appModeSearchHome = null;
+
+/** Whether it was collapsed before the dashboard borrowed it. */
+let appModeSearchWasCollapsed = true;
+
+/**
+ * Keep the Tools nav item showing whether its panel is up.
+ *
+ * Its own function because four things close that panel — the item, the
+ * sidebar's edge handle, Escape and the scrim — and each of them has to leave
+ * the button telling the truth.
+ */
+/** Where the nav controls came from, so leaving the board puts them back. */
+const appModeNavHome = {};
+
+function syncDashToolsBtn() {
+  const app = document.getElementById('app');
+  const btn = document.getElementById('dnTools');
+  if (!app || !btn) return;
+  const open = app.classList.contains('dash-side-open');
+  btn.classList.toggle('on', open);
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+}
+
+/** @returns {string} the current mode */
+function appMode() {
+  const m = document.getElementById('app');
+  return (m && m.dataset.mode) || 'map';
+}
+
+/**
+ * Switch layout.
+ *
+ * @param {string} mode one of APP_MODES
+ * @param {object} [opts] `{silent}` to skip the status line
+ */
+function setAppMode(mode, opts) {
+  if (APP_MODES.indexOf(mode) === -1) mode = 'map';
+  const app = document.getElementById('app');
+  if (!app || app.dataset.mode === mode) return;
+
+  app.dataset.mode = mode;
+
+  // The tools overlay is per-visit, not a setting: leaving the board closes it
+  // rather than leaving a panel hanging over whatever you switch to.
+  app.classList.remove('dash-side-open');
+  syncDashToolsBtn();
+
+  // The search box is one element with one set of handlers and one results
+  // list. In dashboard mode it belongs in the top bar, so it is re-parented
+  // rather than duplicated — a second search input would be a second thing to
+  // keep in step with the first.
+  // THE NAV RAIL IS GONE ON THE BOARD, so the two controls that have to stay
+  // reachable come with it into the top bar — the mode pill, which is the only
+  // way back to the map, and Tools. Re-parented, never duplicated: a second
+  // copy of either is a second thing to keep in step with the first.
+  const navSlot = document.getElementById('dashTopNav');
+  if (navSlot) {
+    [['modeSwitch', 'appModeSwitchHome'], ['dnTools', 'appModeToolsHome'],
+      ['dnProjects', 'appModeProjectsHome']].forEach(([id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!appModeNavHome[id]) appModeNavHome[id] = { parent: el.parentNode, next: el.nextSibling };
+      if (mode === 'dashboard') {
+        if (el.parentNode !== navSlot) navSlot.appendChild(el);
+      } else if (el.parentNode === navSlot) {
+        const home = appModeNavHome[id];
+        home.parent.insertBefore(el, home.next);
+      }
+    });
+  }
+
+  const search = document.getElementById('searchBox');
+  const slot = document.getElementById('dashTopSearch');
+  if (search && slot) {
+    if (mode === 'dashboard') {
+      if (!appModeSearchHome) appModeSearchHome = search.parentNode;
+      // Remember how it was left on the map, so coming back does not silently
+      // change a control the user had already set the way they wanted.
+      appModeSearchWasCollapsed = search.classList.contains('collapsed');
+      if (search.parentNode !== slot) slot.appendChild(search);
+      search.classList.remove('collapsed');
+    } else if (appModeSearchHome && search.parentNode !== appModeSearchHome) {
+      appModeSearchHome.appendChild(search);
+      if (appModeSearchWasCollapsed) search.classList.add('collapsed');
+    }
+  }
+
+  document.querySelectorAll('[data-mode-btn]').forEach(b => {
+    const on = b.dataset.modeBtn === mode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+
+  // On the board the map is a tile on the canvas, so it moves into it — and
+  // back out again for the other two modes, where it is a grid item. Moving it
+  // costs the map nothing but its cached size (see dashLayout.js), and it has
+  // to happen before the board renders so the layout can measure it.
+  if (typeof dashMapToCanvas === 'function') dashMapToCanvas(mode === 'dashboard');
+
+  if (mode === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+
+  // The account chip is drawn on the way in, not at wire time. This file loads
+  // well before auth/session.js, so the call in wireAppMode() runs while
+  // currentUser() does not yet exist and correctly renders nothing — by the
+  // time anybody reaches the board the session has long since resolved.
+  if (mode === 'dashboard') renderDashAccount();
+
+  // Before the frame is drawn, so the board never flashes the app's theme on
+  // the way in or the board's on the way out.
+  applyBoardTheme();
+
+  // Leaflet caches the container size and will keep drawing to the old one —
+  // a map that thinks it is 1400px wide inside a 700px panel renders half its
+  // tiles off the edge and puts every click in the wrong place.
+  const settle = () => {
+    try { map.invalidateSize({ animate: false }); } catch (e) { /* not up yet */ }
+    if (typeof scheduleRepaint === 'function') scheduleRepaint();
+    // The colour key stacks itself under the key-distances card by measuring
+    // it. Dashboard mode hides both (see css/dashboard.css), and a hidden card
+    // measures zero — positionColorKey() correctly hands the card back to the
+    // stylesheet and gives up. Coming back to map mode it is visible again but
+    // nothing recomputes, so without this it sits at its default top-right and
+    // lands on top of the card it is supposed to stack beneath.
+    if (typeof positionColorKey === 'function') positionColorKey();
+  };
+  requestAnimationFrame(() => { settle(); setTimeout(settle, 240); });
+
+  try { localStorage.setItem('dbot.appMode', mode); } catch (e) { /* private mode */ }
+
+  if (!(opts && opts.silent) && typeof status === 'function') {
+    if (mode === 'dashboard') status('Dashboard. The map is still live — draw, drag and edit exactly as before.');
+    else status('Map studio.');
+  }
+}
+
+/**
+ * Fill the AI-reports popover.
+ *
+ * Lists what this browser has a record of, and says so plainly when the
+ * backend's count is higher — a report generated on another machine is not
+ * downloadable from here, and pretending the list is complete would send
+ * someone hunting for a file that was never in this browser.
+ *
+ * @param {number|null} serverCount today's count from the backend, if known
+ */
+function renderReportsMenu(serverCount) {
+  const host = document.getElementById('dtReports');
+  if (!host) return;
+  const list = (typeof aiReportLog === 'function') ? aiReportLog() : [];
+
+  let html = '<h4>Your reports</h4>';
+  if (!list.length) {
+    html += '<div class="dt-empty">Nothing to download yet. Generate one with '
+      + '<b>New research</b> — the PDF and Word links land here and stay for 48 hours.</div>';
+  } else {
+    html += list.map(r =>
+      '<div class="dt-rep"><div class="dt-rep-main">'
+      + '<div class="dt-rep-name">' + esc(r.site || 'Site report') + '</div>'
+      + '<div class="dt-rep-meta">' + esc(aiReportWhen(r.createdAt))
+      + (r.expiresAt ? ' · ' + esc(aiReportLeft(r.expiresAt)) : '') + '</div></div>'
+      + (r.pdfUrl ? '<a href="' + esc(r.pdfUrl) + '" data-dl="PDF">PDF</a>' : '')
+      + (r.docxUrl ? '<a href="' + esc(r.docxUrl) + '" data-dl="Word document">Word</a>' : '')
+      + '</div>').join('');
+  }
+
+  if (typeof serverCount === 'number' && serverCount > list.length) {
+    html += '<div class="dt-empty">' + serverCount + ' report'
+      + (serverCount === 1 ? ' was' : 's were') + ' generated on this account today, but only '
+      + list.length + ' ' + (list.length === 1 ? 'is' : 'are') + ' saved in this browser. '
+      + 'The rest were made elsewhere — the download links only exist where the report was made.</div>';
+  }
+
+  host.innerHTML = html;
+  host.querySelectorAll('[data-dl]').forEach(a => {
+    a.addEventListener('click', e => {
+      if (typeof aiDownload !== 'function') return;   // let the plain link work
+      e.preventDefault();
+      aiDownload(a.getAttribute('href'), a.dataset.dl);
+    });
+  });
+}
+
+/**
+ * The account chip in the board's top bar.
+ *
+ * Deliberately silent when nobody is signed in: local mode has no account to
+ * show, and an avatar with no name behind it is a control that does nothing.
+ */
+function renderDashAccount() {
+  const slot = document.getElementById('dashAcct');
+  if (!slot) return;
+  slot.innerHTML = '';
+
+  const user = (typeof currentUser === 'function') ? currentUser() : null;
+  if (!user) return;
+
+  const av = document.createElement('button');
+  av.className = 'dt-avatar';
+  av.type = 'button';
+  av.setAttribute('aria-haspopup', 'menu');
+  av.textContent = user.initials || '?';
+  av.style.background = user.color || 'var(--accent)';
+  av.title = user.name + ' \u2014 account';
+  av.setAttribute('aria-label', 'Account menu for ' + user.name);
+  av.addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof projectBridgeAccountMenu === 'function') projectBridgeAccountMenu(av, user);
+  });
+  slot.appendChild(av);
+}
+
+/**
+ * The board, in light, when that is asked for.
+ *
+ * Exports are always rendered light because a deliverable is printed on white
+ * paper (see dashRenderBoard). This is the same idea for the screen: a way to
+ * build the thing you are about to hand over while looking at roughly what it
+ * will be, without putting the map studio itself into a theme nobody wanted.
+ *
+ * IT BORROWS THE THEME RATHER THAN SCOPING ONE. The alternative is a
+ * `.board-light` class re-declaring the token vocabulary for one subtree, and a
+ * second copy of a palette is a second thing to keep in step — css/themes.css
+ * already carries a complete, checked light theme, and it is one attribute.
+ * effectiveTheme() stays the source of truth for every other mode, so leaving
+ * the board puts back whatever the app was actually set to.
+ */
+function applyBoardTheme() {
+  const want = appMode() === 'dashboard' && (typeof getPref === 'function') && !!getPref('boardLight');
+  const root = document.documentElement;
+  if (want) root.dataset.theme = 'light';
+  else if (typeof applyTheme === 'function') applyTheme();
+}
+
+(function wireAppMode() {
+  document.querySelectorAll('[data-mode-btn]').forEach(b => {
+    b.addEventListener('click', () => setAppMode(b.dataset.modeBtn));
+  });
+
+  const tools = document.getElementById('dnTools');
+  if (tools) {
+    tools.addEventListener('click', () => {
+      // The studio's sidebar is absolutely positioned and works in every mode;
+      // this slides it back in over the board, so the full toolset is one click
+      // away from the dashboard rather than a mode switch away.
+      //
+      // A class of its own rather than reusing `side-hidden`: that one is the
+      // studio's own preference, and opening the tools over the dashboard must
+      // not change what you see when you go back to the map.
+      const app = document.getElementById('app');
+      if (!app) return;
+      app.classList.toggle('dash-side-open');
+      syncDashToolsBtn();
+    });
+  }
+
+  // Three ways out of the tools panel, because the first version had none: the
+  // Tools item again, the sidebar's own edge handle, Escape, or a click on the
+  // dimmed board behind it. A panel with one way to close it is one missed
+  // affordance away from being a trap, and this one had zero.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const app = document.getElementById('app');
+    if (!app || !app.classList.contains('dash-side-open')) return;
+    // Not while typing in the panel — Escape there means "stop editing this".
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    app.classList.remove('dash-side-open');
+    syncDashToolsBtn();
+  });
+
+  document.addEventListener('pointerdown', e => {
+    const app = document.getElementById('app');
+    if (!app || !app.classList.contains('dash-side-open')) return;
+    // Anything outside the panel and its two handles. Testing what the click is
+    // NOT inside, rather than hit-testing the scrim: the scrim is a pseudo
+    // element and never an event target, so a geometric test would be the only
+    // alternative and it would go wrong the first time the layout moved.
+    if (e.target.closest('.sidebar, #dnTools, #sideToggle')) return;
+    app.classList.remove('dash-side-open');
+    syncDashToolsBtn();
+  }, true);
+
+  const editBtn = document.getElementById('dashEditBtn');
+  if (editBtn) editBtn.addEventListener('click', () => setDashEditing(!dashEditing));
+
+  // Preferences and the account, on the board.
+  //
+  // Both already existed — the gear at #prefsBtn and the avatar projectBridge
+  // builds — but both live in the map sidebar's brandbar, and that panel is
+  // off-canvas outside map mode. So changing the theme or the units, or signing
+  // out, meant going back to the map first: the wrong shape for a control you
+  // reach for WHILE reading a board.
+  //
+  // Wired to the same functions rather than reimplemented. One preferences
+  // dialog, and one sign-out path — projectBridgeAccountMenu also flushes the
+  // autosave before it leaves, which a second copy would quietly forget to do.
+  const prefs = document.getElementById('dashPrefsBtn');
+  if (prefs) prefs.addEventListener('click', () => { if (typeof openPrefs === 'function') openPrefs(); });
+  renderDashAccount();
+
+  // "New research" opens the AI panel rather than starting a run: which site
+  // the report is for is a choice, and a button that picked one for you would
+  // spend a report on the wrong place.
+  const cta = document.getElementById('dtNewReport');
+  if (cta) {
+    cta.addEventListener('click', () => {
+      const ai = document.getElementById('aiBtn');
+      if (ai && typeof openAiPanel === 'function') openAiPanel();
+      else if (ai) ai.click();
+    });
+  }
+
+  // The allowance is the backend's own count, fetched once when the board is
+  // first opened. Left as an em-dash rather than a guess if it cannot be
+  // reached — a made-up quota is worse than a visibly absent one.
+  const usage = document.getElementById('dtUsageVal');
+  let usageCount = null;
+  if (usage) {
+    const fill = () => {
+      if (typeof getUsage !== 'function') { usage.textContent = 'not configured'; return; }
+      getUsage()
+        .then(u => {
+          usageCount = u.reportsGenerated ?? 0;
+          usage.textContent = usageCount + ' / ' + (u.reportsCap ?? '?') + ' today';
+        })
+        .catch(() => { usage.textContent = 'unavailable'; });
+    };
+    let asked = false;
+    document.querySelectorAll('[data-mode-btn="dashboard"]').forEach(b =>
+      b.addEventListener('click', () => { if (!asked) { asked = true; fill(); } }));
+  }
+
+  /* ---- the two top-bar popovers ---- */
+
+  // One handler for both: only one may be open, and a click anywhere else
+  // closes whichever is.
+  const pops = [['dtUsage', 'dtReports'], ['dashExportBtn', 'dashExportMenu']];
+  const closeAll = except => pops.forEach(([bid, mid]) => {
+    const m = document.getElementById(mid), b = document.getElementById(bid);
+    if (!m || m === except) return;
+    m.hidden = true;
+    if (b) b.setAttribute('aria-expanded', 'false');
+  });
+
+  pops.forEach(([bid, mid]) => {
+    const b = document.getElementById(bid), m = document.getElementById(mid);
+    if (!b || !m) return;
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = m.hidden;
+      closeAll(open ? m : null);
+      m.hidden = !open;
+      b.setAttribute('aria-expanded', String(open));
+      if (open && mid === 'dtReports') renderReportsMenu(usageCount);
+    });
+    m.addEventListener('click', e => e.stopPropagation());
+  });
+
+  document.addEventListener('click', () => closeAll(null));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(null); });
+
+  // Restore the last view. Deliberately not part of the project file: which
+  // layout someone was looking at is about them, not about the map, and a
+  // project opened by a colleague should not drag them into a mode.
+  let saved = null;
+  try { saved = localStorage.getItem('dbot.appMode'); } catch (e) { /* ignore */ }
+  // A mode that no longer exists reads as map — and takes the map branch here
+  // rather than the setAppMode branch, which would return early on "already in
+  // that mode" and leave the nav with nothing lit. Anybody whose last session
+  // ended on the report sheet lands on the map, correctly marked.
+  if (saved && APP_MODES.indexOf(saved) === -1) saved = null;
+  if (saved && saved !== 'map') setTimeout(() => setAppMode(saved, { silent: true }), 400);
+  else document.querySelectorAll('[data-mode-btn="map"]').forEach(b => b.classList.add('on'));
+})();

@@ -1,0 +1,11 @@
+DBOT Map Studio
+version  6.0232
+built    2026-10-05T06:38:36.727Z
+files    178  (5.6 MB)
+
+Upload the CONTENTS of this directory into public_html — including the
+hidden .htaccess file, which the File Manager only shows once "Show
+hidden files" is ticked in its settings.
+
+See docs/HOSTINGER-DEPLOY.md in the repository for the full procedure,
+including the four external services that need this domain added to them.

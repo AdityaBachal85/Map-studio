@@ -1,0 +1,2807 @@
+/* ===========================================================================
+   dashboard.css — the two layouts that are not the full-screen map.
+
+   THREE MODES, ONE MAP. `.app[data-mode]` switches between them, and the map
+   you edit in every one of them is the map — not a picture of it, not a second
+   copy. In map and report mode it is a grid item; on the dashboard it is a
+   tile on the canvas, which means it does get moved in the DOM.
+
+   That move is safe, and it was measured rather than assumed. An earlier
+   version of this comment claimed re-parenting "destroys the Leaflet
+   container's DOM"; it does not. `appendChild` relocates a subtree intact —
+   the map was moved with pins, shapes, routes and tiles on it and came through
+   with every one of them, still pannable, no errors. What genuinely does go
+   stale is Leaflet's cached size, which is exactly what `invalidateSize()` is
+   for. What would be fatal is *re-creating* the container, and nothing here
+   does that.
+
+   Density follows a dashboard scale (8/12/16/20 rather than the marketing-page
+   24/32/48): this is a working surface, and the numbers on it are the content.
+   Motion is deliberately subtle — 220ms, small translations — because a panel
+   that flies across the screen on every mode change stops being useful the
+   third time you use it.
+
+   Colours are the app's own tokens throughout. A dashboard that arrived in a
+   different palette from the studio it lives inside would read as a different
+   product bolted on.
+   ========================================================================= */
+
+/* --------------------------------------------------------------------------
+   1. Mode plumbing
+   ----------------------------------------------------------------------- */
+
+/* Everything that is not the map is out of the way in map mode. Kept as
+   display:none rather than off-screen so none of it costs layout or paints
+   while the studio is being used. */
+#dashNav, #dashTop, #dashGrid, #dashFormat,
+#rsHead, #rsLegend, #rsRight, #rsFoot { display: none; }
+
+.app[data-mode="dashboard"],
+.app[data-mode="report"] {
+  display: grid;
+  overflow: hidden;
+  background: var(--bg0);
+}
+
+/* --------------------------------------------------------------------------
+   2. Dashboard layout
+   ----------------------------------------------------------------------- */
+
+/* Two areas, not five. Everything on the board — the map included — is a tile
+   on one canvas, so the layout here only has to place the nav, the top bar and
+   the canvas; where each tile sits inside the canvas is the user's business,
+   not the stylesheet's. */
+.app[data-mode="dashboard"] {
+  /* NO NAV COLUMN. The rail cost the canvas 210px plus its gutter — a sixth of
+     a laptop screen — to hold four buttons, on the one screen in the app whose
+     whole job is to be as wide as the document it produces. The document is
+     landscape; the board it is arranged on should be too. The two buttons that
+     have to be reachable moved into the top bar, which was already there and
+     had room. */
+  grid-template-columns: minmax(0, 1fr) 0;
+  /* 44, not 58. The row was sized around the map's 46px search pill back when
+     that pill came into the bar wearing its map styling; the controls in it are
+     32px and the bar had 26px of air it was not using. */
+  grid-template-rows: 44px auto;
+  grid-template-areas:
+    "top    fmt"
+    "canvas fmt";
+  column-gap: 14px;
+  row-gap: 14px;
+  padding: 0 14px 14px 14px;
+  /* Deliberately NOT transitioned. Animating the column width means the canvas
+     is a different size on every frame, and the tile geometry is computed from
+     that width — so the layout would either be measured mid-animation (wrong)
+     or re-measured every frame (wasteful). The tiles have their own transition
+     and glide to their new places anyway, which is the animation you actually
+     see. */
+}
+
+/* The format pane only takes a column when it has something to show. A
+   permanent empty rail costs the board 270px for nothing. */
+.app[data-mode="dashboard"].df-open { grid-template-columns: minmax(0, 1fr) 268px; }
+
+.app[data-mode="dashboard"] #dashTop { display: flex; grid-area: top; }
+.app[data-mode="dashboard"] #dashGrid { display: block; grid-area: canvas; }
+.app[data-mode="dashboard"].df-open #dashFormat { display: block; grid-area: fmt; }
+
+/* The whole board scrolls as one. Scrolling the card grid inside its own box
+   would leave the map pinned while the numbers move under it, which reads as
+   two pages that happen to share a window. */
+.app[data-mode="dashboard"],
+.app[data-mode="report"] { overflow-y: auto; overflow-x: hidden; }
+
+/* --------------------------------------------------------------------------
+   3. Report sheet layout
+   ----------------------------------------------------------------------- */
+
+/* The nav is here too, not just on the dashboard. It carries the only way back
+   out of this mode — the first cut hid it and left the report sheet a room with
+   no door, which a test found by running out of buttons to click. Keeping it
+   also means the switcher is in the same place in both non-map modes. */
+.app[data-mode="report"] {
+  grid-template-columns: 210px 236px minmax(0, 1fr) 292px;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+  grid-template-areas:
+    "nav rhead rhead rhead"
+    "nav rleg  map   rright"
+    "nav rfoot rfoot rfoot";
+  gap: 10px;
+  padding: 12px 12px 12px 0;
+  background: #10141d;
+}
+
+.app[data-mode="report"] #dashNav { display: flex; grid-area: nav; }
+.app[data-mode="report"] #rsHead { display: flex; grid-area: rhead; }
+.app[data-mode="report"] #rsLegend { display: block; grid-area: rleg; }
+.app[data-mode="report"] #rsRight { display: block; grid-area: rright; }
+.app[data-mode="report"] #rsFoot { display: flex; grid-area: rfoot; }
+
+/* --------------------------------------------------------------------------
+   4. The map, as a panel
+   ----------------------------------------------------------------------- */
+
+/* On the board the map is a tile: absolutely positioned inside the canvas, with
+   its geometry written by the layout engine like every other tile's. On the
+   sheet it is still a grid item. */
+.app[data-mode="dashboard"] .map-wrap {
+  position: absolute;
+  inset: auto;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  min-height: 0;
+  z-index: 1;
+}
+
+.app[data-mode="report"] .map-wrap {
+  position: relative;
+  inset: auto;
+  grid-area: map;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  min-height: 0;      /* or the grid row refuses to shrink below the map's content */
+}
+
+.app[data-mode="report"] .map-wrap { border-radius: 8px; }
+
+/* The studio's own furniture is scaled back in a panel this size. The title
+   card and legend are the sheet's job in report mode, and in dashboard mode a
+   400px-tall map does not have room for both them and the controls. */
+.app[data-mode="report"] #titleCard,
+.app[data-mode="report"] #legendCard,
+.app[data-mode="report"] #mapHistory,
+.app[data-mode="report"] #fsBtn { display: none; }
+
+/* Dashboard mode hides the same furniture, and for a sharper reason: on the
+   board it is DUPLICATED, not merely cramped.
+
+   These four cards are children of #mapWrap, and dashMapToCanvas() moves that
+   whole element into the board with appendChild — so the entire subtree rides
+   along into the map tile whether the board wants it or not.
+
+   Key Distances (#legendCard) is the worst of it: the board's own "Key access
+   points" card is built from legendRows(), the identical function that fills
+   the on-map card, so the same five places with the same distances and times
+   were printed twice on one page — once in a floating box covering roughly a
+   third of the map, once in a card beside it. The Legend (#colorKeyCard) has a
+   board card of its own now too. The title card is the sheet's job, as above.
+
+   The map tile shows the map. The cards carry the numbers. */
+.app[data-mode="dashboard"] #titleCard,
+.app[data-mode="dashboard"] #legendCard,
+.app[data-mode="dashboard"] #colorKeyCard,
+.app[data-mode="dashboard"] #contourLegendCard { display: none; }
+
+/* Except when the board has asked for it.
+   A printed connectivity sheet puts its key in a corner of the drawing it
+   explains, not in a panel beside it, and that is the layout being matched. The
+   duplication this block exists to stop cannot come back with it: the Legend
+   card drops out of the layout in the same breath — see dashTiles() — so the
+   rows are still on the page exactly once.
+
+   Top-left, not the stylesheet's own top-right: the map's control rail owns the
+   right-hand edge, and the key would sit under it. */
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard {
+  display: block;
+  left: 14px;
+  top: 14px;
+  right: auto;
+  bottom: auto;
+  /* A real grip, for nothing. `resize` needs a scroll container to act on,
+     which `overflow: auto` provides — and which also means a legend narrowed
+     past its longest name scrolls rather than clipping it. The size is written
+     back onto the card by dashSizeMapLegend(), because the browser forgets it
+     the moment the element is rebuilt. */
+  resize: both;
+  overflow: auto;
+  min-width: 140px;
+  min-height: 70px;
+  max-width: 60%;
+  max-height: 80%;
+}
+
+/* The grip is a UA widget and it is chrome. It is not drawn into a capture
+   anyway, but on the board it should not read as part of the legend. */
+.map-wrap.capturing #colorKeyCard { resize: none; overflow: hidden; }
+
+/* The grip and the edit pencil are for arranging it on a live map; on the board
+   they are chrome in a deliverable. */
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard .legend-edit,
+.app[data-mode="dashboard"].legend-on-map #colorKeyCard .grip { display: none; }
+
+/* And no drop shadow into the capture. html2canvas does not render box-shadow
+   the way a browser does — it came out as a hard offset slab beside the box,
+   the same defect that put a grey rectangle across the board's right-hand
+   column. The card has a border; on a printed sheet nothing floats anyway. */
+.map-wrap.capturing #colorKeyCard { box-shadow: none; }
+
+/* The studio sidebar is `position:absolute; left:0; z-index:1200` — it takes no
+   part in the grid, so outside map mode it lands directly on top of the left
+   nav and swallows every click meant for it. (Found the same way as the bug
+   below: a test could see a nav item, click it, and hit a sidebar tab
+   instead.) Off-canvas by default here; the nav's Tools item slides it back in
+   over the top, which is what an overlay panel should do anyway. */
+/* FLUSH LEFT, like everywhere else. It was offset 210px for one reason: the
+   nav rail lived there, and a panel flush against the edge covered it
+   completely — including the Tools item that opened it, so once the panel was
+   up there was no button on screen to put it back down.
+   The rail is gone and Tools is in the top bar, which the panel does not
+   reach, so the offset now buys nothing and costs the obvious thing: the panel
+   floated in from the middle of the board, detached from any edge, looking
+   like a dialog that had lost its way. */
+.app[data-mode="dashboard"] .sidebar,
+.app[data-mode="report"] .sidebar {
+  left: 0;
+  transform: translateX(calc(-100% - 12px)) translateZ(0);
+}
+
+.app[data-mode="dashboard"].dash-side-open .sidebar,
+.app[data-mode="report"].dash-side-open .sidebar { transform: translateX(0) translateZ(0); }
+
+/* The edge handle is the second way out, in the place the studio always puts
+   it. Only while the panel is open — closed, it would be a tab floating in the
+   middle of the board pointing at nothing. */
+.app[data-mode="dashboard"] #sideToggle,
+.app[data-mode="report"] #sideToggle { display: none; }
+
+.app[data-mode="dashboard"].dash-side-open #sideToggle,
+.app[data-mode="report"].dash-side-open #sideToggle {
+  display: flex;
+  /* At the panel's own right edge, which is now the panel's width and nothing
+     more — the 210px it used to add was the nav rail's. */
+  left: var(--sbw);
+}
+
+/* A dimmed board behind the panel: it says the panel is a layer over the board
+   rather than part of it, and gives click-anywhere-to-close something that
+   looks like a target. Hung off .app rather than #dashGrid because the canvas
+   is display:none in report mode, and a scrim that only exists on one of the
+   two modes is worse than none. */
+.app[data-mode="dashboard"].dash-side-open::after,
+.app[data-mode="report"].dash-side-open::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(3, 7, 15, .38);
+}
+
+/* Above the scrim, or the way out is behind the thing it is meant to dismiss —
+   which is the bug this whole block exists to fix. */
+.app[data-mode="dashboard"] #dashNav,
+.app[data-mode="report"] #dashNav {
+  position: relative;
+  z-index: 1250;
+}
+
+/* Everything the map positions off the sidebar's width has to stop doing that
+   once the sidebar is off-canvas — otherwise it is offset by ~400px of nothing.
+   On the sheet that put the search bar across the middle of the map. */
+.app[data-mode="report"] .search-box { left: 12px; }
+.app[data-mode="dashboard"] #titleCard,
+.app[data-mode="report"] #clickHint,
+.app[data-mode="dashboard"] #clickHint { left: 50%; }
+/* Left like the sidebar-hidden case, but lifted clear of the brand mark and the
+   scale bar, which own that corner and which it would otherwise sit straight on
+   top of (it is z-index 1000 against the mark's 800, so the mark loses). */
+.app[data-mode="dashboard"] #basemapSwitcher,
+.app[data-mode="report"] #basemapSwitcher { left: 12px; bottom: 86px; }
+
+/* --------------------------------------------------------------------------
+   4b. The mode switcher that lives on the map
+   -----------------------------------------------------------------------
+
+   In map mode the left nav is hidden, so without this there is literally no
+   way to reach the dashboard — the buttons that switch modes were themselves
+   inside the thing you were switching to. Caught by a test that could not
+   click a button it could see in the DOM.
+
+   Sits in the top-right control row, immediately left of undo/redo. Not a
+   floating action button and not buried in a menu: switching view is a
+   top-level action and the segmented control is the pattern people already
+   read as "these are the views". Labels are visible because three unlabelled
+   icons are a guessing game. */
+
+#modeSwitch {
+  position: absolute;
+  top: 12px;
+  right: 148px;          /* clears #mapHistory: right 58 + 82 wide + 8 gap */
+  z-index: 1000;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  height: 38px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+
+.ms-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  /* The theme's muted token (--dim in dark) is already borderline against a
+     frost panel; the app's own text colour at 72% is comfortably readable in
+     both themes without needing a per-theme value. */
+  color: var(--text);
+  opacity: .72;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .16s, color .16s;
+}
+
+.ms-item:hover { opacity: 1; background: rgba(127, 127, 127, .16); }
+
+/* The current view reads as pressed, not merely tinted — with three items of
+   equal weight, colour alone is too weak a signal for "you are here". */
+.ms-item.on {
+  opacity: 1;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.ms-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The nav is the switcher once you are out of map mode; two of them on screen
+   at once is one too many. */
+/* Hidden on the board only while it is still on the MAP — the map is a tile
+   there, and a mode pill floating inside one card is chrome in the wrong
+   place. Moved into the top bar it is the only way back to the map, so the
+   rule has to spare it. */
+.app[data-mode="dashboard"] #mapWrap #modeSwitch { display: none; }
+
+/* Chrome, not map content — out of exports with the rest of the furniture. */
+.map-wrap.capturing #modeSwitch { display: none; }
+
+/* Narrow windows: the search box grows toward this from the left, so the
+   labels go before anything overlaps. The tooltips and aria-labels stay. */
+@media (max-width: 1180px) {
+  .ms-item span { display: none; }
+  .ms-item { padding: 0 9px; }
+}
+
+/* --------------------------------------------------------------------------
+   5. Left nav
+   ----------------------------------------------------------------------- */
+
+#dashNav {
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  background: var(--surface-solid);
+  border-right: 1px solid var(--border);
+}
+
+.dn-brand { padding: 2px 8px 16px; line-height: 1; }
+
+/* The real mark, not the word typed out.
+   The DBOT logo is navy and green and drawn to sit on white, so on this dark
+   rail it needs something to stand on — the same white pill #brandMark and
+   .logoPill already use elsewhere, rather than a fourth way of presenting the
+   same asset. inline-flex so the pill is the width of the mark and not of the
+   column. */
+.dn-logo {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  padding: 5px 10px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+}
+
+.dn-logo img { height: 19px; display: block; }
+.dn-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: var(--text-2);
+}
+
+.dn-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  font: 600 12.5px/1 var(--font, inherit);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease;
+}
+
+.dn-item:hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+.dn-item svg { flex: none; }
+
+/* Current view, said twice: colour and a bar. Colour alone would be the only
+   signal for where you are, which is the one thing a nav must not get wrong
+   for anyone who cannot separate these two greys. */
+.dn-item.on {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.dn-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.dn-sep { height: 1px; margin: 10px 6px; background: var(--border); }
+.dn-foot { margin-top: auto; padding: 8px 6px 0; border-top: 1px solid var(--border); }
+
+/* --------------------------------------------------------------------------
+   6. Top bar
+   ----------------------------------------------------------------------- */
+
+/* One bar, one surface, one row of controls sitting on it. The first version
+   was a bare strip with three differently-shaped things floating on the page
+   background, which read as leftovers rather than a toolbar. */
+#dashTop {
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  box-shadow: var(--elev-1);
+}
+
+/* --------------------------------------------------------------------------
+   The search box, wearing the toolbar rather than the map
+   --------------------------------------------------------------------------
+   This is the MAP's search box, re-parented into the bar rather than
+   duplicated — one element, one set of handlers, one results list. It arrives
+   dressed for a map: position:absolute at left:calc(var(--sbw) + 12px), 300px
+   wide, a 46px pill with a 30px drop shadow made to lift it off imagery, and a
+   36px circular button on the end.
+
+   In a row of 30px controls that reads as a floating pill somebody dropped on
+   the toolbar, and because it is the tallest thing in the flex row it was
+   setting the bar's height too. None of that styling is wrong on the map. It
+   is simply not what this is here.
+
+   Relative, not static: the results list is absolutely positioned against this
+   box, and a static parent would send it to the nearest positioned ancestor
+   instead — which is the whole header. */
+#dashTopSearch {
+  /* The anchor for the results list. The search box itself is `position: static`
+     in this mode (see the rule further down that re-homes it), so without a
+     positioned parent here the results panel would hang off whatever ancestor
+     happened to be positioned — the app shell — and land nowhere near the
+     field it belongs to. */
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 120px;
+  /* Wide enough for a full place name, not so wide it becomes the bar. */
+  max-width: 420px;
+}
+
+#dashTopSearch .search-box .inner {
+  height: 32px;
+  padding: 0 3px 0 2px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  /* No lift. Nothing in a toolbar floats. */
+  box-shadow: none;
+}
+
+#dashTopSearch #searchInput { font-size: 12px; }
+
+#dashTopSearch #searchBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+#dashTopSearch #searchBtn:hover { transform: none; filter: brightness(1.06); box-shadow: none; }
+#dashTopSearch .sIconBtn { width: 28px; height: 28px; }
+
+/* The results list still belongs to the search box, so it hangs off the bar
+   rather than being clipped by it. */
+#dashTopSearch .search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 1400;
+}
+
+.dt-spacer { flex: 1; }
+
+/* A hairline between the search and the controls, so the bar reads as two
+   zones instead of one queue of unrelated buttons. */
+.dt-div {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex: none;
+}
+
+.dt-meter,
+.dt-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.dt-meter b,
+.dt-btn b { color: var(--text-2); font-weight: 600; }
+.dt-meter i { font-style: normal; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.dt-btn:hover,
+.dt-meter:hover { border-color: var(--border-strong); }
+.dt-btn.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.dt-btn:focus-visible,
+.dt-meter:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Square siblings of .dt-btn, for controls whose icon IS the label — the
+   preferences gear and the account avatar. Same height and border so the row
+   still reads as one set of controls rather than two. */
+.dt-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color var(--dur-fast, .12s) var(--ease-out), border-color var(--dur-fast, .12s) var(--ease-out);
+}
+
+.dt-icon:hover { color: var(--text); border-color: var(--border-strong); }
+.dt-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The avatar carries the identity colour as its background, so it keeps no
+   border of its own — a ring around a coloured chip reads as a button that has
+   been disabled. */
+#dashAcct .dt-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+
+#dashAcct .dt-avatar:hover { filter: brightness(1.12); }
+#dashAcct .dt-avatar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.34);
+}
+
+/* The account menu is projectBridge's, reused rather than rebuilt so there is
+   one sign-out path in the app. Its own rules anchor it to the sidebar's
+   brandbar (top:48; right:14), which is the wrong corner here — inside the
+   board's .dt-wrap it hangs from the control it was opened from, like the
+   Export popover beside it. */
+#dashAcct { position: relative; }
+#dashAcct .pb-acct-menu { top: calc(100% + 8px); right: 0; }
+
+.dt-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  /* Fixed ink, NOT var(--accent-ink): in dark mode that token resolves to the
+     orange itself — it is the "accent cast readable as text on the page", which
+     is the opposite of what an accent-filled button needs. It shipped as orange
+     text on an orange fill, i.e. a button with no visible label at all.
+     #2A1200 on #FF7A1A measures 6.8:1, and --accent is orange in both themes so
+     one value covers both. (White would be 2.6:1 — a fail.) */
+  color: #2A1200;
+  font: 700 12px/1 var(--font, inherit);
+  cursor: pointer;
+  box-shadow: var(--accent-glow);
+  transition: filter .18s ease, transform .18s ease;
+}
+.dt-cta:hover { filter: brightness(1.07); }
+.dt-cta:active { transform: scale(.98); }
+.dt-cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* ---- the AI reports menu ---- */
+
+.dt-wrap { position: relative; }
+
+.dt-pop {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  box-shadow: var(--elev-3);
+}
+.dt-pop[hidden] { display: none; }
+
+.dt-pop h4 {
+  margin: 2px 6px 8px;
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.dt-rep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 9px;
+}
+.dt-rep:hover { background: var(--surface-2); }
+.dt-rep-main { flex: 1; min-width: 0; }
+.dt-rep-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-rep-meta { font-size: 10.5px; color: var(--text-2); margin-top: 2px; }
+.dt-rep a {
+  flex: none;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: 600 10.5px/1 var(--font, inherit);
+  color: var(--text);
+  text-decoration: none;
+}
+.dt-rep a:hover { border-color: var(--accent); color: var(--accent); }
+.dt-empty { padding: 10px 8px 12px; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
+
+/* In dashboard mode the studio's floating search moves into the top bar. Same
+   element, same handlers, same results list — re-homed, not rebuilt. */
+.app[data-mode="dashboard"] #searchBox {
+  position: static;
+  /* The slot sizes it — one number, in #dashTopSearch above, rather than a
+     second one here that has to be kept in step with it. */
+  width: 100%;
+  transform: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. The canvas and its tiles
+   -----------------------------------------------------------------------
+
+   The canvas is a plain positioned box; every tile is absolutely placed inside
+   it from grid units the layout engine computes. No CSS grid here on purpose —
+   a CSS grid would have to be told about each tile's row and column through
+   custom properties anyway, and it cannot express "this one is being dragged
+   in free pixels while the rest reflow around it".
+   ----------------------------------------------------------------------- */
+
+#dashGrid {
+  position: relative;
+  min-height: 200px;
+}
+
+.dash-tile,
+.app[data-mode="dashboard"] .map-wrap {
+  position: absolute;
+  /* Snapping is instant while you drag (the engine writes the geometry every
+     frame); this transition is for the *other* tiles reflowing out of the way,
+     which reads as the board making room rather than teleporting. */
+  transition: left .16s cubic-bezier(.2, .8, .3, 1), top .16s cubic-bezier(.2, .8, .3, 1),
+              width .16s cubic-bezier(.2, .8, .3, 1), height .16s cubic-bezier(.2, .8, .3, 1);
+}
+
+/* Nothing animates under the pointer: the tile you are holding must track the
+   cursor exactly, or it feels like dragging something through treacle. */
+.dash-tile.dragging,
+.dash-tile.resizing,
+.map-wrap.dragging,
+.map-wrap.resizing,
+body.dash-gesture .dash-tile,
+body.dash-gesture .map-wrap { transition: none; }
+
+.dash-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  padding: 12px 14px 13px;
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: var(--elev-1);
+  /* So the big figures can size against the card rather than the window: a
+     stat dragged to a quarter of its width should shrink its number, and
+     `cqw` with no container context silently measures the viewport instead. */
+  container-type: inline-size;
+}
+
+.dc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-bottom: 9px;
+}
+
+/* Sized to its text, not stretched to fill. Stretched, the title covered the
+   whole header bar — and because the title is the one thing in that bar you
+   must be able to click into and type, it left the card with no grab area
+   except a 13px dot. Shrink-to-fit puts real draggable bar to the right of it. */
+.dc-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  padding-right: 8px;
+  font: 700 10.5px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dc-title:focus { color: var(--accent2, var(--accent)); }
+
+/* The body takes the leftover height, so a card that is dragged taller gives
+   its extra room to the chart or the list rather than to padding. */
+.dc-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dc-empty {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* --------------------------------------------------------------------------
+   8. Chart tokens and marks
+   -----------------------------------------------------------------------
+
+   Eight categorical slots, each with a light and a dark step. Not one palette
+   dimmed for dark mode: the dark column is the same eight hues re-stepped for
+   a dark surface, so both modes clear the same colour-vision and contrast
+   gates. Checked with a validator against this app's own card surfaces
+   (#FFFFFF and #0E1728) rather than chosen by eye — the whole point of a fixed
+   slot order is that it is verifiable.
+
+   A card stores a slot number, never a hex, so a board built in one theme
+   still reads correctly in the other.
+   ----------------------------------------------------------------------- */
+
+:root {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-6: #008300;
+  --viz-7: #9085e9;
+  --viz-8: #e66767;
+  --viz-grid: rgba(255, 255, 255, .10);
+  --viz-track: rgba(255, 255, 255, .055);
+  --viz-surface: #0E1728;
+}
+
+:root[data-theme="light"] {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #4a3aa7;
+  --viz-8: #e34948;
+  --viz-grid: rgba(16, 32, 60, .11);
+  --viz-track: rgba(16, 32, 60, .055);
+  --viz-surface: #FFFFFF;
+}
+
+.dc-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 -2px;
+}
+
+.viz { display: block; overflow: visible; }
+
+/* Recessive chrome: hairline, solid, one step off the surface. Dashed
+   gridlines read as "projection" or "threshold" when they are just a grid. */
+.viz-grid { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
+
+.viz-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The wash is carried by a gradient now (vizDefs), so the element itself is
+   fully opaque and the fade lives in the stops. A flat wash ends in a hard
+   horizontal edge along the axis and reads as a second series. */
+.viz-area { stroke: none; }
+
+/* The ring is the surface colour, so a dot stays legible where it crosses the
+   line or another dot — separation by negative space, not by more ink. */
+.viz-dot { stroke: var(--viz-surface); stroke-width: 2; }
+/* ITS OWN INK, NOT THE GRID'S. A gridline is 1px and a ring's track is 17, so
+   the same 11% wash that reads as a hairline behind a chart reads as a solid
+   grey disc behind a ring — five of them stacked, and the tracks became the
+   loudest thing on the card while the data sat on top as thin coloured commas. */
+.viz-track { fill: none; stroke: var(--viz-track); }
+
+/* Text never wears the series colour — a light hue is illegible as type. The
+   coloured mark beside it carries the identity. */
+.viz-tick {
+  font-size: 9.5px;
+  fill: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-endlabel {
+  font: 700 11px/1 var(--font, inherit);
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-legend { font-size: 10.5px; fill: var(--text); }
+.viz-legend-val { font-size: 10.5px; fill: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.viz-donut-total {
+  font: 800 18px/1 var(--font, inherit);
+  fill: var(--text);
+}
+.viz-donut-cap {
+  font-size: 9px;
+  fill: var(--text-2);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.viz-cross { stroke: var(--text-2); stroke-width: 1; opacity: .45; pointer-events: none; }
+
+/* Pie slices and treemap tiles are separated by a ring in the surface colour —
+   the same negative-space trick as the dots, so no segment needs a border. */
+.viz-slice { stroke: var(--viz-surface); stroke-width: 2; }
+.viz-tm { stroke: none; }
+
+/* A radar's shape has to be readable through the one on top of it, so the fill
+   is a wash and the outline carries the identity. Two series at 16% each is
+   still lighter than one card border. */
+.viz-web {
+  fill-opacity: .16;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.viz-label {
+  font-size: 10px;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A value label that had to go inside its own bar, because there was no room
+   outside it. Same reasoning as .viz-inlabel below — white clears every hue in
+   the palette, and a dark label disappears into half of them. */
+.viz-label-in {
+  fill: #fff;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, .22);
+  stroke-width: 2px;
+}
+
+/* A label sitting *inside* a coloured fill is the one place text may leave the
+   ink tokens: white clears every slot in the palette, and the alternative is a
+   dark label vanishing into slot 7. */
+.viz-inlabel {
+  font: 700 10px/1 var(--font, inherit);
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, .25);
+  stroke-width: 2px;
+}
+
+.viz-tm-name { font: 700 11px/1 var(--font, inherit); fill: #fff; }
+.viz-tm-val { font-size: 10px; fill: rgba(255, 255, 255, .82); font-variant-numeric: tabular-nums; }
+
+.viz-tip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  box-shadow: var(--elev-2);
+  white-space: nowrap;
+  font-size: 11px;
+}
+.viz-tip em {
+  display: block;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.viz-tip span { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.viz-tip i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.viz-tip b { margin-left: auto; padding-left: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------------------------------
+   The enter animation
+   --------------------------------------------------------------------------
+   A chart arrives rather than appearing. Marks grow from the axis they are
+   measured against, staggered across the categories; a line draws in from the
+   left, the direction it is read; the dots and the labels settle afterwards.
+
+   EVERY MARK IS DRAWN IN ITS FINAL STATE AND ANIMATED `from`. There is no `to`
+   in any of these keyframes, so removing the class — which dashDrawChart does
+   once the window is up, and which the export pass does immediately — leaves
+   the chart already there rather than stuck at zero. That is what makes this
+   safe to rasterise into a PDF, and what makes reduced motion a no-op instead
+   of a separate code path.
+
+   The class is also carried by `.viz-enter` alone, never by the marks, so a
+   redraw for a resize costs nothing: no animation is attached to re-evaluate.
+   ----------------------------------------------------------------------- */
+
+@keyframes viz-rise { from { transform: scaleY(0); } }
+@keyframes viz-widen { from { transform: scaleX(0); } }
+@keyframes viz-draw { from { stroke-dashoffset: var(--len, 1200); } }
+@keyframes viz-fade { from { opacity: 0; } }
+@keyframes viz-pop { from { opacity: 0; transform: scale(.4); } }
+@keyframes viz-sweep { from { opacity: 0; transform: rotate(-12deg) scale(.93); } }
+
+/* fill-box, so the origin is the mark's own baseline rather than the SVG's
+   top-left corner — without it every bar would grow from the corner of the
+   card. */
+.viz-enter .viz-mark,
+.viz-enter .viz-tm,
+.viz-enter .viz-dot,
+.viz-enter .viz-slice,
+.viz-enter .viz-arc { transform-box: fill-box; }
+
+.viz-enter .viz-mark {
+  transform-origin: bottom;
+  animation: viz-rise 620ms cubic-bezier(.85, 0, .15, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Horizontal forms — bar, stacked bar — grow from the value axis on the left,
+   which is where their zero is. */
+.viz-enter .viz-mark-h,
+.viz-enter[data-horiz] .viz-mark {
+  transform-origin: left;
+  animation-name: viz-widen;
+}
+
+/* A funnel is centred on its own axis, so its stages open outward from the
+   middle. Growing them from the left would slide the whole shape sideways into
+   place, which is a different chart arriving. */
+.viz-enter .viz-mark-c {
+  transform-origin: center;
+  animation-name: viz-widen;
+}
+
+.viz-enter .viz-area { animation: viz-fade 1100ms ease-out both; }
+
+.viz-enter .viz-line {
+  stroke-dasharray: var(--len, 1200);
+  animation: viz-draw 1100ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+.viz-enter .viz-dot {
+  transform-origin: center;
+  animation: viz-pop 320ms cubic-bezier(.34, 1.4, .64, 1) both;
+  /* After the line has passed them, not before: a dot that lands ahead of its
+     own line is a dot with nothing under it. */
+  animation-delay: calc(260ms + var(--i, 0) * 40ms);
+}
+
+.viz-enter .viz-slice,
+.viz-enter .viz-arc {
+  transform-origin: center;
+  animation: viz-sweep 700ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* A dial sweeps along itself rather than turning: it has a floor on the left
+   and a ceiling on the right, and rotating it would start the needle somewhere
+   off the scale. */
+.viz-enter .viz-dial {
+  stroke-dasharray: var(--len, 600);
+  animation: viz-draw 900ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+/* The web grows out of its own centre, which is where every axis on it starts
+   from. */
+.viz-enter .viz-web {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: viz-pop 700ms cubic-bezier(.22, .8, .3, 1) both;
+}
+
+.viz-enter .viz-tm {
+  transform-origin: center;
+  animation: viz-pop 480ms cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+.viz-enter .viz-label,
+.viz-enter .viz-inlabel,
+.viz-enter .viz-endlabel,
+.viz-enter .viz-donut-total,
+.viz-enter .viz-donut-cap,
+.viz-enter .viz-tm-name,
+.viz-enter .viz-tm-val { animation: viz-fade 400ms ease-out 900ms both; }
+
+/* The grid and the axis text do not animate. They are the frame the data
+   arrives into; a frame that arrives with it is just motion. */
+
+/* An export rasterises whatever is on screen at that instant, so a chart caught
+   mid-reveal would be exported half-drawn. Every keyframe above is `from`-only,
+   which makes switching the animation off the same thing as finishing it. */
+#dashGrid.exporting .viz-enter * { animation: none !important; }
+
+/* And the cards lose their drop shadows for the same pass.
+   html2canvas does not render box-shadow the way a browser does: the card's
+   two-layer 2px/8px shadow came out as a flat 11%-grey slab about 210px wide
+   standing over the right-hand third of every card in the right column. It
+   looked like a rendering fault because it was one, and it was in every export
+   of a board.
+   Removing it is also the right call on its own terms. A drop shadow says "this
+   floats above the page"; on paper nothing floats, and the card already has a
+   border. */
+#dashGrid.exporting .dash-card,
+#dashGrid.exporting .map-wrap,
+#dashGrid.exporting .dash-tile { box-shadow: none; }
+
+/* --------------------------------------------------------------------------
+   The report look: filled header bars, tables, comment and rating blocks
+   --------------------------------------------------------------------------
+   A quiet uppercase caption in muted ink is right for a screen you are working
+   in and wrong for a sheet somebody reads at arm's length across a desk. The
+   filled bar is what separates one block from the next in every printed
+   connectivity report, so it is offered per card rather than imposed: the board
+   you build in and the sheet you hand over are the same board.
+
+   TWO TONES, BOTH WHITE ON DARK, BOTH CLEARING AA. Navy is #0A1E3C — 14.9:1
+   against white — and the green is slot six, #008300, at 4.8:1. The tone is
+   never the only thing carrying meaning: the bar always has its title in it.
+   ----------------------------------------------------------------------- */
+
+.dash-card.headed > .dc-head {
+  margin: -13px -13px 10px;
+  padding: 8px 13px;
+  border-radius: 12px 12px 0 0;
+  background: var(--navy);
+}
+
+/* THE BAR IS THE SLOT, DEEPENED — NOT THE SLOT ITSELF.
+   The palette is a categorical set chosen to be told apart against a card, and
+   several of its hues are far too light to carry 9.5px type. Slot one is the
+   sharp case: white on it is 4.3:1 and navy on it is 3.8:1, so NEITHER ink
+   reaches AA and choosing between them by luminance only picks the less bad
+   one. Mixing 60% of the hue into navy keeps the colour recognisably itself and
+   makes every bar dark enough for white — the worst case is slot four's amber
+   at 4.7:1, and every other slot is better than that. A header bar wants a deep
+   tone anyway; that is what the reference sheets use. */
+.dash-card.head-slot-1 > .dc-head { background: color-mix(in srgb, var(--viz-1) 60%, var(--navy)); }
+.dash-card.head-slot-2 > .dc-head { background: color-mix(in srgb, var(--viz-2) 60%, var(--navy)); }
+.dash-card.head-slot-3 > .dc-head { background: color-mix(in srgb, var(--viz-3) 60%, var(--navy)); }
+.dash-card.head-slot-4 > .dc-head { background: color-mix(in srgb, var(--viz-4) 60%, var(--navy)); }
+.dash-card.head-slot-5 > .dc-head { background: color-mix(in srgb, var(--viz-5) 60%, var(--navy)); }
+.dash-card.head-slot-6 > .dc-head { background: color-mix(in srgb, var(--viz-6) 60%, var(--navy)); }
+.dash-card.head-slot-7 > .dc-head { background: color-mix(in srgb, var(--viz-7) 60%, var(--navy)); }
+.dash-card.head-slot-8 > .dc-head { background: color-mix(in srgb, var(--viz-8) 60%, var(--navy)); }
+
+/* A colour chosen outside the palette, deepened by the same rule — the ink on
+   a bar must not depend on where the hue came from. */
+.dash-card.head-custom > .dc-head {
+  background: color-mix(in srgb, var(--head-hue, var(--navy)) 60%, var(--navy));
+}
+
+/* Room between the title and whatever sits at the end of the bar. Without it a
+   title that filled the width ran straight into the remove button — the bar
+   read as "INFRASTRUCTURE SCOREX". */
+.dash-card.headed > .dc-head .dc-title { padding-right: 6px; }
+
+.dash-card.headed > .dc-head .dc-title,
+.dash-card.headed > .dc-head .dc-grip { color: #fff; }
+.dash-card.headed > .dc-head .dc-title { opacity: 1; }
+
+/* The tools sit on the bar in edit mode, so they need to be legible on it. */
+.dash-card.headed > .dc-head .dc-btn { color: rgba(255, 255, 255, .85); }
+.dash-card.headed > .dc-head .dc-btn:hover { color: #fff; }
+
+
+
+/* -- per-point colours ----------------------------------------------------- */
+
+/* Folded away: most charts never colour an individual bar, and eight more
+   swatches per series would undo the tidying the single trigger just bought.
+   Opened automatically when any point is set, so it can never hide something
+   somebody has already done. */
+.df-points { margin-top: 6px; }
+
+.df-points > summary {
+  cursor: pointer;
+  padding: 4px 2px;
+  font: 600 10.5px/1 var(--font, inherit);
+  letter-spacing: .02em;
+  color: var(--text-2);
+  list-style: none;
+}
+
+.df-points > summary::-webkit-details-marker { display: none; }
+.df-points > summary::before { content: '\25B8 '; display: inline-block; transition: transform .15s ease; }
+.df-points[open] > summary::before { transform: rotate(90deg); }
+.df-points > summary:hover { color: var(--accent); }
+/* A pie or a ring has no series colour to fall back to, so its swatches are the
+   control rather than an override of one — no disclosure to open first. */
+.df-points-open { margin-top: 0; }
+
+.df-point-row { display: flex; align-items: center; gap: 5px; }
+
+.df-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.df-clear:hover { background: var(--danger-soft, var(--surface-2)); color: var(--danger); }
+
+/* -- alignment glyphs ------------------------------------------------------ */
+
+.df-seg-icons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Square, so four of them read as a toolbar rather than as four words that
+     happen to be pictures. */
+  padding: 4px 0;
+  min-width: 34px;
+}
+
+.df-seg-icons button svg { display: block; }
+
+/* -- the colour trigger ---------------------------------------------------- */
+
+/* One swatch, not nine. A score card with four rings meant four rows of nine
+   squares — thirty-six of them, most of the pane, to say four things — and it
+   asked people to learn a second colour interface when the map has had a proper
+   picker all along. This opens that one. */
+.df-sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+
+.df-sw-btn:hover { border-color: var(--accent); }
+.df-sw-btn.on { border-color: var(--accent); color: var(--accent); }
+
+.df-sw-btn i {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  /* A hairline, so white and near-white swatches are still a shape. */
+  box-shadow: inset 0 0 0 1px rgba(10, 30, 60, .22);
+}
+
+.df-sw-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.df-bar-tone { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* -- the custom colour well ----------------------------------------------- */
+
+/* The native colour input is the platform's own picker — gradient area, hue
+   slider, and the eyedropper on the browsers that have one — so the swatch is
+   a label wrapped around it and the input itself is invisible. */
+.dc-sw-custom {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  /* A chequer, so "no custom colour" reads as empty rather than as black. */
+  background-image:
+    linear-gradient(45deg, var(--border-strong) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-strong) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border-strong) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border-strong) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.dc-sw-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The trade a custom colour makes is worth saying out loud, not discovering. */
+.df-note-warn { color: var(--warn, var(--accent)); }
+
+/* -- alignment ------------------------------------------------------------ */
+
+/* Two settings, not one. The title and the body align separately, because a
+   centred header bar over a left-read paragraph is a real layout and coupling
+   them made that impossible.
+
+   The title is shrink-to-fit by default so the rest of the header stays a grab
+   area. Aligning it needs it to own the row instead, which is also what stops a
+   long title running into the tools at the right-hand end — "INFRASTRUCTURE
+   SCORE" and the close button were touching on a narrow card. */
+.dash-card.talign-center > .dc-head .dc-title,
+.dash-card.talign-right > .dc-head .dc-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-card.talign-center > .dc-head .dc-title { text-align: center; }
+.dash-card.talign-right > .dc-head .dc-title { text-align: right; }
+
+.dash-card.balign-center .dc-text,
+.dash-card.balign-center .dc-rating-cap,
+.dash-card.balign-center .dc-rating-note,
+.dash-card.balign-center .dc-gauge-cap,
+.dash-card.balign-center .dc-stat-label { text-align: center; }
+
+.dash-card.balign-right .dc-text,
+.dash-card.balign-right .dc-rating-cap,
+.dash-card.balign-right .dc-rating-note,
+.dash-card.balign-right .dc-gauge-cap,
+.dash-card.balign-right .dc-stat-label { text-align: right; }
+
+/* Justify is offered for prose only. On a list of place names it would space
+   out four words across a card and call it typography. */
+.dash-card.balign-justify .dc-text { text-align: justify; }
+
+/* -- the table reading of a live list ------------------------------------- */
+
+.dc-tbl-wrap { overflow-x: auto; }
+
+.dc-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.dc-tbl th,
+.dc-tbl td {
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.dc-tbl thead th {
+  font: 700 9px/1 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 6px;
+}
+
+/* Zebra rather than a rule per row: on a sheet of twelve distances the stripe
+   is what keeps the eye on one line all the way across, and it is one paint
+   instead of twelve hairlines.
+
+   An ink wash, not --surface-2. That token is a translucent glass tint — white
+   at 72% in the light theme — so over a white card it was a stripe the exact
+   colour of the card. The stripe has to be a step DOWN from whatever it sits
+   on, in either theme, which is what a low-alpha ink gives and a surface token
+   cannot. */
+.dc-tbl tbody tr:nth-child(odd) { background: rgba(16, 32, 60, .045); }
+:root:not([data-theme="light"]) .dc-tbl tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, .045);
+}
+:root[data-theme="dark"] .dc-tbl tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, .045);
+}
+
+.dc-tbl tbody th {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Numbers line up under each other or the column is not a column. */
+.dc-tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.dc-tbl tbody td.num { color: var(--text); font-weight: 600; }
+
+/* -- the closing comment -------------------------------------------------- */
+
+.dc-comment { display: flex; gap: 12px; align-items: flex-start; height: 100%; }
+
+.dc-comment-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  width: 74px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-align: center;
+}
+
+.dc-comment-mark span {
+  font: 700 8.5px/1.25 var(--font, inherit);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.dc-comment .dc-text { flex: 1; min-width: 0; }
+
+/* -- the closing rating --------------------------------------------------- */
+
+.dc-rating { display: flex; gap: 14px; align-items: center; height: 100%; }
+.dc-rating-main { flex: 1; min-width: 0; }
+
+.dc-rating-cap {
+  font: 700 11px/1.3 var(--font, inherit);
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.dc-rating-note { font-size: 10.5px; line-height: 1.45; color: var(--text-2); }
+
+/* The badge is the one place on the board where a number is allowed to be
+   loud: it is the answer the whole sheet was built to give. */
+.dc-rating-badge {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--viz-6);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-rating-badge b { font: 800 26px/1 var(--font, inherit); }
+.dc-rating-badge span { font: 700 13px/1 var(--font, inherit); opacity: .82; }
+
+/* Nothing typed is not a score of zero — an empty badge says so rather than
+   printing a number nobody chose. */
+.dc-rating-badge.empty { background: var(--surface-2); color: var(--text-2); }
+
+.dc-rating-in { max-width: 74px; margin-top: 6px; }
+
+/* --------------------------------------------------------------------------
+   The export menu's ground switch
+   ----------------------------------------------------------------------- */
+
+.dt-ground {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.dt-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.dt-seg button {
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  opacity: .72;
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+
+.dt-seg button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Hover marks: the point the crosshair is actually reading, on every series at
+   once. The crosshair alone tells you which category; these tell you which
+   value on which line, which is the question a multi-series chart raises. */
+.viz-hit {
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   9. Card internals
+   ----------------------------------------------------------------------- */
+
+/* Proportional figures, not tabular: at 26px, equal-width digits make a number
+   like 121 look loose. Tabular is for columns that have to line up. */
+.dc-stat-val {
+  font: 800 clamp(20px, 6cqw, 34px)/1.05 var(--font, inherit);
+  letter-spacing: -.02em;
+  color: var(--text);
+  outline: none;
+}
+
+.dc-stat { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+
+.dc-stats { display: flex; gap: 14px; align-items: center; height: 100%; }
+.dc-stats-cell { flex: 1; min-width: 0; }
+.dc-stats .dc-stat-val { font-size: clamp(17px, 4.4cqw, 26px); }
+
+.dc-stat-label,
+.dc-stat-sub {
+  font-size: 11px;
+  color: var(--text-2);
+  outline: none;
+}
+
+.dc-stat-label { margin-top: 3px; }
+.dc-stat-sub { margin-top: 6px; }
+
+/* Gauge ring */
+.dc-gauges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  justify-content: space-around;
+  align-content: center;
+  height: 100%;
+  overflow: auto;
+}
+.dc-gauge { text-align: center; min-width: 70px; }
+.dc-gauge svg { display: block; margin: 0 auto; }
+.dc-gauge .track { fill: none; stroke: var(--viz-grid); }
+.dc-gauge .val { fill: none; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.dc-gauge-num {
+  font: 800 15px/1 var(--font, inherit);
+  fill: var(--text);
+  text-anchor: middle;
+}
+.dc-gauge-cap { margin-top: 5px; font-size: 10.5px; color: var(--text-2); outline: none; }
+
+/* List */
+.dc-list { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
+.dc-row { display: flex; align-items: center; gap: 9px; }
+.dc-row .dc-ico { flex: none; line-height: 0; }
+.dc-row-main { flex: 1; min-width: 0; }
+.dc-row-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dc-row-meta {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-2);
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Free text */
+.dc-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  outline: none;
+  white-space: pre-wrap;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* --------------------------------------------------------------------------
+   10. Edit affordances
+   ----------------------------------------------------------------------- */
+
+/* Off until the board is in edit mode. A dashboard you can accidentally retype
+   by clicking on it is not a dashboard, it is a document. */
+.dc-tools { display: none; gap: 2px; }
+.app.dash-editing .dc-tools { display: flex; }
+
+.dc-btn {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 5px;
+  line-height: 0;
+  transition: color .15s ease, background .15s ease;
+}
+.dc-btn:hover { color: var(--text); background: rgba(127, 127, 127, .16); }
+.dc-btn.danger:hover { color: var(--danger); background: rgba(255, 107, 129, .12); }
+.dc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dc-addrow {
+  align-self: flex-start;
+  font: 600 11px/1 var(--font, inherit);
+  line-height: 1.4;
+  padding: 4px 8px;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-2);
+}
+
+.app.dash-editing [contenteditable] {
+  outline: 1px dashed var(--border-strong);
+  outline-offset: 3px;
+  border-radius: 4px;
+  cursor: text;
+}
+.app.dash-editing [contenteditable]:focus {
+  outline: 2px solid var(--accent);
+  background: rgba(255, 122, 26, .07);
+}
+
+/* ---- chart controls ---- */
+
+.dc-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.dc-seg {
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.dc-seg button {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: 600 10.5px/1 var(--font, inherit);
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.dc-seg button:hover { color: var(--text); }
+.dc-seg button.on { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+
+.dc-swatches { display: flex; gap: 4px; }
+.dc-sw {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+/* A ring rather than a tick: the swatch is 15px and a glyph inside it would be
+   unreadable at that size in either theme. */
+.dc-sw.on { box-shadow: 0 0 0 2px var(--surface-solid), 0 0 0 3.5px var(--text); }
+.dc-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dc-fields {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.dc-fields label {
+  flex: 1;
+  min-width: 0;
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.dc-input {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+/* ---- move and resize ---- */
+
+.dc-grip {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  cursor: grab;
+  background:
+    radial-gradient(currentColor 1px, transparent 1.2px) 0 0 / 4.5px 4.5px;
+  color: var(--text-2);
+  opacity: .7;
+}
+/* The whole card is the drag surface in edit mode; the fields inside it opt
+   back out, so the caret still means "type here". */
+.app.dash-editing .dash-card { cursor: grab; }
+.app.dash-editing .dash-card [contenteditable],
+.app.dash-editing .dash-card button,
+.app.dash-editing .dash-card .dc-plot { cursor: auto; }
+.app.dash-editing .dash-card [contenteditable] { cursor: text; }
+.app.dash-editing .dash-card button { cursor: pointer; }
+.dash-tile.dragging { opacity: .92; z-index: 40; box-shadow: var(--elev-3); }
+.dash-tile.resizing { z-index: 40; }
+body.dash-gesture { cursor: grabbing; user-select: none; }
+
+/* Eight handles. Edges are wide invisible strips rather than visible bars: a
+   1px hit target is a game, and a visible frame of eight bars around every
+   card would drown the board in chrome. Corners get a visible corner mark,
+   which is the one people look for. */
+.dc-rz { position: absolute; z-index: 5; display: none; }
+.app.dash-editing .dc-rz { display: block; }
+
+/* Fully inside the tile, not straddling its edge. A handle hanging outside gets
+   cut in half by the card's own `overflow: hidden`, which leaves its centre —
+   exactly where a pointer aims — in the clipped half where nothing is hittable.
+   Inset, the whole 8px strip is live. */
+.dc-rz-n, .dc-rz-s { left: 14px; right: 14px; height: 8px; cursor: ns-resize; }
+.dc-rz-e, .dc-rz-w { top: 14px; bottom: 14px; width: 8px; cursor: ew-resize; }
+.dc-rz-n { top: 0; }
+.dc-rz-s { bottom: 0; }
+.dc-rz-e { right: 0; }
+.dc-rz-w { left: 0; }
+
+.dc-rz-ne, .dc-rz-nw, .dc-rz-se, .dc-rz-sw { width: 14px; height: 14px; }
+.dc-rz-ne { top: 0; right: 0; cursor: nesw-resize; }
+.dc-rz-nw { top: 0; left: 0; cursor: nwse-resize; }
+.dc-rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.dc-rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+/* The corner mark: two short strokes, only on the corner you are near. */
+.app.dash-editing .dash-card:hover .dc-rz-se::after,
+.app.dash-editing .map-wrap:hover .dc-rz-se::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-2);
+  border-bottom: 2px solid var(--text-2);
+  border-radius: 0 0 3px 0;
+  opacity: .8;
+}
+
+.app.dash-editing .dash-card:hover,
+.app.dash-editing .map-wrap:hover { border-color: var(--border-strong); }
+
+/* The map has no title bar of its own, so edit mode gives it one to grab. */
+.dc-maphandles { position: absolute; inset: 0; pointer-events: none; z-index: 1100; }
+.dc-maphandles .dc-rz { pointer-events: auto; }
+/* Top-left, which is the one corner of the map panel nothing else claims: the
+   title card is centred, the history and fullscreen buttons are top-right, and
+   the search box has moved up to the board's top bar. Centred, it landed under
+   the title card. Labelled, because a bare grip on a map does not say what it
+   would move. */
+.dc-maphead {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--text-2);
+  box-shadow: var(--elev-2);
+  pointer-events: auto;
+  cursor: grab;
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.dc-maphead::before {
+  content: '';
+  width: 9px;
+  height: 13px;
+  background: radial-gradient(currentColor 1px, transparent 1.2px) 0 0 / 4.5px 4.5px;
+  opacity: .8;
+}
+
+.dc-maphead::after { content: 'Map'; }
+
+/* The drop outline. Dashed, in the accent, so it reads as "this is where it
+   goes" and not as another card. */
+#dashGhost {
+  position: absolute;
+  z-index: 2;
+  border: 2px dashed var(--accent);
+  border-radius: 13px;
+  background: rgba(255, 122, 26, .07);
+  pointer-events: none;
+}
+
+#dashAdd {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 11px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 13px;
+}
+.app.dash-editing #dashAdd { display: flex; }
+
+.da-cap {
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-right: 2px;
+}
+
+#dashAdd button {
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  cursor: pointer;
+}
+#dashAdd button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Chrome, not content: none of the edit furniture is in an export. */
+#dashGrid.exporting .dc-rz,
+#dashGrid.exporting .dc-grip,
+#dashGrid.exporting .dc-maphandles,
+#dashGrid.exporting #dashAdd,
+#dashGrid.exporting .dc-tools { display: none !important; }
+
+/* An empty visual states that it is empty in every context. The half that
+   tells you what to DO about it — "turn on Edit board to type them", "Draw one
+   in the Routes tab" — is addressed to whoever is building the board, and in an
+   exported file it is an instruction to a reader who has no board and no
+   controls. It reads as the document being unfinished, which is the impression
+   an export exists to avoid. The state survives; the instruction does not. */
+#dashGrid.exporting .dc-hint { display: none !important; }
+
+/* --------------------------------------------------------------------------
+   11. Legend, table, slicer
+   ----------------------------------------------------------------------- */
+
+.dc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.dc-legend-top { margin-bottom: 8px; }
+.dc-legend-bottom { order: 2; margin-top: 8px; }
+
+/* A right-hand legend is a column beside the plot, which is what a donut or a
+   pie wants — the slices are round, the labels are a list. */
+.dc-type-chart .dc-body:has(> .dc-legend-right) { flex-direction: row-reverse; align-items: stretch; gap: 12px; }
+.dc-legend-right {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+  justify-content: center;
+  width: 40%;
+  max-width: 150px;
+  overflow: auto;
+}
+
+.dc-key { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dc-key i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+.dc-key b {
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- table ---- */
+
+.dc-tablewrap { overflow: auto; min-height: 0; }
+.dc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.dc-table th, .dc-table td {
+  text-align: left;
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.dc-th {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  outline: none;
+}
+.dc-td { color: var(--text); outline: none; font-variant-numeric: tabular-nums; }
+.dc-table tbody tr:last-child th, .dc-table tbody tr:last-child td { border-bottom: 0; }
+.dc-tw { width: 22px; padding-right: 0 !important; }
+.dc-tblbtns { display: flex; gap: 6px; margin-top: 8px; }
+
+/* ---- slicer ---- */
+
+.dc-slicer { display: flex; flex-wrap: wrap; gap: 6px; overflow: auto; min-height: 0; align-content: flex-start; }
+.dc-chip {
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.dc-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.dc-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Fixed ink on the accent fill, for the reason spelled out on .dt-cta. */
+  color: #2A1200;
+}
+.dc-clear { margin-top: 9px; align-self: flex-start; }
+
+/* A transparent card sits straight on the board — for a title block or a note
+   that should not read as another panel. */
+.dash-card.plain {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+.app.dash-editing .dash-card.plain { border-color: var(--border); border-style: dashed; }
+
+.dc-grip-float { position: absolute; top: 8px; left: 8px; z-index: 3; }
+
+/* The selected visual, in edit mode. A ring rather than a colour change: the
+   card's own colours are the user's, and a selection that recolours them lies
+   about what the board looks like. */
+.app.dash-editing .dash-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--elev-2);
+}
+
+/* --------------------------------------------------------------------------
+   12. The format pane
+   ----------------------------------------------------------------------- */
+
+#dashFormat {
+  overflow: auto;
+  padding: 0 0 14px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+}
+
+.df-empty {
+  padding: 16px 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.df-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.df-head b {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.df-head span { font-size: 10px; color: var(--text-2); white-space: nowrap; }
+
+.df-sec { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.df-sec:last-child { border-bottom: 0; }
+.df-sec h4 {
+  margin: 0 0 9px;
+  font: 700 9.5px/1 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.df-row { display: block; margin-bottom: 9px; }
+.df-row > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.df-note { margin: 8px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--text-2); }
+
+.df-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.df-kinds button,
+.df-seg button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 10.5px/1 var(--font, inherit);
+  padding: 7px 6px;
+  cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.df-kinds button:hover, .df-seg button:hover { color: var(--text); border-color: var(--border-strong); }
+.df-kinds button.on,
+.df-seg button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+.df-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.df-seg button { flex: 1; min-width: 44px; }
+
+.df-tgl {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: 600 11.5px/1 var(--font, inherit);
+  cursor: pointer;
+  text-align: left;
+}
+.df-tgl i {
+  flex: none;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  position: relative;
+  transition: background .16s ease;
+}
+.df-tgl i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+  transition: transform .16s ease;
+}
+.df-tgl.on i { background: var(--accent); }
+.df-tgl.on i::after { transform: translateX(11px); }
+.df-tgl:hover { border-color: var(--border-strong); }
+
+.df-series {
+  padding: 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+.df-series-hd { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.df-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.df-input,
+.df-name {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  font-size: 11px;
+  color: var(--text);
+  outline: none;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.df-input:focus, .df-name:focus { border-color: var(--accent); }
+
+.df-sw-row { display: flex; gap: 4px; margin-top: 7px; }
+
+.df-add {
+  padding: 7px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: 600 11px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.df-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.df-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.df-grid4 label { display: block; }
+.df-grid4 span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  color: var(--text-2);
+}
+.df-grid4 input {
+  width: 100%;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  color: var(--text);
+  font: 600 11px/1 var(--font, inherit);
+  text-align: center;
+}
+.df-grid4 input:focus { border-color: var(--accent); outline: none; }
+
+.df-btns { display: flex; gap: 6px; margin-top: 9px; }
+.df-btns .df-add { flex: 1; text-align: center; }
+
+/* --------------------------------------------------------------------------
+   10. Report sheet panels
+   ----------------------------------------------------------------------- */
+
+#rsHead {
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: linear-gradient(100deg, #143a2a 0%, #17624a 55%, #1c7a5c 100%);
+  color: #fff;
+}
+
+#rsHead h1 {
+  margin: 0;
+  font: 800 22px/1.1 var(--font, inherit);
+  letter-spacing: .01em;
+  outline: none;
+}
+#rsHead p { margin: 3px 0 0; font-size: 11.5px; outline: none; }
+#rsSubA { color: #FFD166; font-weight: 700; }
+#rsSubB { color: rgba(255, 255, 255, .86); }
+
+#rsLegend, #rsRight {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.rs-panel {
+  border: 1px solid rgba(10, 30, 60, .14);
+  border-radius: 8px;
+  background: #fff;
+  color: #17202B;
+  overflow: hidden;
+}
+.rs-panel + .rs-panel { margin-top: 10px; }
+
+.rs-panel > h3 {
+  margin: 0;
+  padding: 7px 11px;
+  background: #123a2b;
+  color: #fff;
+  font: 800 10px/1.3 var(--font, inherit);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.rs-body { padding: 9px 11px; }
+
+.rs-line { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 11px; }
+.rs-line .rs-swatch { width: 26px; height: 3px; border-radius: 2px; flex: none; }
+.rs-line .rs-ico { width: 17px; flex: none; line-height: 0; text-align: center; }
+.rs-line span { flex: 1; min-width: 0; outline: none; }
+
+.rs-bullets { margin: 0; padding: 0; list-style: none; }
+.rs-bullets li {
+  position: relative;
+  padding: 4px 0 4px 18px;
+  font-size: 11px;
+  line-height: 1.4;
+  outline: none;
+}
+.rs-bullets li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #17624a;
+}
+
+.rs-rows { width: 100%; border-collapse: collapse; font-size: 11px; }
+.rs-rows td { padding: 5px 4px; }
+.rs-rows tr:nth-child(even) { background: rgba(10, 30, 60, .045); }
+.rs-rows td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+#rsFoot {
+  gap: 10px;
+  align-items: stretch;
+}
+
+.rs-foot-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: #fff;
+  color: #17202B;
+}
+
+.rs-foot-badge {
+  flex: none;
+  width: 74px;
+  text-align: center;
+  font: 800 9px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #17624a;
+}
+.rs-foot-badge svg { display: block; margin: 0 auto 5px; }
+
+.rs-foot-text { font-size: 11px; line-height: 1.5; outline: none; }
+
+.rs-rating {
+  flex: none;
+  width: 220px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: #123a2b;
+  color: #fff;
+  text-align: center;
+}
+.rs-rating h4 {
+  margin: 0 0 6px;
+  font: 800 9px/1.3 var(--font, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  outline: none;
+}
+.rs-score {
+  font: 800 26px/1 var(--font, inherit);
+  color: #FFD166;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.rs-score-note { margin-top: 6px; font-size: 9.5px; line-height: 1.4; color: rgba(255, 255, 255, .8); outline: none; }
+
+/* --------------------------------------------------------------------------
+   11. Motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .app[data-mode="dashboard"] #dashGrid > .dash-card,
+  .app[data-mode="dashboard"] #dashSide > .dash-card,
+  .app[data-mode="report"] .rs-panel {
+    animation: dashIn 260ms cubic-bezier(.16, 1, .3, 1) backwards;
+  }
+}
+
+@keyframes dashIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --------------------------------------------------------------------------
+   The figures arrive too
+   --------------------------------------------------------------------------
+   The charts have had an entrance since the bklit pass and the numbers beside
+   them did not, so on a board whose loudest visual is a row of score rings the
+   charts arrived and the scores just sat there. These are the same discipline:
+   every keyframe is `from`-only and every element is drawn in its final state,
+   so switching the animation off is the same thing as finishing it. That is
+   what makes them safe to rasterise into a PDF and makes reduced motion a
+   no-op rather than a second code path.
+
+   Reusing viz-draw, viz-pop and viz-fade rather than writing four more: the
+   board should arrive with one rhythm, not with each card doing its own thing.
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A score ring sweeps in along itself, like the gauge dial — it is the same
+     shape making the same statement. Staggered, so four scores read as four
+     answers rather than one flash. */
+  /* NO stroke-dasharray HERE. The ring's own dasharray is what makes a 9 a
+     nine-tenths arc — "135.7 150.8" on the element — and a CSS declaration
+     beats a presentation attribute, so setting it to the full circumference
+     here drew every score as a closed circle. A 9 and a 10 became the same
+     picture. Only the offset is animated; the arc stays the arc. */
+  .app[data-mode="dashboard"] .dc-gauge .val {
+    animation: viz-draw 900ms cubic-bezier(.4, 0, .2, 1) both;
+    animation-delay: calc(120ms + var(--i, 0) * 90ms);
+  }
+
+  /* The badge is the answer the sheet was built to give, so it lands last and
+     lands with weight. */
+  .app[data-mode="dashboard"] .dc-rating-badge {
+    transform-origin: center;
+    animation: viz-pop 460ms cubic-bezier(.34, 1.4, .64, 1) both;
+    animation-delay: 220ms;
+  }
+
+  /* KPI figures rise into place rather than popping: they are read, not
+     watched, and a number that bounces is a number you look at twice. */
+  .app[data-mode="dashboard"] .dc-stat-val,
+  .app[data-mode="dashboard"] .dc-gauge-num {
+    animation: dashIn 420ms cubic-bezier(.16, 1, .3, 1) both;
+    animation-delay: 180ms;
+  }
+}
+
+/* An export rasterises whatever is on screen at that instant, so anything
+   caught mid-entrance would be exported half-arrived. Every keyframe above is
+   `from`-only, which makes switching them off the same as finishing them. */
+#dashGrid.exporting .dc-gauge .val,
+#dashGrid.exporting .dc-rating-badge,
+#dashGrid.exporting .dc-stat-val,
+#dashGrid.exporting .dc-gauge-num { animation: none !important; }
+
+/* The operator's own preference, which is not the same question as the OS's. */
+body.reduce-motion .dc-gauge .val,
+body.reduce-motion .dc-rating-badge,
+body.reduce-motion .dc-stat-val,
+body.reduce-motion .dc-gauge-num { animation: none !important; }
+
+/* Small buttons the sheet uses for add/remove. Deliberately reusing the legend
+   card's .legend-x so the two editable surfaces feel like one product. */
+.rs-add {
+  border: 1px solid rgba(10, 30, 60, .2);
+  background: #fff;
+  color: #17202B;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font: 600 10.5px/1 var(--font, inherit);
+  cursor: pointer;
+}
+.rs-add:hover { border-color: #17624a; color: #17624a; }
+.rs-del { color: #7C8AA0; }
+.rs-panel [contenteditable]:focus {
+  outline: 2px solid #17624a;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+#rsHead [contenteditable]:focus { outline: 2px solid #FFD166; outline-offset: 2px; border-radius: 4px; }
+
+/* ---------------------------------------------------------------------------
+ * The text formatting bar
+ *
+ * Floating over the selection rather than parked in the format pane: the pane
+ * is 268px away from the words being marked, and a control you have to look
+ * away from to reach is one you stop using. Fixed positioning, because it is
+ * placed from viewport coordinates.
+ * ------------------------------------------------------------------------ */
+
+/* Layout only. The surface comes from `.frost` — see css/map.css — so this bar
+   is made of the same glass as every other floating pane in the app, adapts to
+   the theme with them, and falls back to a solid fill when Preferences turns
+   glass off. The drop shadow is the one thing added on top: this pane floats
+   over a card rather than over the map, and needs to read as being above it. */
+.rich-bar {
+  position: fixed;
+  z-index: 2400;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 12px;
+}
+.rich-bar.open { display: flex; }
+.rich-bar.frost { box-shadow: var(--glass-highlight), 0 10px 30px rgba(4, 10, 22, .34); }
+body.no-glass .rich-bar.frost { box-shadow: 0 10px 30px rgba(4, 10, 22, .34); }
+
+.rich-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1 var(--font, inherit);
+  cursor: pointer;
+}
+/* Hover and the on-state are drawn from the ink rather than from a surface
+   token: a glass pane has whatever is behind it showing through, so a
+   translucent "surface" laid on top of it barely registers. */
+.rich-bar button:hover { background: rgba(var(--text-rgb), 0.12); }
+.rich-bar button.on { background: var(--accent); color: #fff; }
+.rich-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.rich-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: rgba(var(--text-rgb), 0.22);
+}
+
+/* The inks are the mark itself, so they are shown rather than named. */
+.rich-ink { min-width: 24px; padding: 0 3px; }
+.rich-ink i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(var(--text-rgb), 0.28);
+}
+/* A swatch of "no colour" has to say so — an empty square reads as white.
+   Drawn on a pseudo-element, NOT as this element's own background-image: the
+   button writes `style="background:transparent"` inline, and the `background`
+   shorthand resets background-image, so the slash was being erased by the very
+   attribute that made the swatch mean "none". Inline beats the stylesheet. */
+.rich-ink-off i { position: relative; overflow: hidden; }
+.rich-ink-off i::after {
+  content: '';
+  position: absolute;
+  left: -30%;
+  top: 50%;
+  width: 160%;
+  height: 2px;
+  background: var(--danger, #d64545);
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+/* The marks as they read on a card. `mark` and a highlighted span carry the
+   reader's ink, not the theme's, so they keep dark text on a light wash in both
+   themes — a highlight that inverts is not a highlight. */
+.dash-card mark,
+.dash-card span[style*="background"] {
+  color: #14243d;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.dash-card mark { background: #fff3a3; }
+
+/* A filled table row. The fill and its ink are written inline by
+   dashTableHtml() — see dashInkOn() for why the ink cannot stay the theme's.
+   What is needed here is only to get the card's zebra striping out of the way:
+   a stripe laid over a chosen fill is that fill in two slightly different
+   shades, which reads as a rendering fault rather than as a choice. */
+.dc-table tr.dc-tr-fill,
+.dc-table tr.dc-tr-fill td,
+.dc-table tr.dc-tr-fill th { background: transparent; }
+.dc-table tr.dc-tr-fill td,
+.dc-table tr.dc-tr-fill th { border-color: rgba(255, 255, 255, .22); }
+
+/* THE INK HAS TO REACH THE TEXT. The fill and its ink are written on the row,
+   but `.dc-th` and `.dc-td` each set a colour of their own, and a rule beats
+   an inherited value — so the fill landed and the ink did not, leaving a header
+   in muted grey on navy. `inherit` hands the row's ink back to the cell.
+   Only on a filled row: everywhere else the theme's own ink is correct. */
+.dc-table tr.dc-tr-fill .dc-th,
+.dc-table tr.dc-tr-fill .dc-td { color: inherit; }
+
+/* ---------------------------------------------------------------------------
+ * Table rules, banding and density
+ *
+ * Three separate decisions, because a spreadsheet lets you make them
+ * separately: where the lines are, whether alternate rows are tinted, and how
+ * much air each row gets. Coupling them would mean turning off the rules to
+ * get a tighter table.
+ * ------------------------------------------------------------------------ */
+
+/* Rules. `rows` is the default the card has always had. */
+.dc-table.dc-rule-none th,
+.dc-table.dc-rule-none td { border: 0; }
+.dc-table.dc-rule-grid th,
+.dc-table.dc-rule-grid td {
+  border: 1px solid var(--border);
+  padding-left: 8px;
+}
+/* An outline only: the frame, with nothing inside it. */
+.dc-table.dc-rule-box th,
+.dc-table.dc-rule-box td { border: 0; }
+.dc-table.dc-rule-box { outline: 1px solid var(--border); }
+
+/* THE HEADER IS THE TOP OF THE TABLE, not a caption floating above it.
+   The body's banding runs the full width of the card while the header carried
+   no ground at all and a rule at 12% opacity — so the column names read as a
+   line of text sitting above a striped block rather than as its first row.
+   A ground slightly deeper than the banding, and a rule with enough weight to
+   bind the two, which is what every printed report table does.
+
+   Not on a row the operator filled: that fill and its ink are a choice, and
+   painting over it would make the Header-row colour control do nothing. */
+.dc-table thead tr:not(.dc-tr-fill):not(.dc-colbar) th {
+  background: rgba(var(--text-rgb), .06);
+}
+.dc-table:not(.dc-rule-none) thead tr:not(.dc-tr-fill):not(.dc-colbar) th {
+  /* 2px, not 1.5: the table collapses its borders and the browser rounds the
+     resolved width, so 1.5 came back out as the same 1px the body rows use —
+     see the cell borders in dashTable.js, which hit this first. */
+  border-bottom: 2px solid rgba(var(--text-rgb), .3);
+}
+/* The row-number gutter keeps its own frame colour in edit mode. */
+.dc-table thead tr .dc-rowno { background: var(--surface-2, rgba(127, 143, 173, .12)); }
+
+/* Banding. Skipped on a row that carries a fill of its own — a stripe over a
+   chosen colour is that colour in two shades, which reads as a fault. */
+.dc-table.dc-band-on tbody tr:nth-child(even):not(.dc-tr-fill) td {
+  background: rgba(var(--text-rgb), 0.04);
+}
+
+.dc-table.dc-dense-compact th,
+.dc-table.dc-dense-compact td { padding-top: 2px; padding-bottom: 2px; }
+.dc-table.dc-dense-roomy th,
+.dc-table.dc-dense-roomy td { padding-top: 9px; padding-bottom: 9px; }
+
+/* An axis title. Quieter than a tick label — it names the scale rather than
+   being part of it, and a title as loud as the numbers competes with them. */
+.viz-axtitle {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  fill: var(--text-2);
+}
+
+/* ---------------------------------------------------------------------------
+   The table's spreadsheet frame — edit mode only
+   ---------------------------------------------------------------------------
+   Column tabs across the top, row numbers down the side, a corner that selects
+   everything. Only drawn while the board is being edited: a finished card and
+   every export see the plain table, so none of this reaches a client.
+   --------------------------------------------------------------------------- */
+
+.dc-gutcol { width: 26px; }
+
+.dc-colbar th,
+.dc-rowno {
+  background: var(--surface-2, rgba(127, 143, 173, .12));
+  color: var(--text-2);
+  font: 600 9.5px/1 var(--font, inherit);
+  text-align: center;
+  padding: 3px 2px;
+  position: relative;
+  user-select: none;
+  cursor: pointer;
+  border: 1px solid var(--line, rgba(127, 143, 173, .22));
+}
+
+.dc-rowno { vertical-align: middle; width: 26px; }
+
+.dc-coltab.on,
+.dc-rowno.on {
+  background: var(--orange-soft, rgba(242, 107, 33, .18));
+  color: var(--text);
+}
+
+.dc-corner { width: 26px; padding: 0 !important; }
+
+.dc-selall {
+  width: 100%;
+  height: 100%;
+  min-height: 15px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+/* The corner triangle every spreadsheet puts here. */
+.dc-selall::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  border: 5px solid transparent;
+  border-right-color: var(--text-2);
+  border-bottom-color: var(--text-2);
+  opacity: .55;
+}
+.dc-selall:hover::after { opacity: 1; }
+
+/* THE GRIP IS THE EDGE OF THE TAB. A separate handle beside the tab would need
+   its own column of space; the trailing 6px of the tab itself is where a
+   spreadsheet already trains people to grab. */
+.dc-cgrip,
+.dc-rgrip {
+  position: absolute;
+  z-index: 2;
+}
+.dc-cgrip { top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; }
+.dc-rgrip { left: 0; bottom: -3px; height: 7px; width: 100%; cursor: row-resize; }
+.dc-cgrip:hover { background: var(--orange); opacity: .5; }
+.dc-rgrip:hover { background: var(--orange); opacity: .5; }
+
+/* The selection. A ring rather than a fill, so a cell that already carries a
+   colour still shows it — a highlight that hid the formatting you are about to
+   change would be the wrong way round. */
+.dc-table .dc-cell.dc-sel {
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+  background-image: linear-gradient(rgba(242, 107, 33, .10), rgba(242, 107, 33, .10));
+}
+
+/* In edit mode the grid is visible, as it is in a sheet — you cannot tell what
+   you have selected without seeing where the cells end. */
+.dc-table.dc-grid .dc-cell {
+  border: 1px solid var(--line, rgba(127, 143, 173, .22));
+}
+
+.dc-pastehint {
+  margin-left: 8px;
+  font-size: 10.5px;
+  opacity: .7;
+  align-self: center;
+}
+
+/* THE GRID SAYS IT BETTER. Every editable field on the board carries a dashed
+   ring so you can see it is editable; inside the table that ring now sits
+   3px inside a cell border that says the same thing, so each cell reads as two
+   nested boxes. The grid line is the spreadsheet's own affordance — keep it and
+   drop the ring, but keep the focus ring, which says something the grid does
+   not: this is the cell you are typing in. */
+.app.dash-editing .dc-table.dc-grid .dc-cell [contenteditable] {
+  outline: none;
+  outline-offset: 0;
+}
+.app.dash-editing .dc-table.dc-grid .dc-cell [contenteditable]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* A list in a card. The app's reset strips list styling everywhere, which is
+   right for the nav and the panels and wrong here — a bulleted list somebody
+   made with the toolbar has to look like one. Markers inside the box so a
+   narrow card does not hang them off its left edge into the gap. */
+.dash-card ul,
+.dash-card ol,
+#rsBody ul,
+#rsBody ol {
+  margin: .35em 0 .35em 1.15em;
+  padding: 0;
+  list-style-position: outside;
+}
+.dash-card ul, #rsBody ul { list-style-type: disc; }
+.dash-card ol, #rsBody ol { list-style-type: decimal; }
+.dash-card li, #rsBody li { margin: .12em 0; }
+
+/* Seven border buttons in a pane 250px wide: they wrap, and each one has to
+   stay square so the little diagrams inside them line up across the two rows. */
+.df-seg.df-bd {
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.df-seg.df-bd button {
+  flex: none;
+  width: 28px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.df-seg.df-bd button svg { display: block; }
+
+/* The column's own delete, matching the one every row has carried. Hidden until
+   the tab is under the pointer or its column is selected: seven letters each
+   wearing a permanent × is a header strip of nothing but buttons. */
+.dc-coltab { position: relative; }
+.dc-coln { display: inline-block; }
+.dc-colx {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-2);
+  font: 700 12px/1 var(--font, inherit);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, color .12s, background .12s;
+}
+.dc-coltab:hover .dc-colx,
+.dc-coltab.on .dc-colx { opacity: .75; }
+.dc-colx:hover { opacity: 1; color: var(--danger, #E5484D); background: rgba(var(--text-rgb), .1); }
+.dc-colx:focus-visible { opacity: 1; outline: 2px solid var(--accent); }
+
+/* The sheet's context menu. Its own element rather than the map's #ctxMenu,
+   which is positioned inside #mapWrap and would open off-screen over a card. */
+.dc-sheetmenu {
+  position: fixed;
+  z-index: 6000;
+  min-width: 176px;
+  padding: 5px;
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .34);
+  font-size: 12px;
+  user-select: none;
+}
+.dc-sheetmenu .lbl {
+  padding: 4px 9px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.dc-sheetmenu .mi {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.dc-sheetmenu .mi:hover { background: rgba(var(--text-rgb), .09); }
+.dc-sheetmenu .mi .ico {
+  width: 14px;
+  text-align: center;
+  color: var(--text-2);
+  font-weight: 700;
+}
+.dc-sheetmenu .mi.off { opacity: .38; cursor: default; }
+.dc-sheetmenu .mi.off:hover { background: none; }
+.dc-sheetmenu .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(var(--text-rgb), .14);
+}
+
+/* THE INK HAS TO REACH THE TEXT — see the `dc-ink` comment in dashTableHtml().
+   The words sit in a .dc-th/.dc-td div inside the cell, and those set a colour
+   of their own; a rule beats an inherited value, so a cell given a dark fill
+   and a light ink landed the fill and kept the theme's dark text on top of it.
+   Only on cells that actually carry one: everywhere else the theme is right. */
+.dc-table .dc-cell.dc-ink .dc-th,
+.dc-table .dc-cell.dc-ink .dc-td { color: inherit; }
+/* Same again for a chosen size: `.dc-th` sets one of its own, so a header cell
+   set to 18px stayed at 9.5 while the cell around it measured 18 — which is
+   what an assertion reading the cell rather than the words in it missed. */
+.dc-table .dc-cell.dc-sized .dc-th,
+.dc-table .dc-cell.dc-sized .dc-td { font-size: inherit; }
+
+/* ---------------------------------------------------------------------------
+ * The nav's controls, in the top bar
+ *
+ * They arrive here by re-parenting when the board opens (ui/appMode.js), so
+ * they carry their map-mode styling with them and have to be told to look like
+ * the bar rather than like the rail or the frosted map chrome.
+ * ------------------------------------------------------------------------ */
+
+#dashTopNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* The pill lives on the map with `position: absolute` and a frosted ground.
+   In the bar it is an ordinary inline control. */
+.app[data-mode="dashboard"] #dashTopNav #modeSwitch {
+  display: flex;
+  position: static;
+  inset: auto;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--field, rgba(0, 0, 0, .04));
+  border: 1px solid var(--field-edge, rgba(0, 0, 0, .08));
+}
+
+/* The rail's items are full-width rows with a left-aligned label; in the bar
+   they are buttons the width of their own text. */
+.app[data-mode="dashboard"] #dashTopNav .dn-item {
+  width: auto;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
