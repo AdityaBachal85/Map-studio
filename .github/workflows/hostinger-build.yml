@@ -18,7 +18,9 @@
 # HISTORY IS KEPT on hostinger-build, one commit per build, rather than
 # force-pushed: a deploy that pulls a branch whose history was rewritten can
 # fail as a non-fast-forward, and "the site stopped updating" is a quiet way
-# for that to show. Each commit names the source commit it was built from.
+# for that to show. Each commit names the source commit it was built from, and
+# a push that changes nothing the site serves — the docs, the tests — publishes
+# nothing at all.
 
 name: Build for Hostinger
 
@@ -79,8 +81,13 @@ jobs:
           cp -a ../dist/. .
 
           git add -A
-          if git diff --cached --quiet; then
-            echo "The build is identical to what is already published. Nothing to do."
+          # BUILD.txt records when the build ran, so it differs every time.
+          # Compared without it, or a push that touched only the docs would
+          # publish a "new" site identical to the old one and send Hostinger
+          # off to redeploy it. When something real changed, BUILD.txt goes
+          # along with it — it is staged; it just does not decide.
+          if git diff --cached --quiet -- . ':(exclude)BUILD.txt'; then
+            echo "The site is identical to what is already published. Nothing to do."
             exit 0
           fi
           git commit -q -m "v${VERSION}, built from ${SOURCE:0:7}"

@@ -212,11 +212,13 @@ fs.writeFileSync(path.join(DIST, 'BUILD.txt'),
   + 'version  ' + version + '\n'
   + 'built    ' + new Date().toISOString() + '\n'
   + 'files    ' + copied + '  (' + mb + ' MB)\n\n'
-  + 'Upload the CONTENTS of this directory into public_html — including the\n'
-  + 'hidden .htaccess file, which the File Manager only shows once "Show\n'
-  + 'hidden files" is ticked in its settings.\n\n'
-  + 'See docs/HOSTINGER-DEPLOY.md in the repository for the full procedure,\n'
-  + 'including the four external services that need this domain added to them.\n');
+  + 'These are the CONTENTS of the site\'s folder — for map.dbotrealty.tech,\n'
+  + 'the subdomain\'s folder, not public_html itself. That includes the hidden\n'
+  + '.htaccess file, which the File Manager only shows once "Show hidden files"\n'
+  + 'is ticked in its settings.\n\n'
+  + 'Usually you will not upload these by hand: Hostinger deploys them from\n'
+  + 'the hostinger-build branch on GitHub. See docs/GO-LIVE.md in the\n'
+  + 'repository for every step, in order.\n');
 
 let zipName = '';
 if (!NO_ZIP) {
