@@ -45,17 +45,43 @@ successfully and immediately appear signed out.
 **✅ Check:** `https://map.dbotrealty.tech` opens with a padlock (it may show an
 empty folder — that's fine for now).
 
-### 3. Upload the site
+### 3. Put the site in it — from GitHub
 
-hPanel → **Files** → **File Manager** → open the subdomain's folder from step 1
-→ upload **`map-studio-<version>-hostinger.zip`** → right-click → **Extract** →
-delete the zip.
+Connecting Hostinger to GitHub means every change pushed to the code updates
+the site by itself; you never upload a zip again.
 
-You should now see `index.html`, `login.html`, `projects.html`, `admin.html`,
-`404.html`, an `api` folder, and **`.htaccess`**. If you can't see `.htaccess`,
-turn on "show hidden files" in the File Manager's settings — it must be there.
+**What Hostinger deploys is the branch `hostinger-build`, not
+`Map-Studio_Hostinger`.** The code branch is about 500 MB on disk — mostly
+`legacy/`, years of build snapshots — and the site inside it is 6 MB. A GitHub
+Action builds the site on every push to `Map-Studio_Hostinger` and commits just
+those 6 MB to `hostinger-build`, so that is the one Hostinger should copy.
 
-**✅ Check:** `https://map.dbotrealty.tech` shows the sign-in page.
+1. Make sure the subdomain's folder from step 1 is **empty** — Hostinger refuses
+   to deploy into a folder with anything in it. (If you uploaded a zip there
+   before, delete its contents. Nothing in it is irreplaceable: the config lives
+   in your home folder, not here — step 6.)
+2. hPanel → **Advanced** → **Git** → **Connect with GitHub**. Approve the
+   Hostinger app, and give it access to **AdityaBachal85/Map-studio**.
+3. Choose:
+   - Repository: **AdityaBachal85/Map-studio**
+   - Branch: **`hostinger-build`**
+   - Directory / install path: the subdomain's folder, **relative to
+     `public_html`** — with the default layout, **`map`**
+4. Deploy. Then turn on **Auto-Deployment** on the same page.
+
+**✅ Check:** `https://map.dbotrealty.tech` shows the sign-in page, and its
+version number at the bottom matches the newest one on GitHub.
+
+<details><summary>No Git option, or would rather upload by hand?</summary>
+
+File Manager → the subdomain's folder → upload
+**`map-studio-<version>-hostinger.zip`** → right-click → **Extract** → delete the
+zip. You should then see `index.html`, `login.html`, `projects.html`,
+`admin.html`, `404.html`, an `api` folder, and **`.htaccess`** — turn on "show
+hidden files" in the File Manager's settings if you can't see it. The zip is the
+same build the Action publishes.
+
+</details>
 
 ### 4. Create the database
 
@@ -155,17 +181,21 @@ In the Supabase dashboard:
 
 ### 9. Export, on your computer
 
+You need one file from the repository, not the whole thing — the full download
+is about 500 MB of old build snapshots.
+
 1. Install **Node.js LTS** from nodejs.org if you don't have it.
    (In a terminal, `node -v` should print a version.)
-2. On GitHub, open **AdityaBachal85/Map-studio**, switch to the branch
-   **`Map-Studio_Hostinger`**, then **Code** → **Download ZIP**. Extract it.
-3. Open a terminal **in the extracted folder** (Windows: open the folder,
-   Shift + right-click → *Open in Terminal*).
-4. Run:
+2. Make an empty folder, e.g. `C:\supabase-export`.
+3. Open
+   [tools/export-supabase.js on GitHub](https://github.com/AdityaBachal85/Map-studio/blob/Map-Studio_Hostinger/tools/export-supabase.js)
+   → **Download raw file** → save it into that folder.
+4. Open a terminal **in that folder** (Windows: open the folder, Shift +
+   right-click → *Open in Terminal*) and run:
 
 ```
 npm install --no-save pg
-node tools/export-supabase.js --dsn "PASTE-THE-CONNECTION-STRING-HERE"
+node export-supabase.js --dsn "PASTE-THE-CONNECTION-STRING-HERE" --out map-studio-export.json
 ```
 
 Keep the quotes around the connection string.
@@ -173,7 +203,7 @@ Keep the quotes around the connection string.
 **✅ Check:** it ends with something like
 
 ```
-Wrote …\map-studio-export.json
+Wrote map-studio-export.json
   12 accounts (10 with a password that will carry over, 2 who will need the reset link)
   87 maps
 ```
@@ -296,3 +326,26 @@ Only after the site has been in use for a few days and nobody has reported a
 missing map. And check first whether Render's `DATABASE_URL` points at Supabase:
 if it does, pausing Supabase stops AI reports — that database is separate from
 everything above and isn't moved by it.
+
+---
+
+## Later: updating the site
+
+Push to `Map-Studio_Hostinger`. That's all:
+
+1. The **Build for Hostinger** action builds the site (GitHub → your repo →
+   **Actions** shows it running — about a minute).
+2. It commits the result to `hostinger-build`, naming the version and the
+   commit it was built from.
+3. Hostinger's auto-deployment pulls it.
+
+Your config, database and everybody's maps are untouched by a deploy: the
+config is in your home folder and the data is in MySQL, neither of which is in
+the site folder that gets replaced.
+
+**If the site didn't update:** check the action first. A red ✗ there usually
+means the build refused something on purpose — most often that the version
+wasn't bumped consistently (`node tools/stamp-assets.js --bump` fixes it) — and
+in that case nothing was published, so the site is still on the previous good
+version rather than a broken one.
+
