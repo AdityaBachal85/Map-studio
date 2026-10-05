@@ -1,0 +1,88 @@
+# Build the Hostinger package on every push, and publish it as a branch
+# Hostinger can deploy from.
+#
+# WHY A SEPARATE BRANCH RATHER THAN DEPLOYING THIS ONE. Hostinger's Git deploy
+# clones a branch, whole, into the site's folder. This branch is ~500 MB on
+# disk — legacy/ alone is 473 MB of single-file build snapshots — and the site
+# inside it is about 6 MB. Pointing Hostinger here would put every snapshot,
+# the tests, the Node backend and the docs onto a shared plan's quota, to serve
+# files no visitor will ever request. tools/build-hostinger.js already knows
+# exactly what the site is (an allow-list, not a deny-list), so this runs it and
+# publishes the result, and Hostinger deploys only that.
+#
+# THE SAME BUILD AS THE ZIP. Nothing here decides what ships — that is
+# tools/build-hostinger.js, which also refuses to build a tree that is not
+# stamped at one version or that references a file it left out. If this
+# workflow fails, the zip would have been wrong too.
+#
+# HISTORY IS KEPT on hostinger-build, one commit per build, rather than
+# force-pushed: a deploy that pulls a branch whose history was rewritten can
+# fail as a non-fast-forward, and "the site stopped updating" is a quiet way
+# for that to show. Each commit names the source commit it was built from.
+
+name: Build for Hostinger
+
+on:
+  push:
+    branches: [Map-Studio_Hostinger]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two pushes in quick succession must not race each other to the branch.
+concurrency:
+  group: hostinger-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the site
+        run: node tools/build-hostinger.js --no-zip
+
+      - name: Publish it to the hostinger-build branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SOURCE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "console.log(require('fs').readFileSync('js/constants.js','utf8').match(/APP_VERSION\s*=\s*'([^']+)'/)[1])")
+
+          mkdir publish && cd publish
+          git init -q
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+          # Continue the existing branch, or start it on the first run.
+          if git fetch -q --depth=1 origin hostinger-build 2>/dev/null; then
+            git checkout -q -B hostinger-build FETCH_HEAD
+          else
+            git checkout -q --orphan hostinger-build
+          fi
+
+          # Replace everything but .git with the fresh build — dotfiles
+          # included, since .htaccess is the file the site cannot run without.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../dist/. .
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The build is identical to what is already published. Nothing to do."
+            exit 0
+          fi
+          git commit -q -m "v${VERSION}, built from ${SOURCE:0:7}"
+          git push -q origin hostinger-build
+          echo "Published v${VERSION} (from ${SOURCE:0:7}) to hostinger-build."
