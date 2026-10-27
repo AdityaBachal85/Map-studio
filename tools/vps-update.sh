@@ -53,10 +53,14 @@ PHPV="8.3"
 # OVERPASS_MIRRORS), under the ids the relay serves them at.
 OVERPASS_RELAYS=(
   "de      overpass-api.de/api/interpreter"
-  "kumi    overpass.kumi.systems/api/interpreter"
+  "fr      overpass.openstreetmap.fr/api/interpreter"
   "coffee  overpass.private.coffee/api/interpreter"
   "mailru  maps.mail.ru/osm/tools/overpass/api/interpreter"
 )
+# How the relay introduces itself. overpass-api.de has refused requests that
+# do not name the program asking since April 2026 — curl's default and the
+# stock names of the usual HTTP libraries included — with a 406.
+RELAY_UA="DBOTMapStudio/1.0 (+https://map.dbotrealty.tech; Overpass relay for ring scans)"
 SNIPPET="/etc/nginx/snippets/map-studio-overpass.conf"
 sock=""
 
@@ -366,8 +370,8 @@ location = /osm/overpass/$id {
     proxy_pass_request_headers off;
     proxy_set_header Host $host;
     proxy_set_header Content-Type "application/x-www-form-urlencoded";
-    proxy_set_header Accept "application/json";
-    proxy_set_header User-Agent "DBOT Map Studio relay (https://map.dbotrealty.tech)";
+    proxy_set_header Accept "*/*";
+    proxy_set_header User-Agent "$RELAY_UA";
     proxy_hide_header Set-Cookie;
 
     # Overpass may take the 25 s the query allows it, plus the download.
@@ -536,14 +540,25 @@ step "Check"
       bad "the Overpass relay is installed, but $DOMAIN does not answer its ping."
     fi
 
-    # The relay is only as good as this server's own way out.
+    # The relay is only as good as this server's own way out — asked exactly
+    # the way the relay asks, User-Agent included. Asked with curl's own, as
+    # this first was, overpass-api.de answers 406 to a request the relay
+    # would have had answered, and the check reports a failure that is not one.
     reach=0
     for entry in "${OVERPASS_RELAYS[@]}"; do
       read -r id path <<<"$entry"
-      c="$(curl -s -m 25 -o /dev/null -w '%{http_code}' \
+      res="$(curl -s -m 25 -o /dev/null -w '%{http_code}|%{errormsg}' \
+        -A "$RELAY_UA" -H 'Accept: */*' \
         --data-urlencode 'data=[out:json][timeout:10];node(1);out ids;' "https://$path" 2>/dev/null)"
-      if [ "$c" = 200 ]; then reach=$((reach + 1))
-      else note "this server got no answer from ${path%%/*} (HTTP ${c:-none})"; fi
+      c="${res%%|*}"; why="${res#*|}"
+      case "$c" in
+        200) reach=$((reach + 1)); ok "this server reaches ${path%%/*}" ;;
+        406) note "${path%%/*} refuses this server (406): it blocks some hosting networks outright" ;;
+        429) note "${path%%/*} is rate-limiting this server (429) — it usually passes within minutes" ;;
+        5*)  note "${path%%/*} is up but failing (HTTP $c) — their problem, not this server's" ;;
+        000|"") note "${path%%/*} did not answer: ${why:-no response}" ;;
+        *)   note "${path%%/*} answered HTTP $c" ;;
+      esac
     done
     if [ "$reach" -gt 0 ]; then ok "this server reaches $reach of ${#OVERPASS_RELAYS[@]} Overpass servers"
     else bad "this server cannot reach any Overpass server either, so the relay cannot help yet."; fi
