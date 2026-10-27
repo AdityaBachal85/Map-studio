@@ -1,6 +1,6 @@
 DBOT Map Studio
-version  6.0236
-built    2026-10-27T11:10:02.858Z
+version  6.0237
+built    2026-10-27T11:28:28.152Z
 files    178  (5.6 MB)
 
 These are the CONTENTS of the site's folder — for map.dbotrealty.tech,
