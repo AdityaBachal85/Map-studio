@@ -257,13 +257,19 @@ const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minA
     };
     const A = fresh();
     const list = await A.overpassMirrorList();
-    ck('a site that relays lists its own routes first, then the mirrors direct',
-      list.length === 8 && list[0] === '/osm/overpass/de' && list[4] === A.OVERPASS_MIRRORS[0],
-      list.slice(0, 2).join(' ') + ' … ' + short(list[4]));
+    // Direct first: where the browser can reach the mirrors — as it could
+    // from the GitHub Pages copy all along — that is the fast path, and each
+    // person's queries count against their own address, not the server's.
+    ck('a site that relays lists the mirrors direct first, then its own routes',
+      list.length === 8 && list[0] === A.OVERPASS_MIRRORS[0] && list[4] === '/osm/overpass/de',
+      short(list[0]) + ' … ' + list.slice(4, 6).join(' '));
+    const t0 = Date.now();
     const got = await A.overpassRace('q', { gate: () => Promise.resolve() });
     ck('so a browser that cannot reach any mirror still gets its answer, through the site',
       got.ok && got.host === '/osm/overpass/de', got.host || JSON.stringify(got.reasons));
-    ck('without trying the blocked mirrors at all', !asked.some(u => /^https:/.test(u)));
+    ck('and the blocked mirrors in front of it cost no wait: they fail at once and hand over',
+      asked.filter(u => /^https:/.test(u)).length === 4 && Date.now() - t0 < 300,
+      asked.filter(u => /^https:/.test(u)).length + ' refused, ' + (Date.now() - t0) + 'ms');
     await A.overpassRace('q', { gate: () => Promise.resolve() });
     ck('and the site is asked whether it relays once per page, not once per scan',
       asked.filter(u => /ping$/.test(u)).length === 1);

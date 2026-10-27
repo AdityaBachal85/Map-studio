@@ -438,6 +438,62 @@ step "Overpass relay"
 fi
 
 # ---------------------------------------------------------------------------
+if [ "$SITE_ONLY" = 0 ] && [ "$SERVER" = nginx ]; then
+step "Content-Security-Policy"
+# ---------------------------------------------------------------------------
+
+  # A CSP WITHOUT OVERPASS IN IT STOPS EVERY RING SCAN, and it looks exactly
+  # like a firewall: the browser refuses the connection before a byte leaves,
+  # and fetch() sees the same error either way. That is what made the VPS copy
+  # fail while the GitHub Pages copy — same browser, same network, no such
+  # header — scanned fine. Where nginx sets one, the four Overpass servers are
+  # added to its connect-src; nothing else in the policy is touched.
+  overpass_origins="$(for e in "${OVERPASS_RELAYS[@]}"; do read -r _ p <<<"$e"; printf 'https://%s ' "${p%%/*}"; done)"
+  overpass_origins="${overpass_origins% }"
+  csp_files="$(nginx -T 2>/dev/null | awk '
+    /^# configuration file / { f = $4; sub(/:$/, "", f); next }
+    /^[ \t]*#/ { next }
+    tolower($0) ~ /add_header[ \t]+["\x27]?content-security-policy["\x27]?[ \t]/ { print f }' | sort -u)"
+  if [ -z "$csp_files" ]; then
+    ok "nginx sets no Content-Security-Policy, so nothing here stops the browser reaching Overpass"
+  else
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BACKUP_DIR"; chmod 700 "$BACKUP_DIR"
+    csp_edited=(); csp_stuck=()
+    for f in $csp_files; do
+      real="$(readlink -f "$f")"
+      grep -iE 'add_header[[:space:]]+.?content-security-policy.?[[:space:]]' "$real" | grep -vq 'overpass-api\.de' || continue
+      bk="$BACKUP_DIR/csp-$(basename "$real")-$stamp"
+      cp -p "$real" "$bk"
+      # Into connect-src where the policy has one. Where it has only
+      # default-src, connect-src falls back to that — so the new connect-src
+      # starts as a copy of it, and allows nothing default-src did not, bar
+      # these four.
+      OVH="$overpass_origins" perl -i -pe '
+        if (/add_header\s+["\x27]?Content-Security-Policy["\x27]?\s/i && !/^\s*#/ && !/overpass-api\.de/) {
+          if (/connect-src/) { s/connect-src/connect-src $ENV{OVH}/; }
+          elsif (/default-src([^;"]*)/) { my $d = $1; s/(default-src[^;"]*)/$1; connect-src$d $ENV{OVH}/; }
+        }' "$real"
+      # Only a change that was made is reported as one. A policy written
+      # through a variable, or split across lines, has nothing here to edit.
+      if cmp -s "$bk" "$real"; then rm -f "$bk"; csp_stuck+=("$real")
+      else csp_edited+=("$real"); fi
+    done
+    if [ ${#csp_stuck[@]} -gt 0 ]; then
+      bad "a Content-Security-Policy is set in ${csp_stuck[*]} in a form this script cannot edit safely. Add these to its connect-src by hand: $overpass_origins"
+    fi
+    if [ ${#csp_edited[@]} -eq 0 ]; then
+      [ ${#csp_stuck[@]} -gt 0 ] || ok "nginx's Content-Security-Policy already allows the Overpass servers"
+    elif test_out="$(nginx -t 2>&1)"; then
+      ok "added the four Overpass servers to the Content-Security-Policy in ${csp_edited[*]} (originals in $BACKUP_DIR)"
+    else
+      for f in "${csp_edited[@]}"; do cp -p "$BACKUP_DIR/csp-$(basename "$f")-$stamp" "$f"; done
+      bad "nginx refused the updated Content-Security-Policy, so it was put back: $(printf '%s' "$test_out" | grep -m1 -iE 'emerg|error' | head -c 300)"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 if [ "$SITE_ONLY" = 0 ]; then
 step "Restart"
 # ---------------------------------------------------------------------------
@@ -516,6 +572,28 @@ step "Check"
   else
     ok "api/config.php cannot be downloaded"
   fi
+
+  # What the browser is actually told, whoever set it: nginx, PHP, a proxy in
+  # front. A policy that restricts connections without naming Overpass is the
+  # scan's one silent killer.
+  # By curl's exit status, not by whether anything came back: a failed
+  # connection can still print headers — a proxy's own refusal, say — and those
+  # are not this site's.
+  hdrs="$(curl -skI -m 15 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/index.html" 2>/dev/null)" \
+    || hdrs="$(curl -sI -m 15 -H "Host: $DOMAIN" "http://127.0.0.1/index.html" 2>/dev/null)"
+  csp="$(printf '%s' "$hdrs" | tr -d '\r' | awk 'tolower($1) == "content-security-policy:" { $1 = ""; print; exit }')"
+  # connect-src decides, or default-src where there is none.
+  eff="$(printf '%s' "$csp" | grep -oE 'connect-src[^;]*' | head -1)"
+  [ -n "$eff" ] || eff="$(printf '%s' "$csp" | grep -oE 'default-src[^;]*' | head -1)"
+  if [ -z "$csp" ]; then
+    ok "the site sends no Content-Security-Policy, so the browser may reach Overpass directly"
+  elif [ -z "$eff" ] || printf '%s' "$eff" | grep -qE 'overpass-api\.de|(^|[[:space:]])(\*|https:)([[:space:]]|$)'; then
+    ok "the site's Content-Security-Policy lets the browser reach Overpass"
+  else
+    bad "the site's Content-Security-Policy stops the browser reaching Overpass, so ring scans fail: $(printf '%s' "$eff" | head -c 200)"
+  fi
+  other="$(printf '%s' "$hdrs" | tr -d '\r' | grep -iE '^cross-origin-(embedder|opener|resource)-policy:' | tr '\n' ' ')"
+  [ -n "$other" ] && note "also sent: $other"
 
   if [ "$SERVER" = nginx ] && { [ "$RELAY" = 1 ] || [ -f "$SNIPPET" ]; }; then
     post_code() {

@@ -1658,16 +1658,46 @@ function overpassRelayReady() {
 }
 
 /**
- * Every route to Overpass this page has: through the site first, where it
- * relays, then direct. Ordered by overpassMirrorOrder from there, so a route
- * that keeps failing — the direct ones, behind a firewall — drops behind the
- * ones that answer, and stays there.
+ * Every route to Overpass this page has: direct first, then through the site
+ * where it relays. Ordered by overpassMirrorOrder from there, so a route that
+ * keeps failing drops behind the ones that answer, and stays there.
+ *
+ * DIRECT FIRST, BECAUSE DIRECT IS WHAT USUALLY WORKS. The relay went first for
+ * a release, and on a server that could not reach Overpass itself every scan
+ * then waited out four relayed attempts before asking the mirrors the browser
+ * could have reached all along — the GitHub Pages copy, asking them directly,
+ * was answering while this one hung. Direct requests that are blocked fail in
+ * well under a second, so the relay behind them costs nothing when it is
+ * needed, and each person's queries count against their own address rather
+ * than all of them against the server's.
  * @returns {Promise<string[]>}
  */
 async function overpassMirrorList() {
   const relayed = (await overpassRelayReady())
     ? OVERPASS_RELAY_IDS.map(id => OVERPASS_RELAY_BASE + id) : [];
-  return relayed.concat(OVERPASS_MIRRORS);
+  return OVERPASS_MIRRORS.concat(relayed);
+}
+
+/**
+ * Mirrors this page's own Content-Security-Policy refused to let it connect to.
+ *
+ * A CSP BLOCK AND A FIREWALL LOOK IDENTICAL TO fetch(): both are a TypeError,
+ * instantly. So a server whose nginx sent a CSP without Overpass in its
+ * connect-src told every reader that their office firewall was the problem,
+ * while the same browser scanned fine from the GitHub Pages copy, which sends
+ * no such header. The browser does say which it was — to the document, as a
+ * securitypolicyviolation event — so that is listened for.
+ */
+const _overpassCspBlocked = new Set();
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('securitypolicyviolation', e => {
+    const dir = String(e.effectiveDirective || e.violatedDirective || '');
+    const uri = String(e.blockedURI || '');
+    if (/^(connect-src|default-src)/.test(dir)
+      && OVERPASS_MIRRORS.some(m => uri.indexOf(m.split('/').slice(0, 3).join('/')) === 0)) {
+      _overpassCspBlocked.add(uri.split('/').slice(0, 3).join('/'));
+    }
+  });
 }
 
 /**
@@ -1829,7 +1859,14 @@ async function overpassRace(ql, o) {
     clearTimeout(overall);
     clearTimeout(hedgeTimer);
   }
-  return won || { ok: false, reasons };
+  if (won) return won;
+  // A CSP refusal reaches the document as an event a moment after fetch has
+  // already rejected; that moment is given before deciding what to call it.
+  if (reasons.indexOf('network') >= 0 && typeof document !== 'undefined') {
+    await new Promise(r => setTimeout(r, 60));
+    if (_overpassCspBlocked.size) reasons.push('csp');
+  }
+  return { ok: false, reasons };
 }
 
 /* ---------------------------------------------------------------------------
@@ -2186,7 +2223,10 @@ function overpassWorstReason(reasons) {
   // A timeout outranks a bare transport failure: "it did not finish in time"
   // is a fact about the query, and "could not connect" is a guess about the
   // network. Where both happened, the one that can be acted on wins.
-  const rank = r => (r === 'http-400' ? 5 : r === 'http-429' ? 4
+  // A CSP block outranks everything: it is certain, it is the whole story for
+  // every request it stopped, and it is the one failure only the server's
+  // owner can fix.
+  const rank = r => (r === 'csp' ? 6 : r === 'http-400' ? 5 : r === 'http-429' ? 4
     : /^http-5/.test(r) ? 3 : r === 'timeout' ? 2 : 1);
   return reasons.slice().sort((a, b) => rank(b) - rank(a))[0] || 'network';
 }
@@ -2208,6 +2248,12 @@ function ringFeatureMessage(reason, ctx) {
       return 'This ring is too wide for ' + (names || 'the selected types')
         + '. A city-scale search returns thousands of them. Reduce the ring, or untick those.';
     }
+    case 'csp':
+      return 'This site\'s own security settings blocked the scan. The web server sends a'
+        + ' Content-Security-Policy that does not allow OpenStreetMap\'s Overpass servers, so'
+        + ' the browser refused before asking them. It is not your network. Whoever runs the'
+        + ' server can fix it for everyone: tools/vps-update.sh adds the four servers to the'
+        + ' policy\'s connect-src.';
     case 'http-400':
       return 'Overpass rejected the query. That is a bug in Map Studio, not in your ring —'
         + ' please report which types you had ticked.';
