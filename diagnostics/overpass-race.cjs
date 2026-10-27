@@ -218,7 +218,7 @@ const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minA
     };
     const t0 = Date.now();
     const a = await M.fetchOverpassFeatures(19.10, 72.88, 2000, ['rail'], null);
-    const cache = JSON.parse(store['dbot.overpassCache.v1'] || '{}');
+    const cache = JSON.parse(store['dbot.overpassCache.v2'] || '{}');
     ck('a scan whose first mirror timed out on its side takes the next mirror\'s answer',
       a.ok && calls === 2 && Date.now() - t0 < 4000, calls + ' requests, ' + (Date.now() - t0) + 'ms');
     ck('and caches that answer, which is a real one', Object.keys(cache).length === 1);
@@ -229,7 +229,7 @@ const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minA
       return { status: 200, ok: true, json: async () => ({ elements: [], remark: 'runtime error: Query run out of memory' }) };
     };
     const b = await M.fetchOverpassFeatures(19.20, 72.90, 2000, ['rail'], null);
-    const cache2 = JSON.parse(store['dbot.overpassCache.v1'] || '{}');
+    const cache2 = JSON.parse(store['dbot.overpassCache.v2'] || '{}');
     ck('a scan every mirror gave up on is reported as a timeout, not as "nothing here"',
       !b.ok && b.reason === 'timeout', JSON.stringify(b));
     ck('and is not cached as if it were an answer', Object.keys(cache2).length === 1);

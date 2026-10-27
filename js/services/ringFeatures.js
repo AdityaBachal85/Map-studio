@@ -104,7 +104,14 @@ const OVERPASS_CAP = 600;
 /** ~8 m. Finer than anyone can see at the zooms this is drawn at. */
 const OVERPASS_SIMPLIFY_DEG = 0.00007;
 
-const OVERPASS_CACHE_KEY = 'dbot.overpassCache.v1';
+/*
+ * v2 because v1 can hold wrong answers: before 6.0233 a 200 carrying
+ * Overpass's own "runtime error" remark was cached as a definite result — a
+ * scan that timed out on their side, stored for a week as "almost nothing is
+ * here". There is no telling those entries from real ones, so v1 goes.
+ */
+const OVERPASS_CACHE_KEY = 'dbot.overpassCache.v2';
+try { localStorage.removeItem('dbot.overpassCache.v1'); } catch (e) { /* no storage */ }
 const OVERPASS_CACHE_TTL_MS = 7 * 24 * 3600e3;
 /** By bytes, not entries: one entry here is 50-200× a cached boundary. */
 const OVERPASS_CACHE_MAX_BYTES = 1.5e6;
