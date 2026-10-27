@@ -28,6 +28,9 @@ function ms_route_auth(string $method, array $seg): void
     if ($action === 'me' && $method === 'GET') {
         ms_auth_me();
     }
+    if ($action === 'check' && $method === 'GET') {
+        ms_auth_check();
+    }
     if ($action === 'signup' && $method === 'POST') {
         ms_auth_signup();
     }
@@ -72,6 +75,22 @@ function ms_auth_me(): void
         'signupOpen' => ms_config()['allow_signup'],
         'emailDomain' => ms_config()['allowed_email_domain'],
     ]);
+}
+
+/**
+ * 200 for a signed-in request, 401 otherwise — and nothing else.
+ *
+ * For the web server rather than the app: nginx's auth_request asks this
+ * before relaying a ring scan to Overpass (tools/vps-update.sh installs the
+ * relay). /auth/me cannot do that job, because it rightly answers 200 to
+ * everybody. An open relay would let anyone on the internet spend this
+ * server's Overpass allowance and get its address rate-limited for everyone
+ * who actually works here.
+ */
+function ms_auth_check(): void
+{
+    ms_require_user();
+    ms_send(200, ['ok' => true]);
 }
 
 function ms_auth_signup(): void

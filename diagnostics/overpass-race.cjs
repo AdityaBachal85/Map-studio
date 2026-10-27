@@ -236,6 +236,62 @@ const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minA
     globalThis.fetch = realFetch;
   }
 
+  /* ---- through the site's own server, where it relays ---------------------- */
+
+  {
+    // A browser behind a firewall that blocks every mirror — the scan that
+    // came back "Could not reach any Overpass server (tried 4)" in under a
+    // second — on a site that relays. A fresh copy of the module, because
+    // whether the site relays is asked once per page and remembered.
+    const file = path.join(REPO, 'js/services/ringFeatures.js');
+    const fresh = () => { delete require.cache[require.resolve(file)]; return require(file); };
+    const realFetch = globalThis.fetch;
+    delete store[M.OVERPASS_MIRROR_KEY];
+    globalThis.location = { protocol: 'https:' };
+    const asked = [];
+    globalThis.fetch = async (url) => {
+      asked.push(url);
+      if (url === '/osm/overpass/ping') return { ok: true, status: 200, text: async () => 'map-studio-overpass\n' };
+      if (/^https:/.test(url)) throw new TypeError('Failed to fetch');
+      return { ok: true, status: 200, json: async () => ({ elements: [] }) };
+    };
+    const A = fresh();
+    const list = await A.overpassMirrorList();
+    ck('a site that relays lists its own routes first, then the mirrors direct',
+      list.length === 8 && list[0] === '/osm/overpass/de' && list[4] === A.OVERPASS_MIRRORS[0],
+      list.slice(0, 2).join(' ') + ' … ' + short(list[4]));
+    const got = await A.overpassRace('q', { gate: () => Promise.resolve() });
+    ck('so a browser that cannot reach any mirror still gets its answer, through the site',
+      got.ok && got.host === '/osm/overpass/de', got.host || JSON.stringify(got.reasons));
+    ck('without trying the blocked mirrors at all', !asked.some(u => /^https:/.test(u)));
+    await A.overpassRace('q', { gate: () => Promise.resolve() });
+    ck('and the site is asked whether it relays once per page, not once per scan',
+      asked.filter(u => /ping$/.test(u)).length === 1);
+    ck('with the relay on, a failure does not tell anyone to switch it on',
+      !/relaying scans/.test(A.ringFeatureMessage('network')));
+
+    // A site without the relay: nginx's 404, or an HTML page served for any
+    // path. Neither may be taken for it.
+    for (const [what, reply] of [
+      ['a 404', { ok: false, status: 404, text: async () => '<html>404</html>' }],
+      ['an HTML page for any path', { ok: true, status: 200, text: async () => '<!doctype html><title>Map Studio</title>' }],
+    ]) {
+      globalThis.fetch = async (url) => (url === '/osm/overpass/ping' ? reply
+        : { ok: true, status: 200, json: async () => ({ elements: [] }) });
+      const B = fresh();
+      const l = await B.overpassMirrorList();
+      ck('a site answering the ping with ' + what + ' is not taken for a relay',
+        l.join() === B.OVERPASS_MIRRORS.join(), l.length + ' routes');
+      if (what === 'a 404') {
+        ck('and there, the firewall message says the relay would fix it for everyone',
+          /relaying scans/.test(B.ringFeatureMessage('network')));
+      }
+    }
+    globalThis.fetch = realFetch;
+    delete globalThis.location;
+    delete store[M.OVERPASS_MIRROR_KEY];
+  }
+
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
   process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
 })();

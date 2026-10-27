@@ -37,6 +37,26 @@ const OVERPASS_MIRRORS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
+/**
+ * The same four servers, reached through this site's own.
+ *
+ * WHEN THE BROWSER CANNOT REACH OVERPASS AT ALL, NO AMOUNT OF RACING HELPS. An
+ * office firewall or a DNS filter that blocks all four turned every scan into
+ * "Could not reach any Overpass server (tried 4)" in under a second — on a
+ * network that reaches map.dbotrealty.tech perfectly well. So the server can
+ * relay: tools/vps-update.sh gives nginx /osm/overpass/<id>, each passing a
+ * signed-in user's query on to one mirror, and the browser then only ever
+ * talks to its own site. Same servers, same race; only the route differs.
+ *
+ * Optional. A site without the relay answers the ping with a 404, the relay is
+ * never listed, and the scan goes straight to the mirrors as it always did.
+ * In the same order as OVERPASS_MIRRORS.
+ */
+const OVERPASS_RELAY_BASE = '/osm/overpass/';
+const OVERPASS_RELAY_IDS = ['de', 'kumi', 'coffee', 'mailru'];
+/** What the relay's ping answers, so an HTML page served for any path is not mistaken for it. */
+const OVERPASS_RELAY_PING = 'map-studio-overpass';
+
 /** Overpass's own timeout, in seconds, and ours, in ms. */
 const OVERPASS_TIMEOUT_S = 25;
 const OVERPASS_FETCH_MS = 30000;
@@ -1576,9 +1596,10 @@ function overpassMirrorNote(host, patch) {
  * where several have), one that failed in the last half hour goes behind the
  * ones that did not, and one still running a query of ours goes last of all.
  *
- * @param {number} [now] @returns {string[]}
+ * @param {number} [now] @param {string[]} [list] defaults to the direct mirrors
+ * @returns {string[]}
  */
-function overpassMirrorOrder(now) {
+function overpassMirrorOrder(now, list) {
   now = now || Date.now();
   const st = overpassMirrorStats();
   const rank = h => {
@@ -1589,8 +1610,50 @@ function overpassMirrorOrder(now) {
   };
   const speed = h => (st[h] && isFinite(st[h].ms) ? st[h].ms : 0);
   // Stable, so mirrors with nothing to tell them apart keep the listed order.
-  return OVERPASS_MIRRORS.slice().sort((a, b) => rank(a) - rank(b)
+  return (list || OVERPASS_MIRRORS).slice().sort((a, b) => rank(a) - rank(b)
     || (rank(a) === 0 ? speed(a) - speed(b) : 0));
+}
+
+let _overpassRelay = null;
+/** Known once the ping has answered: true, false, or null for not yet asked. */
+let _overpassRelayOn = null;
+
+/**
+ * Whether this site relays Overpass. Asked once per page.
+ * @returns {Promise<boolean>}
+ */
+function overpassRelayReady() {
+  if (_overpassRelay) return _overpassRelay;
+  if (typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) {
+    _overpassRelayOn = false;
+    _overpassRelay = Promise.resolve(false);
+    return _overpassRelay;
+  }
+  _overpassRelay = (async () => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 3000);
+    try {
+      const res = await fetch(OVERPASS_RELAY_BASE + 'ping', { cache: 'no-store', signal: ctl.signal });
+      _overpassRelayOn = res.ok && (await res.text()).trim() === OVERPASS_RELAY_PING;
+    } catch (e) {
+      _overpassRelayOn = false;
+    } finally { clearTimeout(timer); }
+    return _overpassRelayOn;
+  })();
+  return _overpassRelay;
+}
+
+/**
+ * Every route to Overpass this page has: through the site first, where it
+ * relays, then direct. Ordered by overpassMirrorOrder from there, so a route
+ * that keeps failing — the direct ones, behind a firewall — drops behind the
+ * ones that answer, and stays there.
+ * @returns {Promise<string[]>}
+ */
+async function overpassMirrorList() {
+  const relayed = (await overpassRelayReady())
+    ? OVERPASS_RELAY_IDS.map(id => OVERPASS_RELAY_BASE + id) : [];
+  return relayed.concat(OVERPASS_MIRRORS);
 }
 
 /**
@@ -1617,7 +1680,7 @@ function overpassMirrorOrder(now) {
  */
 async function overpassRace(ql, o) {
   o = o || {};
-  const hosts = o.mirrors || overpassMirrorOrder();
+  const hosts = o.mirrors || overpassMirrorOrder(Date.now(), await overpassMirrorList());
   const doFetch = o.fetch || ((url, init) => fetch(url, init));
   const gate = o.gate || overpassGate;
   const hedgeMs = o.hedgeMs != null ? o.hedgeMs : OVERPASS_HEDGE_MS;
@@ -2164,7 +2227,13 @@ function ringFeatureMessage(reason, ctx) {
     default:
       return 'Could not reach any Overpass server (tried ' + OVERPASS_MIRRORS.length + ').'
         + ' An office firewall or a DNS filter blocks these specifically, and that is as common'
-        + ' as being offline. You can still trace a line by hand with Draw a road.';
+        + ' as being offline. You can still trace a line by hand with Draw a road.'
+        // Only where it would help: with the relay on, the firewall was never
+        // in the way, and saying this would send somebody to fix nothing.
+        + (_overpassRelayOn === false
+          ? ' Whoever runs this site can fix it for everyone by relaying scans through the'
+            + ' site itself (docs/GO-LIVE.md, "On the VPS").'
+          : '');
   }
 }
 
@@ -2191,6 +2260,8 @@ if (typeof module !== 'undefined' && module.exports) {
     overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_FETCH_MS,
     OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S, OVERPASS_BACKOFF_MS,
     overpassRace, overpassMirrorOrder, fetchOverpassFeatures,
+    overpassRelayReady, overpassMirrorList, OVERPASS_RELAY_BASE, OVERPASS_RELAY_IDS,
+    OVERPASS_RELAY_PING,
     OVERPASS_MIRRORS, OVERPASS_HEDGE_MS, OVERPASS_DEMOTE_MS, OVERPASS_MIRROR_KEY,
     overpassWorstReason, ringFeatureMessage, ringFeatureRetryable,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,

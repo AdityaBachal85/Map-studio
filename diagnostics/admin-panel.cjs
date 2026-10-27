@@ -497,7 +497,7 @@ async function signOutTo(page, url) {
 
 async function runBrowser() {
   const { chromium } = require('playwright');
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
 
   try {
     const ctx = await browser.newContext();

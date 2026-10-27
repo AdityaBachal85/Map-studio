@@ -20,8 +20,16 @@
 # Options:
 #   --auto        also install a five-minute check for new builds
 #   --site-only   only bring the files up to date: no apt, no restarts
+#   --no-relay    do not set up the Overpass relay (below)
 #   --root DIR    the site's folder, when the web server's config does not say
 #   --quiet       print problems only (what the five-minute check uses)
+#
+# THE OVERPASS RELAY. A ring scan asks OpenStreetMap's Overpass servers
+# straight from the browser, and an office firewall or DNS filter that blocks
+# them makes every scan fail in under a second. On nginx this adds
+# /osm/overpass/… to the site: the browser asks the site, the server asks
+# Overpass. Signed-in users only, checked by the API, and nothing from the
+# browser — cookie, session, address — is passed on with the query.
 #
 # SAFE TO RUN AGAIN. It never prints or replaces the database settings; backs
 # the site folder up before changing a file; refuses to write into a folder
@@ -41,11 +49,23 @@ LOG="/var/log/map-studio-update.log"
 # no third-party package source needed. The API needs 8.0 or newer.
 PHPV="8.3"
 
-AUTO=0; SITE_ONLY=0; QUIET=0; ROOT=""
+# The four Overpass mirrors the app uses (js/services/ringFeatures.js,
+# OVERPASS_MIRRORS), under the ids the relay serves them at.
+OVERPASS_RELAYS=(
+  "de      overpass-api.de/api/interpreter"
+  "kumi    overpass.kumi.systems/api/interpreter"
+  "coffee  overpass.private.coffee/api/interpreter"
+  "mailru  maps.mail.ru/osm/tools/overpass/api/interpreter"
+)
+SNIPPET="/etc/nginx/snippets/map-studio-overpass.conf"
+sock=""
+
+AUTO=0; SITE_ONLY=0; QUIET=0; RELAY=1; ROOT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --auto)      AUTO=1 ;;
     --site-only) SITE_ONLY=1 ;;
+    --no-relay)  RELAY=0 ;;
     --quiet)     QUIET=1 ;;
     --root)      ROOT="${2:-}"; shift ;;
     *)           echo "Unknown option: $1"; exit 2 ;;
@@ -278,6 +298,141 @@ else
   fi
 fi
 
+# The relay's nginx config. $1 = where to write it, $2 = PHP-FPM's address.
+write_relay_snippet() {
+  local dns id path host
+  # nginx resolves the mirrors itself, at request time, so a mirror whose name
+  # does not resolve today cannot stop nginx starting — which a hostname
+  # written straight into proxy_pass would.
+  dns="$(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ { printf "%s ", $2 }' /etc/resolv.conf 2>/dev/null)"
+  [ -n "$dns" ] || dns="1.1.1.1 8.8.8.8 "
+  {
+    cat <<'EOF'
+# Map Studio — the Overpass relay. Written by tools/vps-update.sh and
+# rewritten every time it runs: change the script, not this file.
+#
+# Lets a signed-in user's ring scan reach OpenStreetMap's Overpass servers
+# through this site, for browsers on networks that block them. The app asks
+# /osm/overpass/ping once per page and uses these routes when it answers.
+
+location = /osm/overpass/ping {
+    default_type text/plain;
+    add_header Cache-Control "no-store" always;
+    return 200 "map-studio-overpass\n";
+}
+
+# Who is signed in, asked of the API before every relayed query: 200 lets it
+# through, 401 stops it. Not an open relay — that would let anyone spend this
+# server's Overpass allowance and get its address rate-limited for everybody.
+location = /osm/overpass/_auth {
+    internal;
+    fastcgi_pass __SOCK__;
+    fastcgi_pass_request_body off;
+    fastcgi_param CONTENT_LENGTH  "";
+    fastcgi_param SCRIPT_FILENAME $document_root/api/index.php;
+    fastcgi_param SCRIPT_NAME     /api/index.php;
+    fastcgi_param DOCUMENT_ROOT   $document_root;
+    fastcgi_param REQUEST_URI     /api/auth/check;
+    fastcgi_param PATH_INFO       "";
+    fastcgi_param QUERY_STRING    "";
+    fastcgi_param REQUEST_METHOD  GET;
+    fastcgi_param SERVER_PROTOCOL $server_protocol;
+    fastcgi_param SERVER_NAME     $host;
+    fastcgi_param REMOTE_ADDR     $remote_addr;
+    fastcgi_param HTTPS           $https if_not_empty;
+}
+EOF
+    for entry in "${OVERPASS_RELAYS[@]}"; do
+      read -r id path <<<"$entry"
+      host="${path%%/*}"
+      cat <<EOF
+
+location = /osm/overpass/$id {
+    auth_request /osm/overpass/_auth;
+    limit_except POST { deny all; }
+    client_max_body_size 64k;
+
+    resolver __DNS__ valid=300s ipv6=off;
+    resolver_timeout 5s;
+    set \$overpass_upstream https://$path;
+    proxy_pass \$overpass_upstream;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_verify_depth 3;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
+    # The query and nothing else: no cookie, no session, no address of the
+    # person asking reaches the mirror.
+    proxy_pass_request_headers off;
+    proxy_set_header Host $host;
+    proxy_set_header Content-Type "application/x-www-form-urlencoded";
+    proxy_set_header Accept "application/json";
+    proxy_set_header User-Agent "DBOT Map Studio relay (https://map.dbotrealty.tech)";
+    proxy_hide_header Set-Cookie;
+
+    # Overpass may take the 25 s the query allows it, plus the download.
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 30s;
+    proxy_read_timeout 60s;
+}
+EOF
+    done
+  } | sed -e "s#__SOCK__#$2#" -e "s#__DNS__#${dns% }#" >"$1"
+}
+
+# ---------------------------------------------------------------------------
+if [ "$SITE_ONLY" = 0 ] && [ "$RELAY" = 1 ]; then
+step "Overpass relay"
+# ---------------------------------------------------------------------------
+
+  if [ "$SERVER" != nginx ]; then
+    note "set up automatically on nginx only; this server runs ${SERVER:-no web server}"
+  elif [ -z "$sock" ]; then
+    bad "Overpass relay not set up: it asks the API who is signed in, and nginx passes nothing to PHP for this site yet."
+  elif [ -z "$ROOT" ] || ! grep -q "ms_auth_check" "$ROOT/api/routes/auth.php" 2>/dev/null; then
+    bad "Overpass relay not set up: the site's API is too old to answer its sign-in check — the site files did not update."
+  else
+    # The files that configure the domain, from nginx's own account of what it
+    # loaded. readlink: sites-enabled entries are usually links, and editing
+    # the link would replace it with a copy.
+    files="$(nginx -T 2>/dev/null | awk -v d="$DOMAIN" '
+      /^# configuration file / { f = $4; sub(/:$/, "", f); next }
+      /^[ \t]*server_name[ \t]/ && index($0, d) { print f }' | sort -u)"
+    if [ -z "$files" ]; then
+      bad "Overpass relay not set up: could not find the nginx file that configures $DOMAIN."
+    else
+      stamp="$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$BACKUP_DIR"; chmod 700 "$BACKUP_DIR"
+      had_snippet=0
+      [ -f "$SNIPPET" ] && { cp -p "$SNIPPET" "$BACKUP_DIR/relay-$stamp.conf"; had_snippet=1; }
+      mkdir -p "$(dirname "$SNIPPET")"
+      write_relay_snippet "$SNIPPET" "$sock"
+
+      edited=()
+      for f in $files; do
+        real="$(readlink -f "$f")"
+        grep -qF "include $SNIPPET;" "$real" && continue
+        cp -p "$real" "$BACKUP_DIR/nginx-$(basename "$real")-$stamp"
+        # After every server_name that names the domain: these routes belong
+        # to this site's server blocks and to nobody else's.
+        sed -i "/^[[:space:]]*server_name[[:space:]].*${DOMAIN//./\\.}/a\\    include $SNIPPET;" "$real"
+        edited+=("$real")
+      done
+
+      if test_out="$(nginx -t 2>&1)"; then
+        if [ ${#edited[@]} -gt 0 ]; then ok "added to ${edited[*]} (the originals are in $BACKUP_DIR)"
+        else ok "already in place; its settings were rewritten"; fi
+      else
+        # Put everything back exactly as it was, so the restart below finds
+        # the configuration that was working before this ran.
+        for f in "${edited[@]}"; do cp -p "$BACKUP_DIR/nginx-$(basename "$f")-$stamp" "$f"; done
+        if [ "$had_snippet" = 1 ]; then cp -p "$BACKUP_DIR/relay-$stamp.conf" "$SNIPPET"; else rm -f "$SNIPPET"; fi
+        bad "Overpass relay not set up: nginx refused its configuration, so it was taken out again: $(printf '%s' "$test_out" | grep -m1 -iE 'emerg|error' | head -c 300)"
+      fi
+    fi
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 if [ "$SITE_ONLY" = 0 ]; then
 step "Restart"
@@ -356,6 +511,42 @@ step "Check"
     bad "SECURITY: https://$DOMAIN/api/config.php can be downloaded, database password included. Fix this before anything else — send this output to Claude."
   else
     ok "api/config.php cannot be downloaded"
+  fi
+
+  if [ "$SERVER" = nginx ] && { [ "$RELAY" = 1 ] || [ -f "$SNIPPET" ]; }; then
+    post_code() {
+      local c
+      c="$(curl -sk -m 20 -o /dev/null -w '%{http_code}' --resolve "$DOMAIN:443:127.0.0.1" \
+        -X POST --data 'data=' "https://$DOMAIN$1" 2>/dev/null)"
+      if [ -z "$c" ] || [ "$c" = 000 ]; then
+        c="$(curl -s -m 20 -o /dev/null -w '%{http_code}' -H "Host: $DOMAIN" \
+          -X POST --data 'data=' "http://127.0.0.1$1" 2>/dev/null)"
+      fi
+      printf '%s' "$c"
+    }
+    if [ "$(get /osm/overpass/ping | tr -d '\r\n')" = "map-studio-overpass" ]; then
+      ok "the Overpass relay is on"
+      code="$(post_code /osm/overpass/de)"
+      case "$code" in
+        401) ok "and it refuses anyone who is not signed in" ;;
+        200) bad "SECURITY: the Overpass relay answers anyone, signed in or not. Run again with --no-relay and send this output to Claude." ;;
+        *)   bad "the relay answered a signed-out request with HTTP $code instead of 401 — its sign-in check is not working." ;;
+      esac
+    elif [ -f "$SNIPPET" ]; then
+      bad "the Overpass relay is installed, but $DOMAIN does not answer its ping."
+    fi
+
+    # The relay is only as good as this server's own way out.
+    reach=0
+    for entry in "${OVERPASS_RELAYS[@]}"; do
+      read -r id path <<<"$entry"
+      c="$(curl -s -m 25 -o /dev/null -w '%{http_code}' \
+        --data-urlencode 'data=[out:json][timeout:10];node(1);out ids;' "https://$path" 2>/dev/null)"
+      if [ "$c" = 200 ]; then reach=$((reach + 1))
+      else note "this server got no answer from ${path%%/*} (HTTP ${c:-none})"; fi
+    done
+    if [ "$reach" -gt 0 ]; then ok "this server reaches $reach of ${#OVERPASS_RELAYS[@]} Overpass servers"
+    else bad "this server cannot reach any Overpass server either, so the relay cannot help yet."; fi
   fi
 fi
 

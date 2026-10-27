@@ -387,6 +387,24 @@ In order, it:
    `/api/config.php`. The last must **not** come back, because that file holds
    the database password.
 
+It also sets up the **Overpass relay** (skip it with `--no-relay`). A ring
+scan normally asks OpenStreetMap's Overpass servers straight from the browser,
+and an office firewall or DNS filter that blocks them makes every scan fail at
+once with "Could not reach any Overpass server (tried 4)". With the relay, the
+browser asks `map.dbotrealty.tech/osm/overpass/…` and the server asks Overpass.
+The app finds the relay by itself and still falls back to asking the servers
+directly. The relay:
+
+- answers signed-in users only. nginx asks the API (`/api/auth/check`)
+  before every query, so it cannot be used by strangers to run up the
+  server's Overpass allowance;
+- passes on the query and nothing else: no cookie, session or address;
+- reaches the same four servers the app does, and nothing else;
+- lives in `/etc/nginx/snippets/map-studio-overpass.conf`, with one `include`
+  line added to the site's nginx file. The original file is kept in
+  `/var/backups/map-studio/`. If nginx refuses the result, both are put back
+  as they were.
+
 Add `--auto` (`… | bash -s -- --auto`) once, and a five-minute check is
 installed in `/etc/cron.d/map-studio-update`: from then on a push reaches the
 site by itself. Its log is `/var/log/map-studio-update.log`. Delete the cron

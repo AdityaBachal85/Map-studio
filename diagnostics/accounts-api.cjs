@@ -231,6 +231,15 @@ async function run() {
   ck('and answers 200 with a null user for nobody, not 401', stranger.status === 200
     && stranger.json.user === null);
 
+  // /auth/check is the opposite on purpose: nginx's auth_request asks it
+  // before relaying a ring scan to Overpass, and only a 2xx lets it through.
+  const checkIn = await al.get('/auth/check');
+  const checkOut = await new Client('nobody').get('/auth/check');
+  ck('/auth/check lets a signed-in request through, for the Overpass relay',
+    checkIn.status === 200, String(checkIn.status));
+  ck('and refuses a signed-out one with 401, so the relay is not open to the internet',
+    checkOut.status === 401, String(checkOut.status));
+
   /* --- signing in --- */
 
   const wrong = await new Client('wrong').post('/auth/signin',
@@ -412,6 +421,9 @@ async function run() {
   const afterOut = await al.get('/auth/me');
   ck('signing out ends the session at the server, not only in the browser',
     afterOut.status === 200 && afterOut.json.user === null);
+  const checkAfterOut = await al.get('/auth/check');
+  ck('and the relay check stops letting that browser through', checkAfterOut.status === 401,
+    String(checkAfterOut.status));
 
   /* --- the shape of a failure --- */
 
@@ -461,7 +473,7 @@ async function runThrottle() {
 
 async function runBrowser() {
   const { chromium } = require('playwright');
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
 
   try {
     const ctx = await browser.newContext();
