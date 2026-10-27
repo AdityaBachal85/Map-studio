@@ -93,39 +93,24 @@ async function identifyAt(lat, lng, radiusM) {
     + 'nwr' + around + '["building"]["name"];'
     + ');out tags center 40;';
 
-  const reasons = [];
-  for (const host of OVERPASS_MIRRORS) {
-    await overpassGate();
-    let res;
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 20000);
-      res = await fetch(host, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(ql),
-        signal: ctl.signal,
-      });
-      clearTimeout(timer);
-    } catch (e) { reasons.push('network'); continue; }
-    if (res.status === 400) { reasons.push('http-400'); break; }
-    if (!res.ok) { reasons.push(res.status === 429 ? 'http-429' : 'http-' + res.status); continue; }
+  // The same race the ring scan runs, with a shorter fuse before a second
+  // mirror is asked: this is a few dozen tags around one point, which a
+  // healthy server answers in a second or two, and somebody is looking at an
+  // empty popup while it does.
+  const got = await overpassRace(ql, { hedgeMs: 4000 });
+  if (!got.ok) return { ok: false, reason: overpassWorstReason(got.reasons) };
 
-    let json;
-    try { json = await res.json(); } catch (e) { reasons.push('network'); continue; }
-    const items = ((json && json.elements) || [])
-      .filter(el => el.tags)
-      .map(el => ({
-        tags: el.tags,
-        lat: el.lat != null ? el.lat : (el.center && el.center.lat),
-        lng: el.lon != null ? el.lon : (el.center && el.center.lon),
-        score: identifyScore(el.tags),
-      }))
-      .filter(i => isFinite(i.lat) && isFinite(i.lng))
-      .sort((a, b) => b.score - a.score);
-    return { ok: true, items };
-  }
-  return { ok: false, reason: overpassWorstReason(reasons) };
+  const items = ((got.json && got.json.elements) || [])
+    .filter(el => el.tags)
+    .map(el => ({
+      tags: el.tags,
+      lat: el.lat != null ? el.lat : (el.center && el.center.lat),
+      lng: el.lon != null ? el.lon : (el.center && el.center.lon),
+      score: identifyScore(el.tags),
+    }))
+    .filter(i => isFinite(i.lat) && isFinite(i.lng))
+    .sort((a, b) => b.score - a.score);
+  return { ok: true, items };
 }
 
 /** Sentence-case an OSM tag value: `fire_station` -> `Fire station`. */

@@ -1,11 +1,13 @@
 DBOT Map Studio
-version  6.0232
-built    2026-10-05T06:39:35.471Z
+version  6.0233
+built    2026-10-27T10:25:38.871Z
 files    178  (5.6 MB)
 
-Upload the CONTENTS of this directory into public_html — including the
-hidden .htaccess file, which the File Manager only shows once "Show
-hidden files" is ticked in its settings.
+These are the CONTENTS of the site's folder — for map.dbotrealty.tech,
+the subdomain's folder, not public_html itself. That includes the hidden
+.htaccess file, which the File Manager only shows once "Show hidden files"
+is ticked in its settings.
 
-See docs/HOSTINGER-DEPLOY.md in the repository for the full procedure,
-including the four external services that need this domain added to them.
+Usually you will not upload these by hand: Hostinger deploys them from
+the hostinger-build branch on GitHub. See docs/GO-LIVE.md in the
+repository for every step, in order.

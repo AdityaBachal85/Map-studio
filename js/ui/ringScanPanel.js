@@ -221,12 +221,17 @@ function renderRingScan() {
   if (s.busy) {
     const secs = s.startedAt ? Math.round((Date.now() - s.startedAt) / 1000) : 0;
     const st = s.step || {};
-    const where = st.backoff ? 'OpenStreetMap asked us to slow down — standing back a moment'
-      : st.stage === 'google' ? 'Asking Google about the places found'
-      : (st.mirror > 1
-        ? 'The first OpenStreetMap server did not answer — trying number '
-          + st.mirror + ' of ' + st.of
-        : 'Searching OpenStreetMap inside the ' + esc(String(s.km)) + ' km ring');
+    // Two different things, said differently: a server that is slow is still
+    // being waited for, with another asked beside it, while one that failed
+    // has been given up on.
+    const where = st.stage === 'google' ? 'Asking Google about the places found'
+      : !(st.mirror > 1) ? 'Searching OpenStreetMap inside the ' + esc(String(s.km)) + ' km ring'
+      : st.live > 1
+        ? 'OpenStreetMap is slow to answer — also asking server ' + st.mirror + ' of ' + st.of
+          + ', and the first to answer wins'
+        : (st.mirror === 2 ? 'The first OpenStreetMap server' : 'The first ' + (st.mirror - 1)
+          + ' OpenStreetMap servers') + ' did not answer — trying number '
+          + st.mirror + ' of ' + st.of;
     // The count is worth saying: a scan is one request covering every ticked
     // type, so ten types is a heavier question than three, and the reader is
     // the only one who can make it lighter.
