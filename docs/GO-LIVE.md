@@ -16,6 +16,20 @@ before starting:
 Wherever this guide says `u123456789`, use your own Hostinger username (it is in
 hPanel, and in every database name hPanel creates).
 
+> **Is your site on a VPS?** This guide is written for Hostinger's shared
+> hosting (hPanel → Websites). The DBOT account's `map.dbotrealty.tech` is
+> actually served from a **VPS** (Ubuntu 24.04, no control panel), where
+> hPanel's "deploy from GitHub" does not exist. On the VPS, open hPanel →
+> **VPS → Browser terminal** and run:
+>
+> ```
+> curl -fsSL https://raw.githubusercontent.com/AdityaBachal85/Map-studio/Map-Studio_Hostinger/tools/vps-update.sh | bash -s -- --auto
+> ```
+>
+> It updates PHP (Ubuntu's 8.3), copies in the latest build, restarts PHP and
+> the web server, and checks the result. `--auto` makes every later push
+> arrive by itself within five minutes. See "Later: updating the site" below.
+
 ---
 
 ## Part 1 — Put the site up
@@ -348,4 +362,41 @@ means the build refused something on purpose — most often that the version
 wasn't bumped consistently (`node tools/stamp-assets.js --bump` fixes it) — and
 in that case nothing was published, so the site is still on the previous good
 version rather than a broken one.
+
+### On the VPS
+
+Step 3 above does not apply: there is no Hostinger auto-deployment on a VPS.
+`tools/vps-update.sh` takes its place. Run it in hPanel → **VPS → Browser
+terminal**:
+
+```
+curl -fsSL https://raw.githubusercontent.com/AdityaBachal85/Map-studio/Map-Studio_Hostinger/tools/vps-update.sh | bash
+```
+
+In order, it:
+
+1. finds the folder nginx (or Apache, or Caddy) serves `map.dbotrealty.tech` from;
+2. installs or updates PHP 8.3 with the MySQL and mbstring extensions, plus
+   any other PHP package already on the server;
+3. backs the site folder up to `/var/backups/map-studio/` (the last five are
+   kept), then copies the latest `hostinger-build` over it. It deletes nothing,
+   so your config file stays where it is;
+4. restarts PHP-FPM, and restarts the web server only if its configuration
+   test passes;
+5. asks the server for the version it serves, for `/api/health`, and for
+   `/api/config.php`. The last must **not** come back, because that file holds
+   the database password.
+
+Add `--auto` (`… | bash -s -- --auto`) once, and a five-minute check is
+installed in `/etc/cron.d/map-studio-update`: from then on a push reaches the
+site by itself. Its log is `/var/log/map-studio-update.log`. Delete the cron
+file to stop it.
+
+It is safe to run again. If it ends with problems, the lines marked `!!` say
+what and where; it never writes into a folder that holds a different site.
+
+On a VPS the configuration file normally lives at `api/config.php` inside the
+site folder. PHP-FPM gives the API no home folder to look in, and anything
+under `/var/www` counts as web-served. The web server must refuse that file;
+step 5 of the script checks that it does.
 
