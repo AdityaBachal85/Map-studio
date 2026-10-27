@@ -68,7 +68,31 @@ const OVERPASS_TOTAL_MS = 95000;
  */
 const OVERPASS_MIN_ATTEMPT_MS = OVERPASS_TIMEOUT_S * 1000 + 3000;
 
-/** How long to stand back after being rate-limited, before asking anyone else. */
+/**
+ * How long one server is given before the next is asked alongside it.
+ *
+ * ASKING ONE SERVER AT A TIME MADE A DEAD ONE COST HALF A MINUTE. The mirrors
+ * were tried in turn, and each was rightly allowed the full time Overpass is
+ * told it may take — so a first mirror that simply never answered held the
+ * whole scan for twenty-eight seconds before the second was asked anything.
+ * That is what "trying number 2 of 4" after half a minute was, and it read, not
+ * unreasonably, as the site being slow. A healthy mirror answers an ordinary
+ * ring in two to six seconds.
+ *
+ * Past this, the next mirror is asked too — without hanging up on the first,
+ * which may be slow rather than dead and is still allowed to finish. Whichever
+ * answers first is used and the rest are cancelled. A dead mirror now costs
+ * eight seconds, and a slow live one costs nothing it did not cost before.
+ */
+const OVERPASS_HEDGE_MS = 8000;
+
+/** How long a mirror that failed is asked last, behind the ones that did not. */
+const OVERPASS_DEMOTE_MS = 30 * 60e3;
+
+/** Which mirror answered, and how fast — so the next scan asks it first. */
+const OVERPASS_MIRROR_KEY = 'dbot.overpassMirrors.v1';
+
+/** How long a mirror that rate-limited us is put to the back of the queue. */
 const OVERPASS_BACKOFF_MS = 6000;
 
 /** Overpass's usage policy is a condition of use, not a suggestion. */
@@ -1483,21 +1507,23 @@ let _overpassGate = Promise.resolve();
 let _overpassLast = 0;
 
 /**
- * Not before this, because of what a timeout actually leaves behind.
+ * Per mirror: asked last until this, because of what an abandoned query
+ * leaves behind.
  *
  * ABORTING A FETCH DOES NOT STOP OVERPASS. When a scan times out, the server
  * carries on running that query for up to its own timeout, and it is still
- * holding one of the two slots this address is allowed. Ask again immediately
- * and the new request does not fail — it QUEUES behind our own abandoned one,
- * waits, and times out too. Retry twice more and every slot is full of our own
- * ghosts: the scan then fails no matter how few types are ticked, which is
- * exactly what it looks like from the outside and exactly what it is not.
+ * holding one of the two slots this address is allowed. Ask it again
+ * immediately and the new request does not fail — it QUEUES behind our own
+ * abandoned one, waits, and times out too.
  *
- * So a timeout buys a cool-off long enough for the abandoned query to finish
- * and give the slot back. Waiting is not the app being slow here; it is the
- * only thing that makes the next attempt able to succeed at all.
+ * IT WAS ONE CLOCK FOR EVERY SERVER, which was right while only one was asked
+ * at a time and wrong the moment there was a choice: our ghost holds a slot on
+ * the server that timed out, not on the other three. One clock made a timeout
+ * at overpass-api.de hold back a question to kumi.systems that it owed nothing
+ * to. Now the server holding the ghost goes to the back of the queue and the
+ * others are asked at once.
  */
-let _overpassCoolUntil = 0;
+const _overpassCool = new Map();
 
 /**
  * Wait until Overpass may be asked again.
@@ -1512,12 +1538,214 @@ let _overpassCoolUntil = 0;
  */
 function overpassGate() {
   const wait = _overpassGate.then(() => {
-    const due = Math.max(OVERPASS_MIN_GAP_MS - (Date.now() - _overpassLast),
-      _overpassCoolUntil - Date.now());
+    const due = OVERPASS_MIN_GAP_MS - (Date.now() - _overpassLast);
     return due > 0 ? new Promise(r => setTimeout(r, due)) : undefined;
   }).then(() => { _overpassLast = Date.now(); });
   _overpassGate = wait;
   return wait;
+}
+
+/** @returns {object} host -> { ok, ms, fail }, times as epoch ms */
+function overpassMirrorStats() {
+  try { return JSON.parse(localStorage.getItem(OVERPASS_MIRROR_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+/** @param {string} host @param {object} patch */
+function overpassMirrorNote(host, patch) {
+  try {
+    const all = overpassMirrorStats();
+    all[host] = Object.assign({}, all[host], patch);
+    localStorage.setItem(OVERPASS_MIRROR_KEY, JSON.stringify(all));
+  } catch (e) { /* private mode — the order is an optimisation */ }
+}
+
+/**
+ * The mirrors, best first.
+ *
+ * THE SAME SERVER WAS ASKED FIRST EVERY TIME, including straight after it had
+ * failed — so a mirror having a bad afternoon made every scan of that
+ * afternoon wait for it. Now the one that answered last leads (the fastest,
+ * where several have), one that failed in the last half hour goes behind the
+ * ones that did not, and one still running a query of ours goes last of all.
+ *
+ * @param {number} [now] @returns {string[]}
+ */
+function overpassMirrorOrder(now) {
+  now = now || Date.now();
+  const st = overpassMirrorStats();
+  const rank = h => {
+    const s = st[h] || {};
+    if ((_overpassCool.get(h) || 0) > now) return 3;
+    if ((s.ok || 0) > (s.fail || 0)) return 0;
+    return s.fail && now - s.fail < OVERPASS_DEMOTE_MS ? 2 : 1;
+  };
+  const speed = h => (st[h] && isFinite(st[h].ms) ? st[h].ms : 0);
+  // Stable, so mirrors with nothing to tell them apart keep the listed order.
+  return OVERPASS_MIRRORS.slice().sort((a, b) => rank(a) - rank(b)
+    || (rank(a) === 0 ? speed(a) - speed(b) : 0));
+}
+
+/**
+ * Ask the mirrors one query, staggered, and take the first real answer.
+ *
+ * The next mirror is asked as soon as every one in flight has failed — there
+ * is nothing left to wait for — or when OVERPASS_HEDGE_MS passes without an
+ * answer, alongside the slow one rather than instead of it. The first complete
+ * answer wins and every other request is cancelled.
+ *
+ * "COMPLETE" IS CHECKED, NOT ASSUMED. Overpass reports its own timeout as an
+ * HTTP 200 whose body carries a `remark: "runtime error: …"` and however few
+ * elements it got through before stopping. Taken as an answer, that is a scan
+ * that found almost nothing, said so confidently, and — being a definite
+ * answer — was cached for a week.
+ *
+ * Every timing, the mirror list and the fetch itself can be supplied, so
+ * diagnostics/overpass-race.cjs can play a dead server against a live one in
+ * milliseconds rather than half a minute.
+ *
+ * @param {string} ql
+ * @param {object} [o] { mirrors, fetch, gate, hedgeMs, attemptMs, minAttemptMs, totalMs, onStep }
+ * @returns {Promise<{ok:true, json:object, host:string, ms:number}|{ok:false, reasons:string[]}>}
+ */
+async function overpassRace(ql, o) {
+  o = o || {};
+  const hosts = o.mirrors || overpassMirrorOrder();
+  const doFetch = o.fetch || ((url, init) => fetch(url, init));
+  const gate = o.gate || overpassGate;
+  const hedgeMs = o.hedgeMs != null ? o.hedgeMs : OVERPASS_HEDGE_MS;
+  const attemptMs = o.attemptMs != null ? o.attemptMs : OVERPASS_FETCH_MS;
+  const minAttemptMs = o.minAttemptMs != null ? o.minAttemptMs : OVERPASS_MIN_ATTEMPT_MS;
+  const totalMs = o.totalMs != null ? o.totalMs : OVERPASS_TOTAL_MS;
+  const deadline = Date.now() + totalMs;
+  const onStep = o.onStep;
+
+  const reasons = [];
+  const live = new Map();       // host -> AbortController, once its request is out
+  let pending = 0;              // asked (or queued at the gate) and not yet settled
+  let asked = 0;
+  let won = null;
+  let stop = false;
+  let wake = null;
+  const changed = () => { if (wake) { const w = wake; wake = null; w(); } };
+
+  const stopAll = except => {
+    stop = true;
+    live.forEach((ctl, h) => {
+      if (h === except) return;
+      ctl.abort();
+      // Cancelled is not stopped: that server is still running the query and
+      // holding the slot, exactly as after a timeout.
+      _overpassCool.set(h, Date.now() + OVERPASS_TIMEOUT_S * 1000);
+    });
+    live.clear();
+    changed();
+  };
+
+  const fail = (host, reason, ghost) => {
+    reasons.push(reason);
+    if (ghost) _overpassCool.set(host, Date.now() + OVERPASS_TIMEOUT_S * 1000);
+    overpassMirrorNote(host, { fail: Date.now() });
+  };
+
+  const attempt = async host => {
+    pending++;
+    try {
+      await gate();
+      if (stop) return;
+      const ctl = new AbortController();
+      live.set(host, ctl);
+      const t0 = Date.now();
+      let timedOut = false;
+      // Never below what the server was told it may take: aborting first
+      // turns a slow answer into no answer.
+      const budget = Math.max(minAttemptMs, Math.min(attemptMs, deadline - t0));
+      const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, budget);
+      let res;
+      try {
+        res = await doFetch(host, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(ql),
+          signal: ctl.signal,
+        });
+      } catch (e) {
+        // Cancelled because another mirror answered: not this one failing.
+        if (stop) return;
+        // OUR OWN TIMEOUT IS NOT A BLOCKED CONNECTION, and they were the same
+        // word. So a scan that simply took too long told the reader that a
+        // firewall was blocking Overpass — a confident, checkable, wrong
+        // diagnosis, and one that sends somebody to their IT department over a
+        // ring that was merely too wide.
+        fail(host, timedOut ? 'timeout' : 'network', timedOut);
+        return;
+      } finally { clearTimeout(timer); }
+
+      // A syntax error fails identically everywhere — asking the other
+      // mirrors would spend their rate-limit budget on the same refusal.
+      if (res.status === 400) { reasons.push('http-400'); stopAll(host); return; }
+      if (res.status === 429) {
+        // A RATE LIMIT IS NOT A DEAD SERVER, and it is usually our own earlier
+        // query being counted — on THIS server. The others owe us nothing, so
+        // they are asked now and this one is left alone for a while.
+        _overpassCool.set(host, Date.now() + OVERPASS_BACKOFF_MS);
+        fail(host, 'http-429', false);
+        return;
+      }
+      if (!res.ok) { fail(host, 'http-' + res.status, false); return; }
+
+      let json;
+      try { json = await res.json(); }
+      catch (e) { if (!stop) fail(host, 'network', false); return; }
+      if (stop) return;
+      if (json && /runtime error/i.test(String(json.remark || ''))) {
+        fail(host, 'timeout', false);
+        return;
+      }
+      won = { ok: true, json, host, ms: Date.now() - t0 };
+      overpassMirrorNote(host, { ok: Date.now(), ms: won.ms });
+      stopAll(host);
+    } finally {
+      live.delete(host);
+      pending--;
+      changed();
+    }
+  };
+
+  // The whole race is bounded too: a mirror that sends headers and then
+  // stalls must not hold the scan open for ever.
+  const overall = setTimeout(() => { if (!stop) { reasons.push('timeout'); stopAll(); } }, totalMs);
+  let hedgeTimer = null;
+  let hedgeAt = 0;
+  try {
+    while (!stop) {
+      const now = Date.now();
+      if (asked < hosts.length && (pending === 0 || now >= hedgeAt)) {
+        if (deadline - now < minAttemptMs) {
+          // Too little time left for a server to answer even if it wanted
+          // to: the request would only be cancelled and called a failure.
+          reasons.push('timeout');
+          asked = hosts.length;
+          continue;
+        }
+        const host = hosts[asked++];
+        if (onStep) onStep({ mirror: asked, of: hosts.length, live: pending + 1 });
+        attempt(host);
+        hedgeAt = now + hedgeMs;
+        continue;
+      }
+      if (pending === 0) break;           // every mirror asked, every one failed
+      await new Promise(r => {
+        wake = r;
+        if (asked < hosts.length) hedgeTimer = setTimeout(changed, Math.max(0, hedgeAt - now));
+      });
+      clearTimeout(hedgeTimer);
+    }
+  } finally {
+    clearTimeout(overall);
+    clearTimeout(hedgeTimer);
+  }
+  return won || { ok: false, reasons };
 }
 
 /* ---------------------------------------------------------------------------
@@ -1816,8 +2044,7 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   if (!used.length) return { ok: false, reason: 'too-big', skipped };
 
   const key = overpassCacheKey(used, lat, lng, radiusM);
-  const all = overpassCacheRead();
-  const hit = all[key];
+  const hit = overpassCacheRead()[key];
   if (hit && Date.now() - hit.at < OVERPASS_CACHE_TTL_MS) {
     const f = hit.f || [];
     // Re-measured rather than trusted: the cache key rounds the centre to
@@ -1829,89 +2056,33 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   if (_overpassPending.has(key)) return _overpassPending.get(key);
 
   const run = (async () => {
-    const reasons = [];
-    let attempt = 0;
-    const deadline = Date.now() + OVERPASS_TOTAL_MS;
-    for (const host of OVERPASS_MIRRORS) {
-      const left = deadline - Date.now();
-      if (left < OVERPASS_MIN_ATTEMPT_MS) { reasons.push('timeout'); break; }
-      if (onStep) onStep({ mirror: attempt + 1, of: OVERPASS_MIRRORS.length });
-      await overpassGate();
-      attempt++;
-      let res;
-      let timedOut = false;
-      try {
-        const ctl = new AbortController();
-        // Never below what the server was told it may take: aborting first
-        // turns a slow answer into no answer.
-        const budget = Math.max(OVERPASS_MIN_ATTEMPT_MS,
-          Math.min(OVERPASS_FETCH_MS, deadline - Date.now()));
-        const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, budget);
-        res = await fetch(host, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(ql),
-          signal: ctl.signal,
-        });
-        clearTimeout(timer);
-      } catch (e) {
-        // OUR OWN TIMEOUT IS NOT A BLOCKED CONNECTION, and they were the same
-        // word. So a scan that simply took too long told the reader that a
-        // firewall was blocking Overpass — a confident, checkable, wrong
-        // diagnosis, and one that sends somebody to their IT department over a
-        // ring that was merely too wide.
-        if (timedOut) _overpassCoolUntil = Date.now() + OVERPASS_TIMEOUT_S * 1000;
-        reasons.push(timedOut ? 'timeout' : 'network');
-        continue;
-      }
+    const got = await overpassRace(ql, { onStep });
+    if (!got.ok) return { ok: false, reason: overpassWorstReason(got.reasons), skipped };
 
-      // A syntax error fails identically everywhere — cycling four mirrors on
-      // it wastes five seconds and four slots of rate-limit budget.
-      if (res.status === 400) { reasons.push('http-400'); break; }
-      if (res.status === 429) {
-        // A RATE LIMIT IS NOT A DEAD SERVER, and hopping to the next mirror
-        // 1.2 seconds later is what a client that cannot tell the difference
-        // does. Worse, it is usually OUR OWN earlier request being counted:
-        // aborting a fetch does not stop Overpass working on the query, so a
-        // scan that timed out is still holding its slot when we come back.
-        // Waiting is the only thing that actually helps.
-        reasons.push('http-429');
-        const left = deadline - Date.now();
-        if (left < OVERPASS_MIN_ATTEMPT_MS + OVERPASS_BACKOFF_MS) break;
-        if (onStep) onStep({ backoff: true });
-        await new Promise(r => setTimeout(r, OVERPASS_BACKOFF_MS));
-        continue;
-      }
-      if (!res.ok) { reasons.push('http-' + res.status); continue; }
+    const els = (got.json && got.json.elements) || [];
+    const features = [];
+    els.forEach(el => {
+      const cid = overpassClassOf(el, used);
+      if (!cid) return;
+      const f = overpassToFeature(el, cid);
+      // The box's corners are outside the ring the panel promised.
+      if (f && ringHoldsFeature(f, lat, lng, radiusM)) features.push(f);
+    });
 
-      let json;
-      try { json = await res.json(); } catch (e) { reasons.push('network'); continue; }
-
-      const els = (json && json.elements) || [];
-      const features = [];
-      els.forEach(el => {
-        const cid = overpassClassOf(el, used);
-        if (!cid) return;
-        const f = overpassToFeature(el, cid);
-        // The box's corners are outside the ring the panel promised.
-        if (f && ringHoldsFeature(f, lat, lng, radiusM)) features.push(f);
-      });
-
-      const joined = joinRingFeatures(features);
-      // AFTER the join, not before: a road chained from nine pieces is one
-      // thing at one distance, and the distance of the nearest piece is the
-      // answer for all of it.
-      joined.forEach(f => { f.fromKm = ringDistanceKm(f, lat, lng); });
-      const truncated = els.length >= OVERPASS_CAP;
-      const out = { ok: true, features: joined, skipped, truncated };
-      // Cache a definite answer, including an empty one — "nothing is mapped
-      // here" is still true tomorrow. Never cache a transport failure: one
-      // blip must not look permanent for a week.
-      all[key] = { at: Date.now(), f: joined, tr: truncated };
-      overpassCacheWrite(all);
-      return out;
-    }
-    return { ok: false, reason: overpassWorstReason(reasons), skipped };
+    const joined = joinRingFeatures(features);
+    // AFTER the join, not before: a road chained from nine pieces is one
+    // thing at one distance, and the distance of the nearest piece is the
+    // answer for all of it.
+    joined.forEach(f => { f.fromKm = ringDistanceKm(f, lat, lng); });
+    const truncated = els.length >= OVERPASS_CAP;
+    // Cache a definite answer, including an empty one — "nothing is mapped
+    // here" is still true tomorrow. Never cache a transport failure: one
+    // blip must not look permanent for a week. Re-read rather than reusing the
+    // copy from before the request: another scan may have written to it since.
+    const all = overpassCacheRead();
+    all[key] = { at: Date.now(), f: joined, tr: truncated };
+    overpassCacheWrite(all);
+    return { ok: true, features: joined, skipped, truncated };
   })();
 
   _overpassPending.set(key, run);
@@ -2012,6 +2183,8 @@ if (typeof module !== 'undefined' && module.exports) {
     overpassQL,
     overpassGate, OVERPASS_MIN_GAP_MS, OVERPASS_FETCH_MS,
     OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S, OVERPASS_BACKOFF_MS,
+    overpassRace, overpassMirrorOrder, fetchOverpassFeatures,
+    OVERPASS_MIRRORS, OVERPASS_HEDGE_MS, OVERPASS_DEMOTE_MS, OVERPASS_MIRROR_KEY,
     overpassWorstReason, ringFeatureMessage, ringFeatureRetryable,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,
     ringMergeGoogle, RING_SAME_PLACE_M,

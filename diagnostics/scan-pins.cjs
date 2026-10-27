@@ -891,8 +891,11 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     ringScanState.step = { stage: 'google' };
     renderRingScan();
     const t3 = document.getElementById('ringScanBody').textContent;
+    ringScanState.step = { mirror: 2, of: 4, live: 2 };
+    renderRingScan();
+    const t4 = document.getElementById('ringScanBody').textContent;
     ringScanState = null;
-    return { t, t2, t3 };
+    return { t, t2, t3, t4 };
   });
   ck('a scan in progress shows how long it has been going',
     /2[34]s/.test(busy.t), (busy.t.match(/\d+s/) || ['none'])[0]);
@@ -906,6 +909,11 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     /did not answer/.test(busy.t2) && /number 3 of 4/.test(busy.t2), busy.t2.slice(0, 110));
   ck('and the Google pass says it is a different thing being waited on',
     /Asking Google/.test(busy.t3), busy.t3.slice(0, 90));
+  // A slow server is still being waited for, with another asked beside it; it
+  // has not been given up on, and saying "did not answer" would claim it had.
+  ck('a slow server is reported as slow, with a second asked alongside it',
+    /slow to answer/.test(busy.t4) && /server 2 of 4/.test(busy.t4) && !/did not answer/.test(busy.t4),
+    busy.t4.slice(0, 120));
 
   /* -- what is coming, drawn so it cannot be read as built ------------------ */
 

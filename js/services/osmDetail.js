@@ -126,60 +126,42 @@ async function fetchOsmDetail(b, level) {
 
   const ql = osmDetailQL(b, want);
   const run = (async () => {
-    const reasons = [];
-    const mirrors = (typeof OVERPASS_MIRRORS !== 'undefined') ? OVERPASS_MIRRORS : [];
-    for (const host of mirrors) {
-      if (typeof overpassGate === 'function') await overpassGate();
-      let res;
-      try {
-        const ctl = new AbortController();
-        const ms = (typeof OVERPASS_FETCH_MS !== 'undefined') ? OVERPASS_FETCH_MS : 30000;
-        const timer = setTimeout(() => ctl.abort(), ms);
-        res = await fetch(host, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(ql),
-          signal: ctl.signal,
-        });
-        clearTimeout(timer);
-      } catch (e) { reasons.push('network'); continue; }
-
-      // A 400 is this query being wrong, and it will be just as wrong at the
-      // next mirror. Anything else is worth another host.
-      if (res.status === 400) { reasons.push('http-400'); break; }
-      if (!res.ok) { reasons.push(res.status === 429 ? 'http-429' : 'http-' + res.status); continue; }
-
-      let json;
-      try { json = await res.json(); } catch (e) { reasons.push('network'); continue; }
-
-      const els = (json && json.elements) || [];
-      const tol = (typeof OVERPASS_SIMPLIFY_DEG !== 'undefined') ? OVERPASS_SIMPLIFY_DEG : 0.00007;
-      const features = [];
-      els.forEach(el => {
-        if (!el.geometry || el.geometry.length < 2) return;
-        const cls = osmDetailClass(el.tags);
-        if (!cls) return;
-        let pts = el.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
-        // Buildings are already small; simplifying them turns a rectangle into
-        // a triangle. Everything else benefits.
-        if (cls !== 'building' && typeof simplifyLatLngs === 'function') pts = simplifyLatLngs(pts, tol);
-        const first = pts[0], last = pts[pts.length - 1];
-        features.push({
-          cls,
-          closed: pts.length > 3 && Math.abs(first.lat - last.lat) < 1e-9 && Math.abs(first.lng - last.lng) < 1e-9,
-          pts: pts.map(p => [p.lat, p.lng]),
-        });
-      });
-
-      const truncated = els.length >= OSM_DETAIL_CAP;
-      cache[key] = { at: Date.now(), f: features, tr: truncated };
-      // Only ever cached on a definite answer. A mirror having a bad minute
-      // must not look like "there are no roads here" for the next week.
-      if (typeof overpassCacheWrite === 'function') overpassCacheWrite(cache);
-      return { ok: true, features, truncated };
+    // The ring scan's race: mirrors staggered rather than queued, so one that
+    // never answers costs seconds, not the whole fetch. A 400 still stops it —
+    // this query being wrong is just as wrong at every mirror.
+    const got = (typeof overpassRace === 'function') ? await overpassRace(ql) : { ok: false, reasons: [] };
+    if (!got.ok) {
+      const worst = (typeof overpassWorstReason === 'function') ? overpassWorstReason(got.reasons) : 'network';
+      return { ok: false, reason: worst };
     }
-    const worst = (typeof overpassWorstReason === 'function') ? overpassWorstReason(reasons) : 'network';
-    return { ok: false, reason: worst };
+
+    const els = (got.json && got.json.elements) || [];
+    const tol = (typeof OVERPASS_SIMPLIFY_DEG !== 'undefined') ? OVERPASS_SIMPLIFY_DEG : 0.00007;
+    const features = [];
+    els.forEach(el => {
+      if (!el.geometry || el.geometry.length < 2) return;
+      const cls = osmDetailClass(el.tags);
+      if (!cls) return;
+      let pts = el.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
+      // Buildings are already small; simplifying them turns a rectangle into
+      // a triangle. Everything else benefits.
+      if (cls !== 'building' && typeof simplifyLatLngs === 'function') pts = simplifyLatLngs(pts, tol);
+      const first = pts[0], last = pts[pts.length - 1];
+      features.push({
+        cls,
+        closed: pts.length > 3 && Math.abs(first.lat - last.lat) < 1e-9 && Math.abs(first.lng - last.lng) < 1e-9,
+        pts: pts.map(p => [p.lat, p.lng]),
+      });
+    });
+
+    const truncated = els.length >= OSM_DETAIL_CAP;
+    // Re-read: the copy from before the request may be stale by now.
+    const latest = (typeof overpassCacheRead === 'function') ? overpassCacheRead() : cache;
+    latest[key] = { at: Date.now(), f: features, tr: truncated };
+    // Only ever cached on a definite answer. A mirror having a bad minute
+    // must not look like "there are no roads here" for the next week.
+    if (typeof overpassCacheWrite === 'function') overpassCacheWrite(latest);
+    return { ok: true, features, truncated };
   })();
 
   _osmDetailPending.set(key, run);

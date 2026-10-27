@@ -4,7 +4,7 @@
 
 > Professional Interactive Property Mapping Tool for Real Estate Research, Market Analysis & Presentation Generation
 
-![Version](https://img.shields.io/badge/version-v6.0232-blue)
+![Version](https://img.shields.io/badge/version-v6.0233-blue)
 ![Built With](https://img.shields.io/badge/Built%20With-Leaflet-orange)
 ![Status](https://img.shields.io/badge/status-Active-success)
 
@@ -861,6 +861,14 @@ an ordinary shape you can restyle, rename, hide or delete.
 OSM returns roads in fragments rather than as whole named routes, so the scan
 chains them end to end, grouped by class rather than by name — the unnamed
 connector between two named stretches has to be able to join either.
+
+The query goes to OpenStreetMap's public Overpass servers straight from the
+browser — not through your own hosting, so a slow scan is never the site's
+server. Four mirrors are raced rather than queued: if the first has not
+answered in 8 seconds a second is asked alongside it, the first complete answer
+wins, and the one that won is asked first next time. A dead mirror used to hold
+the scan for half a minute before anything else was tried. Identify and the
+contour map's Roads & Structures use the same race.
 
 ### The red medical symbols, on raster OSM
 

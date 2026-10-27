@@ -1,0 +1,243 @@
+/**
+ * Four Overpass mirrors, and which one the scan waits for.
+ *
+ * The ring scan asked the mirrors one at a time and rightly gave each the full
+ * time Overpass is told it may take. So a first mirror that never answered
+ * held the scan for twenty-eight seconds before the second was asked anything
+ * — "The first OpenStreetMap server did not answer — trying number 2 of 4",
+ * half a minute in, which read as the site being slow.
+ *
+ * Now a second mirror is asked alongside a slow one, the first complete answer
+ * wins, and the one that won is asked first next time. Every case here plays
+ * pretend servers against each other on a clock scaled down to milliseconds:
+ * no network, no browser.
+ *
+ *   node diagnostics/overpass-race.cjs
+ */
+const path = require('path');
+const REPO = path.join(__dirname, '..');
+
+// The module keeps its mirror memory in localStorage; Node has none.
+const store = {};
+globalThis.localStorage = {
+  getItem: k => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: k => { delete store[k]; },
+};
+const M = require(path.join(REPO, 'js/services/ringFeatures.js'));
+
+const R = [];
+const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (d ? '  — ' + d : '')); };
+
+/**
+ * Pretend mirrors. Each url maps to how it behaves:
+ *   { after, status, body }  answer after `after` ms
+ *   { hang: true }           never answer
+ *   { after, network: true } refuse the connection
+ * Records when each was asked and whether it was cancelled.
+ */
+function servers(table) {
+  const t0 = Date.now();
+  const asked = {}, cancelled = new Set();
+  const fetch = (url, init) => {
+    asked[url] = Date.now() - t0;
+    const b = table[url] || { hang: true };
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        cancelled.add(url);
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      };
+      init.signal.addEventListener('abort', onAbort);
+      if (b.hang) return;
+      setTimeout(() => {
+        init.signal.removeEventListener('abort', onAbort);
+        if (b.network) return reject(new TypeError('Failed to fetch'));
+        const status = b.status || 200;
+        resolve({ status, ok: status >= 200 && status < 300,
+          json: async () => b.body || { elements: [] } });
+      }, b.after || 0);
+    });
+  };
+  return { fetch, asked, cancelled, t0 };
+}
+
+/** The production timings, scaled down: 8 s hedge -> 100 ms. */
+const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minAttemptMs: 0, totalMs: 2000 };
+
+(async () => {
+  /* ---- the case that was reported ------------------------------------------ */
+
+  {
+    const s = servers({ A: { hang: true }, B: { after: 30, body: { elements: [{ id: 'b' }] } } });
+    const steps = [];
+    const got = await M.overpassRace('q', Object.assign({}, FAST,
+      { mirrors: ['A', 'B', 'C', 'D'], fetch: s.fetch, onStep: st => steps.push(st) }));
+    const ms = Date.now() - s.t0;
+    ck('a dead first server no longer holds the scan for its whole timeout',
+      got.ok && got.host === 'B' && ms < 250, (got.host || 'none') + ' answered, ' + ms + 'ms of a 400ms timeout');
+    ck('the second is asked once the hedge passes, not before',
+      s.asked.B >= 90 && s.asked.B < 160, 'asked at ' + s.asked.B + 'ms');
+    ck('and the dead one is cancelled once the live one answers', s.cancelled.has('A'));
+    ck('the third and fourth are never bothered', !('C' in s.asked) && !('D' in s.asked));
+    ck('the panel is told the second is asked alongside, not instead',
+      steps.length === 2 && steps[1].mirror === 2 && steps[1].live === 2,
+      JSON.stringify(steps));
+  }
+
+  /* ---- a slow server is still allowed to win ------------------------------- */
+
+  {
+    const s = servers({ A: { after: 180, body: { elements: [{ id: 'a' }] } }, B: { after: 300 } });
+    const got = await M.overpassRace('q', Object.assign({}, FAST, { mirrors: ['A', 'B'], fetch: s.fetch }));
+    ck('a slow live server is not hung up on when the second is asked',
+      got.ok && got.host === 'A', (got.host || 'none') + ' won');
+    ck('and the second is cancelled once the first answers', s.cancelled.has('B'));
+  }
+
+  /* ---- a server that fails at once ----------------------------------------- */
+
+  {
+    const s = servers({ A: { after: 10, network: true }, B: { after: 10 } });
+    const steps = [];
+    const got = await M.overpassRace('q', Object.assign({}, FAST,
+      { mirrors: ['A', 'B'], fetch: s.fetch, onStep: st => steps.push(st) }));
+    ck('a server that refuses outright hands over at once, without waiting out the hedge',
+      got.ok && got.host === 'B' && s.asked.B < 60, 'B asked at ' + s.asked.B + 'ms');
+    ck('and the panel is told the first did not answer, not that it is slow',
+      steps[1] && steps[1].live === 1, JSON.stringify(steps[1]));
+  }
+
+  {
+    // Overpass reports its own timeout as a 200 with a remark and whatever it
+    // got through. Taken as an answer, it was a confident near-empty scan,
+    // cached for a week.
+    const s = servers({
+      A: { after: 10, body: { elements: [], remark: 'runtime error: Query timed out in "query" at line 3 after 26 seconds.' } },
+      B: { after: 20, body: { elements: [{ id: 'b' }] } },
+    });
+    const got = await M.overpassRace('q', Object.assign({}, FAST, { mirrors: ['A', 'B'], fetch: s.fetch }));
+    ck('a 200 that says the query timed out is not taken as the answer',
+      got.ok && got.host === 'B' && got.json.elements.length === 1, (got.host || 'none') + ' won');
+  }
+
+  {
+    const s = servers({ A: { after: 10, status: 400 }, B: { after: 10 } });
+    const got = await M.overpassRace('q', Object.assign({}, FAST, { mirrors: ['A', 'B'], fetch: s.fetch }));
+    ck('a 400 stops the race: the query is just as wrong at every mirror',
+      !got.ok && got.reasons.indexOf('http-400') >= 0 && !('B' in s.asked),
+      JSON.stringify(got.reasons));
+  }
+
+  /* ---- when nothing answers ------------------------------------------------ */
+
+  {
+    const s = servers({
+      A: { after: 10, status: 504 }, B: { after: 10, network: true },
+      C: { after: 10, status: 429 }, D: { hang: true },
+    });
+    const got = await M.overpassRace('q', Object.assign({}, FAST,
+      { mirrors: ['A', 'B', 'C', 'D'], fetch: s.fetch, attemptMs: 150 }));
+    const ms = Date.now() - s.t0;
+    ck('when every mirror fails, every mirror was asked', Object.keys(s.asked).length === 4);
+    ck('and the most useful reason is the one reported',
+      !got.ok && M.overpassWorstReason(got.reasons) === 'http-429', JSON.stringify(got.reasons));
+    ck('without waiting longer than the slowest one was allowed', ms < 260, ms + 'ms');
+  }
+
+  {
+    const s = servers({ A: { hang: true }, B: { hang: true }, C: { hang: true }, D: { hang: true } });
+    const got = await M.overpassRace('q', Object.assign({}, FAST,
+      { mirrors: ['A', 'B', 'C', 'D'], fetch: s.fetch, attemptMs: 10000, totalMs: 300 }));
+    const ms = Date.now() - s.t0;
+    ck('the whole race is bounded, whatever each mirror is allowed',
+      !got.ok && got.reasons.indexOf('timeout') >= 0 && ms < 360, ms + 'ms of a 300ms total');
+    ck('and nothing it asked is left running behind it',
+      Object.keys(s.asked).length >= 3 && Object.keys(s.asked).every(h => s.cancelled.has(h)),
+      Object.keys(s.asked).length + ' asked, ' + s.cancelled.size + ' cancelled');
+  }
+
+  /* ---- the next scan asks the server that answered ------------------------- */
+
+  {
+    const [m0, m1, m2, m3] = M.OVERPASS_MIRRORS;
+    ck('with nothing known, the mirrors are asked in their listed order',
+      M.overpassMirrorOrder().join() === M.OVERPASS_MIRRORS.join());
+
+    const s = servers({ [m0]: { hang: true }, [m1]: { after: 20 } });
+    await M.overpassRace('q', Object.assign({}, FAST, { mirrors: M.OVERPASS_MIRRORS, fetch: s.fetch }));
+    const order = M.overpassMirrorOrder();
+    ck('the mirror that answered is asked first next time', order[0] === m1, order.map(short).join(' > '));
+    // Cancelled is not stopped: that server is still running our query and
+    // holding the slot, so asking it straight away would queue behind our own.
+    ck('and the one left running our cancelled query is asked last', order[3] === m0,
+      order.map(short).join(' > '));
+
+    // Two that have answered: the faster leads.
+    store[M.OVERPASS_MIRROR_KEY] = JSON.stringify({
+      [m2]: { ok: Date.now() - 1000, ms: 900 }, [m3]: { ok: Date.now() - 1000, ms: 300 },
+    });
+    const o2 = M.overpassMirrorOrder(Date.now() + 26000);   // after m0's ghost has cleared
+    ck('between two that answered, the faster is asked first',
+      o2[0] === m3 && o2[1] === m2, o2.map(short).join(' > '));
+
+    // One that failed lately goes behind the ones that did not.
+    store[M.OVERPASS_MIRROR_KEY] = JSON.stringify({ [m0]: { fail: Date.now() - 60e3 } });
+    const o3 = M.overpassMirrorOrder(Date.now() + 26000);
+    ck('a mirror that failed in the last half hour is asked after the others',
+      o3[o3.length - 1] === m0, o3.map(short).join(' > '));
+    const o4 = M.overpassMirrorOrder(Date.now() + M.OVERPASS_DEMOTE_MS + 26000);
+    ck('and gets its place back once that has passed', o4[0] === m0, o4.map(short).join(' > '));
+    delete store[M.OVERPASS_MIRROR_KEY];
+  }
+
+  /* ---- the production numbers ---------------------------------------------- */
+
+  ck('a second server is asked well before a dead one would be given up on',
+    M.OVERPASS_HEDGE_MS < M.OVERPASS_TIMEOUT_S * 1000 / 2,
+    (M.OVERPASS_HEDGE_MS / 1000) + 's, against ' + M.OVERPASS_TIMEOUT_S + 's');
+  ck('but not so soon that a healthy one is doubled up on for an ordinary ring',
+    M.OVERPASS_HEDGE_MS >= 5000, (M.OVERPASS_HEDGE_MS / 1000) + 's');
+  ck('every mirror can be asked and given a full attempt inside the total',
+    (M.OVERPASS_MIRRORS.length - 1) * M.OVERPASS_HEDGE_MS + M.OVERPASS_FETCH_MS <= M.OVERPASS_TOTAL_MS,
+    ((M.OVERPASS_MIRRORS.length - 1) * M.OVERPASS_HEDGE_MS + M.OVERPASS_FETCH_MS) / 1000
+      + 's of ' + M.OVERPASS_TOTAL_MS / 1000 + 's');
+
+  /* ---- the ring scan itself, through the real fetch ------------------------ */
+
+  {
+    // Real gate, real hedge: the first mirror answers with Overpass's own
+    // timeout remark, the next with an empty but complete answer.
+    let calls = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls++;
+      const body = calls === 1
+        ? { elements: [], remark: 'runtime error: Query timed out in "query" at line 3 after 26 seconds.' }
+        : { elements: [] };
+      return { status: 200, ok: true, json: async () => body };
+    };
+    const t0 = Date.now();
+    const a = await M.fetchOverpassFeatures(19.10, 72.88, 2000, ['rail'], null);
+    const cache = JSON.parse(store['dbot.overpassCache.v1'] || '{}');
+    ck('a scan whose first mirror timed out on its side takes the next mirror\'s answer',
+      a.ok && calls === 2 && Date.now() - t0 < 4000, calls + ' requests, ' + (Date.now() - t0) + 'ms');
+    ck('and caches that answer, which is a real one', Object.keys(cache).length === 1);
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return { status: 200, ok: true, json: async () => ({ elements: [], remark: 'runtime error: Query run out of memory' }) };
+    };
+    const b = await M.fetchOverpassFeatures(19.20, 72.90, 2000, ['rail'], null);
+    const cache2 = JSON.parse(store['dbot.overpassCache.v1'] || '{}');
+    ck('a scan every mirror gave up on is reported as a timeout, not as "nothing here"',
+      !b.ok && b.reason === 'timeout', JSON.stringify(b));
+    ck('and is not cached as if it were an answer', Object.keys(cache2).length === 1);
+    globalThis.fetch = realFetch;
+  }
+
+  console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
+  process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
+})();
+
+function short(u) { return u.replace(/^https:\/\//, '').split('/')[0]; }
