@@ -395,8 +395,11 @@ file to stop it.
 It is safe to run again. If it ends with problems, the lines marked `!!` say
 what and where; it never writes into a folder that holds a different site.
 
-On a VPS the configuration file normally lives at `api/config.php` inside the
-site folder. PHP-FPM gives the API no home folder to look in, and anything
-under `/var/www` counts as web-served. The web server must refuse that file;
-step 5 of the script checks that it does.
+The script does not hunt for the configuration file itself. The API can be
+pointed at it from places no folder search would find, such as a
+`MAPSTUDIO_CONFIG` path set in the PHP-FPM pool. So the script asks the API
+instead: a `/api/health` that reaches the database proves the file is in
+place, and one that cannot names the exact path it wanted. If the file sits
+inside the site folder as `api/config.php`, the web server must refuse to
+serve it, and step 5 checks that it does.
 

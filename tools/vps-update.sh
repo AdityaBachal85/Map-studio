@@ -278,17 +278,6 @@ else
   fi
 fi
 
-if [ -n "$ROOT" ] && [ -d "$ROOT" ]; then
-  # Where the API will find its database settings. Never printed — only
-  # whether one is there.
-  found=""
-  for c in "$ROOT/api/config.php" "$(dirname "$ROOT")/map-studio-config.php" /home/*/map-studio-config.php; do
-    [ -f "$c" ] && { found="$c"; break; }
-  done
-  if [ -n "$found" ]; then ok "database settings found at $found"
-  else bad "No database settings file yet, so sign-in cannot work. GO-LIVE.md step 6 says how to make one (as $ROOT/api/config.php on this server)."; fi
-fi
-
 # ---------------------------------------------------------------------------
 if [ "$SITE_ONLY" = 0 ]; then
 step "Restart"
@@ -340,9 +329,18 @@ step "Check"
     bad "The server is serving v$served, but $ROOT holds ${ondisk:+v$ondisk}${ondisk:-no Map Studio build} — $SERVER is serving $DOMAIN from another folder."
   fi
 
+  # WHETHER THE DATABASE SETTINGS EXIST IS ASKED OF THE API, NOT OF THE DISK.
+  # This used to look for the file in three folders and report it missing
+  # when it was in none — on a server where the API was happily reading it
+  # from a path set by MAPSTUDIO_CONFIG, which no folder list can know about.
+  # The API knows exactly where it looked: a health check that reaches the
+  # database proves the file is in place, and one that cannot names the path
+  # it wanted.
   health="$(get /api/health)"
   if printf '%s' "$health" | grep -q '"ok":true'; then
-    ok "the API answers and the database is reachable"
+    ok "the API has its database settings, reaches the database, and the tables are current"
+  elif printf '%s' "$health" | grep -q 'Server is not configured'; then
+    bad "No database settings yet, so sign-in cannot work. The API says: $(printf '%s' "$health" | sed -n 's/.*"detail":"\([^"]*\)".*/\1/p' | head -c 400)"
   elif printf '%s' "$health" | grep -q '<?php'; then
     bad "/api returns PHP source code instead of running it — PHP is not connected to $SERVER for this site."
   elif printf '%s' "$health" | grep -qE '"(ok|error)"'; then
