@@ -29,10 +29,24 @@
  * system twice a second, would make the whole app crawl.
  */
 
-/** Independent hosts. One donated service is not a feature. */
+/**
+ * Independent hosts. One donated service is not a feature.
+ *
+ * INDEPENDENT IS CHECKED, NOT ASSUMED. kumi.systems and private.coffee were
+ * both listed here, and they are one service under two names — the first was
+ * renamed to the second — so they fail together, and a scan that "tried 4"
+ * had really tried three. openstreetmap.fr's instance took kumi's place: a
+ * separate operator, and in October 2026 the one answering while the others
+ * returned errors.
+ *
+ * overpass-api.de stays first, though since April 2026 it refuses requests
+ * that do not name the program asking, and a web page cannot set that header.
+ * Straight from the browser it may well fail; through this site's relay
+ * (below), which does name itself, it is the main instance again.
+ */
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
@@ -53,7 +67,7 @@ const OVERPASS_MIRRORS = [
  * In the same order as OVERPASS_MIRRORS.
  */
 const OVERPASS_RELAY_BASE = '/osm/overpass/';
-const OVERPASS_RELAY_IDS = ['de', 'kumi', 'coffee', 'mailru'];
+const OVERPASS_RELAY_IDS = ['de', 'fr', 'coffee', 'mailru'];
 /** What the relay's ping answers, so an HTML page served for any path is not mistaken for it. */
 const OVERPASS_RELAY_PING = 'map-studio-overpass';
 
