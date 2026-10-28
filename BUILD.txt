@@ -1,7 +1,7 @@
 DBOT Map Studio
-version  6.0237
-built    2026-10-27T11:28:28.152Z
-files    178  (5.6 MB)
+version  6.0238
+built    2026-10-28T09:27:57.385Z
+files    178  (5.7 MB)
 
 These are the CONTENTS of the site's folder — for map.dbotrealty.tech,
 the subdomain's folder, not public_html itself. That includes the hidden

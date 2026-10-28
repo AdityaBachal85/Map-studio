@@ -97,7 +97,7 @@ async function identifyAt(lat, lng, radiusM) {
   // mirror is asked: this is a few dozen tags around one point, which a
   // healthy server answers in a second or two, and somebody is looking at an
   // empty popup while it does.
-  const got = await overpassRace(ql, { hedgeMs: 4000 });
+  const got = await overpassRace(ql, { hedgeMs: 4000, at: [lat, lng] });
   if (!got.ok) return { ok: false, reason: overpassWorstReason(got.reasons) };
 
   const items = ((got.json && got.json.elements) || [])

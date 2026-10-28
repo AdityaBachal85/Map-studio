@@ -104,6 +104,7 @@ async function runRingScan() {
     s.skipped = res.skipped || [];
     s.truncated = !!res.truncated;
     s.cached = !!res.cached;
+    s.own = !!res.own;
     s.google = res.google || null;
     // Everything found starts ticked: the common case is "yes, put the metro
     // line on the map". Unticking a class is one click; ticking six is six.
@@ -226,6 +227,11 @@ function renderRingScan() {
     // has been given up on.
     const where = st.stage === 'google' ? 'Asking Google about the places found'
       : !(st.mirror > 1) ? 'Searching OpenStreetMap inside the ' + esc(String(s.km)) + ' km ring'
+      // The site's own server, by name: it is the one most likely to answer,
+      // and "server 2 of 9" would hide that the wait is nearly over.
+      : st.own
+        ? (st.live > 1 ? 'The public OpenStreetMap server is slow — asking this site\'s own map server too'
+          : 'The public OpenStreetMap server did not answer — asking this site\'s own map server')
       : st.live > 1
         ? 'OpenStreetMap is slow to answer — also asking server ' + st.mirror + ' of ' + st.of
           + ', and the first to answer wins'
@@ -292,6 +298,10 @@ function renderRingScan() {
       html += '<div class="rs-scan-note">Google ' + bits.join(' and ') + '.</div>';
     }
     if (s.cached) html += '<div class="rs-scan-note">From this browser\'s cache.</div>';
+    else if (s.own) {
+      html += '<div class="rs-scan-note">Answered by this site\'s own map server — the public'
+        + ' OpenStreetMap servers were too slow. Its data is refreshed from OpenStreetMap every day.</div>';
+    }
   }
 
   body.innerHTML = html;
