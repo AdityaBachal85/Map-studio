@@ -62,6 +62,15 @@ OVERPASS_RELAYS=(
 # stock names of the usual HTTP libraries included — with a 406.
 RELAY_UA="DBOTMapStudio/1.0 (+https://map.dbotrealty.tech; Overpass relay for ring scans)"
 SNIPPET="/etc/nginx/snippets/map-studio-overpass.conf"
+# The site's own Overpass server, where one runs: a Docker container named
+# map-studio-overpass answering on 127.0.0.1:12345, built from Geofabrik's
+# India extract. COVERAGE is Geofabrik's outline of that extract, served to
+# the app so it only asks the own server about places it has data for.
+LOCAL_NAME="map-studio-overpass"
+LOCAL_URL="http://127.0.0.1:12345/api/interpreter"
+LOCAL_POLY_URL="https://download.geofabrik.de/asia/india.poly"
+COVERAGE="/var/lib/map-studio/overpass-coverage.poly"
+LOCAL=0
 sock=""
 
 AUTO=0; SITE_ONLY=0; QUIET=0; RELAY=1; ROOT=""
@@ -322,7 +331,7 @@ write_relay_snippet() {
 location = /osm/overpass/ping {
     default_type text/plain;
     add_header Cache-Control "no-store" always;
-    return 200 "map-studio-overpass\n";
+    return 200 "map-studio-overpass\n__LOCAL_LINE__";
 }
 
 # Who is signed in, asked of the API before every relayed query: 200 lets it
@@ -346,6 +355,33 @@ location = /osm/overpass/_auth {
     fastcgi_param HTTPS           $https if_not_empty;
 }
 EOF
+    if [ "$LOCAL" = 1 ]; then
+      cat <<EOF
+
+# Where the own server has data: Geofabrik's outline of its extract. Public —
+# it is a country's border — and read once per page by the app.
+location = /osm/overpass/coverage {
+    default_type text/plain;
+    add_header Cache-Control "public, max-age=86400" always;
+    alias $COVERAGE;
+}
+
+# The site's own Overpass server. Same rule as the relays: signed-in users
+# only, and nothing but the query passed on.
+location = /osm/overpass/local {
+    auth_request /osm/overpass/_auth;
+    limit_except POST { deny all; }
+    client_max_body_size 64k;
+    proxy_pass $LOCAL_URL;
+    proxy_pass_request_headers off;
+    proxy_set_header Host localhost;
+    proxy_set_header Content-Type "application/x-www-form-urlencoded";
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 30s;
+    proxy_read_timeout 90s;
+}
+EOF
+    fi
     for entry in "${OVERPASS_RELAYS[@]}"; do
       read -r id path <<<"$entry"
       host="${path%%/*}"
@@ -381,7 +417,8 @@ location = /osm/overpass/$id {
 }
 EOF
     done
-  } | sed -e "s#__SOCK__#$2#" -e "s#__DNS__#${dns% }#" >"$1"
+  } | sed -e "s#__SOCK__#$2#" -e "s#__DNS__#${dns% }#" \
+          -e "s#__LOCAL_LINE__#$([ "$LOCAL" = 1 ] && printf 'local\\\\n')#" >"$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -410,6 +447,19 @@ step "Overpass relay"
       had_snippet=0
       [ -f "$SNIPPET" ] && { cp -p "$SNIPPET" "$BACKUP_DIR/relay-$stamp.conf"; had_snippet=1; }
       mkdir -p "$(dirname "$SNIPPET")"
+      if command -v docker >/dev/null 2>&1 \
+        && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$LOCAL_NAME"; then
+        mkdir -p "$(dirname "$COVERAGE")"
+        if [ -s "$COVERAGE" ] || { curl -fsSL -m 60 "$LOCAL_POLY_URL" -o "$COVERAGE.new" 2>>"$LOG" \
+            && grep -q '^END' "$COVERAGE.new" && mv "$COVERAGE.new" "$COVERAGE"; }; then
+          chmod 644 "$COVERAGE"
+          LOCAL=1
+          ok "your own Overpass server ($LOCAL_NAME) is wired in, asked after the public servers"
+        else
+          rm -f "$COVERAGE.new"
+          bad "your own Overpass server exists, but its coverage outline could not be downloaded from Geofabrik, so it is not wired in yet."
+        fi
+      fi
       write_relay_snippet "$SNIPPET" "$sock"
 
       edited=()
@@ -606,7 +656,7 @@ step "Check"
       fi
       printf '%s' "$c"
     }
-    if [ "$(get /osm/overpass/ping | tr -d '\r\n')" = "map-studio-overpass" ]; then
+    if [ "$(get /osm/overpass/ping | head -1 | tr -d '\r')" = "map-studio-overpass" ]; then
       ok "the Overpass relay is on"
       code="$(post_code /osm/overpass/de)"
       case "$code" in
@@ -614,6 +664,15 @@ step "Check"
         200) bad "SECURITY: the Overpass relay answers anyone, signed in or not. Run again with --no-relay and send this output to Claude." ;;
         *)   bad "the relay answered a signed-out request with HTTP $code instead of 401 — its sign-in check is not working." ;;
       esac
+      if [ "$LOCAL" = 1 ] || grep -q 'osm/overpass/local' "$SNIPPET" 2>/dev/null; then
+        lres="$(curl -s -m 10 "$LOCAL_URL?data=%5Bout%3Ajson%5D%3Bnode(1)%3Bout%3B" 2>/dev/null)"
+        if printf '%s' "$lres" | grep -q '"generator"'; then
+          ok "your own Overpass server answers (its data is as of $(printf '%s' "$lres" | grep -o '"timestamp_osm_base": *"[^"]*"' | grep -oE '[0-9]{4}-[0-9T:Z-]+'))"
+        else
+          step_now="$(docker logs --tail 40 "$LOCAL_NAME" 2>&1 | tr '\r' '\n' | grep -vE '^[[:space:]]*[0-9]+[[:space:]]+[0-9.]+[kMG]?[[:space:]]' | grep -v '^[[:space:]]*$' | tail -1 | head -c 160)"
+          note "your own Overpass server is still being built — scans use the public servers until it is ready${step_now:+ (now: $step_now)}"
+        fi
+      fi
     elif [ -f "$SNIPPET" ]; then
       bad "the Overpass relay is installed, but $DOMAIN does not answer its ping."
     fi
@@ -639,6 +698,10 @@ step "Check"
       esac
     done
     if [ "$reach" -gt 0 ]; then ok "this server reaches $reach of ${#OVERPASS_RELAYS[@]} Overpass servers"
+    elif grep -q 'osm/overpass/local' "$SNIPPET" 2>/dev/null; then
+      # Not a problem with the site's own server in place: browsers still ask
+      # the public servers directly, and the own server is behind them.
+      note "this server cannot reach the public Overpass servers itself; browsers still ask them directly, and your own server answers when they do not"
     else bad "this server cannot reach any Overpass server either, so the relay cannot help yet."; fi
   fi
 fi

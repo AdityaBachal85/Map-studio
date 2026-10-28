@@ -894,8 +894,14 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
     ringScanState.step = { mirror: 2, of: 4, live: 2 };
     renderRingScan();
     const t4 = document.getElementById('ringScanBody').textContent;
+    ringScanState.step = { mirror: 2, of: 9, live: 2, own: true };
+    renderRingScan();
+    const t5 = document.getElementById('ringScanBody').textContent;
+    Object.assign(ringScanState, { busy: false, result: [], own: true, cached: false });
+    renderRingScan();
+    const t6 = document.getElementById('ringScanBody').textContent;
     ringScanState = null;
-    return { t, t2, t3, t4 };
+    return { t, t2, t3, t4, t5, t6 };
   });
   ck('a scan in progress shows how long it has been going',
     /2[34]s/.test(busy.t), (busy.t.match(/\d+s/) || ['none'])[0]);
@@ -914,6 +920,12 @@ const ck = (n, p, d) => { R.push(p); console.log((p ? 'PASS ' : 'FAIL ') + n + (
   ck('a slow server is reported as slow, with a second asked alongside it',
     /slow to answer/.test(busy.t4) && /server 2 of 4/.test(busy.t4) && !/did not answer/.test(busy.t4),
     busy.t4.slice(0, 120));
+  // The site's own server by name, not as "server 2 of 9": it is the one most
+  // likely to answer, and the reader should know the wait is nearly over.
+  ck('the site\'s own map server is named when it is asked',
+    /own map server/.test(busy.t5) && !/2 of 9/.test(busy.t5), (busy.t5.match(/The public[^—]*—[^,]*/) || [''])[0]);
+  ck('and an answer from it says so',
+    /Answered by this site's own map server/.test(busy.t6), /own map server/.test(busy.t6) ? 'noted' : 'silent');
 
   /* -- what is coming, drawn so it cannot be read as built ------------------ */
 

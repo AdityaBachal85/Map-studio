@@ -405,6 +405,28 @@ directly. The relay:
   `/var/backups/map-studio/`. If nginx refuses the result, both are put back
   as they were.
 
+**The site's own Overpass server.** Public Overpass became unreliable in
+October 2026. overpass-api.de's successful requests fell by about nine tenths,
+and since September it meters each address to a few minutes of work a day,
+which an office sharing one address soon uses up. The VPS therefore runs its
+own copy for all of India: a Docker project named `map-studio-overpass` (image
+`wiktorn/overpass-api:0.7.62`), created through Hostinger's Docker manager.
+
+- It answers on `127.0.0.1:12345` only. The way in from outside is the
+  relay's `/osm/overpass/local`, for signed-in users.
+- It was built from Geofabrik's India extract. The first build takes several
+  hours; after that it updates from Geofabrik's daily changes.
+- It is limited to 6 GB of memory and 1.5 CPUs, so the site keeps the rest.
+- The app asks the **public servers first**, as the GitHub Pages copy does,
+  straight from the browser. Only if the best one has not answered within
+  8 seconds is the own server asked too, and the first answer wins.
+- It is used only inside Geofabrik's outline of India, which the script
+  publishes at `/osm/overpass/coverage`. Elsewhere, an empty answer from it
+  would wrongly read as "nothing is mapped here".
+- When `vps-update.sh` finds the container, it adds the route, publishes the
+  outline, and reports whether the server answers yet, or which build step
+  it is on.
+
 Add `--auto` (`… | bash -s -- --auto`) once, and a five-minute check is
 installed in `/etc/cron.d/map-studio-update`: from then on a push reaches the
 site by itself. Its log is `/var/log/map-studio-update.log`. Delete the cron

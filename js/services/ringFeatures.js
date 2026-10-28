@@ -1631,6 +1631,24 @@ function overpassMirrorOrder(now, list) {
 let _overpassRelay = null;
 /** Known once the ping has answered: true, false, or null for not yet asked. */
 let _overpassRelayOn = null;
+/** Whether the ping also names a server of the site's own — see OVERPASS_LOCAL_ROUTE. */
+let _overpassLocalOn = false;
+
+/**
+ * The site's own Overpass server, where it runs one, relayed like the others.
+ *
+ * THE PUBLIC SERVERS STOPPED BEING SOMETHING TO RELY ON. Through October 2026
+ * overpass-api.de's successful requests fell by nine tenths, and since
+ * September it has metered each address to a few minutes of work a day — an
+ * office shares one address, so one busy morning used up everybody's
+ * afternoon. The site can run its own copy for the region it works in
+ * (tools/vps-update.sh wires it in), with no meter and no queue but its own.
+ *
+ * It is asked SECOND, after the best public server and once that has had
+ * OVERPASS_HEDGE_MS to answer, never first: that is the order this site's
+ * owner asked for, and it keeps the public servers the default.
+ */
+const OVERPASS_LOCAL_ROUTE = OVERPASS_RELAY_BASE + 'local';
 
 /**
  * Whether this site relays Overpass. Asked once per page.
@@ -1648,7 +1666,10 @@ function overpassRelayReady() {
     const timer = setTimeout(() => ctl.abort(), 3000);
     try {
       const res = await fetch(OVERPASS_RELAY_BASE + 'ping', { cache: 'no-store', signal: ctl.signal });
-      _overpassRelayOn = res.ok && (await res.text()).trim() === OVERPASS_RELAY_PING;
+      // First line: that this is the relay. Later lines: what else it has.
+      const lines = res.ok ? (await res.text()).split(/\r?\n/).map(l => l.trim()) : [];
+      _overpassRelayOn = lines[0] === OVERPASS_RELAY_PING;
+      _overpassLocalOn = _overpassRelayOn && lines.indexOf('local') > 0;
     } catch (e) {
       _overpassRelayOn = false;
     } finally { clearTimeout(timer); }
@@ -1676,6 +1697,84 @@ async function overpassMirrorList() {
   const relayed = (await overpassRelayReady())
     ? OVERPASS_RELAY_IDS.map(id => OVERPASS_RELAY_BASE + id) : [];
   return OVERPASS_MIRRORS.concat(relayed);
+}
+
+/**
+ * Read an Osmosis .poly file — the outline Geofabrik publishes for each extract.
+ *
+ * A name line, then sections: a header line (a leading "!" marks a hole), one
+ * "lon lat" pair per line, END; and a final END.
+ *
+ * @param {string} text
+ * @returns {{outers: number[][][], holes: number[][][]}} rings as [lat, lng]
+ */
+function parseOsmPoly(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim());
+  const out = { outers: [], holes: [] };
+  let cur = null, hole = false;
+  for (let i = 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (!l) continue;
+    if (cur === null) {
+      if (l === 'END') break;
+      hole = l.charAt(0) === '!';
+      cur = [];
+      continue;
+    }
+    if (l === 'END') {
+      if (cur.length >= 3) (hole ? out.holes : out.outers).push(cur);
+      cur = null;
+      continue;
+    }
+    const p = l.split(/\s+/).map(Number);
+    if (p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) cur.push([p[1], p[0]]);
+  }
+  return out;
+}
+
+/** @param {number[]} at [lat, lng] @param {{outers, holes}} poly @returns {boolean} */
+function polyCovers(at, poly) {
+  return !!poly && poly.outers.some(r => pointInRing(at, r))
+    && !poly.holes.some(r => pointInRing(at, r));
+}
+
+let _overpassCoverage = null;
+/**
+ * Where the site's own server has data, fetched once per page.
+ *
+ * ASKED BEFORE IT IS USED, BECAUSE AN EMPTY ANSWER IS STILL AN ANSWER. Outside
+ * the region it was built from, the own server does not fail — it says, quite
+ * correctly for its data, that nothing is there, and a scan would report that
+ * nothing is mapped around a plot in a city it has simply never heard of.
+ * @returns {Promise<{outers, holes}|null>}
+ */
+function overpassLocalCoverage() {
+  if (_overpassCoverage) return _overpassCoverage;
+  _overpassCoverage = (async () => {
+    try {
+      const res = await fetch(OVERPASS_RELAY_BASE + 'coverage', { cache: 'no-store' });
+      if (!res.ok) return null;
+      const poly = parseOsmPoly(await res.text());
+      return poly.outers.length ? poly : null;
+    } catch (e) { return null; }
+  })();
+  return _overpassCoverage;
+}
+
+/**
+ * Every route for a scan around `at`, in the order to ask them: the public
+ * servers as overpassMirrorOrder ranks them, with the site's own server second
+ * where it covers `at`.
+ * @param {number[]} [at] [lat, lng]; without it the own server is never used
+ * @returns {Promise<string[]>}
+ */
+async function overpassRoutes(at) {
+  const routes = overpassMirrorOrder(Date.now(), await overpassMirrorList());
+  if (_overpassLocalOn && Array.isArray(at) && isFinite(at[0]) && isFinite(at[1])
+    && polyCovers(at, await overpassLocalCoverage())) {
+    routes.splice(1, 0, OVERPASS_LOCAL_ROUTE);
+  }
+  return routes;
 }
 
 /**
@@ -1719,12 +1818,14 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
  * milliseconds rather than half a minute.
  *
  * @param {string} ql
- * @param {object} [o] { mirrors, fetch, gate, hedgeMs, attemptMs, minAttemptMs, totalMs, onStep }
+ * @param {object} [o] { at: [lat, lng] — where the scan is, so the site's own server can
+ *   be asked where it covers it; mirrors, fetch, gate, hedgeMs, attemptMs,
+ *   minAttemptMs, totalMs, onStep }
  * @returns {Promise<{ok:true, json:object, host:string, ms:number}|{ok:false, reasons:string[]}>}
  */
 async function overpassRace(ql, o) {
   o = o || {};
-  const hosts = o.mirrors || overpassMirrorOrder(Date.now(), await overpassMirrorList());
+  const hosts = o.mirrors || await overpassRoutes(o.at);
   const doFetch = o.fetch || ((url, init) => fetch(url, init));
   const gate = o.gate || overpassGate;
   const hedgeMs = o.hedgeMs != null ? o.hedgeMs : OVERPASS_HEDGE_MS;
@@ -1816,7 +1917,7 @@ async function overpassRace(ql, o) {
         fail(host, 'timeout', false);
         return;
       }
-      won = { ok: true, json, host, ms: Date.now() - t0 };
+      won = { ok: true, json, host, ms: Date.now() - t0, own: host === OVERPASS_LOCAL_ROUTE };
       overpassMirrorNote(host, { ok: Date.now(), ms: won.ms });
       stopAll(host);
     } finally {
@@ -1843,7 +1944,8 @@ async function overpassRace(ql, o) {
           continue;
         }
         const host = hosts[asked++];
-        if (onStep) onStep({ mirror: asked, of: hosts.length, live: pending + 1 });
+        if (onStep) onStep({ mirror: asked, of: hosts.length, live: pending + 1,
+          own: host === OVERPASS_LOCAL_ROUTE });
         attempt(host);
         hedgeAt = now + hedgeMs;
         continue;
@@ -2177,7 +2279,7 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
   if (_overpassPending.has(key)) return _overpassPending.get(key);
 
   const run = (async () => {
-    const got = await overpassRace(ql, { onStep });
+    const got = await overpassRace(ql, { onStep, at: [lat, lng] });
     if (!got.ok) return { ok: false, reason: overpassWorstReason(got.reasons), skipped };
 
     const els = (got.json && got.json.elements) || [];
@@ -2203,7 +2305,7 @@ async function fetchOverpassFeatures(lat, lng, radiusM, ids, onStep) {
     const all = overpassCacheRead();
     all[key] = { at: Date.now(), f: joined, tr: truncated };
     overpassCacheWrite(all);
-    return { ok: true, features: joined, skipped, truncated };
+    return { ok: true, features: joined, skipped, truncated, own: !!got.own };
   })();
 
   _overpassPending.set(key, run);
@@ -2321,7 +2423,7 @@ if (typeof module !== 'undefined' && module.exports) {
     OVERPASS_TOTAL_MS, OVERPASS_MIN_ATTEMPT_MS, OVERPASS_TIMEOUT_S, OVERPASS_BACKOFF_MS,
     overpassRace, overpassMirrorOrder, fetchOverpassFeatures,
     overpassRelayReady, overpassMirrorList, OVERPASS_RELAY_BASE, OVERPASS_RELAY_IDS,
-    OVERPASS_RELAY_PING,
+    OVERPASS_RELAY_PING, OVERPASS_LOCAL_ROUTE, parseOsmPoly, polyCovers, overpassRoutes,
     OVERPASS_MIRRORS, OVERPASS_HEDGE_MS, OVERPASS_DEMOTE_MS, OVERPASS_MIRROR_KEY,
     overpassWorstReason, ringFeatureMessage, ringFeatureRetryable,
     ringFeaturePoint, ringMetresBetween, ringFootprintMetres,

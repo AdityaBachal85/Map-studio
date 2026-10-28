@@ -298,6 +298,75 @@ const FAST = { gate: () => Promise.resolve(), hedgeMs: 100, attemptMs: 400, minA
     delete store[M.OVERPASS_MIRROR_KEY];
   }
 
+  /* ---- the site's own server: public first, then this ---------------------- */
+
+  {
+    // The owner's order: the public servers first, the site's own after. And
+    // never for a place it has no data for — its empty answer would be read as
+    // "nothing is mapped here".
+    const poly = M.parseOsmPoly('india\n1\n  68.0 6.5\n  97.5 6.5\n  97.5 35.7\n  68.0 35.7\nEND\n'
+      + '!hole\n  80.0 20.0\n  81.0 20.0\n  81.0 21.0\n  80.0 21.0\nEND\nEND\n');
+    ck('a Geofabrik .poly outline is read, holes and all',
+      poly.outers.length === 1 && poly.holes.length === 1 && poly.outers[0][0][0] === 6.5,
+      poly.outers.length + ' outer, ' + poly.holes.length + ' hole');
+    ck('Mumbai is inside it, Dubai is not, and a hole is not',
+      M.polyCovers([19.07, 72.88], poly) && !M.polyCovers([25.2, 55.27], poly)
+      && !M.polyCovers([20.5, 80.5], poly));
+
+    const file = path.join(REPO, 'js/services/ringFeatures.js');
+    const fresh = () => { delete require.cache[require.resolve(file)]; return require(file); };
+    const realFetch = globalThis.fetch;
+    delete store[M.OVERPASS_MIRROR_KEY];
+    globalThis.location = { protocol: 'https:' };
+    const POLY = 'india\n1\n  68.0 6.5\n  97.5 6.5\n  97.5 35.7\n  68.0 35.7\nEND\nEND\n';
+    const asked = [];
+    let ping = 'map-studio-overpass\nlocal\n';
+    globalThis.fetch = async (url, init) => {
+      asked.push({ url, at: Date.now() });
+      if (url === '/osm/overpass/ping') return { ok: true, status: 200, text: async () => ping };
+      if (url === '/osm/overpass/coverage') return { ok: true, status: 200, text: async () => POLY };
+      if (url === '/osm/overpass/local') {
+        return { ok: true, status: 200, json: async () => ({ elements: [{ id: 'own' }] }) };
+      }
+      // Every public route hangs, as overpass-api.de did all October.
+      return new Promise((resolve, reject) => init.signal.addEventListener('abort', () =>
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+    };
+    const L = fresh();
+    const mumbai = await L.overpassRoutes([19.07, 72.88]);
+    ck('in India, the own server is asked second — right after the best public server',
+      mumbai[0] === L.OVERPASS_MIRRORS[0] && mumbai[1] === L.OVERPASS_LOCAL_ROUTE,
+      short(mumbai[0]) + ', then ' + mumbai[1]);
+    const dubai = await L.overpassRoutes([25.2, 55.27]);
+    ck('outside its outline it is not asked at all', dubai.indexOf(L.OVERPASS_LOCAL_ROUTE) < 0);
+    ck('nor for a request that does not say where it is',
+      (await L.overpassRoutes()).indexOf(L.OVERPASS_LOCAL_ROUTE) < 0);
+
+    asked.length = 0;
+    const t0 = Date.now();
+    const got = await L.overpassRace('q', { at: [19.07, 72.88], gate: () => Promise.resolve(), hedgeMs: 120 });
+    const firstPublic = asked.find(a => /^https:/.test(a.url));
+    const own = asked.find(a => a.url === L.OVERPASS_LOCAL_ROUTE);
+    ck('with the public servers silent, the own server answers the scan',
+      got.ok && got.own === true && got.json.elements[0].id === 'own', got.host);
+    ck('but only after the public server has had its head start',
+      firstPublic && own && own.at - firstPublic.at >= 100,
+      own && firstPublic ? (own.at - firstPublic.at) + 'ms after ' + short(firstPublic.url) : 'not asked');
+    ck('and the public server it was waiting on is cancelled once it has',
+      Date.now() - t0 < 1000, (Date.now() - t0) + 'ms in all');
+    const after = await L.overpassRoutes([19.07, 72.88]);
+    ck('winning does not move it to the front: next time the public server is still asked first',
+      after[0] !== L.OVERPASS_LOCAL_ROUTE && after[1] === L.OVERPASS_LOCAL_ROUTE, after.slice(0, 2).map(short).join(', '));
+
+    ping = 'map-studio-overpass\n';
+    const N = fresh();
+    ck('a site whose relay names no own server never asks one',
+      (await N.overpassRoutes([19.07, 72.88])).indexOf(N.OVERPASS_LOCAL_ROUTE) < 0);
+    globalThis.fetch = realFetch;
+    delete globalThis.location;
+    delete store[M.OVERPASS_MIRROR_KEY];
+  }
+
   console.log('\n' + R.filter(Boolean).length + '/' + R.length + ' passed');
   process.exit(R.filter(Boolean).length === R.length ? 0 : 1);
 })();

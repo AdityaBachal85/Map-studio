@@ -129,7 +129,8 @@ async function fetchOsmDetail(b, level) {
     // The ring scan's race: mirrors staggered rather than queued, so one that
     // never answers costs seconds, not the whole fetch. A 400 still stops it —
     // this query being wrong is just as wrong at every mirror.
-    const got = (typeof overpassRace === 'function') ? await overpassRace(ql) : { ok: false, reasons: [] };
+    const at = [(b.south + b.north) / 2, (b.west + b.east) / 2];
+    const got = (typeof overpassRace === 'function') ? await overpassRace(ql, { at }) : { ok: false, reasons: [] };
     if (!got.ok) {
       const worst = (typeof overpassWorstReason === 'function') ? overpassWorstReason(got.reasons) : 'network';
       return { ok: false, reason: worst };
